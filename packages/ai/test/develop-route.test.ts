@@ -32,6 +32,7 @@ import {
 } from '@mule/engine';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { DevelopHand, type RoutePlay } from '../src/hands/develop.js';
+import { planMind } from '../src/playbook/plan.js';
 import { draftPlaybook, type LeftOutPick } from '../src/playbook/draft.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
@@ -113,18 +114,19 @@ function seatAndHand(): { seat: AiSeat; hand: DevelopHand } {
   return { seat, hand: new DevelopHand(seat.brain, createRng(SEED)) };
 }
 
-/** A route of the test's own, played with the draft's seed and no money-maker: as the seat's own draft, or, `own` false, as adopted. */
+/** A route of the test's own, played with the draft's seed, no money-maker and the seat's own mind: as the seat's own draft, or, `own` false, as adopted. */
 const routeOf = (route: DevelopmentPlay['route'], extra: Partial<DevelopmentPlay> = {}, own = true): RoutePlay => ({
   part: { route, timeBudgetMs: DEVELOPMENT.fullSeconds * MS_PER_SECOND, ifSoldOut: 'pub', ...extra },
   seed: SEED,
   moneyMaker: null,
+  mind: seatAndHand().seat.mind,
   own,
 });
 
 /** The seat's own validated development draft, as a hand is given it on the own path. */
 function drafted(seat: AiSeat, state: GameState): RoutePlay {
   const pb = seat.draft(state, 'development');
-  return { part: pb.development!, seed: SEED, moneyMaker: pb.strategy.moneyMaker, own: true };
+  return { part: pb.development!, seed: SEED, moneyMaker: pb.strategy.moneyMaker, mind: planMind(seat.mind, pb.strategy), own: true };
 }
 
 type Runner = 'tick' | 'steer';

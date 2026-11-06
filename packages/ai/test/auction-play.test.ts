@@ -44,7 +44,10 @@ const seatsFor = (seed: number) => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`
 
 /** The playbook hand for a seat, its rng seeded as AiSeat seeds its own auction hand, so both hands draw the same noise. */
 const handFor = (seat: AiSeat, play: (state: GameState, good: Good) => GoodPlay | null) =>
-  new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), play); // literal-ok: AiSeat's salt for the auction hand's rng
+  new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), (state, good) => { // literal-ok: AiSeat's salt for the auction hand's rng
+    const p = play(state, good);
+    return p && { play: p, mind: seat.mind };
+  });
 
 /** The seat's own fresh one-good draft at the good's status screen (AM-20). */
 const ownDraft = (seat: AiSeat, state: GameState, good: Good): GoodPlay =>
