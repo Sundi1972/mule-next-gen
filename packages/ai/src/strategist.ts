@@ -21,6 +21,7 @@ import {
   shipPrice,
   storeForSale,
   storePaysFor,
+  storeOnStrike,
   storeSellLine,
   tileIndex,
   walkSeconds,
@@ -420,6 +421,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       const tooFar = walk ? walkVeto(walk, walking, back) : null;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
+      else if (storeOnStrike(obs)) veto = 'the store is on strike';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
       else if (tooFar) veto = tooFar;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;

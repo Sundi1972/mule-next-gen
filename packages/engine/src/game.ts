@@ -2,7 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { COLONY_SCORE, DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { firePhase, rollPlayerEvent } from './events.js';
+import { firePhase, rollPlayerEvent, storeOnStrike } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { colonyPrestige, colonyWealth, keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
@@ -251,6 +251,7 @@ export function outfitCostFor(state: GameState, playerId: string, outfit: Outfit
 export function buyMule(state: GameState, playerId: string): void {
   const p = developer(state, playerId);
   if (p.carriedMule) throw new RuleError('Already leading a MULE');
+  if (storeOnStrike(state)) throw new RuleError('The store is on strike: no MULEs this turn');
   if (state.store.mules <= 0) throw new RuleError('The store is out of MULEs');
   const price = mulePriceFor(state, playerId);
   if (p.money < price) throw new RuleError('Not enough money');
