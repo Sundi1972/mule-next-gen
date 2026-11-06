@@ -80,7 +80,7 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
 });
 
 describe("pricing §3: the AI expects the off-world walk's mean reversion", () => {
-  it('price T-AC-2: Crystite off-world at 160 is expected at 134 in one month and 109 in three; Smithore reverts to its reference; goods not exported stay', () => {
+  it('price T-AC-2: Crystite off-world at 160 is expected at 134 in one month and 109 in three, by the auction outlook too; Smithore reverts to its reference; goods not exported stay', () => {
     const state = createGame({ seed: 5, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
     state.store.offWorld.crystite = 160;
     expect([0, 1, 3].map((months) => expectedOffWorld(state, 'crystite', months))).toEqual([160, 134, 109]);
@@ -90,6 +90,12 @@ describe("pricing §3: the AI expects the off-world walk's mean reversion", () =
     for (const good of ['food', 'water', 'energy'] as const) {
       expect(expectedOffWorld(state, good, 3), `${good} is not exported`).toBe(state.store.offWorld[good]);
     }
+    // What the AI reads: at the auction, its outlook opens next month on that path.
+    while (state.phase !== 'auction') advancePhase(state);
+    state.store.offWorld.crystite = 160;
+    const o = outlook(observe(state, 'p0'), 'p0', { lookAhead: true });
+    expect(o.stage.month, 'the premise: the outlook looks at next month').toBe(state.month + 1);
+    expect(expectedOffWorld(o.stage, 'crystite', 0), "the auction outlook's Crystite next month").toBe(134);
   });
 });
 
