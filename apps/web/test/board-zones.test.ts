@@ -212,6 +212,14 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sold-out-note')).toBe(`Store sold out. Nobody can buy from it; it still buys at ${buys}.`);
   });
 
+  it("B-AC-E1 (TV): a store with none of the good and no old price to name says it is sold out and nothing more, never a sentence without its number", () => {
+    const { game } = soldOut(0);
+    const view = game.viewFor(null);
+    // A store that never had the good: no selling line, and a view without zones (a record from before them).
+    const { zones: _, ...auction } = { ...view.auction!, storeSells: null };
+    expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out');
+  });
+
   it('B-AC-E1 (phone, TV): while the store sells, its line is its selling price, and no screen says sold out', () => {
     const { game } = toWalk();
     const S = game.viewFor(null).auction!.storeSells;
