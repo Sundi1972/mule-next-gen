@@ -113,7 +113,9 @@ function tradingAt(board: WalkBoard, market: WalkMarket, w: Walker): number | nu
  */
 function shortHold(board: WalkBoard): void {
   for (const w of board.walkers) {
-    if (!w.held || w.dir >= 0 || w.downSince === undefined || board.elapsed - w.downSince < WALK.shortHoldMs) continue;
+    // Only a seller's hold counts: held survives a switch to buyer, where ▼ walks the bid down, and takeSide clears
+    // downSince on every switch, so back as a seller the hold starts fresh.
+    if (w.side !== 'seller' || !w.held || w.dir >= 0 || w.downSince === undefined || board.elapsed - w.downSince < WALK.shortHoldMs) continue;
     delete w.held;
     w.sellsShort = true;
   }
@@ -145,8 +147,8 @@ export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: strin
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
   w.dir = 0;
   delete w.downSince;
-  // RULE-4: a tap never takes a held seller down; only a hold of ▼ does.
-  if (w.held && dir < 0) return;
+  // RULE-4: a tap never takes a held seller down; only a hold of ▼ does. A held player switched to buyer taps freely.
+  if (w.held && w.side === 'seller' && dir < 0) return;
   const before = rounded(w);
   const to = before + dir;
   if (w.side === 'buyer') {
