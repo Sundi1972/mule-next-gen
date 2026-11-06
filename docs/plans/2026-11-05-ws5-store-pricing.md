@@ -110,13 +110,27 @@ Test: `packages/ai/test/store-quotes-contract.test.ts` (new).
   `expectedOffWorld(state, g, k)` equals `store.offWorld[g]` while off-world prices don't move yet (PR-2 changes this).
   Trap: sample at upkeep, not during the auction: a later good's walk writes lastWalk after an earlier sample.
   Also pins §3's null semantics: `sell` is null exactly when `storeForSale` is 0, `buy` exactly when `storeWants` is 0.
-- [ ] **Step 2: Run it, expect FAIL (`expectedOffWorld` is not exported)** —
-  `pnpm --filter @mule/ai exec vitest run test/store-quotes-contract.test.ts` → FAIL.
+- [ ] **Step 1b: Write the failing test `C2: the hub's store price and the auction's are one rule`** (WS3's triage,
+  6 Nov, via the PM). Today the hub's MarketStrip (`apps/web/src/phone/hub/desks.tsx:150`, fed by
+  `storeQuotes` through `apps/server/src/mule-game.ts`) shows posted × 1.1, while `auction.ts::comeUp` raises the
+  sell line on a short Food/Water shelf (restock premium), so players see two store selling prices. Altitude:
+  engine, in `packages/engine/test/store.test.ts`. Observed at: the state a good comes up in, every good, 20 seeded
+  games, which must include at least one short-shelf Food or Water month (assert that the sample has one, so the
+  test can't pass vacuously): `storeQuotes(state, g)` equals `comeUp`'s `{storeBuy, storeSell}` (null where §3 says
+  so). Run → FAIL on the short-shelf months. Residual, by design: the hub reads the shelf and demand as they stand
+  in development, the auction reads them after production, so the two can still differ across that step; the
+  rule is the same. Say so in PR-1's body and the rulebook chapter.
+- [ ] **Step 2: Run both, expect FAIL (`expectedOffWorld` is not exported; the short-shelf lines differ)** —
+  `pnpm --filter @mule/ai exec vitest run test/store-quotes-contract.test.ts` and
+  `pnpm --filter @mule/engine exec vitest run test/store.test.ts` → FAIL.
 - [ ] **Step 3: Implement C2's extract and the §3 contract per spec**: add `expectedOffWorld` (returns today's off-world price until
   PR-2), add the optional `lastWalk` to `Store`, and make `auction.ts::comeUp` take its lines from `storeQuotes`
   with today's numbers kept (the restock premium moves inside `storeQuotes` unchanged). Mechanism: extract (spec §1
-  C2). No behaviour change: the existing `packages/engine/test/store.test.ts` T-AC-13 and `auction.test.ts` stay
-  green untouched.
+  C2). The auction's lines don't change: the existing `packages/engine/test/store.test.ts` T-AC-13 and
+  `auction.test.ts` stay green untouched. Two readers of `storeQuotes` DO change on a short Food/Water shelf, by
+  design (Step 1b): the hub's MarketStrip shows the auction's selling price, and the colony fund
+  (`colony.ts::fund`, WS7's, `COLONY.fundBuysGoods`) pays it. No edit to colony.ts; name the fund's change to WS7
+  through the PM in PR-1's body.
 - [ ] **Step 4: Run** the new test plus `pnpm --filter @mule/engine exec vitest run test/store.test.ts test/auction.test.ts` → PASS.
 - [ ] **Step 5: Commit** `refactor(engine): one store quote formula and the AI price contract (verifies T-AC-2)`.
 
