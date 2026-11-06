@@ -53,6 +53,9 @@ function strategyOf(state: GameState, mind: Mind, seed: number): Strategy {
   return draftPlaybook({ state, seat: mind.me, mind, seed, phase: 'development' }).strategy;
 }
 
+/** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off (AM-32). */
+const CHAIN_ON = 'AI_PLANS.chain.months=3';
+
 /** Runs `fn` with AI_PLANS paths set by --set, then puts each back. */
 function withPlans<T>(sets: string[], fn: () => T): T {
   const read = (path: string) => path.split('.').slice(1).reduce<unknown>((o, k) => (o as Record<string, unknown>)[k], AI_PLANS);
@@ -125,8 +128,8 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     expect(withPlans(['AI_PLANS.landBaron.minFreeShare=1.01'], () => strategyOf(state, aggressive.mind, aggressive.seed).kind)).not.toBe('landBaron');
 
     // specialist: RULE-4 finds a money-maker, the good the rule's own formula scores best.
-    const specialist = withPlans(['AI_PLANS.leaning.trader.monopolist=0.9'], () => strategyOf(state, trader.mind, trader.seed));
-    expect(specialist).toMatchObject({ kind: 'specialist', moneyMaker: moneyMakerByRule(state, trader.mind), monopolyTarget: null });
+    const [specialist, ruled] = withPlans(['AI_PLANS.leaning.trader.monopolist=0.9', CHAIN_ON], () => [strategyOf(state, trader.mind, trader.seed), moneyMakerByRule(state, trader.mind)] as const);
+    expect(specialist).toMatchObject({ kind: 'specialist', moneyMaker: ruled, monopolyTarget: null });
     expect(specialist.moneyMaker).not.toBeNull();
 
     // monopolist: the level corners and a target qualifies; its money-maker is the target, a good that keeps.
@@ -169,12 +172,14 @@ describe('the draft picks a plan kind and writes its strategy', () => {
   it('FM-chain-household: a seat with no spare Food or Water never drafts Medicine as a chain; its money-maker is the rule before AM-32', () => {
     const { state, seats } = table('trader');
     const trader = seats[2]!;
-    const obs = observe(state, trader.mind.me);
-    expect(canFeed(obs, trader.mind.me, 'medicine'), 'Medicine is short of an input').toBe(false);
-    expect(chainLinks(obs, trader.mind.me, 'medicine')).toEqual([]);
-    const specialist = withPlans(['AI_PLANS.leaning.trader.monopolist=0.9'], () => strategyOf(state, trader.mind, trader.seed));
-    expect(specialist.moneyMaker).not.toBe('medicine');
-    expect(specialist.moneyMaker).toBe(moneyMakerByRule(state, trader.mind, false));
+    withPlans(['AI_PLANS.leaning.trader.monopolist=0.9', CHAIN_ON], () => {
+      const obs = observe(state, trader.mind.me);
+      expect(canFeed(obs, trader.mind.me, 'medicine'), 'Medicine is short of an input').toBe(false);
+      expect(chainLinks(obs, trader.mind.me, 'medicine')).toEqual([]);
+      const specialist = strategyOf(state, trader.mind, trader.seed);
+      expect(specialist.moneyMaker).not.toBe('medicine');
+      expect(specialist.moneyMaker).toBe(moneyMakerByRule(state, trader.mind, false));
+    });
   });
   it('T-AC-5: a Trader table drafts cautious builder, aggressive landBaron, trader specialist or monopolist, saboteur spoiler; at Rookie no monopolist and no spoiler', { timeout: SLOW_MS }, () => {
     const trader = table('trader');

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, GOODS, observe, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
+import { outlook } from '../src/outlook.js';
+import { canFeed, installGain, type Mind } from '../src/value.js';
 
 /** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-32. */
 
@@ -57,8 +59,37 @@ const seatOf = (options: Partial<AiSeatOptions> = {}) => new AiSeat({ id: ME, na
 /** Plots for the whole chain: Rare earth ground, Smithore ground and two plains plots for the works. */
 const CHAIN_PLOTS = [{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }];
 
+/** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off. */
+const CHAIN_ON_MONTHS = 3;
+
+/** Runs `fn` with chains switched on, then puts the switch back. */
+function withChains<T>(fn: () => T): T {
+  const shipped = AI_PLANS.chain.months;
+  AI_PLANS.chain.months = CHAIN_ON_MONTHS;
+  try {
+    return fn();
+  } finally {
+    AI_PLANS.chain.months = shipped;
+  }
+}
+
+/** RULE-4 before AM-32: the best of the goods the seat can feed, by its best plots' install gains, less the rivals' share. */
+function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
+  const obs = observe(state, mind.me);
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const plots = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === mind.me && !t.outfit)));
+  let best: { good: Good; score: number } | null = null;
+  for (const good of GOODS.filter((g) => canFeed(obs, mind.me, g))) {
+    const sum = plots.map((t) => installGain(obs, o, t, good, mind).gain).sort((a, b) => b - a).slice(0, AI_PLANS.moneyMaker.plots).reduce((n, g) => n + g, 0);
+    const rivals = obs.tiles.filter((t) => t.owner !== null && t.owner !== mind.me && t.outfit === good).length;
+    const score = sum * (1 - AI_PLANS.moneyMaker.rivalDiscount * rivals);
+    if (score > 0 && (!best || score > best.score)) best = { good, score };
+  }
+  return best?.good ?? null;
+}
+
 describe('a factory chain (AM-32)', () => {
-  it('B-AC-AM32-1: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => {
+  it('B-AC-AM32-1: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
     const state = development(CHAIN_PLOTS, 2_000);
     const seat = seatOf();
     const installed = playDevelopment(state, seat);
@@ -66,23 +97,23 @@ describe('a factory chain (AM-32)', () => {
     expect(installed.length, `installed ${installed.join(', ')}`).toBeGreaterThan(0);
     expect(installed.every((o) => o === 'rareEarth' || o === 'smithore'), `installed ${installed.join(', ')}`).toBe(true);
     expect(installed.filter((o) => WORKS.includes(o))).toEqual([]);
-  });
+  }));
 
-  it('B-AC-AM32-1: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => {
+  it('B-AC-AM32-1: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
     const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
     const installed = playDevelopment(state, seatOf());
     expect(installed[0], `installed ${installed.join(', ')}`).toBe('alloy');
     expect(installed.slice(1).every((o) => o === 'electronics')).toBe(true);
-  });
+  }));
 
-  it('B-AC-AM32-1 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => {
+  it('B-AC-AM32-1 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => withChains(() => {
     // Rare earth only on ground the seat knows is dry; Smithore ground and plains for the rest.
     const state = development([{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], 2_000);
     const installed = playDevelopment(state, seatOf());
     expect(installed, `installed ${installed.join(', ')}`).not.toContain('rareEarth');
-  });
+  }));
 
-  it('B-AC-AM32-1: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => {
+  it('B-AC-AM32-1: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => withChains(() => {
     // The Smithore mine stands on thin ground (one a month, the Alloy works wants two), so Smithore is still short; the
     // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well.
     const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
@@ -90,9 +121,9 @@ describe('a factory chain (AM-32)', () => {
     const seat = seatOf();
     const redraft = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development', kept: null, replanned: 'election' });
     expect(redraft.moneyMaker).toBe('electronics');
-  });
+  }));
 
-  it('B-AC-AM32-1: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => {
+  it('B-AC-AM32-1: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => withChains(() => {
     // Planning, broke: a Smithore mine on thin ground (worth little at the market) is what a short seat lists first.
     const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
     state.phase = 'planning';
@@ -101,17 +132,17 @@ describe('a factory chain (AM-32)', () => {
     const listed = (moneyMaker: Good) => (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy: strategy(moneyMaker) }).list ?? []).map((l) => l.plot);
     expect(listed('food'), 'without a chain the mine is listed').toContain(0);
     expect(listed('electronics')).not.toContain(0);
-  });
+  }));
 
-  it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => {
+  it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => withChains(() => {
     // Plains only: no ground for a mine, so the chain's inputs can't stand this month.
     const state = development([{ x: 0 }, { x: 2 }, { x: 4 }, { x: 6 }], 2_000);
     state.players.find((p) => p.id === ME)!.money = 50_000;
     const installed = playDevelopment(state, seatOf());
     expect(installed.filter((o) => WORKS.includes(o))).toEqual([]);
-  });
+  }));
 
-  it('B-AC-AM32-1 negative: a price shock on Electronics drops the chain at the next draft point', () => {
+  it('B-AC-AM32-1 negative: a price shock on Electronics drops the chain at the next draft point', () => withChains(() => {
     const state = development(CHAIN_PLOTS, 2_000);
     const seat = seatOf();
     playDevelopment(state, seat);
@@ -127,9 +158,9 @@ describe('a factory chain (AM-32)', () => {
     expect(seat.replanLog().at(-1)?.trigger).toBe('priceShock');
     expect(seat.draft(state, 'development').strategy.moneyMaker).not.toBe('electronics');
     expect(installed.filter((o) => o === 'rareEarth' || WORKS.includes(o))).toEqual([]);
-  });
+  }));
 
-  it('INV-chain-focus: a seat whose money-maker is not a chain plays the same development picks as a seat with no plan', () => {
+  it('INV-chain-focus: a seat whose money-maker is not a chain plays the same development picks as a seat with no plan', () => withChains(() => {
     // Ground where leaning to the money-maker, Smithore, would change the picks.
     const plots = [{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }];
     const planned = seatOf();
@@ -137,5 +168,15 @@ describe('a factory chain (AM-32)', () => {
     expect(planned.draft(development(plots, 220), 'development').strategy.moneyMaker).toBe('smithore');
     expect(picks.length).toBeGreaterThan(0);
     expect(picks).toEqual(playDevelopment(development(plots, 220), seatOf({ playbook: false })));
+  }));
+});
+
+describe('the chain switch (AM-32, PM ruling B)', () => {
+  it('INV-chain-off: at the shipped AI_PLANS.chain.months, a chain-eligible seat drafts the money-maker RULE-4 drafted before AM-32', () => {
+    const state = development(CHAIN_PLOTS, 2_000);
+    const seat = seatOf();
+    const drafted = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development' }).moneyMaker;
+    expect(drafted).toBe(fedMoneyMaker(state, seat.mind));
+    expect(withChains(() => draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development' }).moneyMaker), 'switched on, a chain').toBe('electronics');
   });
 });
