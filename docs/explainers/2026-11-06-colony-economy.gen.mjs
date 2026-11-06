@@ -194,33 +194,38 @@ const crewShare = (s) => 1 - CREW_DROP * gTol(s);
 function chainDiagram() {
   const lane = (y, h, name) => `<rect x="8" y="${y}" width="664" height="${h}" rx="12" class="lane"/><text x="22" y="${y + 20}" class="lanet">${name}</text>`;
   const box = (x, y, w, h, t, sub = '', cls = 'node') => `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" class="${cls}"/><text x="${x + w / 2}" y="${y + (sub ? h / 2 - 3 : h / 2 + 5)}" text-anchor="middle" class="nodet">${t}</text>${sub ? `<text x="${x + w / 2}" y="${y + h / 2 + 13}" text-anchor="middle" class="nodes">${sub}</text>` : ''}</g>`;
-  const goods = (d) => `<path d="${d}" class="flowline" marker-end="url(#ah2)"/>`;
-  const effect = (d, l, lx, ly, anchor = 'middle') => `<path d="${d}" class="effline" marker-end="url(#ah3)"/><text x="${lx}" y="${ly}" text-anchor="${anchor}" class="efflbl">${l}</text>`;
-  return `<figure><svg viewBox="0 0 680 470" role="img" aria-labelledby="ch-t ch-d" class="chart"><title id="ch-t">What runs short, and what it does, at plot, player and colony level</title><desc id="ch-d">Goods flow down from plots to the player's stock, where the household and crews eat, and on to the store, where colonists eat. Shortages flow back up as effects: a hungry or thirsty crew works slower, a hungry player walks slower and falls sick more easily, a plot without Energy switches off, hungry colonists lose mood and leave, and a short store raises its price.</desc>
+  const goods = (d) => `<path d="${d}" class="halo"/><path d="${d}" class="flowline" marker-end="url(#ah2)"/>`;
+  const effect = (d, l, lx, ly, anchor = 'middle') => `<path d="${d}" class="effline" marker-end="url(#ah3)"/>${[].concat(l).map((t, i) => `<text x="${lx}" y="${ly + i * 13}" text-anchor="${anchor}" class="efflbl">${t}</text>`).join('')}`;
+  const spread = (d, l, lx, ly, anchor = 'middle') => `<path d="${d}" class="halo"/><path d="${d}" class="sickline" marker-end="url(#ah5)"/><text x="${lx}" y="${ly}" text-anchor="${anchor}" class="sicklbl">${l}</text>`;
+  return `<figure><svg viewBox="0 0 680 530" role="img" aria-labelledby="ch-t ch-d" class="chart"><title id="ch-t">What runs short, and what it does, at plot, player and colony level</title><desc id="ch-d">Goods flow down from plots to the player's stock, where the household and crews eat, and on to the store, where colonists eat and take their Medicine and Electronics. Shortages flow back up as effects: a hungry, thirsty or sick crew works slower, a plot without Energy switches off, a player whose household went hungry walks slower, colonists short of Food, Water or Medicine lose mood, fall sick and leave, and a short store raises its price. Sickness spreads from the colonists to players and crews.</desc>
 <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
-<marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="effhead"/></marker></defs>
-${lane(8, 130, 'Plot')}${lane(150, 150, 'Player')}${lane(312, 150, 'Colony')}
+<marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="effhead"/></marker>
+<marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sickhead"/></marker></defs>
+${lane(8, 130, 'Plot')}${lane(150, 150, 'Player')}${lane(312, 210, 'Colony')}
 ${box(40, 50, 150, 54, 'Energy for the plot')}
 ${box(270, 50, 150, 54, 'The plot works', 'Food, Water, mines, works')}
 ${box(490, 50, 150, 54, 'Its crew', 'eats, drinks by plot type')}
 ${box(40, 196, 150, 54, 'The player', 'walks, may fall sick', 'node accent')}
 ${box(270, 196, 150, 54, 'Household', 'eats 2, drinks 1')}
-${box(490, 196, 150, 54, "Player's stock")}
-${box(40, 360, 150, 54, 'Price and mood', 'and how many stay', 'node accent')}
-${box(270, 360, 150, 54, 'Colonists', 'eat from the store, free')}
-${box(490, 360, 150, 54, "Store's shelf")}
-${goods('M345,104 L345,140 L610,140 L610,194')}<text x="452" y="154" class="flowlbl">output</text>
+${box(490, 196, 150, 54, "Player's stock", 'Food spoils ¼ a month')}
+${box(40, 380, 150, 54, 'Price, mood, health', 'and how many stay', 'node accent')}
+${box(270, 380, 150, 54, 'Colonists', 'Food, Water, Medicine, free')}
+${box(490, 380, 150, 54, "Store's shelf")}
+${goods('M345,104 L345,140 L610,140 L610,194')}<text x="400" y="134" text-anchor="middle" class="flowlbl">output</text>
 ${goods('M490,223 L422,223')}
-${goods('M530,196 L530,106')}<text x="536" y="160" class="flowlbl">crews eat</text>
-${goods('M565,250 L565,358')}<text x="572" y="306" class="flowlbl">sold to the store</text>
-${goods('M490,387 L422,387')}
-${effect('M190,77 L268,77', 'no Energy: off', 229, 122)}
-${effect('M490,77 L422,77', 'hungry or thirsty: slower', 456, 122)}
-${effect('M270,223 L192,223', 'hungry: slower, sick', 229, 272)}
-${effect('M270,387 L192,387', 'short: mood, leave', 229, 434)}
-${effect('M640,400 L656,400 L656,452 L115,452 L115,416', 'shelf against need: price', 400, 446)}
-</svg><div class="legend"><span class="key"><i style="background:var(--ink2)"></i>Goods move</span><span class="key"><i style="background:var(--s2)"></i>A shortage acts (proposed and today)</span></div>
-<figcaption>Read top to bottom for goods, and follow the orange arrows back for what a shortage does. The table below says which of these exist today and which are proposed.</figcaption></figure>`;
+${goods('M530,196 L530,106')}<text x="524" y="178" text-anchor="end" class="flowlbl">crews eat</text>
+${goods('M565,250 L565,378')}<text x="572" y="290" class="flowlbl">sold to the store</text>
+${goods('M490,407 L422,407')}
+${effect('M190,77 L268,77', 'no Energy: off', 229, 40)}
+${effect('M490,77 L422,77', ['hungry, thirsty or sick:', 'slower'], 456, 30)}
+${effect('M270,223 L192,223', ['hungry at its last', 'meal: slower'], 229, 178)}
+${effect('M270,407 L192,407', ['short: mood falls,', 'sick, leave'], 229, 450)}
+${spread('M300,378 L300,282 L115,282 L115,252', 'sickness spreads to players', 207, 276)}
+${spread('M420,392 L462,392 L462,92 L488,92', 'and to crews', 468, 340, 'start')}
+${effect('M640,420 L656,420 L656,508 L115,508 L115,436', 'shelf against need: price', 400, 502)}
+<text x="430" y="472" text-anchor="middle" class="efflbl">Electronics: a bonus, never a loss</text>
+</svg><div class="legend"><span class="key"><i style="background:var(--ink2)"></i>Goods move</span><span class="key"><i style="background:var(--s2)"></i>A shortage acts</span><span class="key"><i style="background:var(--c-med)"></i>Sickness spreads</span></div>
+<figcaption>Read top to bottom for goods, and follow the arrows back for what a shortage does. A crew that went hungry, thirsty or sick works slower on every plot; the farm's old “dry” halving goes. A player's hunger is read from their household's last meal. Colonists short of Food, Water or Medicine lose mood and fall sick, and their sickness spreads to players and crews. Electronics only ever add to the colonists' mood. The table below says which of these exist today and which are proposed.</figcaption></figure>`;
 }
 
 const MATRIX = [
@@ -282,51 +287,107 @@ function ws7HealthParts() {
 }
 const tableOf = (t) => `<div class="scroll"><table><thead><tr>${t.head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
+// Every line runs in straight pieces: out of its box, along its own vertical track between two columns, and into the
+// left edge of the box it feeds, ending in an arrow at that edge, so no line can be read as ending in a neighbour.
+// The tracks' left-to-right order is chosen to cross as few lines as possible; where a line must cross a track it is
+// drawn with a gap (a bridge). Recipes: config.ts RECIPES; the ship's goods: config.ts EXPORT_DEMAND.
 function allGoodsFlow() {
-  const C1 = 16, C2 = 262, C3 = 512, BW = 150, BH = 40;
-  const raw = ['Food (farm)', 'Water (well)', 'Energy (plant)', 'Smithore (mine)', 'Crystite (mine)', 'Rare earth (mine)'];
-  const mid = ['Alloy works', 'Electronics works', 'Medicine lab', 'The store builds MULEs'];
-  const uses = ['Households and crews', 'Colonists', 'Every working plot', 'Outfitting a plot (MULE)', 'Colony buildings, filters', 'Sick players', 'The export ship'];
-  const yR = (i) => 40 + i * 64, yM = (i) => 72 + i * 92, yU = (i) => 30 + i * 58;
-  const box = (x, y, t, cls) => `<rect x="${x}" y="${y}" width="${BW}" height="${BH}" rx="8" class="${cls}"/><text x="${x + BW / 2}" y="${y + BH / 2 + 4}" text-anchor="middle" class="nodet sm">${t}</text>`;
-  const link = (x1, y1, x2, y2, cls = 'gl') => `<path d="M${x1},${y1} C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2} ${x2},${y2}" class="${cls}" marker-end="url(#ah4)"/>`;
-  const R = (i) => [C1 + BW, yR(i) + BH / 2], M = (i) => [C2, yM(i) + BH / 2], Mo = (i) => [C2 + BW, yM(i) + BH / 2], U = (i) => [C3, yU(i) + BH / 2];
-  const edges = [
-    [R(0), U(0)], [R(0), U(1)], [R(0), M(2)],
-    [R(1), U(0)], [R(1), U(1)], [R(1), M(2)],
-    [R(2), U(2)], [R(2), M(0)], [R(2), M(1)], [R(2), M(2)],
-    [R(3), M(0)], [R(3), M(3)], [R(3), U(6)],
-    [R(4), U(6)], [R(4), U(4)],
-    [R(5), M(1)], [R(5), U(6)],
-    [Mo(0), U(4)], [Mo(0), U(6)], [Mo(1), U(4)], [Mo(1), U(6)], [Mo(2), U(5)], [Mo(2), U(6)], [Mo(3), U(3)],
+  const XR = 8, WR = 128, XM = 266, WM = 156, XU = 534, WU = 138, BAR = 600;
+  const box = (x, y, w, h, t, sub, cls) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" class="${cls}"/>`
+    + `<text x="${x + w / 2}" y="${y + h / 2 + (sub ? -2 : 4)}" text-anchor="middle" class="nodet sm">${t}</text>`
+    + (sub ? `<text x="${x + w / 2}" y="${y + h / 2 + 12}" text-anchor="middle" class="nodes">${sub}</text>` : '');
+  const raw = [
+    ['food', 'Food', 'farm', 28], ['water', 'Water', 'well', 88], ['energy', 'Energy', 'power plant', 168],
+    ['smithore', 'Smithore', 'mine', 306], ['rare', 'Rare earth', 'mine', 385], ['crystite', 'Crystite', 'mine', 540],
+  ].map(([k, t, sub, y]) => ({ k, t, sub, y, h: 40, c: y + 20 }));
+  const mid = {
+    med: { t: 'Medicine lab', sub: 'Food, Water, Energy', y: 232, h: 54, out: 258 },
+    alloy: { t: 'Alloy works', sub: 'Smithore, Energy', y: 310, h: 50, out: 335 },
+    elec: { t: 'Electronics works', sub: 'Rare earth, Alloy, Energy', y: 390, h: 52, out: 416 },
+    mule: { t: 'MULEs', sub: 'built by the store', y: 470, h: 40, out: 490 },
+  };
+  const uses = [
+    ['Households and crews', 'Medicine cures crews', 26, 52], ['Colonists', 'free, from the store', 90, 66],
+    ['Every working plot', '', 168, 40], ['Sick players', 'Medicine cures them', 238, 40], ['Air filters', "a player's own Alloy", 315, 40],
+    ['Outfitting a plot', '', 470, 40], ['Colony buildings', 'only from the store', 520, 56],
   ];
-  let s = `<svg viewBox="0 0 680 450" role="img" aria-labelledby="ag-t ag-d" class="chart"><title id="ag-t">Every good, from the ground to its uses</title><desc id="ag-d">Farms, wells and plants feed households, crews, colonists and every working plot. Smithore goes to Alloy works, to the store's MULE building and to the ship. Rare earth and Alloy make Electronics. Food, Water and Energy make Medicine. Alloy and Electronics go to colony buildings and the ship; Medicine cures sick players; Crystite goes to the ship and one colony building.</desc>
-<defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>
-<text x="${C1 + BW / 2}" y="18" text-anchor="middle" class="axislabel">From the ground</text><text x="${C2 + BW / 2}" y="18" text-anchor="middle" class="axislabel">Made from other goods</text><text x="${C3 + BW / 2}" y="18" text-anchor="middle" class="axislabel">Used by</text>`;
-  // Each line takes the colour of the good it carries: the six raw goods, then the three products and MULEs.
-  const carries = [0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 3];
-  s += edges.map(([[a, b], [c, d]], i) => link(a, b, c - 2, d, `gl g${carries[i]}`)).join('');
-  s += link(C2 + BW / 2, yM(0) + BH, C2 + BW / 2, yM(1) - 2, 'gl strong');
-  s += `<text x="${C2 + BW / 2 + 6}" y="${(yM(0) + BH + yM(1)) / 2 + 4}" class="flowlbl">Alloy</text>`;
-  raw.forEach((t, i) => (s += box(C1, yR(i), t, 'node')));
-  mid.forEach((t, i) => (s += box(C2, yM(i), t, 'node accent')));
-  uses.forEach((t, i) => (s += box(C3, yU(i), t, 'node')));
-  const keyC = [['Food', 'food'], ['Water', 'water'], ['Energy', 'energy'], ['Smithore', 'smithore'], ['Crystite', 'crystite'], ['Rare earth', 'rare']];
-  const key = keyC.map(([n, c]) => `<span class="key"><i style="background:var(--c-${c})"></i>${n}</span>`).join('') + '<span class="key"><i style="background:var(--ink2)"></i>Alloy, Electronics, Medicine, MULEs (dashed)</span>';
-  return `<figure>${s}</svg><div class="legend">${key}</div><figcaption>Recipes: an Alloy works turns 2 Smithore and 2 Energy into 2 Alloy; an Electronics works turns 1 Rare earth, 1 Alloy and 1 Energy into 1 Electronics; a Medicine lab turns 1 Food, 1 Water and 1 Energy into 2 Medicine; the store builds a MULE from 1 Smithore. Colony buildings take Alloy, Electronics and, for the observatory, Crystite.</figcaption></figure>`;
+  // Sources in the left track area (raw goods) and the right one (made goods): where they leave their box, which
+  // heights they feed (and how far right), and whether they also go to the ship.
+  const toMid = XM, toUse = XU;
+  const A = [
+    { k: 'food', exit: 48, taps: [[38, toUse], [102, toUse], [244, toMid]] },
+    { k: 'water', exit: 108, taps: [[52, toUse], [116, toUse], [258, toMid]] },
+    { k: 'energy', exit: 188, taps: [[188, toUse], [272, toMid], [344, toMid], [428, toMid]] },
+    { k: 'smithore', exit: 326, taps: [[326, toMid], [490, toMid]], ship: true },
+    { k: 'rare', exit: 405, taps: [[405, toMid]], ship: true },
+    { k: 'crystite', exit: 560, taps: [[560, toUse]], ship: true },
+  ];
+  const B = [
+    { k: 'med', exit: 258, taps: [[66, toUse], [130, toUse], [258, toUse]], ship: true },
+    { k: 'alloy', exit: 335, taps: [[335, toUse], [532, toUse]], ship: true },
+    { k: 'elec', exit: 416, taps: [[144, toUse], [546, toUse]], ship: true },
+  ];
+  const span = (s) => { const ys = [s.exit, ...s.taps.map(([y]) => y), ...(s.ship ? [BAR] : [])]; return [Math.min(...ys), Math.max(...ys)]; };
+  const perms = (xs) => (xs.length < 2 ? [xs] : xs.flatMap((x, i) => perms([...xs.slice(0, i), ...xs.slice(i + 1)]).map((r) => [x, ...r])));
+  function place(srcs, x0, step, xLeft) {
+    let best = null;
+    for (const order of perms(srcs.map((_, i) => i))) {
+      const xs = []; order.forEach((si, pos) => (xs[si] = x0 + pos * step));
+      let n = 0;
+      srcs.forEach((s, i) => {
+        const segs = [[xLeft, xs[i], s.exit], ...s.taps.map(([y, to]) => [xs[i], to, y])];
+        srcs.forEach((t, j) => { if (j === i) return; const [lo, hi] = span(t); for (const [xa, xb, y] of segs) if (xa < xs[j] && xs[j] < xb && lo < y && y < hi) n++; });
+      });
+      if (!best || n < best.n) best = { n, xs };
+    }
+    srcs.forEach((s, i) => (s.x = best.xs[i]));
+  }
+  place(A, 150, 18, XR + WR);
+  place(B, 444, 28, XM + WM);
+  const arrowR = (x, y) => `<path d="M${x - 7},${y - 4} L${x},${y} L${x - 7},${y + 4} z"`;
+  const arrowD = (x, y) => `<path d="M${x - 4},${y - 7} L${x},${y} L${x + 4},${y - 7} z"`;
+  let trunks = '', lines = '', heads = '';
+  for (const s of [...A, ...B]) {
+    const cls = `g-${s.k}`, [lo, hi] = span(s);
+    trunks += `<path d="M${s.x},${lo} L${s.x},${s.ship ? BAR - 7 : hi}" class="gl ${cls}"/>`;
+    if (s.ship) heads += `${arrowD(s.x, BAR)} class="ah ${cls}"/>`;
+    const xL = A.includes(s) ? XR + WR : XM + WM;
+    const segs = [[xL, s.x - 2, s.exit, false], ...s.taps.map(([y, to]) => [s.x + 2, to - 6, y, true])];
+    for (const [xa, xb, y, arrow] of segs) {
+      lines += `<path d="M${xa},${y} L${xb},${y}" class="halo"/><path d="M${xa - (arrow ? 2 : 0)},${y} L${xb + (arrow ? 0 : 2)},${y}" class="gl ${cls}"/>`;
+      if (arrow) heads += `${arrowR(xb + 6, y)} class="ah ${cls}"/>` + (y !== s.exit ? `<circle cx="${s.x}" cy="${y}" r="2.5" class="ah ${cls}"/>` : '');
+    }
+  }
+  // Alloy into the Electronics works, straight down between the two boxes; MULEs straight across to the plot.
+  lines += `<path d="M${XM + WM / 2},${mid.alloy.y + mid.alloy.h} L${XM + WM / 2},${mid.elec.y - 7}" class="gl g-alloy"/>`;
+  heads += `${arrowD(XM + WM / 2, mid.elec.y)} class="ah g-alloy"/>`;
+  lines += `<path d="M${XM + WM},${mid.mule.out} L${XU - 6},${mid.mule.out}" class="halo"/><path d="M${XM + WM},${mid.mule.out} L${XU - 6},${mid.mule.out}" class="gl g-mule"/>`;
+  heads += `${arrowR(XU, mid.mule.out)} class="ah g-mule"/>`;
+  let s = `<svg viewBox="0 0 680 650" role="img" aria-labelledby="ag-t ag-d" class="chart"><title id="ag-t">Every good, from the ground to its uses</title><desc id="ag-d">Food and Water go to households and crews, to colonists and to the Medicine lab. Energy goes to every working plot and to the three works. Smithore goes to the Alloy works, to the store's MULE building and to the ship. Rare earth goes to the Electronics works and the ship; Crystite to the colony buildings and the ship. Alloy goes on to the Electronics works, to air filters, to colony buildings and to the ship. Electronics go to colonists, colony buildings and the ship. Medicine goes to sick players, to curing crews, to colonists and to the ship. MULEs outfit plots.</desc>
+<text x="${XR + WR / 2}" y="16" text-anchor="middle" class="axislabel">From the ground</text><text x="${XM + WM / 2}" y="16" text-anchor="middle" class="axislabel">Made from other goods</text><text x="${XU + WU / 2}" y="16" text-anchor="middle" class="axislabel">Used by</text>`;
+  s += trunks + lines;
+  raw.forEach((r) => (s += box(XR, r.y, WR, r.h, r.t, r.sub, 'node')));
+  Object.values(mid).forEach((m) => (s += box(XM, m.y, WM, m.h, m.t, m.sub, 'node accent')));
+  uses.forEach(([t, sub, y, h]) => (s += box(XU, y, WU, h, t, sub, 'node')));
+  s += box(140, BAR, XU + WU - 140, 40, 'The export ship', 'takes what the colony sells off-world; nothing comes in', 'node');
+  s += heads;
+  const keyC = [['Food', 'food'], ['Water', 'water'], ['Energy', 'energy'], ['Smithore', 'smithore'], ['Rare earth', 'rare'], ['Crystite', 'crystite'], ['Alloy', 'alloy'], ['Electronics', 'elec'], ['Medicine', 'med'], ['MULEs', 'mule']];
+  const key = keyC.map(([n, c]) => `<span class="key"><i style="background:var(--c-${c})"></i>${n}</span>`).join('');
+  return `<figure>${s}</svg><div class="legend">${key}</div><figcaption>Each line takes the colour of the good it carries and ends in an arrow at the box it feeds; where two lines cross, the one passing over has a gap. Recipes: an Alloy works turns 2 Smithore and 2 Energy into 2 Alloy; an Electronics works turns 1 Rare earth, 1 Alloy and 1 Energy into 1 Electronics; a Medicine lab turns 1 Food, 1 Water and 1 Energy into 2 Medicine; the store builds a MULE from 1 Smithore. <b>Nothing is imported:</b> colony buildings get their Alloy and Electronics only from the store, and the store only holds what the colony made; the observatory also takes Crystite. <b>Demand runs back up the chain:</b> what the colonists want of Electronics also counts as demand for Rare earth and Alloy, so their prices rise too (decision ${D.elecInputs}).</figcaption></figure>`;
 }
 
 const MATRIX_ALL = [
   ['Energy', ['Switched off, biggest user first; makes a fifth', 'Unchanged'], ['Nothing', 'Unchanged'], ['A price only', 'A price only; steps up in a shortage']],
-  ['Water', ['A farm makes half if its owner holds too little', 'A thirsty crew works slower on every plot; a farm’s own Water is its irrigation'], ['Nothing', 'Nothing'], ['Colonists shrink 5% whenever short', 'As Food; the store price steps up']],
-  ['Food', ['Nothing', 'A crew that went hungry last month works slower (curve below)'], ['Walks slower, down to 60% with none', 'Same; hunger read from whether the household ate (decision)'], ['Colonists shrink 5% whenever short', 'Mood and population follow how short; the store price steps up']],
+  ['Water', ['A farm makes half if its owner holds too little', 'A thirsty crew works slower on every plot, on the curve below; the farm’s “dry” halving goes, and a farm’s own Water is its irrigation'], ['Nothing', 'Nothing'], ['Colonists shrink 5% whenever short', 'As Food: mood and population follow how short, thirsty colonists fall sick more easily; the store price steps up']],
+  ['Food', ['Nothing', 'A crew that went hungry last month works slower (curve below)'], ['Walks slower, down to 60% with none; read from the stock after half of it spoiled', 'Same, read from the household’s last meal; Food spoils a quarter a month instead of half'], ['Colonists shrink 5% whenever short', 'Mood and population follow how short; hungry colonists fall sick more easily; the store price steps up']],
+  ['Medicine', ['Nothing', 'Sick crews work slower; one Medicine in the player’s stock cures that player’s crews'], ['A sick player walks at half pace until cured', 'Same; the colony’s sickness adds to the odds (up to 10 points more)'], ['A price only: colonists never take it', 'Colonists take it free from the store; short of it they fall sick and recover slower. It reaches their mood only through sickness']],
+  ['Sickness', ['Nothing', 'Once a fifth of the colonists are sick, the same share of each player’s crews is sick and works slower, on top of hunger'], ['Players fall sick at random, likelier in dirty air', 'Likelier while many colonists are sick'], ['Colonists are never sick', 'A health gauge shows the share who are well (never below 6 in 10). Sickness spreads among colonists, needs up to 40% more Medicine, lowers the mood’s aim by up to 4 and growth by up to 2% a month']],
+  ['Electronics', ['Nothing', 'Unchanged'], ['Nothing', 'Unchanged'], ['Hospital, stadium, spaceport wait; colonists want none', 'The buildings wait, as today. Colonists want 1 a month per 50: when they get it their mood aims up to 4 higher; missing it costs nothing. Their want counts as demand for Electronics, Rare earth and Alloy']],
   ['Smithore', ['Nothing', 'Unchanged'], ['No MULE to buy, so a plot stays idle', 'Unchanged'], ['The corral sells out; MULEs 15% dearer next month', 'Unchanged; the store price steps up']],
   ['MULEs', ['A plot cannot be outfitted', 'Unchanged'], ['The store refuses the purchase', 'Unchanged'], ['Price rises while the corral sells out', 'Unchanged, capped like every price']],
   ['Crystite', ['Nothing', 'Unchanged'], ['Nothing', 'Unchanged'], ['The ship gets less; the observatory waits', 'Unchanged']],
-  ['Rare earth', ['An Electronics works cannot run', 'Unchanged'], ['Nothing', 'Unchanged'], ['The ship gets less', 'Unchanged']],
-  ['Alloy', ['An Electronics works cannot run', 'Unchanged'], ['No pollution filter', 'Unchanged'], ['Park, stadium, spaceport wait', 'Unchanged']],
-  ['Electronics', ['Nothing', 'Unchanged'], ['Nothing', 'Unchanged'], ['Hospital, stadium, spaceport wait; no other building starts meanwhile', 'Unchanged']],
-  ['Medicine', ['Nothing', 'Unchanged'], ['A sick player walks at half pace until cured', 'Same; hunger may raise the odds (decision)'], ['A price only', 'Hungry colonists need more; a shortfall counts half in their hardship (colonists’ decisions)']],
+  ['Rare earth', ['An Electronics works cannot run', 'Unchanged'], ['Nothing', 'Unchanged'], ['The ship gets less', 'The ship gets less; its price also rises with the colonists’ Electronics want']],
+  ['Alloy', ['An Electronics works cannot run', 'Unchanged'], ['No air filter', 'Unchanged'], ['Park, stadium, spaceport wait', 'They wait: nothing is imported, so buildings get Alloy only from what the colony made; its price also rises with the colonists’ Electronics want']],
 ];
 function matrixAll() {
   const cell = ([t, p]) => `<td><span class="today">Today:</span> ${t}<br><span class="prop">Proposed:</span> ${p}</td>`;
@@ -409,10 +470,18 @@ const chainDecisions = [
 <li><b>As today: when they start development holding less Food than they eat.</b> <i>Against:</i> it reads the stock after half the Food has spoiled and before the month's market, so a player whose farms make twice their need still counts as hungry; 83 of every 100 player-months read hungry today.</li></ul>
 <p class="rec"><b>Recommended: the household's last meal.</b></p></div>`,
   `<div class="decision"><h3>Does hunger make a player sick more easily?</h3>
-<ul><li><b>Not yet.</b> The simulations never got the air dirty, so sickness is untested; decide it when it can be measured.</li><li><b>Yes</b>: hunger raises the existing sickness odds by up to half. <i>For:</i> one more link in the chain. <i>Against:</i> untested; it stacks on the slower walk.</li></ul>
+<p class="note">This is a player's <i>own</i> hunger. Decision @SPILL@ is the colony's sickness reaching players; both stand, and where both apply their odds add.</p>
+<ul><li><b>Not yet.</b> No simulation has tested this link; decide it when it can be measured.</li><li><b>Yes</b>: hunger raises the existing sickness odds by up to half. <i>For:</i> one more link in the chain. <i>Against:</i> untested; it stacks on the slower walk.</li></ul>
 <p class="rec"><b>Recommended: not yet.</b></p></div>`,
 ];
 const ws7h = ws7HealthParts();
+// One page, one heading per name; and WS7 measured with Medicine at half weight in the mood (the superseded decision),
+// so its mood columns say so.
+ws7h.body = ws7h.body
+  .replace("<h3>What you'll see at the table</h3>", '<h3>Colony health at the table</h3>')
+  .replace('<h3>Measured: ten simulated games</h3>', '<h3>Measured by the colonists’ team</h3>')
+  .replace(/(<p><b>Electronics today:<\/b>[\s\S]*?<\/p>)/, `$1\n<p class="note">Read this table against its own first column. It was measured with the colonists' hardship rule on (49 colonists left without health, where today's rules leave 72) and with missing Medicine also counting at half weight in the mood, which the health rule has since replaced; without that double count the mood should be no worse, but it has not been re-measured. The table further down is the store's side: today's rules plus health, sick crews, and Medicine as today's colony supplies it. The 80,738 is today's store prices; the new ones stop at 880 in a long shortage.</p>`);
+if (!ws7h.body.includes('Colony health at the table')) throw new Error("WS7's health part changed its headings");
 const healthDecisions = [
   `<div class="decision"><h3>Colony health: switch it on now, or with the Medicine supply?</h3>
 <ul><li><b>With the Medicine supply</b>, once a simulation shows colonists short of Medicine in fewer than 40 months of 120 (today 110). <i>For:</i> the rules only make sense when Medicine can be had. <li><b>Now.</b> <i>Against:</i> measured: most months at the ceiling, Food down by a third, 55 colonists left of 100.</li></ul>
@@ -459,6 +528,31 @@ const decisions = [
   ...healthDecisions,
   ...ws7h.decisions,
 ].map((d, i) => d.replace(/<h3>(?:\d+\s*·\s*)?/, `<h3>${i + 1} · `));
+// Your ruling of 6 Nov, and the cross-references between WS7's decisions and the rest, written against the final
+// numbers so a reordering cannot leave a stale number behind.
+const numOf = (re) => { const i = decisions.findIndex((d) => re.test(d.slice(0, d.indexOf('</h3>')))); if (i < 0) throw new Error(`no decision ${re}`); return i + 1; };
+const D = {
+  hungrySick: numOf(/hungry colonists get sick/i), medMood: numOf(/running out of Medicine/i), playerSick: numOf(/hunger make a player sick/i),
+  spill: numOf(/colony sickness reach players/i), sickRule: numOf(/ceiling and recovery/i), healthMood: numOf(/health weighs on the mood/i),
+  elecInputs: numOf(/Electronics demand reach its inputs/i), elecBonus: numOf(/Electronics bonus/i), supply: numOf(/hardship together with the supply/i),
+};
+decisions[D.playerSick - 1] = decisions[D.playerSick - 1].replace('@SPILL@', D.spill);
+D.crews = numOf(/Sick crews/); D.mood = numOf(/mood react to a shortfall/i); D.crewSlow = numOf(/hungry or thirsty crew do/i); D.healthOn = numOf(/switch it on now/i);
+const superseded = (by, why) => `<p class="superseded"><b>Superseded by the health rule (your ruling, 6 Nov), see decision ${by}.</b> ${why} The options below are kept as they were approved, for the record.</p>`;
+const noteAfterH3 = (n, html) => { decisions[n - 1] = decisions[n - 1].replace('</h3>', `</h3>\n${html}`); };
+decisions[D.hungrySick - 1] = decisions[D.hungrySick - 1].replace('</h3>', ' <span class="tag">superseded</span></h3>');
+decisions[D.medMood - 1] = decisions[D.medMood - 1].replace('</h3>', ' <span class="tag">superseded</span></h3>');
+noteAfterH3(D.hungrySick, superseded(D.sickRule, 'Hunger now acts through sickness: hungry colonists fall sick more easily, and the sick share raises their Medicine need by up to 40%. There is no separate “half again” for hunger.'));
+noteAfterH3(D.medMood, superseded(D.healthMood, 'Missing Medicine reaches the mood only through sickness (up to 4 points of its aim), never also as half-weight hardship, so it counts once.'));
+decisions[D.medMood - 1] = decisions[D.medMood - 1].replace("decision 1's extra Medicine need", `decision ${D.hungrySick}'s extra Medicine need`);
+noteAfterH3(D.spill, `<p class="note">This is the colony's sickness reaching players. Decision ${D.playerSick} is a player's own hunger; both stand, and where both apply their odds add.</p>`);
+decisions[D.elecBonus - 1] = decisions[D.elecBonus - 1]
+  .replace(/is the store's side \(WS5\): asking makes it stock them, but with no maker the price runs away \(80,738 measured\)\./, `is the store's side. You ruled that it does: the price rise is the signal to build Electronics works. The new store prices stop the run-away measured under today's prices (80,738): four times normal (880) in a long shortage, twelve times (2,640) at most (decision ${D.elecInputs}).`)
+  .replace(/Whether the store asks for it goes with WS5's pricing ceiling\./, 'The store asks for it, as you ruled.');
+noteAfterH3(D.sickRule, `<p class="note">This rule replaces decision ${D.hungrySick} (your ruling, 6 Nov): hunger raises the colonists' Medicine need only through the sick share, up to 40%.</p>`);
+noteAfterH3(D.healthMood, `<p class="note">This replaces decision ${D.medMood} (your ruling, 6 Nov): missing Medicine reaches the mood only through these points, so it counts once.</p>`);
+decisions[D.hungrySick - 1] = decisions[D.hungrySick - 1].replace('one link Heiko asked for', 'one link you asked for');
+if (/WS\d/.test(decisions.join(''))) throw new Error('a team id is left in the decisions');
 
 const html = `<!doctype html>
 <html lang="en">
@@ -471,14 +565,14 @@ const html = `<!doctype html>
   --ink:#1d2233; --ink-soft:#545b70; --paper:#f5f6f9; --panel:#ffffff; --line:#d9dce5; --accent:#b5651d; --accent-soft:#f6e7d6;
   --font-display:"Chakra Petch","Trebuchet MS",sans-serif; --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
   --bg:var(--paper); --surface:var(--panel); --ink2:var(--ink-soft); --muted:#7a8094; --grid:#e3e5ec; --axis:#b9bdcb; --ring:rgba(29,34,51,0.12);
-  --s1:#1f5fa8; --s2:#b5651d; --s3:#2f7d4f; --c-food:#2f7d4f; --c-water:#1f5fa8; --c-energy:#c08a12; --c-smithore:#6b4fa0; --c-crystite:#a3471f; --c-rare:#3c8a95; --bandA:rgba(29,34,51,0.05); --bandB:rgba(29,34,51,0); --tol:rgba(31,95,168,0.08); --rec:var(--accent); }
+  --s1:#1f5fa8; --s2:#b5651d; --s3:#2f7d4f; --c-food:#2f7d4f; --c-water:#1f5fa8; --c-energy:#c08a12; --c-smithore:#6b4fa0; --c-crystite:#a3471f; --c-rare:#3c8a95; --c-alloy:#5f6b85; --c-elec:#b0308f; --c-med:#c4314b; --c-mule:#1d2233; --bandA:rgba(29,34,51,0.05); --bandB:rgba(29,34,51,0); --tol:rgba(31,95,168,0.08); --rec:var(--accent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark;
   --ink:#e4e7f0; --ink-soft:#a3a9bb; --paper:#141722; --panel:#1c2030; --line:#2f3448; --accent:#e8a35c; --accent-soft:#3a2b1d;
-  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0; --c-food:#7fd3a0; --c-water:#8ab8f0; --c-energy:#f0c85c; --c-smithore:#c2a8ef; --c-crystite:#f0a07c; --c-rare:#7fd0da;
+  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0; --c-food:#7fd3a0; --c-water:#8ab8f0; --c-energy:#f0c85c; --c-smithore:#c2a8ef; --c-crystite:#f0a07c; --c-rare:#7fd0da; --c-alloy:#b4bdd0; --c-elec:#ef93d6; --c-med:#f58e9f; --c-mule:#e4e7f0;
   --bandA:rgba(228,231,240,0.06); --tol:rgba(138,184,240,0.12); } }
 :root[data-theme="dark"] { color-scheme: dark;
   --ink:#e4e7f0; --ink-soft:#a3a9bb; --paper:#141722; --panel:#1c2030; --line:#2f3448; --accent:#e8a35c; --accent-soft:#3a2b1d;
-  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0; --c-food:#7fd3a0; --c-water:#8ab8f0; --c-energy:#f0c85c; --c-smithore:#c2a8ef; --c-crystite:#f0a07c; --c-rare:#7fd0da;
+  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0; --c-food:#7fd3a0; --c-water:#8ab8f0; --c-energy:#f0c85c; --c-smithore:#c2a8ef; --c-crystite:#f0a07c; --c-rare:#7fd0da; --c-alloy:#b4bdd0; --c-elec:#ef93d6; --c-med:#f58e9f; --c-mule:#e4e7f0;
   --bandA:rgba(228,231,240,0.06); --tol:rgba(138,184,240,0.12); }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.6 var(--font-body); }
@@ -494,10 +588,22 @@ figcaption { color: var(--ink-soft); font-size: 14px; margin-top: 6px; }
 .tick { fill: var(--muted); font-size: 11px; } .axislabel { fill: var(--ink2); font-size: 12px; } .lbl { fill: var(--ink); font-size: 12px; }
 .bandname { fill: var(--muted); font-size: 11px; }
 .lane { fill: var(--bandA); stroke: var(--line); } .lanet { fill: var(--ink2); font-size: 12px; font-weight: 600; }
+.sickline { fill: none; stroke: var(--c-med); stroke-width: 1.8; stroke-dasharray: 2 3; } .sickhead { fill: var(--c-med); } .sicklbl { fill: var(--c-med); font-size: 11px; }
 .effline { fill: none; stroke: var(--s2); stroke-width: 1.8; stroke-dasharray: 5 4; } .effhead { fill: var(--s2); } .efflbl { fill: var(--s2); font-size: 11px; }
 .gl { fill: none; stroke: var(--ink2); stroke-opacity: 0.7; stroke-width: 1.4; } .gl.strong { stroke-opacity: 0.9; stroke-width: 2; }
 .g0 { stroke: var(--c-food); } .g1 { stroke: var(--c-water); } .g2 { stroke: var(--c-energy); } .g3 { stroke: var(--c-smithore); }
 .g4 { stroke: var(--c-crystite); } .g5 { stroke: var(--c-rare); } .g6, .g7, .g8 { stroke: var(--ink2); stroke-dasharray: 4 3; }
+.halo { fill: none; stroke: var(--panel); stroke-width: 6; }
+.gl.g-food { stroke: var(--c-food); stroke-opacity: 1; stroke-width: 2; } .ah.g-food { fill: var(--c-food); }
+.gl.g-water { stroke: var(--c-water); stroke-opacity: 1; stroke-width: 2; } .ah.g-water { fill: var(--c-water); }
+.gl.g-energy { stroke: var(--c-energy); stroke-opacity: 1; stroke-width: 2; } .ah.g-energy { fill: var(--c-energy); }
+.gl.g-smithore { stroke: var(--c-smithore); stroke-opacity: 1; stroke-width: 2; } .ah.g-smithore { fill: var(--c-smithore); }
+.gl.g-rare { stroke: var(--c-rare); stroke-opacity: 1; stroke-width: 2; } .ah.g-rare { fill: var(--c-rare); }
+.gl.g-crystite { stroke: var(--c-crystite); stroke-opacity: 1; stroke-width: 2; } .ah.g-crystite { fill: var(--c-crystite); }
+.gl.g-alloy { stroke: var(--c-alloy); stroke-opacity: 1; stroke-width: 2; } .ah.g-alloy { fill: var(--c-alloy); }
+.gl.g-elec { stroke: var(--c-elec); stroke-opacity: 1; stroke-width: 2; } .ah.g-elec { fill: var(--c-elec); }
+.gl.g-med { stroke: var(--c-med); stroke-opacity: 1; stroke-width: 2; } .ah.g-med { fill: var(--c-med); }
+.gl.g-mule { stroke: var(--c-mule); stroke-opacity: 1; stroke-width: 2; } .ah.g-mule { fill: var(--c-mule); }
 .nodet.sm { font-size: 12px; }
 .matrix tbody th { white-space: nowrap; } .today { color: var(--ink2); font-weight: 600; } .prop { color: var(--s1); font-weight: 600; } .barv { fill: #fff; font-size: 12px; font-weight: 600; } .bandA { fill: var(--bandA); } .bandB { fill: var(--bandB); } .tol { fill: var(--tol); }
 .hit { fill: transparent; } .hit:hover { fill: var(--ring); }
@@ -513,13 +619,27 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 .decision { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 12px; margin: 16px 0; }
 .rec { border-left: 3px solid var(--rec); padding-left: 10px; }
 .pending { color: var(--ink-soft); font-style: italic; }
+.since { background: var(--panel); border: 2px solid var(--s1); border-radius: 12px; padding: 4px 18px 8px; margin: 18px 0; }
+.since h2 { border-top: 0; margin: 12px 0 4px; padding-top: 0; font-size: 20px; }
+.superseded { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 6px 10px; border-radius: 6px; }
+.note { color: var(--ink-soft); font-size: 14px; border-left: 3px solid var(--line); padding-left: 10px; }
+.tag { font-size: 12px; font-family: var(--font-body); font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 8px; vertical-align: 2px; margin-left: 4px; }
 </style>
 </head>
 <body>
 <main>
-<p class="sub">Colony economy · a proposal for you to approve · nothing is built yet</p>
+<p class="sub">Colony economy · version 3, 6 Nov · you approved the recommendations on 6 Nov; this version adds your later rulings · nothing is built yet</p>
 <h1>How the colony eats, and what the store charges</h1>
-<p>Four parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, and how colonists feel when they go short. ${decisions.length} decisions for you are at the end, each with a recommendation.</p>
+<p>Five parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, how colonists feel when they go short, and how sickness moves through the colony. The ${decisions.length} decisions are at the end, each with its recommendation; two of them (${D.hungrySick} and ${D.medMood}) are now superseded by the health rule.</p>
+
+<div class="since"><h2>Since you approved (6 Nov)</h2>
+<ul>
+<li><b>Nothing is imported.</b> The colony makes its own goods. Colony buildings get their Alloy and Electronics only through the store, from goods made in the colony; the export ship only takes goods away.</li>
+<li><b>The Federation grant goes to 450</b>, and taxes are the colony fund's largest income.</li>
+<li><b>Two or three colony buildings can be in progress at once.</b></li>
+<li><b>Build times stay at 1 to 3 months per building.</b></li>
+<li><b>The health rule replaces decisions ${D.hungrySick} and ${D.medMood}.</b> Hunger makes colonists sicker; sickness raises the Medicine need (by up to 40%) and lowers the mood; missing Medicine reaches the mood only through sickness. Each effect counts once. Decisions ${D.playerSick} and ${D.spill} both stand: one is a player's own hunger, the other the colony's sickness reaching players.</li>
+</ul></div>
 
 <h2>What you'll see at the table</h2>
 <div class="lead">
@@ -530,6 +650,9 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <li><b>If players pay each other far more than the store asked</b>, the store's price jumps towards that.</li>
 <li><b>Once the colony holds enough again</b>, the price comes down a quarter each month.</li>
 <li>The phone's market strip, the auction and the TV all show the same store price.</li>
+<li><b>Colonists also take Medicine</b>, free from the store. Short of it, or of Food or Water, they fall sick, and sickness spreads to other colonists, to players and to crews. A new <b>colony health</b> gauge beside the mood shows the share who are well.</li>
+<li><b>A crew that went hungry, thirsty or sick works slower.</b> The farm's “dry” halving goes. One Medicine cures a player's crews.</li>
+<li><b>Electronics are a comfort:</b> colonists who get them are happier; missing them costs nothing.</li>
 </ul>
 ${ws7See}
 </div>
@@ -560,7 +683,7 @@ ${matrixAll()}
 ${balanceSection()}
 
 <h2>Crews that go short</h2>
-<p>Today a crew only eats; nothing happens to it if its player leaves it short. The proposal gives each player's crews last month's meal as their state: crews eat at the month's end, after the household, from their own player's stock, and next month every plot of that player works at the share below. A power plant keeps running, as today. The farm's “dry” rule goes: the farm's own Water in the table is its irrigation, and a thirsty crew works slower on every plot instead of only farms halving.</p>
+<p>Today a crew only eats; nothing happens to it if its player leaves it short. The proposal gives each player's crews last month's meal as their state: crews eat at the month's end, after the household, from their own player's stock, and next month every plot of that player works at the share below. A power plant keeps running, as today. A sick crew works slower too, on top of hunger (see Colony health below), and one Medicine in the player's stock cures it. The farm's “dry” rule goes: the farm's own Water in the table is its irrigation, and a thirsty crew works slower on every plot instead of only farms halving.</p>
 <p>Why last month's meal: a plot works before the month's market, so a crew can only be fed from what its player kept back, and today's rule, which looks at the stock just after the month's eating and spoilage, finds nearly everyone short.</p>
 ${crewSection()}
 
@@ -588,7 +711,10 @@ ${fallChart()}
 
 <h2>The colony level: what a shortage does to the colonists</h2>
 ${ws7c.body}
-<p><b>Two notes on the numbers.</b> Medicine's store price today climbs without limit (15,584 in one game); the proposed store prices cap every good at twelve times normal (1,440 for Medicine), and their steps stop at four times (480). And the air stayed clean in all ten simulated games, so nothing here has tested pollution or sickness yet.</p>
+<p><b>Two notes on the numbers.</b> Medicine's store price today climbs without limit (15,584 in one game); the proposed store prices cap every good at twelve times normal (1,440 for Medicine), and their steps stop at four times (480). And the air stayed clean in all ten of these games; the colony health measurements below force dirty air to test sickness.</p>
+<h3>Proposed: colonists who fall sick, and a health gauge</h3>
+<p>Colonists take Medicine from the store, free, after their Food and Water: one a month for every 50 colonists. Short of Medicine, or hungry or thirsty, more of them fall sick, and the more are sick the more catch it. Sickness spreads beyond the colonists: a player's chance of falling sick rises with the colony's sick share, and once a fifth of the colonists are sick the same share of every player's crews is sick and works slower. One Medicine in a player's stock cures their crews.</p>
+<p>A new gauge, <b>colony health</b>, sits beside the mood: the share of colonists who are well, never below 6 in 10. A sick colony needs up to 40% more Medicine, its mood aims up to 4 points lower and it grows up to 2% a month slower. That is the only way missing Medicine reaches the mood: it counts once, through sickness. Electronics work the other way: colonists who get them are happier, and missing them costs nothing. The full rules and their measurements are in “Colony health” below.</p>
 
 <h2>How colonists feel when they go short</h2>
 ${ws7Mood}
@@ -598,18 +724,18 @@ ${ws7Example}
 ${moodBars()}
 ${ws7Measure}
 
-<h2>Addendum: colony health</h2>
-<p>You asked for colonists who need Medicine, fall sick without it, pass sickness on to each other and to players and crews, a colony health gauge, and Electronics that make colonists happier but are never required. The colonists' side comes first; then what it asks of the store, the players and the crews; then what ten simulated games say.</p>
+<h2>Colony health: sickness, Medicine and Electronics</h2>
+<p>Colonists who need Medicine, fall sick without it and pass sickness on to each other, to players and to crews; a colony health gauge; and Electronics that make colonists happier but are never required. The colonists' side comes first; then what it asks of the store, the players and the crews; then what ten simulated games say.</p>
 ${ws7h.body}
 <h3>What it asks of the store, the players and the crews</h3>
 <ul>
 <li><b>Medicine.</b> Colonists take their Medicine from the store at the month's end, free, after Food and Water: one a month for every 50 colonists, half as much again in dirty air, and up to 40% more while many are sick. It counts in what the colony needs, so a Medicine shortage raises its price through the same steps as Food.</li>
-<li><b>Players.</b> A player's chance of falling sick rises with the colony's sick share. Recommended as an addition (up to 10 points more at the worst), not a multiple: as a multiple, dirty air made players sick in 387 of 480 months.</li>
-<li><b>Crews.</b> Once a tenth of the colonists are sick, the same share of each player's crews is sick, and their plots make up to half as much on top of the hunger curve. One Medicine in the player's stock cures that player's crews for the month.</li>
+<li><b>Players.</b> A player's chance of falling sick rises with the colony's sick share (decision ${D.spill}). Recommended as an addition (up to 10 points more at the worst), not a multiple: as a multiple, dirty air made players sick in 387 of 480 months.</li>
+<li><b>Crews.</b> Once a fifth of the colonists are sick (decision ${D.crews}; the simulation below started at a tenth), the same share of each player's crews is sick, and their plots make up to half as much on top of the hunger curve. One Medicine in the player's stock cures that player's crews for the month.</li>
 <li><b>The gauge.</b> Colony health shows beside the colony's mood as the share of colonists who are well. It is a new piece of screen, so its look needs a mock before it is built.</li>
 <li><b>Electronics.</b> Colonists want one a month for every 50 of them; when they get it the mood's aim rises, and when they don't, nothing is lost. It counts in what the colony needs, so its price climbs to four times normal (880) while nobody makes it. The ceiling stays at twelve times (2,640) as a safety rail only. At 880 the store pays 792 for a unit whose inputs (Rare earth, Alloy, Energy) cost about 175 at normal prices, or about 700 even if all three are short: a works pays well.</li>
 </ul>
-<h3>Ten simulated games</h3>
+<h3>Measured on today's supply: ten simulated games</h3>
 ${HEALTH ? tableOf(HEALTH) : '<p class="pending">Running.</p>'}
 <p><b>What it says.</b> The rules cannot run away: with Medicine supplied in full the sick share never reaches the ceiling and every bad spell clears within two to seven months. But today's colony cannot supply Medicine: colonists got about 0.4 of the 2.1 they needed each month, so the sick share sat at its ceiling in most months, sick crews cut Food from 13.2 to 7.9 a month, and 55 colonists were left instead of 72. <b>Medicine supply has to come first.</b></p>
 <p><b>Did the high Electronics price make anyone build Electronics?</b> Two computer players put up an Electronics works as the price rose, but neither became a working chain: in all ten games nobody mined Rare earth or made Alloy, so the works ran for one month in total. The computer players only build a works when they already hold its inputs, and nothing asks for Rare earth or Alloy except a works that already stands. So the price at the end of the chain cannot pull the chain on its own; the inputs need the same signal (decision below). That is also a finding for the computer players' team.</p>
@@ -618,6 +744,8 @@ ${HEALTH ? tableOf(HEALTH) : '<p class="pending">Running.</p>'}
 ${simBlock}
 
 <h2>Decisions for you</h2>
+<h3>Where decisions overlap</h3>
+<p>Some decisions touch the same effect from two sides. <b>Decisions ${D.playerSick} and ${D.spill} both stand:</b> ${D.playerSick} is a player's own hunger making them sick, ${D.spill} is the colony's sickness reaching players; their odds add. <b>Decision ${D.hungrySick} is superseded by the health rule (decision ${D.sickRule}):</b> hunger acts through the sick share, which raises the colonists' Medicine need by up to 40%; there is no separate “half again”. <b>Decision ${D.medMood} is superseded by decision ${D.healthMood}:</b> missing Medicine reaches the mood only through sickness, never also as half-weight hardship, so Medicine counts once in the mood. Hunger itself reaches the mood twice by design, at once as its blow (decision ${D.mood}) and slowly through sickness (up to 4 points, decision ${D.healthMood}). A crew that is both hungry and sick works slower on both counts (decisions ${D.crewSlow} and ${D.crews}). Health switches on together with the Medicine supply (decision ${D.healthOn}), as hardship does with the Food supply (decision ${D.supply}).</p>
 ${decisions.join('\n')}
 </main>
 </body>
