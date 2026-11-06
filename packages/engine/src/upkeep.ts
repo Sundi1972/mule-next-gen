@@ -1,12 +1,19 @@
-import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { GAME, GOOD_CONFIG, HAPPINESS, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { moodBand } from './colony.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
 import { GOODS, type GameState, type Good } from './types.js';
 
-/** The factor the colonists grow by at this upkeep (G-5 RULE-29). */
+/**
+ * The factor the colonists grow by at this upkeep, never below 0 (G-5 RULE-29). The mood's band is read as upkeep
+ * finds it, before runColony steps it: the band the players saw this month.
+ */
 export function growthRate(state: GameState, fed: boolean): number {
-  throw new Error('NotImplemented: growthRate');
+  if (airBand(state.air).name === 'collapse') return 1 - POLLUTION.collapseLeave;
+  const base = fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
+  const mood = state.colony ? HAPPINESS.migration[moodBand(state.colony.happiness)] : 0;
+  return Math.max(0, base + mood);
 }
 
 /**
@@ -44,9 +51,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     state.store.stock[good] = Math.max(0, state.store.stock[good] - bought);
     state.store.capital += Math.round(bought * price);
   }
-  // In Collapse colonists leave whatever they eat.
-  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
-  state.colonists = Math.round(state.colonists * growth);
+  state.colonists = Math.round(state.colonists * growthRate(state, fed));
 
   // Spoilage, then anything above the home depot is lost. Selling it in time
   // is the player's own decision.
