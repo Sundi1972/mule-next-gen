@@ -38,7 +38,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, linkShare, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -455,19 +455,21 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
 }
 
 /**
- * A chain focus's links (chainLinks) and what a link MULE is worth: the whole chain's value with that link on `tile`,
- * the works and the other links each on their best own idle or free plot, all at chainOutlook's prices. A link alone
- * makes nothing the seat can sell, so it is worth what it completes. Null when `focus` is no chain. See AM-32.
+ * A chain focus's links (chainLinks) and what a link MULE on `tile` is worth, at chainOutlook's prices: its running
+ * cost, plus the works' best gain times the share of the works' run it supplies (linkShare), plus the other links'
+ * running costs on their best own idle or free plots. A link alone makes nothing the seat can sell, so it is worth what
+ * it completes. Null when `focus` is no chain. See AM-32.
  */
 function chainValue(obs: GameState, o: Outlook, mind: Mind, focus: Good): { links: Good[]; linkGain: (tile: Tile, link: Outfit) => number } | null {
   const links = chainLinks(obs, mind.me, focus);
   if (links.length === 0) return null;
   const valued = chainOutlook(o, links);
+  const members = [focus, ...links];
   const ground = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === mind.me && !t.outfit)));
-  const bestOf = (outfit: Outfit) => Math.max(...ground.map((t) => installGain(obs, valued, t, outfit, mind).gain));
-  const best = new Map<Outfit, number>([focus, ...links].map((g) => [g, bestOf(g)]));
-  const whole = [...best.values()].reduce((n, g) => n + g, 0);
-  return { links, linkGain: (tile, link) => whole - best.get(link)! + installGain(obs, valued, tile, link, mind).gain };
+  const running = (tile: Tile, outfit: Outfit) => installGain(obs, valued, tile, outfit, mind).gain;
+  const best = new Map(members.map((g) => [g, Math.max(...ground.map((t) => running(t, g)))]));
+  const others = (link: Good) => links.reduce((n, g) => (g === link ? n : n + best.get(g)!), 0);
+  return { links, linkGain: (tile, link) => running(tile, link) + linkShare(obs, tile, link as Good, members, mind.me) * best.get(focus)! + others(link as Good) };
 }
 
 /**
