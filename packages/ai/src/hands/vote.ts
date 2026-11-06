@@ -20,7 +20,6 @@ import {
   type LawProposal,
   type Office,
   type PrestigeId,
-  type Project,
   type Rng,
   type TaxPromise,
 } from '@mule/engine';
