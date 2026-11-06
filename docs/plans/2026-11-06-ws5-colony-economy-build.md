@@ -444,6 +444,13 @@ Test: `packages/engine/test/off-world.test.ts` (new).
   e2e-regression, sim).
 - [ ] The report on the integration head vs the base (Task 1.0) in the batch body: prices, sold-out months,
   colonists short, colonists at the end, Electronics.
+- [ ] PR-1 never reaches trunk without PR-2 (PM, 6 Nov): with the real PR-2 merged, the same 10 seed-1 games, politics
+  on, against Task 1.6's table: colonists at the end, months short of Food or Water, hungry seat-months, mood, and
+  AI Food sold (WS9's watch row).
+- [ ] The MULE price (WS1, 6 Nov; WS1 re-measures after the batch lands): on 40 games, seed 1, base vs head, the
+  MULE price p90 (the sim's target is under 500; the base gives 679 on trunk 773f96b5), and a MULE's end-of-game
+  price ÷ its month-1 price (the base median is 9.99×, 18 of 40 games at 10× or more, max 83×). The cap comes from
+  PR-1's Smithore ceiling (12× reference) and PR-4's `MULE.maxFactor` 2.0 together.
 - [ ] Every rulebook chapter the milestone touched reads "In the game" for what it built.
 - [ ] The PM batches it to trunk; WS5 tells WS9 that C17 is on trunk.
 
