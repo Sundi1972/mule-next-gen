@@ -1,0 +1,5 @@
+node_modules/
+dist/
+# copies of the 39 MB / 8 MB models and the HDRI; the sources live in ../out and ../assets
+public/*.glb
+public/*.hdr

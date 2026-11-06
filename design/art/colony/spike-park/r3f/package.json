@@ -1,0 +1,28 @@
+{
+  "name": "spike-park-r3f",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 8820 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 8820 --strictPort"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "@react-three/postprocessing": "^3.2.2",
+    "postprocessing": "^6.39.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.175.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.175.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "typescript": "5.9",
+    "vite": "^8.3.6"
+  }
+}
