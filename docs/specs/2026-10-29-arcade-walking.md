@@ -755,7 +755,10 @@ inside a wall; money and stock change only through game.ts rules; development en
   "Just swapped: lead it to another plot", for a direct action such as the AI's. The block holds only while the led MULE keeps the outfit it was swapped off with
   (`game.ts::justSwappedOff`); re-outfitted since, it is a real swap and allowed (review finding on #383). Reach row 10's notes: "you lead your
   <good> MULE", "same outfit, nothing to swap" and "just swapped: lead it to another plot". Pins:
-  `apps/server/test/installed-this-turn.test.ts` B-AC-SWAP-1..4, `floor-reach.test.ts` rows 10. Not in scope: a
+  `apps/server/test/installed-this-turn.test.ts` B-AC-SWAP-1..5, `floor-reach.test.ts` rows 10. **B-AC-SWAP-5 (the
+  warning, WS6, #444):** while the led MULE came off by a swap, `MyView.leadsSwapped` is set on the player's own view
+  only, and the walking screen says "Turn ends: this MULE goes back to the corral" (the phone's guide note; the laptop's
+  rail); a bought MULE never does. Pins: the server test above and `apps/web/test/arcade-screens.test.ts`. Not in scope: a
   mid-turn "return to the corral" press with a refund (backlog, put to Heiko).
 
 - **AM-34 (2026-11-05, Heiko: "Yes, always count", via the PM).** Month 1's development clock counts down from the
