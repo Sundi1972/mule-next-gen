@@ -166,6 +166,11 @@ def build(stage):
         bx(tx - 1.8, tx + 1.8, ty - 1.8, ty + 1.8, ZT + th, ZT + th + 0.3, dark, 0.02, "tower_top")
         cyl("lightning_mast", tx, ty, 0.08, ZT + th + 0.3, ZT + th + 3.5, dark, 8)
         cyl("beacon", tx, ty, 0.2, ZT + th + 3.5, ZT + th + 4.0, signal, 12)
+        if lit:  # work lamps on the gantry's levels, so it reads at night as well
+            lampm = accent("gantry_lamp", (0.9, 0.85, 0.7), glow=6.0, emit=(1.0, 0.8, 0.5))
+            for zl in (ZT + 7.5, ZT + 15.0, ZT + 22.5):
+                bx(tx + 1.5, tx + 1.75, ty - 1.75, ty - 1.5, zl, zl + 0.25, lampm, 0, "gantry_lamp")
+                light("POINT", (tx + 1.9, ty - 1.9, zl + 0.1), 80, (1.0, 0.8, 0.5), 0.2)
     if lit or closed:
         for za in (z0 + 9.0, z0 + 19.0, z0 + 29.8):
             arm = bx(0, 3.4, -0.5, 0.5, 0, 0.7, dark, 0.02, "access_arm")
@@ -200,15 +205,20 @@ def build(stage):
     gl = mat("dead_glass") if (closed or b2) else glass_mat("window_glass_empty", lit_share=0.0) if damaged else None
     kits.modern(3.0, -9.0, 5.0, 3.0, 1, 3.0, concrete if not closed else kits.faded("blockhouse"), "blockhouse", sp=1.0, top_extra=0.5, upto=0 if b1 else None, gl=gl)
     if lit:  # floodlights round the pad, aimed up the rocket: at night it stands lit
-        for a in (math.radians(-45), math.radians(-150), math.radians(60)):
+        for a in (math.radians(-90), math.radians(30), math.radians(150)):  # none on the camera's line to the rocket
             fx, fy = 10.0 * math.cos(a), 10.0 * math.sin(a)
-            cyl("flood_pole", fx, fy, 0.08, ZT, ZT + 3.0, dark, 8)
-            bx(fx - 0.3, fx + 0.3, fy - 0.3, fy + 0.3, ZT + 3.0, ZT + 3.4, accent("pad_flood", (0.9, 0.92, 0.95), glow=18.0, emit=(0.95, 0.97, 1.0)), 0.01, "flood_head")
-            S = light("SPOT", (fx, fy, ZT + 3.2), 9000, (0.95, 0.96, 1.0), 0.3)
-            d = Vector((0 - fx, 0 - fy, 18.0 - 3.2))
-            S.rotation_euler = (-d).to_track_quat("Z", "Y").to_euler()
-            S.data.spot_size = math.radians(24)
-            S.data.spot_blend = 0.4
+            # a 22 m light tower with a head low down for the body and boosters and one at the top for the upper
+            # stage and fairing: lit from the ground alone, the beams graze the cylinder and its top half stays dark
+            head = accent("pad_flood", (0.9, 0.92, 0.95), glow=18.0, emit=(0.95, 0.97, 1.0))
+            cyl("flood_tower", fx, fy, 0.12, ZT, ZT + 22.0, dark, 8)
+            for hz in (3.0, 22.0):
+                bx(fx - 0.35, fx + 0.35, fy - 0.35, fy + 0.35, ZT + hz, ZT + hz + 0.4, head, 0.01, "flood_head")
+            for (hz, aim_z, size, energy) in ((3.2, 12.0, 62, 18000), (22.2, 30.0, 40, 26000)):
+                S = light("SPOT", (fx, fy, ZT + hz), energy, (0.95, 0.96, 1.0), 0.3)
+                d = Vector((0 - fx, 0 - fy, aim_z - hz))
+                S.rotation_euler = (-d).to_track_quat("Z", "Y").to_euler()
+                S.data.spot_size = math.radians(size)
+                S.data.spot_blend = 0.6
         rover = flat("rover_white", (0.82, 0.83, 0.85), 0.4)  # a rover by the blockhouse
         rx_, ry_ = -3.5, -9.5
         bx(rx_ - 1.6, rx_ + 1.6, ry_ - 0.95, ry_ + 0.95, ZT + 0.75, ZT + 1.5, rover, 0.08, "rover_body")
