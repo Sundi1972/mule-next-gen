@@ -38,7 +38,7 @@ Cost: free.
 
 ### buyMule
 In: development.
-Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 15% after a month the corral sold out), and Gearlings pay 95% of it.
+Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 25% after a month the corral sold out), and Gearlings pay 95% of it.
 Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); the walk there ends before the clock does (else: "Not enough time to walk there"); you are not already leading a MULE (else: "Already leading a MULE"); the corral has a MULE left (else: "The store is out of MULEs"); you have the price in hand (else: "Not enough money").
 Cost: yes, as it says under Does.
 
@@ -173,7 +173,7 @@ Each line names the move and the playbook field you set to play it.
 - claim (LandGrantPlay.ranked): a plot adds 300 to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes 1 more.
 - claim (LandGrantPlay.deny): take a plot before a rival does when it is worth more to them than it costs you to hold.
 - done (LandGrantPlay.claims): claim fewer when you cannot pay for a MULE on the plot (120 plus Smithore, then the outfit): a plot without one makes nothing.
-- buyMule (DevelopmentPlay.route): buy early: the corral has a MULE for each plot claimed this month plus 2, and a sold-out corral raises next month's price by 15%.
+- buyMule (DevelopmentPlay.route): buy early: the corral has a MULE for each plot claimed this month plus 2, and a sold-out corral raises next month's price by 25%.
 - analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 60, so analyse only where the answer changes the outfit.
 - outfit (Strategy.moneyMaker): for the good the colony is short of or the export ship wants (3 goods, every 3 months): a scarce good sells dear.
 - pub (DevelopmentPlay.ifSoldOut): when the corral is out or your route is done: the pub pays more the earlier you go, 20 plus up to 60 + 20 times the month.
