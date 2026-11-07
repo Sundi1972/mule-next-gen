@@ -239,8 +239,7 @@ describe('the AI move list (C9)', () => {
     expect(s.players[0]!.money).toBe(before - DEVELOPMENT.droneFee);
   });
 
-  // trace-allow: WS1's AiAction coverage contract for slice 5 S5-C9; the plan (Task S5-1.8) gives it no AC id
-  it("the AI's setBudget, callOverrule and voteOverrule moves reach politics.ts through applyAction, and a refused one returns false, writes nothing and carries S5-RULE-2, -6 and -7's words in MOVES' legalWhen", () => {
+  it("T-AC-11: the AI's setBudget, callOverrule and voteOverrule moves reach politics.ts through applyAction, and a refused one returns false, writes nothing and carries S5-RULE-2, -6 and -7's words in MOVES' legalWhen", () => {
     // Month 2's planning with p0 governing and no election open.
     const governed = (politics = true): GameState => {
       const g = createGame({ seed: 7, players: IDS.map((id) => ({ id, name: id, isAi: true })), politics });
@@ -307,7 +306,7 @@ describe('the AI move list (C9)', () => {
       refuse(governed(), 'p0', budget(80, 25)),
       refuse(governed(), 'p0', budget(95, 10)),
       refuse(governed(), 'p0', { type: 'callOverrule', target: 'tax' }),
-      refuse(raised, 'p0', { type: 'callOverrule', target: 'tax' }),
+      refuse(governed(), 'p1', { type: 'callOverrule', target: 'tax' }, (g) => void (g.politics = { ...g.politics!, governor: null })),
       refuse(raised, 'p1', { type: 'callOverrule', target: 'budget' }),
       refuse(raised, 'p1', { type: 'callOverrule', target: 'confidence' }),
       refuse(governed(), 'p1', { type: 'callOverrule', target: 'tax' }),
@@ -318,10 +317,11 @@ describe('the AI move list (C9)', () => {
     ];
     const lines = [...described('setBudget').legalWhen(), ...described('callOverrule').legalWhen(), ...described('voteOverrule').legalWhen()];
     // The texts that carry a name or a number are matched on their fixed words; the rest verbatim.
-    for (const words of thrown) {
-      const fixed = lines.some((line) => line === words || new RegExp(`^${line.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[a-z]+\}/g, '.+')}$`).test(words));
-      expect(fixed, `legalWhen has no line for "${words}"`).toBe(true);
-    }
+    const matches = (line: string, words: string) =>
+      line === words || new RegExp(`^${line.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[a-z]+\}/g, '.+')}$`).test(words);
+    for (const words of thrown) expect(lines.some((line) => matches(line, words)), `legalWhen has no line for "${words}"`).toBe(true);
+    // And the other way: every legalWhen line is a refusal the engine really sends.
+    for (const line of lines) expect(thrown.some((words) => matches(line, words)), `nothing throws legalWhen's "${line}"`).toBe(true);
   });
 });
 
