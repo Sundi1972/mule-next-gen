@@ -1,4 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// S4-T-AC-4's spy: a pass-through that records the two hooks in the order they run. vi.spyOn on an ESM namespace would
+// not intercept sabotage.ts's own import of them; vi.mock replaces the module sabotage.ts imports.
+const hooks = vi.hoisted(() => ({ calls: [] as { fn: 'reputationShift' | 'pactBreach'; args: unknown[] }[] }));
+vi.mock('../src/diplomacy.js', async (original) => {
+  const real = await original<typeof import('../src/diplomacy.js')>();
+  return { ...real, pactBreach: (...args: Parameters<typeof real.pactBreach>) => (hooks.calls.push({ fn: 'pactBreach', args }), real.pactBreach(...args)) };
+});
+vi.mock('../src/politics.js', async (original) => {
+  const real = await original<typeof import('../src/politics.js')>();
+  return { ...real, reputationShift: (...args: Parameters<typeof real.reputationShift>) => (hooks.calls.push({ fn: 'reputationShift', args }), real.reputationShift(...args)) };
+});
 import {
   advancePhase,
   captureOdds,
@@ -6,10 +18,13 @@ import {
   createRng,
   GOODS,
   guardsMax,
+  investigate,
   orderSabotage,
   POLITICS,
+  reputationReasons,
   resolveSabotage,
   RuleError,
+  sabotagePossible,
   sabotageEvents,
   seedOf,
   storeEvent,
@@ -495,5 +510,118 @@ describe('a sabotage month through advancePhase', () => {
     expect(lines).toEqual(base.lines);
     expect(events).toEqual(base.events);
     expect(failed.state.politics!.sabotage[0]).toMatchObject({ outcome: 'failed', culpritPublic: false });
+  });
+});
+
+// --- Task S4-1.4: the one reveal -----------------------------------------------------------------------------------
+
+/** What the two hooks were called with since the last reset, as [fn, culprit-or-saboteur, ...] for the calls about `who`. */
+function hookCalls(who: string) {
+  return hooks.calls.filter((c) => c.args[1] === who);
+}
+
+/** A pact between Lena and Brix that binds months 1 to 3. */
+function pactLenaBrix(state: GameState): void {
+  state.politics!.deals.push({ id: 'deal-pact001', from: 'lena', to: 'brix', terms: { kind: 'pact' }, offered: 1, until: 3, status: 'active', brokenBy: null, settled: null });
+}
+
+describe('the one reveal', () => {
+  sabotageOn();
+  beforeEach(() => void (hooks.calls.length = 0));
+
+  const caughtMove = () => POLITICS.reputation.moves.caught;
+
+  it('S4-T-AC-4: a guarded cut: reputationShift(culprit, caught x multiplier) first, then pactBreach once with (culprit, victim, order.month)', () => {
+    const { state } = monthOfSabotage(4, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
+    resolveSabotage(state);
+    const order = state.politics!.sabotage[0]!;
+    expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach']);
+    expect(hooks.calls[0]!.args.slice(1)).toEqual(['lena', caughtMove() * 1]);
+    expect(hooks.calls[1]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
+    expect(order.culpritPublic).toBe(true);
+  });
+
+  it('S4-T-AC-4: a caught-on-the-spot cut (works or not) goes through the same two hooks', () => {
+    for (const worked of [true, false]) {
+      hooks.calls.length = 0;
+      const seed = seedFor({ works: worked, seen: true }, cutBrix);
+      const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+      resolveSabotage(state);
+      expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach']);
+      expect(hooks.calls[1]!.args.slice(1, 4)).toEqual(['lena', 'brix', state.month]);
+    }
+  });
+
+  it('S4-T-AC-4: a rumour caught moves reputation but never asks about a pact', () => {
+    const seed = seedFor({ works: true, seen: true }, () => rumourFood);
+    const { state } = monthOfSabotage(seed, [{ by: 'lena', target: () => rumourFood }]);
+    const before = state.players[0]!.reputation;
+    resolveSabotage(state);
+    expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift']);
+    expect(hooks.calls[0]!.args.slice(1)).toEqual(['lena', caughtMove()]);
+    expect(state.players[0]!.reputation).toBe(before + caughtMove());
+  });
+
+  it('S4-T-AC-4: an order that is not seen reveals nothing: no reputation move, no pact check, culprit unknown', () => {
+    const seed = seedFor({ works: true, seen: false }, cutBrix);
+    const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+    const before = state.players[0]!.reputation;
+    resolveSabotage(state);
+    expect(hooks.calls).toEqual([]);
+    expect(state.players[0]!.reputation).toBe(before);
+  });
+
+  it('S4-T-AC-4: caught against a pact partner: -10 caught then the pact breaks for -20 more, -30 in all, once per card', () => {
+    const { state } = monthOfSabotage(4, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
+    pactLenaBrix(state);
+    const before = state.players[0]!.reputation;
+    resolveSabotage(state);
+    expect(state.players[0]!.reputation).toBe(before + caughtMove() + POLITICS.reputation.moves.pactBroken);
+    expect(state.politics!.deals[0]).toMatchObject({ status: 'broken', brokenBy: 'lena' });
+    expect(hookCalls('lena').map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach', 'reputationShift']);
+  });
+
+  it('S4-T-AC-4: sabotagePossible is true exactly when politics is on and POLITICS.sabotage.on', () => {
+    const on = newGame();
+    const off = newGame({ politics: false });
+    for (const flag of [true, false]) {
+      POLITICS.sabotage.on = flag;
+      expect(sabotagePossible(on)).toBe(flag);
+      expect(sabotagePossible(off)).toBe(false);
+    }
+  });
+
+  it('S4-T-AC-4: a public, attributed order is a "caught" reputation reason, in its month, among the others newest first', () => {
+    const { state } = monthOfSabotage(4, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
+    resolveSabotage(state);
+    expect(reputationReasons(state, 'lena')).toEqual([{ kind: 'caught', month: state.month }]);
+    expect(reputationReasons(state, 'brix')).toEqual([]);
+    // An order nobody has attributed is no reason.
+    const quiet = monthOfSabotage(seedFor({ works: true, seen: false }, cutBrix), [{ by: 'lena', target: cutBrix }]);
+    resolveSabotage(quiet.state);
+    expect(reputationReasons(quiet.state, 'lena')).toEqual([]);
+  });
+
+  // Red until Task S4-1.7 builds investigate: the order a Sheriff solves months later still carries its own month to pactBreach.
+  it('S4-T-AC-4 (investigation leg, red until S4-1.7): an investigation months later still calls pactBreach with the order\'s month', () => {
+    let solved = false;
+    for (let seed = 1; seed <= 60 && !solved; seed++) {
+      hooks.calls.length = 0;
+      const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+      resolveSabotage(state);
+      const order = state.politics!.sabotage[0]!;
+      if (order.outcome !== 'done') continue;
+      state.politics!.sheriff = 'ossa';
+      state.month = order.month + 2;
+      state.phase = 'planning';
+      pactLenaBrix(state);
+      state.politics!.deals[0]!.until = state.month;
+      if (investigate(state, 'ossa', order.id).culpritPublic) {
+        solved = true;
+        expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach']);
+        expect(hooks.calls[1]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
+      }
+    }
+    expect(solved).toBe(true);
   });
 });
