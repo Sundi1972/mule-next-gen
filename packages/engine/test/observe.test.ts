@@ -85,9 +85,10 @@ describe('secret ballots', () => {
         done: ['lena', 'tam'],
         result: stage === 'ballot' ? null : { passed: false, yes: 1, no: 1, tie: true },
       };
-      expect(observe(state, 'lena').politics!.council!.ballots, stage).toEqual({ lena: true });
-      expect(observe(state, 'tam').politics!.council!.ballots, stage).toEqual({ tam: false });
-      expect(observe(state, 'brix').politics!.council!.ballots, `${stage}: a seat that didn't vote sees none`).toEqual({});
+      // Besides its own, a seat sees only the proposer's opening yes, which is public.
+      expect(observe(state, 'lena').politics!.council!.ballots, stage).toEqual({ brix: true, lena: true });
+      expect(observe(state, 'tam').politics!.council!.ballots, stage).toEqual({ brix: true, tam: false });
+      expect(observe(state, 'brix').politics!.council!.ballots, stage).toEqual({ brix: true });
       // The totals are public, and the real game keeps every ballot.
       expect(observe(state, 'brix').politics!.council!.result, stage).toEqual(state.politics!.council!.result);
       expect(state.politics!.council!.ballots, stage).toEqual({ lena: true, tam: false });
