@@ -309,7 +309,7 @@ describe('C26 PR-B: the loyal crew, in production', () => {
 });
 
 /** A colony object at `stage`, as colony.ts keeps it. */
-const object = (id: PrestigeId, stage: Project['stage'] = 'standing'): Project => ({ id, stage, funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+const object = (id: PrestigeId, stage: Project['stage'] = 'standing'): Project => ({ id, stage, funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
 
 describe('C26 PR-B: the riot, at the month end', () => {
   const rioting = (h: number, setUp: (s: GameState) => void = () => {}, seed = 4) => {

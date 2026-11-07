@@ -1,6 +1,6 @@
 import { DEFAULT_SPECIES, EVENTS, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
-import { dotsOf, GOOD_NAME, SPECIES, type Good, type MapObject, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
+import { dotsOf, GOOD_NAME, SPECIES, type Good, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
 /**
  * Small, pure readings of the view for the screens. No rules live here: the
@@ -49,25 +49,9 @@ export function lobbySeatSpecies(seat: SeatView, index: number): Species {
   return known(seat.pick) ?? known(seat.defaultPick) ?? DEFAULT_SPECIES[index % DEFAULT_SPECIES.length]!;
 }
 
-/**
- * The colony's objects by the plot they stand on (a tile index): a project holds its plot from its site on, at every
- * stage, and an object that needs no plot has none. A building site counts its months built.
- */
-function objectsByPlot(view: MuleView): Map<number, MapObject> {
-  const out = new Map<number, MapObject>();
-  for (const p of view.colony?.projects ?? []) {
-    if (p.plot === null) continue;
-    const built = p.stage === 'building' && p.monthsLeft !== null ? { built: p.buildMonths - p.monthsLeft } : {};
-    out.set(p.plot, { kind: p.id, name: p.name, stage: p.stage, buildMonths: p.buildMonths, ...built });
-  }
-  return out;
-}
-
 /** The view's tiles as the map draws them. */
 export function mapTiles(view: MuleView): MapTile[] {
-  const objects = objectsByPlot(view);
-  return view.tiles.map((t, i) => {
-    const object = objects.get(i);
+  return view.tiles.map((t) => {
     const owner = slotOf(view, t.owner);
     const good = t.outfit && t.outfit !== 'greenBelt' ? t.outfit : undefined;
     const ground = dotsOf(t.ground);
@@ -81,7 +65,6 @@ export function mapTiles(view: MuleView): MapTile[] {
       ...(ground ? { ground } : {}),
       ...(t.pollution ? { pollution: t.pollution } : {}),
       ...(t.special ? { special: t.special } : {}),
-      ...(object ? { object } : {}),
     };
   });
 }
