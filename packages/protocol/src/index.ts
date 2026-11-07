@@ -1,4 +1,4 @@
-import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, BudgetLine, DealCard, DealOffer, DevPlace, Election, InquiryRecord, Overrule, OverruleTarget, OverruleWhy, SabotageOrder, SabotageTarget, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, BudgetLine, DealCard, DealOffer, DevPlace, Election, InquiryRecord, Overrule, OverruleTarget, OverruleWhy, SabotageOrder, SabotageTarget, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PlayerId, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -313,6 +313,16 @@ export interface MyView {
   worthParts: ScorePartsView;
   /** This player's own cards; null with politics off. Optional only for older fixtures: the server always sends it. */
   deals?: MyDealsView | null;
+}
+
+/**
+ * One news line and the seats it names: one id for each name in the words, in their order, repeats kept ("Ossa broke a
+ * promise to Brix: a vote for Brix" names ossa, brix, brix), so a screen can mark each name where it stands. A screen
+ * that wants only who is named dedupes.
+ */
+export interface NewsLine {
+  text: string;
+  who: PlayerId[];
 }
 
 /** A player's own deal cards (slice 3). */
@@ -832,6 +842,8 @@ export interface MuleView {
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
   news: string[];
+  /** The same lines as `news`, in the same order, each with the seats it names in the words' order, so a screen can mark a computer seat. Optional only for older fixtures. */
+  newsLines?: NewsLine[];
   /** At game over; `parts` only on the viewer's own entry, never in the board view (goods are private). */
   scores: { id: string; score: number; parts?: ScorePartsView }[] | null;
   /** The live goods auction while it runs. */
