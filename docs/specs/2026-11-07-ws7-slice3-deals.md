@@ -1211,6 +1211,19 @@ because   the phone sends a pick only when tapped; a preselection never tapped s
 goal      S3-2 — still met; S3-B-AC-2 now holds when the player only presses Cast
 ```
 
+```
+AM-8 · 2026-11-07 · WS7 (build: S3-PR-4 group A, the implementer's question) · the Governor's law vote is not the port's
+
+target    §8 AM-5's conditions (VotePort in VoteHand.lawVote)
+said      AM-5 reads the port "before the keyless rule" and exempts only a candidate's vote for itself
+did       on a law ballot the sitting Governor votes yes and the port is not asked, as a candidate votes itself: the
+          engine already counts the Governor's ballot as a yes (slice 2a), and the proposal is theirs. For every
+          other seat the port is asked first, before the Baron's no on a land tax and the rest of the keyless rows.
+because   a port answering no for the Governor would vote down the Governor's own proposal, against the ballot the
+          engine presets for them
+goal      S3-2 — unchanged; WS2's port is asked for every seat but the Governor on the law
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: deal cards (a second writer inside Politics)
