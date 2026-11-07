@@ -7,3 +7,4 @@ export { WRITER_SYSTEM } from './system.js';
 export { defaultManual, seatBounds } from './manual.js';
 export { OFFERED, TOOL_DEFS, toolsFor, type ToolDef, type ToolResult, type WhatIfSim } from './tools.js';
 export { afterGrant, GRANTED, newPlots, ownedPlots, resolveGranted } from './granted.js';
+export { handsDevelopment, keptDevelopmentPlaysToday, type HandsDevelopment } from './kept.js';
