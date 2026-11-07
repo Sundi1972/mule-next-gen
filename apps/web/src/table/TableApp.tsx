@@ -6,6 +6,7 @@ import {
   boardWalkers,
   dealLine,
   dealSpeed,
+  heldSeller,
   newestFirst,
   shipWants,
   ShipWants,
@@ -459,6 +460,20 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
 }
 
 /**
+ * The sellers held at what they must hold, newest first: those already held keep their order, one just held goes on top.
+ * The order is adjusted during render, as useNewestFirst's, so the card never shows a seller who is no longer held.
+ */
+function useHeldNewestFirst(ids: string[]): string[] {
+  const key = ids.join(',');
+  const [held, setHeld] = useState(() => ({ key, ids }));
+  if (held.key === key) return held.ids;
+  const kept = held.ids.filter((id) => ids.includes(id));
+  const next = [...ids.filter((id) => !kept.includes(id)), ...kept];
+  setHeld({ key, ids: next });
+  return next;
+}
+
+/**
  * The auction on the big screen: before each good, the status table and everyone's side, which is public;
  * then the whole board, large, with every creature walking live.
  */
@@ -468,6 +483,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
+  const held = useHeldNewestFirst(auction.walkers.filter(heldSeller).map((w) => w.id));
   const status = auction.stage === 'status';
   // The close stage (A-5, G-5): the board holds still while each phone shows its receipt; "closed" is the receipt's word.
   const closed = auction.stage === 'close';
@@ -609,6 +625,40 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                   The ship buys {GOOD_NAME[auction.good]} at {auction.shipPays}
                 </strong>
               </p>
+            )}
+            {/* RULE-4 said, not only marked KEEPS on the board (WS6's mock, TvSale): the newest held seller in the mock's
+                card; the others are their marks in one box of a fixed height, whatever their number, so a full table
+                keeps the side over the fit floor (PM ruling (A), 6 Nov). The board names each one's KEEPS n. */}
+            {!status && held.length > 0 && (
+              <ul className="flex shrink-0 flex-col gap-1.5" data-testid="tv-held">
+                {(() => {
+                  const w = auction.walkers.find((x) => x.id === held[0])!;
+                  const name = game.players.find((x) => x.id === w.id)?.name ?? w.id;
+                  return (
+                    <li className="flex flex-col gap-2 rounded-panel border border-ok/70 bg-panel p-4" data-testid={`tv-held-${w.id}`}>
+                      {/* The line wraps, as the mock's does: a long name never cuts off the count and the good. The mark is
+                          the name's picture, so a reader hears the name once. */}
+                      <span className="flex items-start gap-2 font-display text-2xl font-semibold leading-tight">
+                        <span aria-hidden="true" className="shrink-0">
+                          <PlayerMark slot={slotOf(game, w.id) ?? 0} size={32} label={name} />
+                        </span>
+                        <span className="min-w-0 break-words" data-testid="held-words">{`${name} keeps ${w.units} ${GOOD_NAME[auction.good]}`}</span>
+                      </span>
+                      <span className="font-mono text-xl text-ink-2">what they must hold</span>
+                    </li>
+                  );
+                })()}
+                {held.length > 1 && (
+                  <li className="flex flex-col gap-1 rounded-control border border-ok/70 bg-panel px-3 py-1.5" data-testid="tv-held-others">
+                    <span className="flex h-5 items-center gap-1.5">
+                      {held.slice(1).map((id) => (
+                        <PlayerMark key={id} slot={slotOf(game, id) ?? 0} size={20} label={game.players.find((x) => x.id === id)?.name ?? id} />
+                      ))}
+                    </span>
+                    <span className="text-base leading-tight text-ink-2">{held.length > 2 ? 'keep' : 'keeps'} what they must hold too</span>
+                  </li>
+                )}
+              </ul>
             )}
             {/* Newest first, every one of them: none is clipped or wrapped out of sight; the side scales instead. */}
             <ul className="flex flex-1 flex-col gap-1.5">

@@ -1,16 +1,18 @@
 /**
- * Plot info as a step of the whole game: the geo drone's Scan and its Drone report in the rail (B-AC-1), then every plot
- * you own listed with its dots, in planning's My plots and on the walking screen's Plots chip (B-AC-2). smoke.ts calls
- * it once, in month 2's planning, with the hub open and nobody ready; the walking screen is read in a second room of
- * the same server, taken to its first development. Each room's part runs held.
+ * Plot info as a step of the whole game: the geo drone's Scan and its Drone report in the rail (B-AC-1), every plot you
+ * own listed with its dots, in planning's My plots and on the walking screen's Plots chip (B-AC-2), and the card Analyse
+ * opens on the walking screen (B-AC-3). smoke.ts calls it once, in month 2's planning, with the hub open and nobody
+ * ready; the walking screen is read in a second room of the same server, taken to its first development with a second
+ * phone and a TV. The planning parts run held; Analyse needs the room's tick, so it runs unheld.
  */
 import { DEVELOPMENT, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { bestOf, dotsOf, gemsIn, GOOD_NAME, type RawGood } from '@mule/ui';
 import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { fmt, mapTiles } from '../src/game/derive';
-import { check, doneWithLand, held as heldIn, PHONE, PHONE_SMALL, type GameStepContext } from './harness';
+import { check, doneWithLand, FLOOR_STARTS_MS, held as heldIn, PHONE, PHONE_SMALL, TV, type GameStepContext } from './harness';
 import { readyThroughTheElection } from './politics-steps';
+import { LAPTOP } from './shell-steps';
 import { plotName, tapPlot, type Plot } from './special-steps';
 
 /** The promise: the report shows within this long of the tap on Scan. */
@@ -27,9 +29,21 @@ type Room = {
 };
 
 const B_AC_1 = 'B-AC-1 (plot info): two free plots picked, Scan, the rail\'s Drone report shows both with each good\'s 0–3 dots and "best for", 60 cr gone, before Ready';
-const B_AC_2 = 'B-AC-2 (plot info): My plots in planning and the Plots chip on the walking screen list every owned plot once, analysed ones with 0–3 dots and the gem, others "Not analysed …"';
+const B_AC_2 = 'B-AC-2 (plot info): My plots in planning and the Plots chip on the walking screen (phone and laptop) list every owned plot once, analysed ones with 0–3 dots and the gem, others "Not analysed …"';
+const B_AC_3 = 'B-AC-3 (plot info): analysing a free plot holding Crystite shows the card with its dots and "best for … · Crystite n" within 1 s of the assay\'s end';
 /** How long the second room has to get through month 1's election, planning and land grant to its development. */
 const TO_DEVELOPMENT_MS = 90_000;
+/** The promise: the Analyse card shows within this long of the assay's end. */
+const CARD_MS = 1_000;
+/** How often the step reads the server's assay while it waits for one. */
+const ASSAY_POLL_MS = 5;
+/** How early the card may show against the server's assay end: the phone's estimate of the server clock, not a rule. */
+const CLOCK_SLACK_MS = 300;
+/**
+ * The second room's development clock, set when its walking screen shows: at the smoke's phaseScale a turn lasts 6 s,
+ * too short for the steps to read it while it runs.
+ */
+const SECOND_ROOM_TURN_MS = 60_000;
 
 /** The phone sizes the whole report must fit at, both plots in the rail with no scroll (UBER-AC-1, spec §8). */
 const FIT_SIZES = [PHONE.viewport, PHONE_SMALL.viewport];
@@ -178,9 +192,11 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
     return `plots ${picks.map(plotName).join(', ')} reported in ${tookMs} ms, both in the rail unscrolled (${fit}), ${fee} cr gone; the TV and ${others.length} other seats hold no ground for them; a second Scan refused ("${refused}")`;
   });
   console.log(`✓ ${B_AC_1}: ${said}`);
-  const listed = `${await myPlotsInPlanning({ phone, server, code, held }, seat)}; ${await thePlotsChipOnTheWalkingScreen({ phone, server })}`;
+  const planned = await myPlotsInPlanning({ phone, server, code, held }, seat);
+  const second = await theSecondRoomsDevelopment({ phone, server });
+  const listed = `${planned}; ${second.walking}`;
   console.log(`✓ ${B_AC_2}: ${listed}`);
-  return `${said}; ${listed}`;
+  return `${said}; ${listed}; ${second.analysed}`;
 }
 
 /** The room behind `code` on the in-process server, as these steps reach into it. */
@@ -192,8 +208,8 @@ function roomOf(server: GameStepContext['server'], code: string): Room {
 
 /**
  * B-AC-2's Given, seeded on the server as makeHungry seeds hunger: `seat` owns at least two plots, one of them holding
- * Crystite or Rare earth (a free one is given when none of its own does), and every plot of its but one is analysed.
- * Sends every screen the view that makes.
+ * Crystite or Rare earth (a free one is given when none of its own does), every plot of its but one is analysed, and
+ * another seat owns a plot. Sends every screen the view that makes.
  */
 function someOfMyPlotsAnalysed(room: Room, seat: string): void {
   const state = room.game.state;
@@ -217,6 +233,14 @@ function someOfMyPlotsAnalysed(room: Room, seat: string): void {
     if (owned().some(unanalysed) && owned().length >= 2) break;
     give(t);
   }
+  // Another seat owns a plot, so "never lists another player's plot" is read against one.
+  const other = state.players.find((p) => p.id !== seat);
+  check(other, `${B_AC_2}: another seat in the game`);
+  if (!state.tiles.some((t) => t.owner !== null && t.owner !== seat)) {
+    const theirs = free.find((t) => state.tiles[index(t)]!.owner === null);
+    check(theirs, `${B_AC_2}: a free plot to give ${other.name}`);
+    Object.assign(state.tiles[index(theirs)]!, { owner: other.id, outfit: null });
+  }
   const mine = owned();
   const kept = mine.find((t) => !hasGem(t) && !me.analysed.includes(index(t)));
   check(kept, `${B_AC_2}: a plot of ${seat}'s to leave unanalysed`);
@@ -235,7 +259,9 @@ async function listsEveryPlot(list: Locator, view: MuleView, seat: string, where
     const n = ids.filter((id) => id === `plot-row-${t.x}-${t.y}`).length;
     check(n === 1, `${B_AC_2}: ${where} lists plot ${plotName(t)} once, got ${n}`);
   }
-  for (const t of view.tiles.filter((t) => t.owner !== null && t.owner !== seat)) {
+  const theirs = view.tiles.filter((t) => t.owner !== null && t.owner !== seat);
+  check(theirs.length > 0, `${B_AC_2} (negative): ${where} is read with another seat owning a plot`);
+  for (const t of theirs) {
     check(!ids.includes(`plot-row-${t.x}-${t.y}`), `${B_AC_2} (negative): ${where} never lists ${t.owner}'s plot ${plotName(t)}`);
   }
   check(ids.length === owned.length, `${B_AC_2}: ${where} lists ${owned.length} plots, the ones ${seat} owns, got ${ids.length}`);
@@ -286,35 +312,185 @@ async function myPlotsInPlanning({ phone, server, code, held: inRoom }: Pick<Gam
   });
 }
 
+/** The room's game as these steps reach into it: the steered floor and the development clock. */
+type SteeredGame = Room['game'] & {
+  steering: { floor: { colonists: { id: string; x: number; y: number; space: 'map' | 'hall' }[] } } | null;
+  devEndsAt: number | null;
+};
+
+/** The server's assay end for `seat`, epoch ms, once its colonist is assaying; null until then. */
+function assayEndOf(room: Room, seat: string): number | null {
+  return room.viewFor(seat).game?.players.find((p) => p.id === seat)?.colonist?.assayUntil ?? null;
+}
+
 /**
- * B-AC-2 on the walking screen: a second room on the same server, one phone and an AI, taken through month 1 to its
- * development; there the Plots chip opens the list over the map and closes it, at the smoke's phone and the small one.
+ * B-AC-3, front to back, unheld (the press and the assay run on the room's tick): Crystite is seeded under a free plot
+ * nobody has analysed, Lena's colonist is put on it, and her phone presses ANALYSE. Her phone shows the card within
+ * CARD_MS of the assay's end; the server's views for the TV and the other seats hold no ground for it, and the TV and
+ * Kai's phone show no card.
+ */
+async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Page; tv: Page }, seat: string): Promise<string> {
+  const state = room.game.state;
+  const game = room.game as SteeredGame;
+  const index = (t: Plot) => t.y * state.width + t.x;
+  const view = room.viewFor(seat).game;
+  check(view, `${B_AC_3}: a view for ${seat}`);
+  // A free plot no seat has analysed, not a lake (Analyse reaches those from the shore), whose best good beats Crystite 1.
+  const plot = mapTiles(view).find((t) => {
+    if (t.owner !== null || t.object || t.terrain === 'store' || t.terrain === 'lake' || state.players.some((p) => p.analysed.includes(index(t)))) return false;
+    const dots = dotsOf({ ...state.tiles[index(t)]!.ground, crystite: 1 });
+    return bestOf(dots) !== 'crystite';
+  });
+  check(plot, `${B_AC_3}: a free plot nobody has analysed`);
+  const tile = state.tiles[index(plot)]!;
+  tile.ground = { ...tile.ground, crystite: 1 };
+  const dots = dotsOf(tile.ground);
+  const best = GOOD_NAME[bestOf(dots)];
+
+  // A phone shows development while the phase's event show still holds it; the floor is steered only after that.
+  const end = Date.now() + FLOOR_STARTS_MS;
+  while (!game.steering && Date.now() < end) await screens.lena.waitForTimeout(ASSAY_POLL_MS);
+  const steering = game.steering;
+  check(steering, `${B_AC_3}: the second room steers its development within ${FLOOR_STARTS_MS / 1_000} s (phase ${state.phase})`);
+  // The turn the rest of the second room's steps need, set once its floor runs: development's own start (after an event
+  // show holds it) would otherwise reset the clock to the smoke's scaled minute.
+  game.devEndsAt = Date.now() + SECOND_ROOM_TURN_MS;
+  room.broadcast();
+  steering.floor = { ...steering.floor, colonists: steering.floor.colonists.map((c) => (c.id === seat ? { ...c, space: 'map', x: plot.x + 0.5, y: plot.y + 0.5, moving: false } : c)) };
+  const walking = screens.lena.locator('[data-phase=development] [data-testid=phone-game]');
+  await appears(walking.getByTestId('action-verb').filter({ hasText: 'ANALYSE' }), STEP_MS, `${B_AC_3}: on plot ${plotName(plot)} Lena's button offers ANALYSE`);
+  // Watched from the server's side from before the press: at the smoke's phaseScale an assay lasts under a second, and a
+  // poll through the browser can come back after it is over.
+  const me = state.players.find((p) => p.id === seat)!;
+  const seen: { assayEnd: number | null; analysed: boolean } = { assayEnd: null, analysed: false };
+  const watch = setInterval(() => {
+    seen.analysed ||= me.analysed.includes(index(plot));
+    seen.assayEnd ??= assayEndOf(room, seat);
+  }, ASSAY_POLL_MS);
+  const pressed = Date.now();
+  try {
+    await walking.getByTestId('action-button').click({ timeout: STEP_MS });
+    while (seen.assayEnd === null && Date.now() < pressed + STEP_MS) await new Promise((r) => setTimeout(r, ASSAY_POLL_MS));
+  } finally {
+    clearInterval(watch);
+  }
+  check(seen.analysed, `${B_AC_3}: the press analysed plot ${plotName(plot)} on the server`);
+  const assayEnd = seen.assayEnd;
+  check(assayEnd !== null, `${B_AC_3}: the server had Lena assaying plot ${plotName(plot)} within ${STEP_MS} ms of the press`);
+  const card = walking.getByTestId('analyse-card');
+  await appears(card, Math.max(1, assayEnd + CARD_MS - Date.now()), `${B_AC_3}: the card shows within ${CARD_MS} ms of the assay's end`);
+  const shownAt = Date.now();
+  check(shownAt - assayEnd <= CARD_MS, `${B_AC_3}: the card shows within ${CARD_MS} ms of the assay's end, took ${shownAt - assayEnd} ms`);
+  check(shownAt - assayEnd >= -CLOCK_SLACK_MS, `${B_AC_3}: the card opens once the assay is done, not ${assayEnd - shownAt} ms before it`);
+
+  const text = (await card.innerText()).replace(/\s+/g, ' ');
+  check(text.includes(`${plotName(plot)} · `) && text.includes('analysed'), `${B_AC_3}: the card names plot ${plotName(plot)} as analysed, got "${text}"`);
+  const line = `best for ${best} · Crystite ${dots.crystite}`;
+  check(text.includes(line), `${B_AC_3}: the card says "${line}", got "${text}"`);
+  for (const g of RAW) {
+    const shown = await card.getByTestId(`dots-${g}`).getAttribute('data-n', { timeout: STEP_MS });
+    check(shown === String(dots[g]), `${B_AC_3}: the card shows ${g} as ${dots[g]} of 3, got ${shown}`);
+  }
+  check((await card.getByText('Only you').count()) === 1, `${B_AC_3}: the card is marked Only you`);
+  // The map's gem: Lena's walking map draws the Crystite gem on the plot she analysed.
+  await appears(walking.getByTestId(`map-gem-${plot.x}-${plot.y}`).getByTestId('gem-crystite'), STEP_MS, `${B_AC_3}: Lena's map draws the Crystite gem on plot ${plotName(plot)}`);
+
+  // Negative (HC-1): only Lena's view holds the plot's ground; the TV and Kai's phone show no card and no dots for it.
+  check(room.viewFor(seat).game?.tiles[index(plot)]?.ground, `${B_AC_3}: the server's view for Lena holds plot ${plotName(plot)}'s ground`);
+  check(room.viewFor(null).game?.tiles[index(plot)]?.ground === undefined, `${B_AC_3} (negative): the TV's view holds no ground for plot ${plotName(plot)}`);
+  for (const o of state.players.filter((p) => p.id !== seat)) {
+    check(room.viewFor(o.id).game?.tiles[index(plot)]?.ground === undefined, `${B_AC_3} (negative): ${o.name}'s view holds no ground for plot ${plotName(plot)}`);
+  }
+  for (const [who, page] of [['the TV', screens.tv] as const, ["Kai's phone", screens.kai] as const]) {
+    const shown = page.locator('[data-phase=development]');
+    await appears(shown.getByTestId(`map-plot-${plot.x}-${plot.y}`).first(), STEP_MS, `${B_AC_3} (negative): ${who} draws plot ${plotName(plot)}`);
+    check((await page.getByTestId('analyse-card').count()) === 0, `${B_AC_3} (negative): ${who} shows no Analyse card`);
+    const label = (await shown.getByTestId(`map-plot-${plot.x}-${plot.y}`).first().getAttribute('aria-label')) ?? '';
+    check(!label.includes('of 3'), `${B_AC_3} (negative): ${who}'s map gives plot ${plotName(plot)} no dots, labelled "${label}"`);
+    check((await shown.getByTestId(`map-gem-${plot.x}-${plot.y}`).count()) === 0, `${B_AC_3} (negative): ${who}'s map draws no gem on plot ${plotName(plot)}`);
+  }
+  return `plot ${plotName(plot)} (${line}) analysed; the card showed ${shownAt - assayEnd} ms after the assay's end; the TV and the other seats' views hold no ground for it, and the TV and Kai's phone show no card and no gem; Lena's map shows the Crystite gem`;
+}
+
+/** The development clock's seconds left as `walking` shows them. */
+async function clockSeconds(walking: Locator): Promise<number> {
+  const label = (await walking.getByTestId('shared-clock').getByRole('timer').getAttribute('aria-label', { timeout: STEP_MS })) ?? '';
+  const s = /^(\d+) seconds left/.exec(label);
+  check(s, `the clock says its seconds left, got "${label}"`);
+  return Number(s[1]);
+}
+
+/** How long the laptop's list stays open while the step watches the clock run under it. */
+const CLOCK_WATCH_MS = 1_500;
+
+/**
+ * B-AC-2's walking half on the laptop, unheld so the game runs: the Plots chip in the laptop's status opens the list,
+ * the clock keeps running under it, and the chip closes it. The page is left at the phone's size.
+ */
+async function thePlotsChipOnTheLaptop(page: Page, room: Room, seat: string): Promise<string> {
+  try {
+    await page.setViewportSize(LAPTOP);
+    const walking = page.locator('[data-phase=development] [data-testid=laptop-game]');
+    const where = `the laptop's Plots list at ${LAPTOP.width}×${LAPTOP.height}`;
+    const chip = walking.getByTestId('plots-chip');
+    const panel = walking.getByTestId('plots-panel');
+    await appears(chip, STEP_MS, `${B_AC_2}: at ${LAPTOP.width}×${LAPTOP.height} the laptop's walking screen offers the Plots chip`);
+    await chip.click({ timeout: STEP_MS });
+    await appears(panel, STEP_MS, `${B_AC_2}: the laptop's Plots chip opens the list`);
+    const before = await clockSeconds(walking);
+    const seen = await listsEveryPlot(panel, room.viewFor(seat).game!, seat, where);
+    await page.waitForTimeout(CLOCK_WATCH_MS);
+    check(await panel.isVisible(), `${B_AC_2}: ${where} stays open while the clock runs`);
+    const after = await clockSeconds(walking);
+    check(after < before, `${B_AC_2}: with ${where} open the clock runs, ${before} s then ${after} s`);
+    await chip.click({ timeout: STEP_MS });
+    await panel.waitFor({ state: 'detached', timeout: STEP_MS });
+    return `the laptop's Plots chip lists ${seen.analysed + seen.not} plots while the clock runs (${before} s → ${after} s), and closes`;
+  } finally {
+    await page.setViewportSize(PHONE.viewport);
+  }
+}
+
+/**
+ * A second room on the same server, Lena's phone, Kai's phone, an AI and a TV, taken through month 1 to its
+ * development: there Analyse opens its card (B-AC-3), and the Plots chip opens the list over the map and closes it, at
+ * the smoke's phone and the small one, then on the laptop (B-AC-2). A page error on any of its screens fails the step.
  * The room is disposed afterwards, so nothing of it runs on.
  */
-async function thePlotsChipOnTheWalkingScreen({ phone, server }: Pick<GameStepContext, 'phone' | 'server'>): Promise<string> {
+async function theSecondRoomsDevelopment({ phone, server }: Pick<GameStepContext, 'phone' | 'server'>): Promise<{ analysed: string; walking: string }> {
   const browser = phone.context().browser();
   check(browser, `${B_AC_2}: the smoke's browser`);
-  const context = await browser.newContext(PHONE);
-  const page = await context.newPage();
+  const origin = new URL(phone.url()).origin;
+  const contexts = await Promise.all([browser.newContext(PHONE), browser.newContext(PHONE), browser.newContext(TV)]);
+  const [page, kai, tv] = (await Promise.all(contexts.map((c) => c.newPage()))) as [Page, Page, Page];
+  const errors: string[] = [];
+  for (const [who, p] of [['Lena', page], ['Kai', kai], ['the TV', tv]] as const) p.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
   let code = '';
   try {
-    await page.goto(new URL(phone.url()).origin);
+    await page.goto(origin);
     await page.getByPlaceholder('Heiko').fill('Lena');
     await page.getByRole('button', { name: 'Start a new game' }).click();
     await page.getByText("You're at the table").waitFor();
     code = (await page.getByTestId('room-code').textContent())?.trim() ?? '';
+    await tv.goto(`${origin}/table?room=${code}`);
+    await kai.goto(`${origin}/?room=${code}`);
+    await kai.getByPlaceholder('Heiko').fill('Kai');
+    await kai.getByRole('button', { name: `Join game ${code}` }).click();
+    await kai.getByText("You're at the table").waitFor();
     await page.getByRole('button', { name: 'Add AI player' }).click();
-    await page.locator('[data-testid=seats] li').nth(1).waitFor();
+    await page.locator('[data-testid=seats] li').nth(2).waitFor();
     await page.getByRole('button', { name: 'Start game' }).click();
     const started = Date.now();
-    await readyThroughTheElection(page, TO_DEVELOPMENT_MS);
-    await doneWithLand(page);
+    await Promise.all([page, kai].map((p) => readyThroughTheElection(p, TO_DEVELOPMENT_MS)));
+    await Promise.all([page, kai].map((p) => doneWithLand(p)));
     const walking = page.locator('[data-phase=development] [data-testid=phone-game]');
     await appears(walking, Math.max(1, started + TO_DEVELOPMENT_MS - Date.now()), `${B_AC_2}: the second room reaches its walking screen`);
     const room = roomOf(server, code);
     const seat = room.game.state.players.find((p) => p.name === 'Lena')?.id;
     check(seat, `${B_AC_2}: Lena plays in the second room`);
-    return await heldIn(server, code, async () => {
+    const analysed = await analyseSaysWhatItFound(room, { lena: page, kai, tv }, seat);
+    console.log(`✓ ${B_AC_3}: ${analysed}`);
+    const listed = await heldIn(server, code, async () => {
       someOfMyPlotsAnalysed(room, seat);
       const said: string[] = [];
       try {
@@ -335,8 +511,15 @@ async function thePlotsChipOnTheWalkingScreen({ phone, server }: Pick<GameStepCo
       }
       return `the walking screen's Plots chip lists them, and closes (${said.join(', ')})`;
     });
+    const laptop = await thePlotsChipOnTheLaptop(page, room, seat);
+    check(errors.length === 0, `${B_AC_2}: no page errors in the second room: ${errors.join('; ')}`);
+    return { analysed, walking: `${listed}; ${laptop}` };
+  } catch (e) {
+    // A step that fails after a page error says so, whichever check tripped.
+    if (errors.length) throw new Error(`${(e as Error).message}; page errors in the second room: ${errors.join('; ')}`);
+    throw e;
   } finally {
-    await context.close();
+    await Promise.all(contexts.map((c) => c.close()));
     if (code) server.registry.get(code)?.dispose();
   }
 }
