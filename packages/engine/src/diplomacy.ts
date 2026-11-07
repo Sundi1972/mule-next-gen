@@ -6,7 +6,7 @@
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
-import { editPolitics, nextElectionMonth, reputationShift } from './politics.js';
+import { contested, editPolitics, nextElectionMonth, reputationShift } from './politics.js';
 import { createRng, seedOf } from './rng.js';
 import type { DealCard, DealOffer, GameState, Office, Politics } from './types.js';
 
@@ -186,10 +186,10 @@ function judge(state: GameState, card: DealCard): Verdict {
   const { terms } = card;
   if (terms.kind !== 'vote') return 'expired';
   if ('office' in terms) {
-    const field = politics.election?.candidates[terms.office] ?? [];
+    const election = politics.election;
     // A ballot needs two candidates at least: fewer is an uncontested or appointed office.
-    if (field.length < 2 || !field.includes(terms.candidate)) return 'expired'; // literal-ok: the definition of a contested office
-    return politics.election!.ballots[card.from]?.[terms.office] === terms.candidate ? 'kept' : 'broken';
+    if (!election || !contested(election, terms.office) || !election.candidates[terms.office].includes(terms.candidate)) return 'expired';
+    return election.ballots[card.from]?.[terms.office] === terms.candidate ? 'kept' : 'broken';
   }
   return politics.council?.ballots[card.from] === terms.yes ? 'kept' : 'broken';
 }

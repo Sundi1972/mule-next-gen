@@ -109,7 +109,7 @@ function liveElection(state: GameState): Shared<Election> {
   return election;
 }
 
-function contested(election: Shared<Election>, office: Office): boolean {
+export function contested(election: Shared<Election>, office: Office): boolean {
   return election.candidates[office].length > 1;
 }
 
