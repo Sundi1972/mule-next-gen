@@ -5,7 +5,7 @@ import { BRAIN, GOODS } from '@mule/engine';
 import { replySchema } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, SeatInfo } from '@tabletop/core';
-import { SeatCodeBook } from '../src/claude-seat/lookup.js';
+import { SeatCodeBook, type SeatLookup } from '../src/claude-seat/lookup.js';
 import { createMcpEndpoint } from '../src/claude-seat/mcp.js';
 import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
 import { MuleGame, type PlaybookNote } from '../src/mule-game.js';
@@ -77,8 +77,8 @@ afterEach(async () => {
 });
 
 /** The endpoint on its own port over `codes`, with a clock the test moves. */
-async function serve(codes: SeatCodeBook, clock = { now: 0 }) {
-  const endpoint = createMcpEndpoint({ lookup: codes.lookup, holdMs: HOLD_MS, now: () => clock.now });
+async function serve(codes: SeatCodeBook, clock = { now: 0 }, options: { holdMs?: number; lookup?: SeatLookup } = {}) {
+  const endpoint = createMcpEndpoint({ lookup: options.lookup ?? codes.lookup, holdMs: options.holdMs ?? HOLD_MS, now: () => clock.now });
   const server = createServer((req, res) => void endpoint.handle(req, res));
   servers.push(server);
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
@@ -191,6 +191,26 @@ describe('/mcp, stateless, the seat code on every call', () => {
     // T-AC-5's capture: the game said its seats' lines, and none carries a code.
     expect(logged.some((line) => line.startsWith('claude seat s2:'))).toBe(true);
     expect(logged.filter((line) => line.includes(codeA) || line.includes(codeB))).toEqual([]);
+  });
+
+  it('B-AC-3: a wait held before Start wakes with the month-1 land ask', async () => {
+    const codes = new SeatCodeBook();
+    const fake = fakeContext({ table: TABLE });
+    const game = new MuleGame(fake.ctx, 10, { maxMonths: 1 });
+    const code = codes.issue(game, 's2');
+    let looked = false;
+    const lookup: SeatLookup = (typed) => {
+      looked = true;
+      return codes.lookup(typed);
+    };
+    // Long enough that a wait which never wakes answers "again" well after the game has started.
+    const client = mcpClient(await serve(codes, { now: 0 }, { holdMs: 2_000, lookup }));
+
+    const waiting = client.call('wait_for_my_turn', { code });
+    while (!looked) await new Promise((done) => setImmediate(done));
+    game.start(TABLE);
+
+    expect(await waiting).toMatchObject({ kind: 'ask', phase: 'land', ask_id: claudeSeatAt(game, 's2')!.writer.openAsk()!.id });
   });
 
   it('B-AC-6: a new client with the same code carries on and gets the open ask', async () => {
