@@ -386,6 +386,15 @@ describe('the validator holds every playbook to RULE-1', () => {
       // Claude's edit to the budget alone plays: the engine's route beside it is no fault of Claude's.
       const half = run('development', [], { state }).draft.development!.timeBudgetMs / 2;
       expect(one('development', '/development/timeBudgetMs', half, { state })).toMatchObject({ plays: half, why: null });
+      // Leading a fitted MULE (one won at the land auction) with nowhere it could go, the draft stops: no throw, no lake.
+      const led = structuredClone(state);
+      led.players.find((p) => p.id === 'ai2')!.carriedMule = 'food';
+      for (const level of ['rookie', 'trader', 'tycoon'] as const) {
+        const r = run('development', [], { state: led, mind: mindOf(2, level) });
+        expect(r.draft.development!.route, `led, ${level}`).not.toContainEqual({ act: 'install', plot: ringed });
+        expect(r.rejected, `led, ${level}`).toEqual([]);
+        expect(r.playbook, `led, ${level}`).toEqual(r.draft);
+      }
       // With a plains plot beside it the MULE isn't lost: the draft takes its next pick, as the hands' own pick did.
       const plain = state.tiles.findIndex((t) => t.terrain === 'plains' && t.owner === null);
       state.tiles[plain]!.owner = 'ai2';
