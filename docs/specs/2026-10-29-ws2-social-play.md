@@ -459,7 +459,10 @@ inputs   port: the seat has a VotePort (Smart or Claude Code seat; Classic → n
          ballot: a candidate on it / yes / no, or null · promise: the seat holds an active vote card on this ballot
          (WS7 slice 3; keyless in the RC)
 first match wins
-  0  the seat runs for this office                  own = its own candidacy; the port is not asked (WS7 cond. 1)
+  0  the seat runs for this office                  own = its own candidacy; the port is not asked (WS7 cond. 1); a
+                                                    card it holds for a rival on that office breaks (WS7 slice 3 AM-8)
+  0b a law ballot and the seat is the Governor      own = yes (the Governor always votes yes); `lawVote` is not asked
+                                                    (WS7 slice 3 AM-8)
   1  port absent or said = null                     own = VoteHand's keyless choice, as today (existing, pinned)
   2  said names someone not in `candidates`         own = the keyless choice, as if null; never an invalid ballot,
                                                     never a throw (WS7 cond. 2); ledger 'vote_clamped'
@@ -474,6 +477,9 @@ unknown  null means "Claude has recorded no vote for this ballot", not "abstain"
          recorded for an earlier ballot never carries over (the port answers per ballot, from the playbook in effect).
 timing   the port is read when VoteHand casts (after its seeded pause, POLITICS.ai.actMs); a recorded reply whose edit
          takes effect after the seat cast changes nothing for that ballot (the ballot is cast once)
+offered  the ballot lines of the brief, the ask and any persuasion prompt never offer Claude a choice rows 0 and 0b
+         take away (a vote on an office it runs for; a law vote as Governor), and DealHand never offers a vote on the
+         seat's own office (WS7 slice 3 AM-8, #658 19a6aae2)
 written  (PM ruling (a), 7 Nov, from WS9's #691 AM-37: a vote in Playbook.politics is accepted only once its candidate has
          declared) the `/politics/votes` edits come only from a reply adopted IN THE ELECTION MONTH AFTER ITS
          DECLARATIONS: that month's planning-start ask, or a recorded whisper reply opened on a heard step during
