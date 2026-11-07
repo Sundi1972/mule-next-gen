@@ -9,7 +9,7 @@ import { TableApp } from '../../../../apps/web/src/table/TableApp';
 import { HUB_SLOTS } from '../../../../apps/web/src/phone/hub/today';
 import { apply, boardClient, clientFor, gameFor, HOLDER, SCENES, SEATS, tableOf, viewFor, type Intent, type Scene, type SceneId, type Seat, type Shares } from './fixture';
 import { Graft } from './Graft';
-import { FundLines, FundPaidNote, fundOnTv } from './proposed/FundLines';
+import { FundLines, FundPaidNote } from './proposed/FundLines';
 import type { Variant } from './proposed/GovernorBudget';
 import { TvBudgetLine, TvOverruleCall } from './proposed/TvBudgetLine';
 import { TvOverrule } from './proposed/TvOverrule';
@@ -33,8 +33,8 @@ const DECISIONS: [string, string][] = [
   ['P13', 'The ready bar: “Cast my vote” until you cast, then “Waiting for the overrule vote”; in the reveal, “Continue” (AM-5).'],
   ['P14', 'The TV’s planning header gains the budget line under the promise line. The call’s banner heads the side column, above who the table waits for: in the header it shrank the body to 0.763 (TV-FIT), in the side the news gives way and it stays at 0.896.'],
   ['P14', 'The overrule panel is TvCouncil’s frame. Its reveal bar is all the table’s votes with the mark at “needed”, not the half-way mark the law’s bar uses: the rules differ.'],
-  ['P15', 'The month end’s colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 432. Out only. Every phone keeps it, and the TV below five seats.'],
-  ['P15', 'From five seats the TV drops that line: the total alone goes in the Wealth gauge’s note, “fund 154 cr · paid out 581” (PM ruling, TV-FIT’s floor).'],
+  ['P15', 'On the phone the colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 432. Out only.'],
+  ['P15', 'The TV shows the total only, at every seat count (PM ruling 7 Nov, on the measured 0.663 vs 0.701): “fund 154 cr · paid out 581” in the Wealth gauge’s note.'],
 ];
 
 interface StateDef {
@@ -42,7 +42,7 @@ interface StateDef {
   label: string;
   scene: SceneId;
   seed?: Shares;
-  /** Seats at the table for this state (4 unless set): P15's five-seat form. */
+  /** Seats at the table for this state (4 unless set): P15's six-seat view, to show the total fits there too. */
   seats?: number;
 }
 interface ScreenDef {
@@ -101,10 +101,10 @@ const SCREENS: ScreenDef[] = [
     ],
   },
   {
-    id: 'p15', title: 'P15 · the month end: what the fund paid out', graft: 'MonthEnd.tsx ColonyPanel (FundLines); from 5 seats on the TV, Colony.tsx ColonyGauges’ Wealth note (FundPaidNote)', kind: 'monthEnd', seats: ['lena'],
+    id: 'p15', title: 'P15 · the month end: what the fund paid out', graft: 'phone: MonthEnd.tsx ColonyPanel (FundLines); TV: Colony.tsx ColonyGauges’ Wealth note (FundPaidNote)', kind: 'monthEnd', seats: ['lena'],
     states: [
-      { id: 'paid', label: '4 seats: the full line', scene: 'monthEnd' },
-      { id: 'five', label: '5 seats: the TV shows the total only', scene: 'monthEnd', seats: 5 },
+      { id: 'paid', label: '4 seats: phone line, TV total', scene: 'monthEnd' },
+      { id: 'six', label: '6 seats: the same, at the floor’s seat count', scene: 'monthEnd', seats: 6 },
     ],
   },
 ];
@@ -140,7 +140,7 @@ function Phone({ seat, scene, w, h, variant = 'a', desk, seed, send, label }: { 
                   <>
                     <Results />
                     {!TODAY && <Graft into='[data-testid="colony-panel"] > div' className="col-span-3">
-                      <FundLines view={view} density="compact" />
+                      <FundLines view={view} />
                     </Graft>}
                   </>
                 ) : (
@@ -166,8 +166,8 @@ function Tv({ scene }: { scene: Scene }) {
     <figure className="flex flex-col gap-1" data-testid="tv-1280">
       <figcaption className="label-caps text-[10px]! text-ink-2">1280 × 720 · the TV</figcaption>
       {/* MOCK: TableApp's root is h-dvh (the TV's whole window); in this frame it is the frame's height, so Scaled draws 1:1. */}
-      {/* MOCK: from five seats the Wealth gauge's own note is hidden and FundPaidNote drawn in its place (the build changes ColonyGauges' note). */}
-      <div className={cx('overflow-hidden rounded-panel border border-holo-line [&>div]:h-full!', scene.moment === 'monthEnd' && !TODAY && fundOnTv(game) === 'total' && '[&_[data-testid=gauge-wealth]_span.truncate]:hidden')} style={{ width: 1280, height: 720 }} data-graft-scope data-frame="tv">
+      {/* MOCK: at the month end the Wealth gauge's own note is hidden and FundPaidNote drawn in its place (the build changes ColonyGauges' note). */}
+      <div className={cx('overflow-hidden rounded-panel border border-holo-line [&>div]:h-full!', scene.moment === 'monthEnd' && !TODAY && '[&_[data-testid=gauge-wealth]_span.truncate]:hidden')} style={{ width: 1280, height: 720 }} data-graft-scope data-frame="tv">
         <ClientProvider client={client}>
           {overrule ? (
             <TvOverrule game={game} />
@@ -175,15 +175,9 @@ function Tv({ scene }: { scene: Scene }) {
             <>
               <TableApp room="MULE" />
               {TODAY ? null : scene.moment === 'monthEnd' ? (
-                fundOnTv(game) === 'line' ? (
-                  <Graft at='[data-testid="colony-fund"]' className="col-span-2">
-                    <FundLines view={game} density="tv" />
-                  </Graft>
-                ) : (
-                  <Graft at='[data-testid="gauge-wealth"] span.truncate' className="min-w-0 truncate">
-                    <FundPaidNote view={game} />
-                  </Graft>
-                )
+                <Graft at='[data-testid="gauge-wealth"] span.truncate' className="min-w-0 truncate">
+                  <FundPaidNote view={game} />
+                </Graft>
               ) : (
                 <>
                   <Graft at='[data-testid="tv-governor-promise"]'>

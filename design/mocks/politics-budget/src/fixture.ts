@@ -83,7 +83,7 @@ const BASE_PLAYERS: PlayerView[] = [
 ];
 
 /**
- * ?seats=5 or ?seats=6 (?six is 6) seats one or two more AI players: P15's five-seat form, and TV-FIT's floor measured
+ * ?seats=5 or ?seats=6 (?six is 6) seats one or two more AI players: P15's six-seat view, and TV-FIT's floor measured
  * at five and six seats (PM ruling, 6 Nov). The extra seats weigh 0 votes, so the overrule's numbers stay "5 of 9".
  */
 const EXTRA = [
