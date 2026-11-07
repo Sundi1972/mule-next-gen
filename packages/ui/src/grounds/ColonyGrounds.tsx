@@ -3,6 +3,7 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
+import { framedBox, topOf, type Framing } from './framing';
 import { Glow, WalkingScene } from './LiveLayer';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
@@ -10,6 +11,8 @@ import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, t
 import { iso, poly, square, W } from './projection';
 
 export type { Frame, GroundsManifest, Light, PictureStage } from './pick';
+export type { Framing } from './framing';
+export { GroundsOpener, useGroundsOpener, type OpenerState } from './GroundsOpener';
 
 /** One project as `@mule/protocol`'s ColonyProjectView carries it; `place` arrives with spec AM-18 (null: none yet). */
 export interface GroundsProject extends PlaceState {
@@ -33,6 +36,10 @@ export interface ColonyGroundsProps {
   manifest: GroundsManifest | null;
   /** Dusk at the month end and in the upkeep phase, day otherwise (RULE-1). */
   light?: Light;
+  /** A full-screen camera on the built area; without it the scene frames the whole land. */
+  framing?: Framing;
+  /** The place numbers and stage chips over each place; off on the TV opener (AM-7 v). */
+  chips?: boolean;
   className?: string;
 }
 
@@ -104,7 +111,7 @@ const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonth
  * trees, the hall and the places by col + row so nearer buildings cover farther ones (each with its glow at dusk), with
  * the colonists on the paths sorted in among them, the near edge, then the callouts.
  */
-export function ColonyGrounds({ colony, size, manifest, light = 'day', className }: ColonyGroundsProps) {
+export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
   const inBack = (a: { col: number; row: number }, b: { col: number; row: number }) => a.col + a.row - (b.col + b.row);
@@ -118,7 +125,9 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
   // Bare until something stands: each building standing plants three more along the edge.
   const edge = edgeDecoration(R + 0.85).slice(0, Math.min(4 * (2 * R + 2), standing * 3));
   const prop = (d: EdgeProp, k: string) => (d.kind === 'tree' ? <Tree key={k} c={d.col} r={d.row} /> : <Lamp key={k} c={d.col} r={d.row} on={mood >= 50} />);
-  const vb = { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W };
+  const vb = framing
+    ? framedBox(framing, R, scene.map(({ p, col, row }) => topOf(p?.id ?? 'hall', col, row, manifest)))
+    : { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W };
 
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
@@ -171,9 +180,10 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
         blocks={placed.map((q) => q.block)}
       />
       <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>
-      {placed.sort(inBack).map(({ n, p, col, row }) => (
-        <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />
-      ))}
+      {chips &&
+        placed.sort(inBack).map(({ n, p, col, row }) => (
+          <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />
+        ))}
     </svg>
   );
 }
