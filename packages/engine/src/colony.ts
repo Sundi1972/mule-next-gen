@@ -6,7 +6,6 @@
 import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
-import { COLONY_SELLER } from './lots.js';
 import { votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { scoreParts } from './game.js';
@@ -111,29 +110,85 @@ function governorActs(state: GameState, playerId: string, act: string): Colony {
 }
 
 /**
- * The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep. It takes the next
- * place on the colony's grounds. See G-5 RULE-22, RULE-32.
+ * The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep. It takes the first
+ * free block of its footprint on the colony's grounds. See G-5 RULE-22, RULE-32b.
  */
 export function commission(state: GameState, playerId: string, id: PrestigeId): void {
   governorActs(state, playerId, 'Commission');
   const refused = objectRefusal(state, id);
   if (refused) throw new RuleError(refused);
-  const slot = lowestFreeSlot(state);
-  if (slot === null) throw new RuleError(GROUNDS_FULL);
-  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null, slot });
+  const slot = firstFreeBlock(state, id);
+  if (slot === null) throw new RuleError(noRoom(id));
+  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, since: state.month, plaque: {}, slot });
 }
 
-const GROUNDS_FULL = "The colony's grounds are full";
+const noRoom = (id: PrestigeId) => `There is no room on the colony's grounds for the ${PRESTIGE[id].name}`;
+
+/** A block on the colony's grounds: its top-left cell and its size, in cells. */
+export interface GroundsPlace {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A project's block on the grounds, from its slot (the top-left cell, y × size + x) and its footprint; null holds none. */
+export function groundsPlace(project: Pick<Project, 'id' | 'slot'>): GroundsPlace | null {
+  const { slot } = project;
+  if (slot === null || slot === undefined) return null;
+  const { size } = COLONY.grounds;
+  return { x: slot % size, y: Math.floor(slot / size), ...PRESTIGE[project.id].footprint };
+}
+
+/** The cells a block covers, as slots. */
+function cellsOf({ x, y, w, h }: GroundsPlace): number[] {
+  const { size } = COLONY.grounds;
+  const cells: number[] = [];
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) cells.push((y + dy) * size + x + dx);
+  return cells;
+}
 
 /**
- * The next place on the colony's grounds (G-5 RULE-32): the lowest index no project holds, or null when all are taken.
- * The index is the growth order, 0 next to the town hall, then outward ring by ring; every project with a place keeps it
- * whatever its stage, closed and damaged ones too. No rule reads the position.
+ * Every w × h block on the grounds that leaves the town hall's centre cell free, in RULE-32b's order: the ring (the
+ * Chebyshev distance from the hall) of its farthest cell, then of its nearest, then clockwise from north by its
+ * centre. The last two keys only make the order total; with a square grounds no two blocks tie before them.
  */
-function lowestFreeSlot(state: GameState): number | null {
-  const taken = new Set(state.colony!.projects.map((p) => p.slot));
-  for (let slot = 0; slot < COLONY.groundsSlots; slot++) if (!taken.has(slot)) return slot;
-  return null;
+function blocksInOrder(w: number, h: number): GroundsPlace[] {
+  const { size } = COLONY.grounds;
+  // literal-ok: geometry, not balance: the hall is the middle cell of the square
+  const hall = Math.floor(size / 2);
+  const ring = (cell: number) => Math.max(Math.abs((cell % size) - hall), Math.abs(Math.floor(cell / size) - hall));
+  const blocks: { place: GroundsPlace; far: number; near: number; turn: number }[] = [];
+  for (let y = 0; y + h <= size; y++) {
+    for (let x = 0; x + w <= size; x++) {
+      const place = { x, y, w, h };
+      const rings = cellsOf(place).map(ring);
+      if (rings.includes(0)) continue;
+      // Clockwise from north: the angle from straight up, 0 to 2π, of the block's centre seen from the hall's centre.
+      // literal-ok: geometry, not balance: a block's centre is half its size in, a cell's centre half a cell in
+      const turn = Math.atan2(x + w / 2 - (hall + 0.5), -(y + h / 2 - (hall + 0.5)));
+      // literal-ok: geometry, not balance: a full turn is 2π
+      blocks.push({ place, far: Math.max(...rings), near: Math.min(...rings), turn: turn < 0 ? turn + 2 * Math.PI : turn });
+    }
+  }
+  blocks.sort((a, b) => a.far - b.far || a.near - b.near || a.turn - b.turn || a.place.y - b.place.y || a.place.x - b.place.x);
+  return blocks.map((b) => b.place);
+}
+
+/**
+ * The slot of the first free block for this object's footprint (G-5 RULE-32b), or null when none is free. Every project
+ * holding a block keeps all its cells, whatever its stage, closed and damaged ones too. No rule reads the position.
+ */
+function firstFreeBlock(state: GameState, id: PrestigeId): number | null {
+  const taken = new Set(
+    state.colony!.projects.flatMap((p) => {
+      const place = groundsPlace(p);
+      return place ? cellsOf(place) : [];
+    }),
+  );
+  const { w, h } = PRESTIGE[id].footprint;
+  const free = blocksInOrder(w, h).find((b) => cellsOf(b).every((cell) => !taken.has(cell)));
+  return free ? free.y * COLONY.grounds.size + free.x : null;
 }
 
 /** Why the colony can't take on this object now, whoever asks (RULE-22 rows 4-6), or null. */
@@ -143,7 +198,7 @@ function objectRefusal(state: GameState, id: PrestigeId): string | null {
   const { name } = PRESTIGE[id];
   if (projects.some((p) => p.id === id)) return `The colony already has ${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name}`;
   const open = projects.filter((p) => OPEN.includes(p.stage));
-  return open.length >= COLONY.maxOpen ? `The colony is already building the ${PRESTIGE[open[0]!.id].name}` : null;
+  return open.length >= COLONY.maxOpen ? `The colony already has ${open.length} ${open.length === 1 ? 'building' : 'buildings'} under way` : null;
 }
 
 /** Why the sitting Governor could not commission this object now, or null when they could: every screen's catalogue reads it. */
@@ -157,7 +212,7 @@ export function commissionRefusal(state: GameState, id: PrestigeId): string | nu
     if (err instanceof RuleError) return err.message;
     throw err;
   }
-  return objectRefusal(state, id) ?? (lowestFreeSlot(state) === null ? GROUNDS_FULL : null);
+  return objectRefusal(state, id) ?? (firstFreeBlock(state, id) === null ? noRoom(id) : null);
 }
 
 /** The Governor pays to repair a damaged object from the fund. See G-5 RULE-21. */
@@ -171,7 +226,7 @@ export function repair(state: GameState, playerId: string, id: PrestigeId): void
   colony.projects.find((p) => p.id === id)!.stage = 'standing';
 }
 
-/** At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and the open project is funded. See G-5 RULE-21. */
+/** At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is funded, oldest first. See G-5 RULE-21. */
 export function runColony(state: GameState, shortages: readonly Good[]): void {
   if (!state.colony) return;
   const colony = edit(state);
@@ -186,8 +241,10 @@ export function runColony(state: GameState, shortages: readonly Good[]): void {
     p.monthsLeft = p.monthsLeft! - 1;
     if (p.monthsLeft === 0) Object.assign(p, { stage: 'standing', monthsLeft: null });
   }
-  const open = colony.projects.find((p) => p.stage === 'commissioned');
-  if (open) fund(state, colony, open);
+  // Every project still being paid for, in the order it was commissioned: one paid in credits but waiting for its goods
+  // takes no credits, so it never starves the ones behind it. fund() keeps the reserve across all of them, and starts
+  // every one that has all its credits and goods; no building waits for land (C48) (RULE-21 row 4).
+  for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) fund(state, colony, p);
   colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
@@ -236,8 +293,8 @@ function fund(state: GameState, colony: Colony, project: Project): void {
   }
   const needs = stillNeeds(project);
   const funded = needs.credits === 0 && Object.keys(needs.goods).length === 0;
-  const sited = !PRESTIGE[project.id].needsPlot || project.plot !== null;
-  if (funded && sited) Object.assign(project, { stage: 'building', monthsLeft: PRESTIGE[project.id].buildMonths });
+  // RULE-21 row 4: fully funded, it builds. Its place on the colony's grounds is its own from the commission (C48).
+  if (funded) Object.assign(project, { stage: 'building', monthsLeft: PRESTIGE[project.id].buildMonths });
 }
 
 /** A good's key as words for a message: rareEarth reads "rare earth". */
@@ -417,32 +474,4 @@ export function payStrike(state: GameState, playerId: string): void {
   const colony = edit(state);
   payOut(state, colony, 'strikePay', strike.cost);
   colony.strike = { ...strike, paid: true };
-}
-
-/** A commissioned project that waits for its plot, or why there is none. See G-5 RULE-28. */
-function waitingForSite(state: GameState, id: PrestigeId): Project {
-  const project = state.colony?.projects.find((p) => p.id === id && p.stage === 'commissioned');
-  if (!project) throw new RuleError('Nothing is waiting for a site');
-  const { name, needsPlot } = PRESTIGE[id];
-  if (!needsPlot) throw new RuleError(`The ${name} needs no plot`);
-  if (project.plot !== null) throw new RuleError(`The ${name} already has its site`);
-  return project;
-}
-
-/** The Governor's top bid for an object's plot at the land auction; null, the colony does not bid. See G-5 RULE-28. */
-export function setSiteBid(state: GameState, playerId: string, id: PrestigeId, maxBid: number | null): void {
-  if (!state.colony) throw new RuleError("This game plays without the colony's council");
-  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Set the bid once the votes are over');
-  if (state.politics?.governor !== playerId) throw new RuleError("Only the Governor sets the colony's bid");
-  waitingForSite(state, id);
-  if (maxBid !== null && !whole(maxBid)) throw new RuleError('Bid a whole number of credits');
-  edit(state).projects.find((p) => p.id === id)!.maxBid = maxBid;
-}
-
-/** The colony won a plot for an object: lots.ts calls this at the lot's settle. The tile becomes the colony's, bare. */
-export function siteProject(state: GameState, id: PrestigeId, tile: number): void {
-  waitingForSite(state, id);
-  // The tile first: a bad index throws before the project holds a plot it doesn't have.
-  Object.assign(state.tiles[tile]!, { owner: COLONY_SELLER, outfit: null });
-  edit(state).projects.find((p) => p.id === id)!.plot = tile;
 }

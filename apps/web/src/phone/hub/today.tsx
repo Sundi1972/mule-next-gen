@@ -26,7 +26,7 @@ export const HUB_SLOTS: HubSlots = {
   ],
   tools: [
     { id: 'look', label: 'Look', hint: () => 'Tap a plot to see what it can make and who owns it.', Map: LookMap, Panel: LookPanel },
-    { id: 'plots', label: 'My plots', hint: () => 'Every plot you own and what it can make. Tap one to find it on the map.', Map: MyPlotsMap, Panel: MyPlotsPanel },
+    { id: 'plots', label: 'My plots', locked: true, hint: () => 'Every plot you own and what it can make. Tap one to find it on the map.', Map: MyPlotsMap, Panel: MyPlotsPanel },
     {
       id: 'drone',
       label: 'Geo drone',

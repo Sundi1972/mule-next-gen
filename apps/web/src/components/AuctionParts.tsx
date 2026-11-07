@@ -1,6 +1,6 @@
 import { COLONY_SELLER, GOOD_CONFIG, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
-import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { bestOffers, Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
@@ -139,18 +139,6 @@ function pricesOn(auction: AuctionView, side: 'seller' | 'buyer', without?: stri
 }
 
 /**
- * How far the closest pair that could trade stands apart: a player's ask against the best bid, or the best ask against
- * a player's bid. Zero or less, they meet; null when no player has a price facing one. The ship and the store crossing
- * each other is no pair: every deal has a player on one side.
- */
-function playerGap(asks: Offer[], bids: Offer[]): number | null {
-  const ask = asks.find((o) => !o.house);
-  const bid = bids.find((o) => !o.house);
-  const gaps = [ask && bids[0] ? ask.price - bids[0].price : null, bid && asks[0] ? asks[0].price - bid.price : null].filter((g): g is number => g !== null);
-  return gaps.length > 0 ? Math.min(...gaps) : null;
-}
-
-/**
  * The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the nearest trade a
  * player faces. TRADING is one word: NEAREST TRADE widens the label column, and a two-line value pushed the second deal row
  * out of the TV's list (TV-FIT).
@@ -160,7 +148,9 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
   const bids = pricesOn(auction, 'buyer');
   const ask = asks[0];
   const bid = bids[0];
-  const gap = playerGap(asks, bids);
+  // The chart's gap chip measures the same pair (SWEEP-C1): every deal has a player on one side.
+  const pair = bestOffers({ walkers: boardWalkers(view, auction), storeSells: storeLines(auction).storeSells, storeStock: auction.storeForSale, storeBuys: auction.storeBuys, shipPays: auction.shipPays });
+  const gap = pair.ask !== null && pair.bid !== null ? pair.ask - pair.bid : null;
   const trading = auction.deals.length > 0;
   return (
     <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
@@ -328,8 +318,12 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   return { line: `Walk down to ${name(best)}’s bid at ${best.price}.`, how };
 }
 
-/** The hint's box: `lit` while your units change hands, `ok` once a choice at a line is done. */
-export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string }) {
+/**
+ * A rail hint: its line, and how to act on it under; `lit` while your units change hands, `ok` once a choice at a line is
+ * done. `howTall` shows the how only where the rail has a row to spare (430 px of height, as the sides caption): on a
+ * phone held sideways a button already says it.
+ */
+export function Hint({ line, how, tone = 'quiet', testid = 'hint', howTall = false }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string; howTall?: boolean }) {
   return (
     <div
       className={cx(
@@ -342,7 +336,7 @@ export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: Rea
         {line}
       </span>
       {how && (
-        <span className="text-ink-2" data-testid="hint-how">
+        <span className={cx('text-ink-2', howTall && 'hidden [@media(min-height:430px)]:block')} data-testid="hint-how">
           {how}
         </span>
       )}
