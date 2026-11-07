@@ -29,7 +29,7 @@ describe('S4-B-AC-8 (off-switch): the sabotage ban exists only while sabotage is
   describe('sabotage off, the default', () => {
     sabotage(false);
 
-    it('S4-RULE-2 row 1 words: proposeLaw refuses the ban, enact or repeal, and changes nothing', () => {
+    it('S4-B-AC-8: S4-RULE-2 row 1 words: proposeLaw refuses the ban, enact or repeal, and changes nothing', () => {
       expect(POLITICS.sabotage.on).toBe(false);
       for (const proposal of [BAN, { kind: 'repeal', law: 'sabotageBan' } as LawProposal]) {
         const state = governed();
@@ -39,12 +39,12 @@ describe('S4-B-AC-8 (off-switch): the sabotage ban exists only while sabotage is
       }
     });
 
-    it('lawOffered lists the four older laws and not the ban', () => {
+    it('S4-B-AC-8: lawOffered lists the four older laws and not the ban', () => {
       const offered = (Object.keys(POLITICS.laws) as LawId[]).filter(lawOffered);
       expect(offered).toEqual(['exportTax', 'landTax', 'pollutionTax', 'emissionCap']);
     });
 
-    it('the other laws are proposed as before', () => {
+    it('S4-B-AC-8: the other laws are proposed as before', () => {
       const state = governed();
       proposeLaw(state, 'lena', LAND_10);
       expect(state.politics!.proposal).toMatchObject({ proposal: { law: 'landTax' } });
@@ -54,7 +54,7 @@ describe('S4-B-AC-8 (off-switch): the sabotage ban exists only while sabotage is
   describe('sabotage on', () => {
     sabotage(true);
 
-    it('the ban is offered and proposable', () => {
+    it('S4-B-AC-8: the ban is offered and proposable with sabotage on', () => {
       expect(lawOffered('sabotageBan')).toBe(true);
       const state = governed();
       proposeLaw(state, 'lena', BAN);
