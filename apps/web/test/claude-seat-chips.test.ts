@@ -267,7 +267,8 @@ describe('HC-3 at a full table: the TV keeps its ready list short (B-AC-19)', ()
     const tv = onTv(view, claude);
     expect(tv).toMatch(/data-testid="tv-ready-claude-thinking" data-count="2"/);
     expect(part(tv, 'tv-ready-claude-thinking')).toMatch(/Juno, Ossa 2 Claude · THINKING$/);
-    expect(part(tv, 'tv-ready-claude-offline')).toMatch(/Brix 1 Claude · OFFLINE · plays its built-in plan$/);
+    // With the note the names would get under 60 px at six seats (measured): the creatures and the count say who.
+    expect(part(tv, 'tv-ready-claude-offline')).toBe('1 Claude · OFFLINE · plays its built-in plan');
     expect(tv).toMatch(/data-testid="tv-ready-ais" data-count="1"/);
     for (const id of ['s3', 's4', 's5', 's6']) expect(tv, `${id} has no row of its own`).not.toContain(`data-testid="tv-ready-${id}"`);
   });
@@ -275,7 +276,7 @@ describe('HC-3 at a full table: the TV keeps its ready list short (B-AC-19)', ()
   it('a Claude seat whose chat never connected shares a row too, saying so; under five seats every seat keeps its own row', () => {
     const view = aGame({ at: sixSeats }).viewFor(null);
     const tv = onTv(view, { s3: 'waiting', s5: 'waiting' });
-    expect(part(tv, 'tv-ready-claude-waiting')).toMatch(/Juno, Ossa 2 WAITING FOR CLAUDE · plays its built-in plan$/);
+    expect(part(tv, 'tv-ready-claude-waiting')).toBe('2 WAITING FOR CLAUDE · plays its built-in plan');
     const four = onTv(aGame().viewFor(null), 'thinking');
     expect(four).toContain(`data-testid="tv-ready-${JUNO}"`);
     expect(four).not.toContain('data-testid="tv-ready-claude-');

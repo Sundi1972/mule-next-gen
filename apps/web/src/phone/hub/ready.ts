@@ -29,8 +29,11 @@ export function stillPlanning(players: readonly PlayerView[], connected: (id: st
   return players.filter((p) => !p.isAi && !p.ready).map((p) => seatOf(p, connected));
 }
 
-/** One line of the TV's ready list: a seat, or the table's AIs folded into one. */
-export type ReadyRow = { kind: 'seat'; seat: Seat } | { kind: 'ais'; seats: Seat[] };
+/** One line of the TV's ready list: a seat, the Claude seats in one status folded into one, or the table's AIs. */
+export type ReadyRow = { kind: 'seat'; seat: Seat } | { kind: 'claude'; status: ClaudeStatus; seats: Seat[] } | { kind: 'ais'; seats: Seat[] };
+
+/** The order the folded Claude rows come in: the chips' own. */
+const STATUS_ORDER: readonly ClaudeStatus[] = ['waiting', 'connected', 'thinking', 'ready', 'offline'];
 
 /** From this many seats the TV folds its AIs into one row, so the news beside the list keeps its room. */
 export const FOLD_AIS_FROM = 5;
@@ -39,16 +42,21 @@ export const FOLD_AIS_FROM = 5;
 const QUIET = new Set<ClaudeStatus | undefined>([undefined, 'ready', 'connected']);
 
 /**
- * The TV's ready list, in seat order. Every person keeps a row, so the TV names whoever the table waits for; from
- * FOLD_AIS_FROM seats the quiet AIs, always ready, share one row at the end. A Claude seat that is thinking, offline or
- * never connected keeps its own row, for its status. The seat count decides, not the space left, so the list doesn't jump as news arrives.
+ * The TV's ready list, in seat order. Every person keeps a row, so the TV names whoever the table waits for. From
+ * FOLD_AIS_FROM seats the computer seats fold: a Claude seat that is thinking, offline or never connected shares one
+ * row per status, in the chips' order, and the quiet AIs, always ready, share the last row. The seat count decides,
+ * not the space left, so the list doesn't jump as news arrives.
  */
 export function readyRows(players: readonly PlayerView[], connected: (id: string) => boolean, claude: (id: string) => ClaudeStatus | undefined = () => undefined): ReadyRow[] {
   const seats = players.map((p) => seatOf(p, connected));
-  const folds = (s: Seat) => s.isAi && QUIET.has(claude(s.id));
-  const ais = seats.filter(folds);
-  if (seats.length < FOLD_AIS_FROM || ais.length === 0) return seats.map((seat) => ({ kind: 'seat', seat }));
-  return [...seats.filter((s) => !folds(s)).map((seat): ReadyRow => ({ kind: 'seat', seat })), { kind: 'ais', seats: ais }];
+  if (seats.length < FOLD_AIS_FROM || !seats.some((s) => s.isAi)) return seats.map((seat) => ({ kind: 'seat', seat }));
+  const people = seats.filter((s) => !s.isAi).map((seat): ReadyRow => ({ kind: 'seat', seat }));
+  const loud = STATUS_ORDER.filter((status) => !QUIET.has(status)).flatMap((status): ReadyRow[] => {
+    const these = seats.filter((s) => s.isAi && claude(s.id) === status);
+    return these.length > 0 ? [{ kind: 'claude', status, seats: these }] : [];
+  });
+  const ais = seats.filter((s) => s.isAi && QUIET.has(claude(s.id)));
+  return [...people, ...loud, ...(ais.length > 0 ? [{ kind: 'ais' as const, seats: ais }] : [])];
 }
 
 /** Whether a seat's screen is connected, as the room has it; a seat the room doesn't list counts as connected. */

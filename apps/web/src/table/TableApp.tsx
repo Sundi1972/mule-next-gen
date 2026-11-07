@@ -25,7 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
-import { Chip, claudeChip, ClaudeCountdownWord, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
+import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWord, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -306,6 +306,28 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
             {readyRows(game.players, connected, claude).map((row) => {
+              if (row.kind === 'claude')
+                return (
+                  <li key={`claude-${row.status}`} className="flex items-center gap-3" data-testid={`tv-ready-claude-${row.status}`} data-count={row.seats.length}>
+                    <span aria-hidden className="w-9 shrink-0" />
+                    <span className="flex shrink-0 -space-x-1.5">
+                      {row.seats.map((s) => (
+                        <PlayerMark key={s.id} slot={toSlot(s.slot)} size={22} glow={row.status === 'thinking'} />
+                      ))}
+                    </span>
+                    {/* Beside the built-in note the names would keep only a few letters: the creatures say who. */}
+                    {playsBuiltIn(row.status) ? (
+                      <span className="flex-1" />
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate font-display text-xl font-semibold" data-testid="tv-ready-claude-names">
+                        {row.seats.map((s) => s.name).join(', ')}
+                      </span>
+                    )}
+                    <span className={cx('shrink-0 font-mono text-sm', row.status === 'thinking' ? 'animate-pulse text-holo' : 'text-warn')}>
+                      {foldedClaudeWord(row.status, row.seats.length)}
+                    </span>
+                  </li>
+                );
               if (row.kind === 'ais')
                 return (
                   <li key="ais" className="flex items-center gap-3 opacity-60" data-testid="tv-ready-ais" data-count={row.seats.length}>
