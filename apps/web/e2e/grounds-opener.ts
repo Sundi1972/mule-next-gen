@@ -4,7 +4,8 @@
  * them. Month 1's end is the first this TV sees: a still, and Ready during it goes to planning at once. Month 2's end,
  * where the Hospital has just come to stand: after any event show the TV shows the opener leaning in on it, ≈ 6 s, then
  * TvMonthEnd. A second TV with reduced motion, whose Hospital pictures are blocked, shows the still with the Hospital's
- * SVG shape and no glow. TV-FIT holds on the opener; the other screens' scales are reported.
+ * SVG shape and no glow, and whose base plate answers 404: it draws the SVG ground instead, never blank (HC-3), while the
+ * main TV draws the plate. TV-FIT holds on the opener; the other screens' scales are reported.
  * Run with `cd apps/web && npx vite build && npx tsx e2e/grounds-opener.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
 import type { GameState } from '@mule/engine';
@@ -83,6 +84,11 @@ async function main(): Promise<void> {
     tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
     await watchTvScales(tv);
     await tv.addInitScript(TIMELINE);
+    // The plate the main TV loads, to tell a plate drawn from one that merely has its element up.
+    const plates: { url: string; status: number }[] = [];
+    tv.on('response', (r) => {
+      if (r.url().includes('/art/colony/plate/')) plates.push({ url: r.url(), status: r.status() });
+    });
     await tv.goto(`${base}/table?room=${code}`);
     await tv.getByTestId('room-code').waitFor();
     // A second TV with reduced motion, whose Hospital pictures never load.
@@ -93,6 +99,12 @@ async function main(): Promise<void> {
     await still.route('**/art/colony/hospital/**', (route) => {
       blocked++;
       return route.abort();
+    });
+    // And its base plate answers 404 (PR-4 review finding 4).
+    let platesMissing = 0;
+    await still.route('**/art/colony/plate/**', (route) => {
+      platesMissing++;
+      return route.fulfill({ status: 404, body: 'not found' });
     });
     await still.goto(`${base}/table?room=${code}`);
     await still.getByTestId('room-code').waitFor();
@@ -174,6 +186,15 @@ async function main(): Promise<void> {
     const href = await grounds.locator(`[data-testid=picture-${h}]`).getAttribute('href');
     check(href?.endsWith('hospital/standing-dusk@800.webp'), `B-AC-6: the Hospital shows its standing picture at dusk, got ${href}`);
     console.log(`✓ B-AC-6: month 2's end shows "${header}", "${caption}", leaning in on the Hospital, no chips; its picture ${href} with its glow; places ${order.join(', ')} back to front`);
+    // The plate the other TV is refused: here it is drawn, on its own ground, with no SVG ground under it (AM-7).
+    // Named as a check, not a timeout: a manifest without a plate fails here.
+    await grounds.getByTestId('plate').waitFor({ timeout: PRESS_MS }).catch(() => undefined);
+    check((await grounds.getByTestId('plate').count()) === 1, 'AM-7: the TV draws the base plate the manifest names (none drawn: does the shipped manifest carry a plate?)');
+    const plateHref = await grounds.getByTestId('plate').getAttribute('href');
+    const served = plates.find((p) => plateHref && p.url.endsWith(plateHref));
+    check(served?.status === 200, `AM-7: the TV loads its plate ${plateHref}, got ${served ? served.status : 'no request'} (plate requests: ${plates.map((p) => `${p.status} ${p.url}`).join(', ')})`);
+    check((await grounds.getByTestId('plate').count()) === 1 && (await grounds.getByTestId('paving').count()) === 0, 'AM-7: the plate is drawn in place of the SVG ground');
+    console.log(`✓ AM-7: the TV draws its plate ${plateHref} (${served.status}), no SVG ground`);
 
     // ≈ 6 s, then TvMonthEnd, unchanged.
     await tv.getByTestId('tv-monthend').waitFor({ timeout: FULL_MS + 2_000 });
@@ -197,6 +218,9 @@ async function main(): Promise<void> {
     check(blocked > 0 && shape && !picture && !glow, `B-AC-4 (negative): the blocked Hospital picture shows its SVG shape and no glow (${blocked} requests blocked), got ${read.parts.join(', ')}`);
     check(park, 'the Park beside it still shows its picture');
     console.log(`✓ B-AC-4 (negative): ${blocked} Hospital picture requests blocked → its SVG shape, its glow gone; the Park keeps its picture`);
+    const [paving, plate, plateGlow] = ['paving', 'plate', 'glow-plate'].map((id) => read.parts.includes(id));
+    check(platesMissing > 0 && read.paving && paving && !plate && !plateGlow, `HC-3 (negative): a plate answering 404 leaves the SVG ground, visible, and no plate or plate glow (${platesMissing} plate requests 404), got ${read.parts.join(', ')}, paving visible ${read.paving}`);
+    console.log(`✓ HC-3 (negative): ${platesMissing} plate requests 404 → the SVG ground shows, no plate, no plate glow`);
 
     // TV-FIT at six seats: the floor holds on the screen this PR adds; every other screen is reported, not failed, because
     // TvMonthEnd's fit is WS4's, per the PM ruling of 7 Nov.
@@ -224,18 +248,22 @@ async function main(): Promise<void> {
 }
 
 /** The reduced-motion TV's opener at the month end, once the Hospital's blocked picture has fallen back to its shape; the place testids it draws. */
-async function readTheStill(tv: Page, board: () => MuleView): Promise<{ kind: string | null; leaning: string | null; caption: string; parts: string[] }> {
+async function readTheStill(tv: Page, board: () => MuleView): Promise<{ kind: string | null; leaning: string | null; caption: string; parts: string[]; paving: boolean }> {
   const opener = tv.getByTestId('tv-grounds-opener');
   await opener.waitFor({ timeout: SHOW_MS });
   await tv.getByTestId('tv-event-overlay').waitFor({ state: 'hidden', timeout: SHOW_MS });
   const hospital = (board().colony?.projects.findIndex((p) => p.id === 'hospital') ?? -1) + 1;
   await opener.getByTestId(`shape-${hospital}`).waitFor({ timeout: STILL_MS });
-  return opener.evaluate((root) => ({
+  // Its plate refused, the grounds go back to the SVG ground.
+  await opener.getByTestId('paving').waitFor({ timeout: STILL_MS });
+  const paving = await opener.getByTestId('paving').isVisible();
+  const read = await opener.evaluate((root) => ({
     kind: root.getAttribute('data-opener'),
     leaning: root.getAttribute('data-leaning'),
     caption: (root.querySelector('[data-testid=opener-caption]') as HTMLElement).innerText.replace(/\s+/g, ' ').trim(),
-    parts: [...root.querySelectorAll('[data-testid^=shape-], [data-testid^=picture-], [data-testid^=glow-]')].map((e) => e.getAttribute('data-testid')!),
+    parts: [...root.querySelectorAll('[data-testid^=shape-], [data-testid^=picture-], [data-testid^=glow-], [data-testid=plate], [data-testid=paving]')].map((e) => e.getAttribute('data-testid')!),
   }));
+  return { ...read, paving };
 }
 
 /** A month from planning to its end: the election (month 2's ready only), the land, the pub, the goods auction. */
