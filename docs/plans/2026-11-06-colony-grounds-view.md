@@ -238,9 +238,9 @@ Built in 2.1–2.2 (ws10-grounds-pr2 @ b12f388c): RULE-2 glow on every stage by 
 **Files:** `apps/web/src/phone/hub/politics/Colony.tsx::ColonyWithFacts` (one line above `ColonyDeskCard`); test: extend `apps/web/test/politics-desks.test.ts`.
 - [x] Implement C8 test-first: write `T-AC-5 (phone): colony-grounds is shown politics on, absent politics off`. Run: FAIL. Add the line. Run: PASS. Commit, and send the SHA to the PM for WS7's OK.
 
-**Status: DONE on #606 (still OPEN)** — mount 62d6680f (WS7 OWNER OK), deep manifest loader b9567595, TV side-panel
-removal fec2bab9, stronger phone test 21045612 (`Review: APPROVE`), fixtures on the real `place` field 80810ed3
-(trunk #605 removed `plot`). CI at 80810ed3 red on the rAF throw above; the guard goes on #606 next.
+**Status: MERGED** — #606 (cc0a4d69): mount 62d6680f (WS7 OWNER OK), deep manifest loader b9567595, TV side-panel
+removal fec2bab9, stronger phone test 21045612, fixtures on the real `place` field 80810ed3 (trunk #605 removed `plot`),
+the rAF guard fbc9ceb7. `Review: APPROVE at fbc9ceb7`.
 
 ### Task 2.4: B-AC-5 — ≤ 1 MB of art on a phone
 
@@ -304,28 +304,49 @@ the Task 4.2 re-render, not from these slab pictures.
 if it does not read the same, stop and re-plan with the PM. Every long render run has a progress check (pictures done /
 total) that the lead reads; a 15-min stall is reported to the PM.
 
-**Status (7 Nov):** proof in flight (park.py layer render started ~10:35Z, out to `design/art/colony/out/proof/`), due
-13:30Z; stall watcher armed on `design/art/colony/out`. Task 4.3 serialises after PR-5's `ColonyGrounds.tsx` commit.
+**Status (23:05Z, 7 Nov): MERGED.** PR-4 = #678 (cefe46c8; `Review: APPROVE at 4aae0fe7`), with the T-AC-10
+plate-fit guard. First art merged via ca076c48 (f595f0e3). Plate frames: plate 3 is 6464×3636 with the hall at
+(3232,2350); plate 5 is 10240×5760 with the hall at (5120,3853). Month 12 sits on **plate 5** (a 2×2 kind lies in ring 2).
+**Ruling: no @1600 tier** — the shipped sizes are [800, 400]; @800 is half the full-res frame, so nothing is upscaled.
+Framing #697 (2b8b8979; `Review: APPROVE at e7bb7442`; T-AC-11, the Stadium at 0.935× of 17.5 px/m) and centring #706
+(22b6c0a3; `Review: APPROVE at 43eaa6b9`; the view centred across on the hall with the minimum shift) followed.
+Night art (PM fixes 1 and 3: lit windows and warm facades at dusk, greener plates, boxwood) at 25b87a62, fast-forwarded
+into `ws10-visual` 23:00Z 7 Nov; generated art, no review (PM ruling); PM passed the dusk read ("Ship #535 on this art").
+The 18:45/19:05Z batch was missed; the grounds ride the 8 Nov batch (lane PR #535 green with shots by 05:00Z).
 
 ### Task 4.1: C1 — the base plate
 
-- [ ] Render the plate in the shared camera (lib/frame scale and sun): ground, grass/dirt, paths, kit vegetation, unbuilt places as graded ground, vignette; day / dusk / glow; plus the hall-centre pixel. Publish to `apps/web/public/art/colony/plate/` and the manifest (`plate`). Look at it beside look.html.
+- [x] Render the plate in the shared camera (lib/frame scale and sun): ground, grass/dirt, paths, kit vegetation, unbuilt places as graded ground, vignette; day / dusk / glow; plus the hall-centre pixel. Publish to `apps/web/public/art/colony/plate/` and the manifest (`plate`). Look at it beside look.html.
 
 ### Task 4.2: C1 — flush layers with shadow catchers, every kind (incl. the Observatory), kit-dressed
 
-- [ ] Re-render every kind × stage × light with no raised slab and a shadow-catcher plane; publish @800/@400 plus @1600 for the TV; T-AC-2 green on the new manifest.
+- [x] Re-render every kind × stage × light with no raised slab and a shadow-catcher plane; publish @800/@400 (no @1600 tier: ruled, see Status); T-AC-2 green on the new manifest.
 
 ### Task 4.3: C2 — the compositor draws the plate and drops the SVG ground
 
-- [ ] C3 is superseded by the plate (AM-7): no painter worker is built for the grounds. Test first at the rendered SVG: the plate `<image>` is drawn first and positioned by the hall-centre pixel; no SVG ground polygons or edge trees remain when the manifest has a plate; without a plate, today's shapes (HC-3). Implement. Commit.
+- [x] C3 is superseded by the plate (AM-7): no painter worker is built for the grounds. Test first at the rendered SVG: the plate `<image>` is drawn first and positioned by the hall-centre pixel; no SVG ground polygons or edge trees remain when the manifest has a plate; without a plate, today's shapes (HC-3). Implement. Commit.
 
 ### Task 4.4: the measured side-by-side
 
-- [ ] Stills of the full month-12 colony, day and dusk, at 1280×720 and 1920×1080, beside look.html's render — to the PM first; then the phone (@400) still. Nothing goes to Heiko before the PM has looked.
+- [x] Stills of the full month-12 colony, day and dusk, at 1280×720 and 1920×1080, beside look.html's render — to the PM first; then the phone (@400) still. Nothing goes to Heiko before the PM has looked.
+
+### Task 4.5: T-AC-10 — the plate fit (C1, C2)
+
+**Altitude:** the shipped manifest and files. **Files:** `packages/ui/test/grounds-manifest.test.ts`.
+- [x] `T-AC-10: every place of the plate's extent and every kind's frame at its place lies inside the plate` — red on the rocket cut, green after the plate frames were widened (#678).
+
+### Task 4.6: T-AC-11 — the framing (C2)
+
+**Altitude:** the rendered view box. **Files:** `packages/ui/test/grounds-framing.test.tsx`, `packages/ui/src/grounds/framing.ts`.
+- [x] `T-AC-11: scale 0.9–1.1× of 17.5 px/m, empty places ≤ 1/3, the view inside the plate` (#697), then centred across on the hall with the minimum shift (#706).
 
 ### PR-4 merge gate
 
-- [ ] T-AC-2 and the Task 4.3 tests green; the side-by-side stills accepted by the PM; typecheck and tests exit 0; Review: APPROVE.
+- [x] T-AC-2 and the Task 4.3 tests green; the side-by-side stills accepted by the PM; typecheck and tests exit 0; Review: APPROVE.
+
+Measured on the night art (game opener shots at 1280, wealth 2000, ours ÷ look.html): hospital panes front 1.01 / side
+1.10, hall panes 1.01, mid-faces 0.92 / 1.10, apron 1.37, lamp pool peak 1.45 / mean 0.82, **grass 0.66** (the renderer's
+own composite reads grass 1.08, a free place 1.04 — different crops; unresolved, see follow-ups). Phone dusk 673,850 B.
 
 ---
 
@@ -335,40 +356,53 @@ total) that the lead reads; a 15-min stall is reported to the PM.
 (the full-screen canvas, header, caption) + `src/look/Living.tsx` (the lean-in). **Named edits:** `TableApp.tsx::TvGame`'s
 upkeep route and `components/Colony.tsx::useMonthEndDrift` (WS4's OK by SHA). WS4 measures TV-FIT ≥ 0.7, six seats.
 
-**Status (7 Nov):** dispatched; branch `ws10-grounds-pr5` (base e22e9244 + pr2 4809efaa + mounts 2c76e51a). Tasks
-5.1–5.4 pushed, red before green: 5.1 b7634d51→d927484e, 5.2 befc8a8f→6f3007dd, 5.3 068fca7c→d95cd2a7, 5.4 C7
-333c3c81→4670e715, C9 8037c71c→4900f399. WS4's named-edit OK pending (diff `2c76e51a..4900f399`). 5.5 next.
+**Status: MERGED** — PR-5 = #664 (1714cdc1; `Review: APPROVE at 729aaf64`). Red before green: 5.1 b7634d51→d927484e,
+5.2 befc8a8f→6f3007dd, 5.3 068fca7c→d95cd2a7, 5.4 C7 333c3c81→4670e715, C9 8037c71c→4900f399. WS4 OWNER OK on
+4900f399 and on 0e401c62 (the smoke e2e waits with `theTvMonthEnd` in `apps/web/e2e/grounds-opener-steps.ts`). TV-FIT:
+the e2e asserts the opener only (PM option A); TvMonthEnd's pre-existing 0.604 went to WS4 and is fixed on trunk.
+The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK) passes at 25b87a62.
 
 ### Task 5.1: T-AC-7 — RULE-5
 
 **Altitude:** unit (hook logic over two views). **Files:** `packages/ui/test/grounds-change.test.ts`, `packages/ui/src/grounds/useGroundsChange.ts`.
-- [ ] Implement C5's change detection test-first: write `T-AC-7: a stage change between month ends leans in on that place; a first view leans in on none`. Run: FAIL. Implement. Run: PASS. Commit.
+- [x] Implement C5's change detection test-first: write `T-AC-7: a stage change between month ends leans in on that place; a first view leans in on none`. Run: FAIL. Implement. Run: PASS. Commit.
 
 ### Task 5.2: T-AC-8 — RULE-6
 
 **Altitude:** unit (pure: change found? reduced motion? politics? → full / still / none, and its length). **Files:** `packages/ui/test/grounds-opener.test.ts`, `packages/ui/src/grounds/opener.ts`.
-- [ ] Write `T-AC-8: <example>` per RULE-6 example. FAIL → implement → PASS. Commit.
+- [x] Write `T-AC-8: <example>` per RULE-6 example. FAIL → implement → PASS. Commit.
 
 ### Task 5.3: C5 — the opener
 
 **Files:** `packages/ui/src/grounds/GroundsOpener.tsx` (full-screen ColonyGrounds at dusk + header + caption from RULE-5's changes, the lean-in from `Living.tsx`, reduced motion → still).
-- [ ] Test at the rendered markup: a changed month carries the caption naming the change and `data-leaning`; a quiet month renders the still with no lean. FAIL → implement → PASS. Commit.
+- [x] Test at the rendered markup: a changed month carries the caption naming the change and `data-leaning`; a quiet month renders the still with no lean. FAIL → implement → PASS. Commit.
 
 ### Task 5.4: C7 + C9 — on the TV (named edits, WS4)
 
 **Files:** `apps/web/src/table/TableApp.tsx::TvGame` (upkeep route: event show → opener → TvMonthEnd), `apps/web/src/components/Colony.tsx::useMonthEndDrift`; tests in `apps/web/test/colony-screens.test.ts`.
-- [ ] `T-AC-9: the gauges' count starts when TvMonthEnd mounts`. FAIL → C9 → PASS. Commit.
-- [ ] `T-AC-5`: politics off, no opener. Then route the opener; TvMonthEnd unchanged (`git diff` of TvMonthEnd empty). Commit. Send both SHAs to the PM for WS4's OK.
+- [x] `T-AC-9: the gauges' count starts when TvMonthEnd mounts`. FAIL → C9 → PASS. Commit.
+- [x] `T-AC-5`: politics off, no opener. Then route the opener; TvMonthEnd unchanged (`git diff` of TvMonthEnd empty). Commit. Send both SHAs to the PM for WS4's OK.
 
 ### Task 5.5: B-AC-6 — browser test (front to back)
 
-- [ ] In `apps/web/e2e/`, the test command owns its stack: at the month end after the Park comes to stand, the TV shows `tv-grounds-opener` after the event show, then `tv-monthend`; everyone Ready during the opener → planning at once; reduced motion → the still. Also Task 1.5 Step 4's checks (failed picture → shape and its glow gone; back-to-front order). TV-FIT ≥ 0.7 at six seats on the opener and the month end (`theTvScalesHeld`).
+- [x] In `apps/web/e2e/`, the test command owns its stack: at the month end after the Park comes to stand, the TV shows `tv-grounds-opener` after the event show, then `tv-monthend`; everyone Ready during the opener → planning at once; reduced motion → the still. Also Task 1.5 Step 4's checks (failed picture → shape and its glow gone; back-to-front order). TV-FIT ≥ 0.7 at six seats on the opener and the month end (`theTvScalesHeld`).
 
 ### PR-5 merge gate
 
-- [ ] T-AC-7, T-AC-8, T-AC-9, T-AC-5 and B-AC-6 green and named. WS4's OK on the two named edits by SHA; WS4's TV-FIT measure ≥ 0.7. Typecheck and tests exit 0. Review: APPROVE. Rulebook: WS6's "Designed, not in the game yet, WS10" lines (table-and-phones month end, events "Who waits") moved to built.
+- [x] T-AC-7, T-AC-8, T-AC-9, T-AC-5 and B-AC-6 green and named. WS4's OK on the two named edits by SHA; WS4's TV-FIT measure ≥ 0.7. Typecheck and tests exit 0. Review: APPROVE. Rulebook: WS6's "Designed, not in the game yet, WS10" lines (table-and-phones month end, events "Who waits") moved to built.
 
 ---
+
+## Follow-ups (after the 8 Nov play-test; none blocks #535)
+
+- **Warm light pools** on the paving round each building's base, as in look.html's colony dusk (PM, non-blocking).
+- **Dusk grass:** the shots agent reads 0.66 of look.html between plots; the renderer's composite reads 1.08 — settle the
+  crop first, then lift if the PM agrees.
+- **Inner lamp heads** (the lamps' heads read unlit close up) and **far-to-near shadows** across neighbouring layers.
+- **Task 2.2b** smoke and haze — still open.
+- **WS4's SHOULD:** poll for the plate request in `apps/web/e2e/grounds-opener.ts` rather than a fixed wait (WS4's file).
+- **WS4:** `apps/web/e2e/colony.ts` takes 364 s against the 360 s watchdog.
+- The mock's type errors in `design/mocks/colony-grounds/src/fixture.ts` and `src/Grounds.tsx`.
 
 <!-- plan-check: no-task C48 T-AC-6 — C48 is WS7's G-5 change (this spec builds its ux); C6/T-AC-6 land in WS7's grounds PR by the PM's ruling (option a), consumed here as a freeze point -->
 

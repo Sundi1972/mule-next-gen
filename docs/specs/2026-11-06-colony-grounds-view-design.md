@@ -262,7 +262,12 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
      "sizes": [800, 400] }` — kind ∈ hall + PrestigeId; stage per RULE-1. A kind may override the frame:
   `"pictures": { "spaceport": { "frame": { "width": 1600, "height": 3200, "place": 1293, "centre": [800, 2600] }, … } }` (AM-1).
   A 2×2 kind's frame is **3200 wide** at the same scale, its centre on the footprint's centre (AM-2); the Spaceport,
-  2×2 and tall, carries both. Paths are relative to `/art/colony/`.
+  2×2 and tall, carries both. Paths are relative to `/art/colony/`. `sizes` is **[800, 400]** — no @1600 tier
+  (ruled 7 Nov; @800 is half the full-res frame, so the TV upscales nothing).
+  Top-level `"plate": { "3" | "5": { "day", "dusk", "glow": "… | null", "frame": { "width", "height", "hall": [x, y] } } }`
+  (AM-7): one base plate per RULE-4 extent — "3" covers ring 1, "5" the whole 5×5; the hall pixel anchors the layers.
+- **Open gap (small):** `ColonyProjectView.place` is on trunk and `plot` was removed (#605); the entry above still
+  describes it as WS7's to produce. Reconcile when C6's PR is recorded here.
 
 ## §4 · Failure & Ops  [handoff]
 
@@ -296,6 +301,8 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-8 (serves C5, C7) | RULE-6's examples: order and length | C5 C7 |
 | T-AC-9 (serves C9) | the gauges' count starts when TvMonthEnd mounts, not at the phase change | C9 |
 | T-AC-7 (serves C5) | RULE-5: a stage change between two month ends leans in on that place; a first view leans in on none | C5 |
+| T-AC-10 (serves B-AC-4, AM-7) | the plate fit: on the shipped manifest every place of the plate's extent, and every kind's frame at its place, lies inside the plate's frame | C1 C2 |
+| T-AC-11 (serves G-2, AM-7) | the framing: a building's scale is 0.9–1.1× of 17.5 px/m; empty places fill ≤ 1/3 of the view; the view lies inside the plate; it is centred across on the hall, shifted only as much as keeps a building whole | C2 |
 
 Invariant: the grounds never write state (HC-1).
 
@@ -407,6 +414,8 @@ did       Heiko: "this is how it should look in the game" — look.html's whole-
           Kit vegetation and props for every kind. C3's map painter is superseded for the grounds (kept for the world
           map). Budget ≈ 10–11 MB (< 16 MB); the phone loads @400 per building in view (HC-2) and gets the plate too.
           Gate: a proof (plate + flush Hospital and Park, side by side with look.html) before anything scales.
+          Later (7 Nov): no @1600 tier — sizes stay [800, 400]; the dusk pass lights the windows (warm panes, lit
+          globes and signs, a ground fill) so dusk reads lit on its own, before the glow layer (PM fix 1).
 because   G-2 (city-builder polish): measured causes — 2.8× smaller framing, no shared ground, raised slabs without
           contact shadows, placeholder trees
 goal      G-2, G-1
