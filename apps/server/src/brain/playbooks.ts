@@ -5,6 +5,7 @@
  */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import {
+  afterGrant,
   atAuctionStart,
   landBrief,
   newPlots,
@@ -159,14 +160,17 @@ export class Playbooks {
         };
         this.worthAtAsk.set(seat.id, { month, worth: worthNow(state) });
         // The month's development rides on the land write, so its edits land every month (PM ruling, 5 Nov, option C).
+        // Drafted on the game as the land grant may leave it (route fix): the hands draft it after the grant, and install
+        // on the plot it gave, which the seat does not hold yet at upkeep.
+        const grant = afterGrant(state, seat.id, drafted.land.landGrant.ranked);
         let development: Playbook | null = null;
         try {
-          development = seat.draft(state, 'development', month);
+          development = seat.draft(grant.state, 'development', month);
         } catch (err) {
           console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
         }
         // The mind for the month briefed: asked at upkeep, this month's adopted fields never shape next month's plans.
-        const brief = landBrief(state, seat.mindFor(month), seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
+        const brief = landBrief(state, seat.mindFor(month), seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null, grant.plot);
         const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development, owned: ownedPlots(state, seat.id) };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);

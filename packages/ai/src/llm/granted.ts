@@ -28,6 +28,21 @@ export function ownedPlots(state: GameState, seat: PlayerId): Set<number> {
   return new Set(state.tiles.flatMap((t, i) => (t.owner === seat && t.terrain !== 'store' ? [i] : [])));
 }
 
+/**
+ * Route fix: the game as the land grant may leave it, for drafting the development at upkeep. The hands draft it at
+ * development's start, after the grant, and install on the plot it gave; drafted before it, the seat has no such plot
+ * and the draft shows the pub. So the copy gives the seat the first plot of `ranked` (its draft land grant's ranking)
+ * that is free and worth claiming, as the hands claim in ranking order. `plot` is that plot, or null where none is
+ * (the land has run out, or nothing ranked is worth anything), and `state` is then the game unchanged.
+ */
+export function afterGrant(state: GameState, seat: PlayerId, ranked: readonly { plot: number; value: number }[]): { state: GameState; plot: number | null } {
+  const pick = ranked.find((r) => r.value > 0 && state.tiles[r.plot]?.owner === null && state.tiles[r.plot]?.terrain !== 'store');
+  if (!pick) return { state, plot: null };
+  const copy = structuredClone(state);
+  copy.tiles[pick.plot]!.owner = seat;
+  return { state: copy, plot: pick.plot };
+}
+
 /** A MULE's group: its buyMule, outfit and install. */
 const MULE_GROUP = 3; // literal-ok: the three steps of a MULE's group, as the rules' route grammar reads them
 
