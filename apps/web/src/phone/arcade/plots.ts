@@ -33,9 +33,15 @@ export function suits(t: Pick<TileView, 'terrain' | 'ground'>): Good[] {
 
 const list = (goods: Good[]) => (goods.length <= 1 ? goods.map((g) => GOOD_NAME[g]).join('') : `${goods.slice(0, -1).map((g) => GOOD_NAME[g]).join(', ')} and ${GOOD_NAME[goods.at(-1)!]}`);
 
+/** "best for Energy", or "nothing worth working" when even its best good draws no dot. */
+export function bestWords(dots: Record<RawGood, number>): string {
+  const best = bestOf(dots);
+  return dots[best] > 0 ? `best for ${GOOD_NAME[best]}` : 'nothing worth working';
+}
+
 /** What a plot suits, in a few words: "often good for Food and Energy", "analysed: best for Water". */
 export function suitsLine(t: Pick<TileView, 'terrain' | 'ground'>): string {
-  if (t.ground) return `analysed: best for ${GOOD_NAME[bestHere(t.ground)]}`;
+  if (t.ground) return `analysed: ${bestWords(dotsOf(t.ground))}`;
   const s = suits(t);
   if (s.length > 0) return `often good for ${list(s)}`;
   const odds = oddsOf(t);

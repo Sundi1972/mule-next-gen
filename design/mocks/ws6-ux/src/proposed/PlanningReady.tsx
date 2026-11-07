@@ -55,8 +55,8 @@ export function readyNow(others: Seat[], isHost: boolean): { title: string; deta
   const away = others.filter((s) => s.away).map((s) => s.name);
   const awayLine = away.length > 0 ? ` ${namesOf(others.filter((s) => s.away), null)} ${away.length === 1 ? 'is' : 'are'} away.` : '';
   return isHost
-    ? { title: `You're ready. Waiting for ${who}`, detail: `Planning has no clock: it ends when everyone is ready. As the host, you can continue without them.${awayLine}` }
-    : { title: `You're ready. Waiting for ${who}`, detail: `Planning has no clock: it ends when everyone is ready, or when the host continues.${awayLine}` };
+    ? { title: "You're ready", detail: `Waiting for ${who}. Planning has no clock: it ends when everyone is ready. As the host, you can continue without them.${awayLine}` }
+    : { title: "You're ready", detail: `Waiting for ${who}. Planning has no clock: it ends when everyone is ready, or when the host continues.${awayLine}` };
 }
 
 /** The ready count, where the clock used to be: planning has none. */

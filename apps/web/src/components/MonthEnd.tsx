@@ -192,16 +192,18 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
   const top = lg.rows[0];
   if (!top) return null;
   const line = winnerWords(view, lg);
-  // Everyone level at the top shares the win: each gets a mark, smaller when there are several.
+  // Everyone level at the top shares the win: each gets a mark, smaller when there are several. The TV's card is about
+  // 418 px inside (TvGameOver's 2fr column of 1,200 less its gap, padding and border): four 80 px marks fit a row, five
+  // do not, so a tie of five or six draws them at 48 (as TvWinner's), and the row wraps rather than run past the card.
   const winners = lg.rows.filter((r) => r.rank === 1);
   if (density === 'tv')
     return (
       <div className="relative flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow animate-pulse-glow" data-testid="tv-winner">
         <span className="label-caps text-lg!">The game goes to</span>
-        <ul className="flex items-center justify-center gap-4" data-testid="winner-marks">
+        <ul className="flex flex-wrap items-center justify-center gap-4" data-testid="winner-marks">
           {winners.map((w) => (
             <li key={w.player.id}>
-              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 1 ? 80 : 112} label={w.player.name} />
+              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 4 ? 48 : winners.length > 1 ? 80 : 112} label={w.player.name} />
             </li>
           ))}
         </ul>
