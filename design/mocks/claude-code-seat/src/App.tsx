@@ -14,7 +14,7 @@ const DECISIONS = [
   'The host can switch the seat back to Built-in; its code stops working.',
   'In play the TV ready list and the phone’s ready bar say CLAUDE · THINKING, CLAUDE · READY or CLAUDE · OFFLINE, on the seat’s own row (never folded in with the AIs); offline plays its built-in plan, unlike an AWAY phone.',
   'HC-3: a Claude Code seat never holds the table. THINKING is a label only and the seat counts as ready, except at the first good’s side pick: there it is waited for, CLAUDE · THINKING · 0:32, at most 45 s, then plays its built-in plan.',
-  'The host can start while a seat is WAITING FOR CLAUDE: the seat says it plays its built-in plan until Claude joins.',
+  'The host can start while a seat is WAITING FOR CLAUDE: in play its row keeps WAITING FOR CLAUDE and says it plays its built-in plan, as an offline seat’s does, until Claude joins.',
   'At the side pick, the host’s Move on for… covers a thinking Claude seat too; it then plays its built-in plan.',
   'Mid-game, Move my seat gains a second choice: Hand my seat to Claude Code. Its code works 10 minutes (counting down); the phone is let go once Claude joins.',
   SETUP_DECISION,
@@ -48,6 +48,7 @@ const PLAY_LINK: Choice<PlayLink>[] = [
   { id: 'thinking', title: 'Thinking' },
   { id: 'ready', title: 'Ready' },
   { id: 'offline', title: 'Offline' },
+  { id: 'waiting', title: 'Never connected' },
 ];
 type StageChoice = Stage | 'sidepick-late';
 const STAGE: Choice<StageChoice>[] = [
