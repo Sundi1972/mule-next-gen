@@ -96,9 +96,17 @@ function within(box: Box, plate: Box): Box {
   return { x: clamp(box.x + (box.w - w) / 2, plate.x, plate.x + plate.w - w), y: clamp(box.y + (box.h - h) / 2, plate.y, plate.y + plate.h - h), w, h };
 }
 
-/** The view before any lean-in: the occupied extent at the canvas's aspect inside the plate, or without one the built area. */
+/** `view` moved across to centre on the hall, as look.html centres its platform, but never so far that it cuts `kept`. */
+function onTheGrid(view: Box, kept: Box): Box {
+  const hall = iso(0, 0)[0];
+  return { ...view, x: Math.min(kept.x, Math.max(kept.x + kept.w - view.w, hall - view.w / 2)) };
+}
+
+/** The view before any lean-in: the occupied extent at the canvas's aspect, across on the hall, inside the plate; or without a plate the built area. */
 export function viewOf(aspect: number, rings: number, blocks: GridPlace[], tops: number[], plate: Box | null): Box {
-  return plate ? within(toAspect(occupied(blocks, tops), aspect), plate) : builtArea(rings, tops, aspect);
+  if (!plate) return builtArea(rings, tops, aspect);
+  const kept = occupied(blocks, tops);
+  return within(onTheGrid(toAspect(kept, aspect), kept), plate);
 }
 
 /** Whether `view` stops short of the plate's edges, where the plate's own vignette fades it out. */
