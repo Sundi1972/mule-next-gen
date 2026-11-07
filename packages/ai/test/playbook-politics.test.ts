@@ -47,6 +47,24 @@ describe("the validator clamps a seat's recorded votes (RULE-1 politics rows; AM
     open.politics!.election = { stage: 'ballot', ceremony: null, candidates: { governor: ['ai0'], sheriff: [] }, promises: {}, ballots: {}, done: [], result: null };
     open.politics!.candidates.governor = [];
     expect(run(open, [edit('/politics/votes/governor', 'ai0')]).playbook.politics).toEqual({ votes: { governor: 'ai0' } });
+
+    // Once that ballot has closed (the ceremony, or over) its candidates no longer stand: an election month's land grant.
+    for (const stage of ['ceremony', 'over'] as const) {
+      const closed = structuredClone(open);
+      Object.assign(closed.politics!.election!, { stage, result: {} });
+      expect(whyOf(run(closed, [edit('/politics/votes/governor', 'ai0')]), '/politics/votes/governor'), stage).toBe('not on the governor ballot');
+    }
+  });
+
+  it('T-AC-1: a law vote plays while the law ballot is open, after the proposal has moved onto it, and not once it is revealed', () => {
+    // openCouncil clears the proposal as it opens the ballot: a whisper reply then still votes (spec B C12, the law's B-AC-B8).
+    const state = table();
+    const council = { stage: 'ballot' as const, clockMs: 0, proposal: { kind: 'enact' as const, law: 'landTax' as const, setting: 1 }, proposer: 'ai1', ballots: { ai1: true }, done: [], result: null };
+    state.politics!.council = council;
+    expect(state.politics!.proposal).toBeNull();
+    expect(run(state, [edit('/politics/law', false)]).playbook.politics).toEqual({ law: false });
+    state.politics!.council = { ...council, stage: 'reveal', result: { passed: false, yes: 1, no: 3, tie: false } };
+    expect(whyOf(run(state, [edit('/politics/law', false)]), '/politics/law')).toBe('no law on the ballot');
   });
 
   it('T-AC-1: an office not elected, a law vote with no law on the ballot, and paths that are no field are refused', () => {
@@ -80,6 +98,13 @@ describe("the validator clamps a seat's recorded votes (RULE-1 politics rows; AM
     const r = run(state, [], carried);
     expect(r.rejected).toEqual([{ path: '/politics/votes/governor', to: 'ai0', why: 'not on the governor ballot' }]);
     expect(r.playbook.politics).toEqual({ votes: {}, law: true });
+    // A carried law vote with no law up any more is dropped; so is a votes that is not an object.
+    const lawless = run(table(), [], { ...clean.draft, politics: { votes: { governor: 'ai1' }, law: true } } as Playbook);
+    expect(lawless.rejected).toEqual([{ path: '/politics/law', to: true, why: 'no law on the ballot' }]);
+    expect(lawless.playbook.politics).toEqual({ votes: { governor: 'ai1' } });
+    const listed = run(state, [], { ...clean.draft, politics: { votes: ['ai1'], law: true } } as unknown as Playbook);
+    expect(whyOf(listed, '/politics/votes')).toBe('not an object');
+    expect(listed.playbook.politics).toEqual({ law: true });
     // A politics that is not an object is dropped whole.
     const junk = run(state, [], { ...clean.draft, politics: 'vote ai1' } as unknown as Playbook);
     expect(whyOf(junk, '/politics')).toBe('not an object');
