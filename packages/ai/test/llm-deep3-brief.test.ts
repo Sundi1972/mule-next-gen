@@ -48,7 +48,7 @@ const p0 = (state: GameState) => state.players.find((p) => p.id === 'p0')!;
 const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
 
 /** Three seats; p0 owns `outfits`, one plot each, and a production has run. */
-function table(outfits: readonly Outfit[] = ['food', 'smithore']): { state: GameState; plots: number[] } {
+function table(outfits: readonly (Outfit | null)[] = ['food', 'smithore']): { state: GameState; plots: number[] } {
   const state = createGame({ seed: 7, players: [0, 1, 2].map((i) => ({ id: `p${i}`, name: `Seat ${i}`, isAi: true })) });
   const free = state.tiles.map((t, i) => (t.terrain === 'store' ? -1 : i)).filter((i) => i >= 0);
   const plots = free.slice(0, outfits.length);
