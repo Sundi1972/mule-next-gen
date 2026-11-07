@@ -50,7 +50,7 @@ ground, vitest with `renderToStaticMarkup` (packages/ui, apps/web), Playwright f
 | PR-1 | `ws10-grounds-pr1` (code, PR #542) + art commits on `ws10-visual` | Tasks 1.1–1.7 (C1 Park + hall + Hospital, C2, C7) | B-AC-1, B-AC-4 (for its kinds), T-AC-1, T-AC-2 (its kinds), T-AC-5 (TV) | manifest.json | ColonyProjectView.place (C6, WS7 engine PR) | Yes |
 | PR-2 | `ws10-grounds-pr2` | Tasks 2.1–2.4 (C4, C8) | B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4, T-AC-5 (phone) | — | manifest.json, place | Yes |
 | PR-3 | `ws10-grounds-pr3` | Tasks 3.1–3.3 (C1 remaining kinds) | B-AC-4, T-AC-2 (all kinds) | — | manifest.json | No (static art) |
-| PR-4 | `ws10-grounds-pr4` | Tasks 4.1–4.3 (C3) | — (look; §4 worker row) | — | — | Yes |
+| PR-4 | `ws10-grounds-pr4` | Tasks 4.1–4.4 (C1, C2, C3; AM-7) | T-AC-2 (plate) | — | — | Yes |
 | PR-5 | `ws10-grounds-pr5` | Tasks 5.1–5.5 (C5, C7, C9; AM-6) | T-AC-7, T-AC-8, T-AC-9, B-AC-6 | — | — | Yes |
 | WS7 | its engine PR | C6 | T-AC-6 | ColonyProjectView.place | — | No |
 
@@ -61,7 +61,7 @@ ground, vitest with `renderToStaticMarkup` (packages/ui, apps/web), Playwright f
 | PR-1 | `packages/ui/src/grounds/**`, `packages/ui/test/grounds-*.test.tsx`, `apps/web/public/art/colony/**`, `design/art/colony/**`, one export line in `packages/ui/src/index.ts` | `design/mocks/colony-grounds/src/Scene.tsx`, `layout.ts` (the approved scaffold: graft, don't redesign) | `apps/web/src/table/TableApp.tsx` (WS4: the mount is a named edit, WS4's OK), `packages/protocol/**`, `apps/server/**` (C6 is WS7's), `packages/ui/src/terrain/**` (HC-4) |
 | PR-2 | `packages/ui/src/grounds/**`, its tests | `design/mocks/colony-grounds/src/look/Living.tsx` (scaffold) | `apps/web/src/phone/hub/politics/Colony.tsx` (WS7: named edit, WS7's OK), `packages/ui/src/terrain/**` |
 | PR-3 | `design/art/colony/**`, `apps/web/public/art/colony/**` | — | `packages/ui/**` |
-| PR-4 | `packages/ui/src/grounds/ground*.ts` | — | `packages/ui/src/terrain/**` (import only) |
+| PR-4 | `packages/ui/src/grounds/**`, its tests, `design/art/colony/**`, `apps/web/public/art/colony/**` | `design/mocks/colony-grounds/tv-beat.html` (scaffold) | `packages/ui/src/terrain/**`, `apps/**/src` (no screen changes in PR-4) |
 | PR-5 | `packages/ui/src/grounds/**` (useGroundsChange.ts, opener.ts, GroundsOpener.tsx, ColonyGrounds.tsx), their tests, `apps/web/test/colony-screens.test.ts`, `apps/web/e2e/` (its own test file) | `design/mocks/colony-grounds/tv-beat.html` + `src/look/Living.tsx` (scaffold) | `apps/web/src/table/TableApp.tsx` beyond TvGame's upkeep route, and `apps/web/src/components/Colony.tsx` beyond useMonthEndDrift (WS4: both named edits, WS4's OK); `TvMonthEnd` itself (must stay unchanged); `packages/protocol/**`, `apps/server/**` |
 
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
@@ -270,24 +270,31 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 
 ---
 
-## PR-4 — the ground, painted the map's way (C3)
+## PR-4 — the base plate and the seamless composite (C1, C2, C3; spec AM-7)
 
-### Task 4.1: C3 — ground painter
+**Gate first:** the 13:30Z proof (plate + flush shadow-catcher Hospital and Park, side by side with look.html's render) —
+if it does not read the same, stop and re-plan with the PM. Every long render run has a progress check (pictures done /
+total) that the lead reads; a 15-min stall is reported to the PM.
 
-**Spec:** §1 C3, HC-4, §4 worker row. **Files:** `packages/ui/src/grounds/ground.ts`, `ground.worker.ts`; reuse `packages/ui/src/terrain/noise.ts` and `picture-cache.ts::PictureCache` by import.
-- [ ] Implement C3: port the painter from `design/art/colony/spike-park/procedural/park.ts` (lawn, gravel, setts, room-to-grow ground, skirt fade) and use the ART-DIRECTION sun. Paint off the main thread, cached.
+### Task 4.1: C1 — the base plate
 
-### Task 4.2: §4 — the worker is unavailable
+- [ ] Render the plate in the shared camera (lib/frame scale and sun): ground, grass/dirt, paths, kit vegetation, unbuilt places as graded ground, vignette; day / dusk / glow; plus the hall-centre pixel. Publish to `apps/web/public/art/colony/plate/` and the manifest (`plate`). Look at it beside look.html.
 
-- [ ] Write `grounds ground: no Worker → painted once on the main thread; until then the flat ground`. Altitude: unit; the boundary can't remove Worker. Run: FAIL. Implement. Run: PASS. Commit.
+### Task 4.2: C1 — flush layers with shadow catchers, every kind (incl. the Observatory), kit-dressed
 
-### Task 4.3: Wire it into ColonyGrounds and run a look round
+- [ ] Re-render every kind × stage × light with no raised slab and a shadow-catcher plane; publish @800/@400 plus @1600 for the TV; T-AC-2 green on the new manifest.
 
-- [ ] Mount the painted ground under the pictures. Check the look page at TV and phone sizes. The PM asks Heiko.
+### Task 4.3: C2 — the compositor draws the plate and drops the SVG ground
+
+- [ ] C3 is superseded by the plate (AM-7): no painter worker is built for the grounds. Test first at the rendered SVG: the plate `<image>` is drawn first and positioned by the hall-centre pixel; no SVG ground polygons or edge trees remain when the manifest has a plate; without a plate, today's shapes (HC-3). Implement. Commit.
+
+### Task 4.4: the measured side-by-side
+
+- [ ] Stills of the full month-12 colony, day and dusk, at 1280×720 and 1920×1080, beside look.html's render — to the PM first; then the phone (@400) still. Nothing goes to Heiko before the PM has looked.
 
 ### PR-4 merge gate
 
-- [ ] The §4 test is green. `git diff -- packages/ui/src/terrain` is empty (HC-4). The look round is recorded. Typecheck and tests exit 0. Review: APPROVE.
+- [ ] T-AC-2 and the Task 4.3 tests green; the side-by-side stills accepted by the PM; typecheck and tests exit 0; Review: APPROVE.
 
 ---
 

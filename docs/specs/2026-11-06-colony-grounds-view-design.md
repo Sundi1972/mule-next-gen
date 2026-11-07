@@ -393,6 +393,26 @@ goal      G-1, G-2
 folded    C5, C7, C9, RULE-6, §6; plan PR-5; the phone mount (C8) unchanged
 ```
 
+```
+AM-7 · 2026-11-07 · lead · Heiko's binding target + PM approval (relayed 10:25Z by date -u)
+target    §1 C1 (pictures on raised slabs), C2 (SVG ground, cone trees), C3 (the map painter for the ground), the TV framing
+said      per-building pictures on their own slabs over a painted (C3) ground; SVG edge trees; the whole 5×5 in frame
+did       Heiko: "this is how it should look in the game" — look.html's whole-colony render (one camera, one light, one
+          scene) is the bar, by day and at dusk, any buildings and stages. Route: (i) a BASE PLATE rendered in the shared
+          camera — ground, grass/dirt, paths, kit vegetation, unbuilt places, vignette — day / dusk / glow; (ii) every
+          building × stage re-rendered FLUSH with a Cycles shadow catcher, so each layer carries its own cast shadow and
+          composites in depth order (ortho camera + directional sun ⇒ one picture serves every place; shadows onto
+          neighbouring buildings dropped, accepted); (iii) dusk and lamps stay rendered passes; (iv) the TV opener frames
+          the built area like the look.html camera, @1600 TV variants (nothing upscaled); (v) no chips on the opener.
+          Kit vegetation and props for every kind. C3's map painter is superseded for the grounds (kept for the world
+          map). Budget ≈ 10–11 MB (< 16 MB); the phone loads @400 per building in view (HC-2) and gets the plate too.
+          Gate: a proof (plate + flush Hospital and Park, side by side with look.html) before anything scales.
+because   G-2 (city-builder polish): measured causes — 2.8× smaller framing, no shared ground, raised slabs without
+          contact shadows, placeholder trees
+goal      G-2, G-1
+folded    C1, C2, C3; plan PR-3 (re-render), PR-4 (now the plate + compositor), PR-5 (framing)
+```
+
 ## §9 · Ownership Boundaries  [handoff]
 
 - Sole owner: WS10, for `packages/ui/src/grounds/**`, `apps/web/public/art/colony/**` and `design/art/**`.
