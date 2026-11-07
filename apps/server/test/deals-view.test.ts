@@ -28,6 +28,7 @@ function startedGame() {
   return { game, notices };
 }
 
+/** The game's engine state: private to MuleGame, so the cast; the tests set up and read the cards there. */
 const stateOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 const PACT = { to: 's2', terms: { kind: 'pact' as const }, months: 3 };
 
@@ -52,7 +53,7 @@ describe('S3-RULE-7 (server views): a card reaches its two parties only, until i
     expect(JSON.stringify(game.viewFor(null)), 'the TV').not.toContain(id);
   });
 
-  it('MyDealsView: an open offer counts against the proposer’s offers left, and the pact lengths come from config', () => {
+  it('S3-T-AC-1: MyDealsView, an open offer counts against the proposer’s offers left, and the pact lengths come from config', () => {
     const { game } = startedGame();
     const left = () => game.viewFor('s1').me!.deals!.offersLeft;
     expect(left()).toBe(POLITICS.deals.maxOpenOffers);
@@ -64,7 +65,7 @@ describe('S3-RULE-7 (server views): a card reaches its two parties only, until i
     expect(game.viewFor('s1').me!.deals!.pactMonths).toEqual([...POLITICS.deals.pactMonths]);
   });
 
-  it('a broken card is public: on every screen’s brokenDeals, on a third phone’s own list, and as the breaker’s public reason', () => {
+  it('S3-T-AC-5: a broken card is public: on every screen’s brokenDeals, on a third phone’s own list, and as the breaker’s public reason', () => {
     const { game } = startedGame();
     const id = pact(game);
 
@@ -78,7 +79,7 @@ describe('S3-RULE-7 (server views): a card reaches its two parties only, until i
     expect(game.viewFor('s4').me!.deals!.cards.map((c) => c.id), 'public now, so on every list').toEqual([id]);
   });
 
-  it('MyPoliticsView.promised: a promised vote shows on the promiser’s own phone only', () => {
+  it('S3-T-AC-5: MyPoliticsView.promised, a promised vote shows on the promiser’s own phone only', () => {
     const { game } = startedGame();
     game.handle('s2', { type: 'run', office: 'governor', promise: { kind: 'hold' } });
     game.handle('s1', { type: 'offerDeal', offer: { to: 's4', terms: { kind: 'vote', office: 'governor', candidate: 's2' } } });
@@ -93,7 +94,7 @@ describe('S3-RULE-7 (server views): a card reaches its two parties only, until i
 describe('S3-RULE-11 / S3-C12: the record’s deal notices, and one news line per break', () => {
   const deal = (notices: Notice[]) => notices.filter((n) => n.kind === 'deal') as Extract<Notice, { kind: 'deal' }>[];
 
-  it('an offer and its answer each leave a notice private to the two parties, with the card as it stood', () => {
+  it('S3-T-AC-11: an offer and its answer each leave a notice private to the two parties, with the card as it stood', () => {
     const { game, notices } = startedGame();
     const id = pact(game);
 
@@ -103,7 +104,7 @@ describe('S3-RULE-11 / S3-C12: the record’s deal notices, and one news line pe
     ]);
   });
 
-  it('a break leaves a public notice, with no parties, and one news line on every screen', () => {
+  it('S3-T-AC-11: a break leaves a public notice, with no parties, and one news line on every screen', () => {
     const { game, notices } = startedGame();
     pact(game);
     pactBreach(stateOf(game), 's1', 's2', stateOf(game).month, true);
@@ -140,15 +141,15 @@ describe('dealNews: the wording of a break, per kind of card', () => {
     [{ kind: 'vote', law: true, yes: true } as const, 'Heiko broke a promise to Lena: a yes on the law. Reputation −10.', ['s1', 's2']],
     [{ kind: 'vote', law: true, yes: false } as const, 'Heiko broke a promise to Lena: a no on the law. Reputation −10.', ['s1', 's2']],
     [{ kind: 'pact' } as const, 'Heiko broke a pact with Lena. Reputation −20.', ['s1', 's2']],
-  ])('%j reads %j, naming %j', (terms, text, who) => {
+  ])('S3-B-AC-2: the news of a broken %j reads %j, naming %j', (terms, text, who) => {
     expect(news(card(terms))).toEqual([{ text, who }]);
   });
 
-  it('a pact broken by its receiver names the proposer as the other party', () => {
+  it('S3-B-AC-2: a pact broken by its receiver names the proposer as the other party', () => {
     expect(news(card({ kind: 'pact' }, 's1', 's2', 's2'))).toEqual([{ text: 'Lena broke a pact with Heiko. Reputation −20.', who: ['s2', 's1'] }]);
   });
 
-  it('only a card that turns broken makes news: an offer, a kept pact or an already broken card makes none', () => {
+  it('S3-T-AC-5: only a card that turns broken makes news: an offer, a kept pact or an already broken card makes none', () => {
     const kept = { ...card({ kind: 'pact' }), status: 'kept' as const, brokenBy: null };
     expect(dealNews([], [{ ...kept, status: 'offered' }], (id) => names[id]!)).toEqual([]);
     expect(dealNews([was(kept)], [kept], (id) => names[id]!)).toEqual([]);
@@ -186,7 +187,7 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
   const cardNotices = (notices: Notice[], id: string) => deal(notices).filter((n) => n.deal.id === id);
   const deal = (notices: Notice[]) => notices.filter((n) => n.kind === 'deal') as Extract<Notice, { kind: 'deal' }>[];
 
-  it('an offer nobody answered is noticed expired as planning closes, stamped planning', () => {
+  it('S3-T-AC-11: an offer nobody answered is noticed expired as planning closes, stamped planning', () => {
     const { game, notices, until } = played();
     game.handle('ossa', { type: 'offerDeal', offer: { to: 'lena', terms: { kind: 'pact' }, months: 3 } });
     const id = stateOf(game).politics!.deals.at(-1)!.id;
@@ -199,7 +200,7 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
     ]);
   });
 
-  it('a one-month pact is noticed kept the moment the clock opens the upkeep, before any intent, stamped upkeep', () => {
+  it('S3-T-AC-11: a one-month pact is noticed kept the moment the clock opens the upkeep, before any intent, stamped upkeep', () => {
     const { game, notices, step } = played();
     game.handle('ossa', { type: 'offerDeal', offer: { to: 'lena', terms: { kind: 'pact' }, months: 1 } });
     const id = stateOf(game).politics!.deals.at(-1)!.id;
@@ -219,7 +220,7 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
     ]);
   });
 
-  it('a pact still running when the game ends is noticed kept at that last upkeep, stamped upkeep, not game over', () => {
+  it('S3-T-AC-11: a pact still running when the game ends is noticed kept at that last upkeep, stamped upkeep, not game over', () => {
     const { game, notices, until } = played(PEOPLE, 1);
     game.handle('ossa', { type: 'offerDeal', offer: { to: 'lena', terms: { kind: 'pact' }, months: 3 } });
     const id = stateOf(game).politics!.deals.at(-1)!.id;
@@ -230,7 +231,7 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
     expect(cardNotices(notices, id).at(-1)).toMatchObject({ event: 'kept', phase: 'upkeep', month: 1 });
   });
 
-  it('a vote promise broken on the ballot is noticed, and in the news with its seats, in the tick that settles it', () => {
+  it('S3-T-AC-11: a vote promise broken on the ballot is noticed, and in the news with its seats, in the tick that settles it', () => {
     const { game, notices, step } = played();
     game.handle('lena', { type: 'run', office: 'governor', promise: { kind: 'hold' } });
     game.handle('brix', { type: 'run', office: 'governor', promise: { kind: 'hold' } });
@@ -255,7 +256,7 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
   it.each([
     ['as the development closes, noticed with the close', 2],
     ['during the development, noticed by the next Ready', 1],
-  ])('a card settling %s stays out of the auction playbook’s public facts', (_when, before) => {
+  ])('S3-T-AC-5: a card settling %s stays out of the auction playbook’s public facts', (_when, before) => {
     const askPhase = vi.spyOn(Playbooks.prototype, 'askPhase');
     const { game, notices, until } = played(PEOPLE.filter((s) => !s.isAi));
     game.handle('ossa', { type: 'offerDeal', offer: { to: 'lena', terms: { kind: 'pact' }, months: 3 } });
@@ -264,7 +265,8 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
     until('development');
     const state = stateOf(game);
 
-    // Some press Ready; then the card settles, as a rule could settle it; the rest press Ready, the last closing it.
+    // Some press Ready; then the card settles, as slice 4's pactBreach will settle one mid-phase (a stand-in until it is
+    // called); the rest press Ready, the last closing it.
     for (const h of HUMANS.slice(0, before)) game.handle(h, { type: 'ready' });
     expect(state.phase, 'the premise: still the development').toBe('development');
     const politics = structuredClone(state.politics!);
