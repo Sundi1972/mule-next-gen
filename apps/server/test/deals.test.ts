@@ -60,7 +60,7 @@ async function seatedPhone() {
 }
 
 describe('S3-C10: the wire takes the three deal intents and refuses malformed ones', () => {
-  it('well-formed deal intents reach the rules: each refusal is the rules’ own words, never "Bad message"', async () => {
+  it('S3-T-AC-1: well-formed deal intents reach the rules: each refusal is the rules’ own words, never "Bad message"', async () => {
     const { first, answer } = await seatedPhone();
     const me = first.me!.id;
     const ai = first.players.find((p) => p.isAi)!.id;
@@ -90,7 +90,7 @@ describe('S3-C10: the wire takes the three deal intents and refuses malformed on
     { type: 'answerDeal', id: 'deal-x' },
     { type: 'answerDeal', id: 'deal-x', accept: 'yes' },
     { type: 'answerDeal', accept: true },
-  ])('refuses %j as a bad message', async (bad) => {
+  ])('S3-T-AC-1: the wire refuses %j as a bad message, before the rules', async (bad) => {
     const { answer } = await seatedPhone();
     expect(await answer(bad)).toBe('Bad message');
   });
@@ -113,7 +113,7 @@ function startedGame(politics = true) {
 const PACT = { to: 's2', terms: { kind: 'pact' as const }, months: 3 };
 
 describe('S3-C11: a phone’s deal intents play through diplomacy.ts in planning', () => {
-  it('an open offer blocks a second one to the same player, and an unknown card is refused', () => {
+  it('S3-T-AC-1: an open offer blocks a second one to the same player, and an unknown card is refused', () => {
     const game = startedGame();
     game.handle('s1', { type: 'offerDeal', offer: PACT });
 
@@ -122,7 +122,7 @@ describe('S3-C11: a phone’s deal intents play through diplomacy.ts in planning
     expect(() => game.handle('s2', { type: 'answerDeal', id: 'deal-nope', accept: true })).toThrow('That card is no longer open');
   });
 
-  it('an accepted pact is binding: a second offer between the two is refused, and answering it again is too late', () => {
+  it('S3-T-AC-1: an accepted pact is binding: a second offer between the two is refused, and answering it again is too late', () => {
     const game = startedGame();
     const before = new Set(dealIds(game));
     game.handle('s1', { type: 'offerDeal', offer: PACT });
@@ -134,7 +134,7 @@ describe('S3-C11: a phone’s deal intents play through diplomacy.ts in planning
     expect(() => game.handle('s1', { type: 'offerDeal', offer: PACT })).toThrow('You already have a pact with Lena');
   });
 
-  it('a withdrawn card can no longer be answered, and the proposer may offer again', () => {
+  it('S3-T-AC-1: a withdrawn card can no longer be answered, and the proposer may offer again', () => {
     const game = startedGame();
     game.handle('s1', { type: 'offerDeal', offer: PACT });
     const id = dealIds(game).at(-1)!;
@@ -145,13 +145,15 @@ describe('S3-C11: a phone’s deal intents play through diplomacy.ts in planning
     expect(() => game.handle('s1', { type: 'offerDeal', offer: PACT })).not.toThrow();
   });
 
-  it('with politics off the rules refuse every deal intent', () => {
+  it('S3-T-AC-6: with politics off the rules refuse each of the three deal intents, in their own words', () => {
     const game = startedGame(false);
     expect(() => game.handle('s1', { type: 'offerDeal', offer: PACT })).toThrow('This game plays without deals');
+    expect(() => game.handle('s1', { type: 'withdrawDeal', id: 'deal-x' })).toThrow('This game plays without deals');
+    expect(() => game.handle('s2', { type: 'answerDeal', id: 'deal-x', accept: true })).toThrow('Cards are answered in planning');
   });
 });
 
-/** The ids of every card in the game, read where the server's own views will read them once dealsView exists. */
+/** The ids of every card in the game. The cast reaches the game's private engine state: the test reads the cards there. */
 function dealIds(game: MuleGame): string[] {
   return ((game as unknown as { state: { politics: { deals: { id: string }[] } | null } }).state.politics?.deals ?? []).map((d) => d.id);
 }

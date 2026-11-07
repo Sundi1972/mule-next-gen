@@ -572,6 +572,7 @@ describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for every
 
     g.game.handle('lena', { type: 'continue' });
     expect(g.game.viewFor(null).news[0]).toBe('Lena closed the ballot without Ossa.');
+    expect(g.game.viewFor(null).newsLines![0], 'F-11: the line names the host, then whom she went on without').toEqual({ text: 'Lena closed the ballot without Ossa.', who: ['lena', 'ossa'] });
     g.advance(WALK.tickMs);
     expect(election(g.game).stage).toBe('ceremony');
     expect(engineOf(g.game).politics!.election!.ballots, 'Ossa abstained').not.toHaveProperty('ossa');
