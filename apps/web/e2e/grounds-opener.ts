@@ -4,7 +4,7 @@
  * them. Month 1's end is the first this TV sees: a still, and Ready during it goes to planning at once. Month 2's end,
  * where the Hospital has just come to stand: after any event show the TV shows the opener leaning in on it, ≈ 6 s, then
  * TvMonthEnd. A second TV with reduced motion, whose Hospital pictures are blocked, shows the still with the Hospital's
- * SVG shape and no glow. TV-FIT holds over the opener and the month end.
+ * SVG shape and no glow. TV-FIT holds on the opener; the other screens' scales are reported.
  * Run with `cd apps/web && npx vite build && npx tsx e2e/grounds-opener.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
 import type { GameState } from '@mule/engine';
@@ -13,7 +13,7 @@ import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { check, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
-import { theTvScalesHeld, TV_SCALE_FLOOR, watchTvScales } from './tv-fit-steps';
+import { TV_SCALE_FLOOR, watchTvScales } from './tv-fit-steps';
 
 const SCALE = 0.25;
 const within = (ms: number) => ms * SCALE + 5_000;
@@ -198,10 +198,16 @@ async function main(): Promise<void> {
     check(park, 'the Park beside it still shows its picture');
     console.log(`✓ B-AC-4 (negative): ${blocked} Hospital picture requests blocked → its SVG shape, its glow gone; the Park keeps its picture`);
 
-    // TV-FIT at six seats over the opener and the month end.
-    const scales = await theTvScalesHeld(tv, 'six seats');
-    check(/upkeep \(tv-grounds-opener\) /.test(scales) && /upkeep \(tv-monthend\) /.test(scales), `TV-FIT read the opener and the month end, got ${scales}`);
-    console.log(`✓ TV-FIT floor ${TV_SCALE_FLOOR}, six seats, every screen incl. the opener and the month end: ${scales}`);
+    // TV-FIT at six seats: the floor holds on the screen this PR adds; every other screen is reported, not failed, because
+    // TvMonthEnd's fit is WS4's, per the PM ruling of 7 Nov.
+    const lows = (await tv.evaluate('window.__tvScaleLows ? window.__tvScaleLows() : null')) as Record<string, number> | null;
+    check(lows !== null, 'TV-FIT: the six-seat TV was watched from its first frame');
+    const scales = Object.entries(lows).map(([screen, scale]) => `${screen} ${scale.toFixed(3)}`).join(', ');
+    const own = lows['upkeep (tv-grounds-opener)'];
+    check(own !== undefined && own >= TV_SCALE_FLOOR, `TV-FIT: at six seats the opener is drawn at ${own?.toFixed(3) ?? 'no scale'}, floor ${TV_SCALE_FLOOR}; every screen's lowest: ${scales}`);
+    console.log(`✓ TV-FIT floor ${TV_SCALE_FLOOR}, six seats, upkeep (tv-grounds-opener) ${own.toFixed(3)}`);
+    const under = Object.entries(lows).filter(([, scale]) => scale < TV_SCALE_FLOOR);
+    console.log(`  TV-FIT report (not this PR's to hold): every screen's lowest: ${scales}${under.length ? `; under the floor: ${under.map(([screen, scale]) => `${screen} ${scale.toFixed(3)}`).join(', ')}` : ''}`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e grounds opener: ok (room ${code}, seed ${SEED}, ${((Date.now() - started) / 1_000).toFixed(1)}s)`);
