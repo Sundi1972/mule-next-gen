@@ -18,6 +18,9 @@ import {
   votesDone,
   votesOpen,
   proposeLaw,
+  answerDeal,
+  offerDeal,
+  withdrawDeal,
   castLawVote,
   DEV_STEER,
   buildFloor,
@@ -88,7 +91,9 @@ import {
   tradePossible,
   unlist as unlistLot,
   WALK,
+  type DealCard,
   type GameState,
+  type PlayerId,
   type EventWeight,
   type Good,
   type GoodReceipt,
@@ -100,7 +105,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type ColonistMealView, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type ColonistMealView, type EventView, type MuleIntent, type MuleView, type NewsLine, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
@@ -108,7 +113,7 @@ import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
-import { ceremonyNews, councilNews, myPoliticsView, politicsView } from './politics-view.js';
+import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -171,11 +176,21 @@ function andList(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
+/** When a notice happened: its month and phase. */
+type Stamp = Pick<Notice, 'month' | 'phase'>;
+
+/** The notices every seat may know: none with parties, which are private to them (record.ts). A copy. */
+function publicNotices(notices: readonly Notice[]): Notice[] {
+  return notices.filter((n) => !('parties' in n) || n.parties === undefined);
+}
+
 /** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
-export function gameOverNews(seats: readonly { name: string; score: number }[]): string {
+export function gameOverNews(seats: readonly { id: string; name: string; score: number }[]): NewsLine {
   const best = Math.max(...seats.map((s) => s.score));
-  const winners = seats.filter((s) => s.score === best).map((s) => s.name);
-  return winners.length === 1 ? `Game over. ${winners[0]} wins the colony!` : `Game over. ${andList(winners)} share the win!`;
+  const winners = seats.filter((s) => s.score === best);
+  const names = winners.map((s) => s.name);
+  const text = names.length === 1 ? `Game over. ${names[0]} wins the colony!` : `Game over. ${andList(names)} share the win!`;
+  return { text, who: winners.map((s) => s.id) };
 }
 
 /** A player's Worth line by line, without the total their public row carries as `worth`. Only for their own `me`. */
@@ -435,7 +450,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Cancels the steered tick's pending timer. */
   private cancelSteerTick: (() => void) | null = null;
   private cancels: (() => void)[] = [];
-  private news: string[] = [];
+  private news: NewsLine[] = [];
   private phaseEndsAt: number | null = null;
   /** When the current phase was entered, epoch ms: its event show is timed from here. */
   private phaseEnteredAt = 0;
@@ -474,6 +489,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly lotHands = new Map<string, LotHand>();
   /** Each AI player's hand in politics: runs, votes and governs, keyed by seat id. */
   private readonly voteHands = new Map<string, VoteHand>();
+  /** The cards as the server last saw them, to diff for notices and news. Every write copies Politics, so this is a snapshot. */
+  private dealsSeen: readonly DealCard[] = [];
 
   /** Real time per unit of game time: 1 is real time, 0.1 ten times faster. Test-only. */
   private readonly phaseScale: number;
@@ -524,6 +541,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   start(seats: SeatInfo[]): void {
     this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
+    this.dealsSeen = this.state.politics?.deals ?? [];
     this.ai.clear();
     this.chats.clear();
     this.monthEnds.clear();
@@ -564,7 +582,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       },
     });
     this.playbooks.ask(this.state, this.state.month);
-    this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
+    this.news = [{ text: 'Welcome to the colony. Talk tactics, then grab land.', who: [] }];
     this.enterPhase();
   }
 
@@ -577,6 +595,28 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   handle(seatId: string, intent: MuleIntent): void {
+    try {
+      this.play(seatId, intent);
+    } finally {
+      this.noteDeals();
+    }
+  }
+
+  /**
+   * S3-RULE-11: what changed in the cards since the server last looked, as the record's notices and one news line per
+   * break. Runs after every intent (an AI seat's too), every votes tick and every phase change: the engine settles, and
+   * the views and the news follow in the same step. `at` stamps the notices when the open phase is not the one whose rule
+   * settled the cards, as at a phase change.
+   */
+  private noteDeals(at?: Stamp): void {
+    const now = this.state?.politics?.deals ?? [];
+    if (now === this.dealsSeen) return;
+    for (const fact of dealNotices(this.dealsSeen, now)) this.notify(fact, at);
+    for (const line of dealNews(this.dealsSeen, now, (id) => this.nameOf(id))) this.addNews(line);
+    this.dealsSeen = now;
+  }
+
+  private play(seatId: string, intent: MuleIntent): void {
     const state = this.requireState();
     if (this.heldUntil !== null) throw new RuleError('The event is still playing');
     switch (intent.type) {
@@ -679,7 +719,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'payStrike': {
         payStrike(state, seatId);
         const { good, cost } = state.colony!.strike!;
-        this.addNews(`${this.nameOf(seatId)} pays the ${goodWords(good)} strikers ${cost} cr.`);
+        this.addNews(`${this.nameOf(seatId)} pays the ${goodWords(good)} strikers ${cost} cr.`, [seatId]);
         return;
       }
       case 'propose':
@@ -687,6 +727,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'voteLaw':
         castLawVote(state, seatId, intent.yes);
+        return;
+      case 'offerDeal':
+        offerDeal(state, seatId, intent.offer);
+        return;
+      case 'withdrawDeal':
+        withdrawDeal(state, seatId, intent.id);
+        return;
+      case 'answerDeal':
+        answerDeal(state, seatId, intent.id, intent.accept);
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
@@ -705,15 +754,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    */
   private continuePlanning(hostId: string): void {
     const state = this.requireState();
-    const goneOn = (did: string, left: string[]) => {
-      if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left)}.`);
+    const goneOn = (did: string, left: readonly { id: string; name: string }[]) => {
+      if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left.map((s) => s.name))}.`, [hostId, ...left.map((s) => s.id)]);
     };
     const council = state.politics?.council;
     if (this.electionOpen() && council && council.stage !== 'over') {
       if (council.stage === 'reveal') throw new RuleError('The result is being announced');
       const waiting = this.seats.filter((s) => !s.isAi && !isVotesDone(state, s.id));
       for (const s of waiting) votesDone(state, s.id);
-      goneOn('closed the law ballot', waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      goneOn('closed the law ballot', waiting.filter((s) => s.id !== hostId));
       return;
     }
     if (this.electionOpen()) {
@@ -722,13 +771,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const waiting = this.seats.filter((s) => !s.isAi && !isElectionDone(state, s.id));
       for (const s of waiting) electionDone(state, s.id);
       const did = stage === 'ballot' ? 'closed the ballot' : ballotAhead(state) ? 'opened the ballot' : 'continued';
-      goneOn(did, waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      goneOn(did, waiting.filter((s) => s.id !== hostId));
       return;
     }
     if (state.phase === 'auction') {
       const a = state.auction;
       if (!a || !a.good || a.stage !== 'status') throw new RuleError('The walk keeps its clock');
-      const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !a.done.includes(s.id)).map((s) => s.name);
+      const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !a.done.includes(s.id));
       // AIs too: one still deciding declares its side once the walk has begun, as it would after a slow decision.
       for (const s of this.seats) auctionDone(state, s.id);
       // With nobody able to trade there is no walk: the good is skipped on the next tick.
@@ -737,7 +786,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
     if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning, a side pick or the month end only');
-    const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
+    const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id));
     this.nextPhase();
     goneOn('continued', left);
   }
@@ -769,9 +818,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return this.seats.find((s) => s.id === seatId)?.name ?? seatId;
   }
 
-  /** Puts a line at the top of the news, which keeps the latest three. */
-  private addNews(line: string): void {
-    this.news = [line, ...this.news].slice(0, 3);
+  /** Puts a line at the top of the news, which keeps the latest three. `who` names its seats in the words' order. */
+  private addNews(line: string | NewsLine, who: PlayerId[] = []): void {
+    const entry = typeof line === 'string' ? { text: line, who } : line;
+    this.news = [entry, ...this.news].slice(0, 3);
   }
 
   /** A player's line reaches the AI seats it was for: a public line every other AI seat, a whisper only its addressee. Never throws. */
@@ -899,9 +949,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.notify({ kind: 'claim', seat: seatId, plot: tileIndex(state.width, x, y) });
   }
 
-  /** Keeps a fact for the open phase and hands it to the listener; a listener's fault never reaches play. */
-  private notify(fact: Without<Notice, 'month' | 'phase'>): void {
-    const { month, phase } = this.requireState();
+  /** Keeps a fact for the open phase, stamped with it unless `at` says otherwise, and hands it to the listener; a listener's fault never reaches play. */
+  private notify(fact: Without<Notice, 'month' | 'phase'>, at?: Stamp): void {
+    const { month, phase } = at ?? this.requireState();
     const notice: Notice = { ...fact, month, phase };
     this.notices.push(notice);
     try {
@@ -915,9 +965,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
     if (state.phase === 'development') this.finishDevelopment();
-    // The development's facts, read before the next phase resets them: its outcome goes into the auction's brief.
-    const developmentFacts = state.phase === 'development' ? this.notices : null;
+    // A card that settled in the closing phase without an intent or a votes tick to notice it is noticed now, stamped
+    // with that phase; only what the change itself settles takes the stamp below.
+    this.noteDeals();
+    // The development's public facts, copied before the phase changes: its outcome goes into the auction's brief, which
+    // every AI seat shares, so a notice private to its parties stays out, and so does whatever the change settles.
+    const developmentFacts = state.phase === 'development' ? publicNotices(this.notices) : null;
+    const closing: Stamp = { month: state.month, phase: state.phase };
     advancePhase(state);
+    // Planning's close and the upkeep's opening settle cards: each notice carries the phase whose rule settled it.
+    // The game ends at an upkeep: its last settles are that upkeep's. (Read afresh: advancePhase moved the phase.)
+    const opened = this.requireState();
+    this.noteDeals(closing.phase === 'planning' ? closing : { month: opened.month, phase: opened.phase === 'gameOver' ? 'upkeep' : opened.phase });
     // The auction's edits are asked in the production show's slack, once production has run, so the draft holds this
     // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
     if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
@@ -937,7 +996,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'gameOver') {
       this.phaseEndsAt = null;
-      this.news = [gameOverNews(this.seats.map((s) => ({ name: s.name, score: score(state, s.id) })))];
+      this.news = [gameOverNews(this.seats.map((s) => ({ id: s.id, name: s.name, score: score(state, s.id) })))];
       this.brain.finish();
       this.options.onGameOver?.(state);
       return;
@@ -975,7 +1034,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.playbooks?.takePhase(state, 'auction');
       this.phaseEndsAt = null;
       this.dealsInGood = [];
-      this.news = ['The auction opens. Walk up to buy, down to sell.'];
+      this.news = [{ text: 'The auction opens. Walk up to buy, down to sell.', who: [] }];
       this.scheduleAuctionTick(this.ctx.now());
       return;
     }
@@ -1108,6 +1167,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
         const news = revealed ? null : councilNews(state);
         if (news) this.addNews(news);
+        // A ballot's result settles the vote cards bound to it.
+        this.noteDeals();
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           // Planning proper opens now: its show, were it to fire one, starts here and not at the election's start.
@@ -1330,7 +1391,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const press of presses) {
       if (press.refused !== null) steering.stats.refused++;
       else steering.stats.acts++;
-      if (press.reach.kind === 'pub' && press.refused === null) this.addNews(`${this.nameOf(press.seat)} went to the pub and won ${press.payout}.`);
+      if (press.reach.kind === 'pub' && press.refused === null) this.addNews(`${this.nameOf(press.seat)} went to the pub and won ${press.payout}.`, [press.seat]);
     }
     // This tick's lines for the TV: stepFloor starts them fresh each step, then settleMoments' (a glint's payout) and the
     // presses' follow, so the floor after the presses holds the tick's, in order, and no earlier tick's.
@@ -1562,7 +1623,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.dealsInGood = [];
     const best = [...lots.values()].sort((x, y) => y.value - x.value)[0];
     if (!best) return;
-    this.addNews(`${this.nameOf(best.seller)} sold ${best.n} ${good} to ${this.nameOf(best.buyer)} at ${Math.round(best.value / best.n)}.`);
+    this.addNews(`${this.nameOf(best.seller)} sold ${best.n} ${good} to ${this.nameOf(best.buyer)} at ${Math.round(best.value / best.n)}.`, [best.seller, best.buyer]);
   }
 
   private reportProduction(): void {
@@ -1570,19 +1631,19 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const report = state.history.at(-1);
     if (!report) return;
     const best = this.seats
-      .map((s) => ({ name: s.name, total: GOODS.reduce((n, g) => n + (report.produced[s.id]?.[g] ?? 0), 0) }))
+      .map((s) => ({ id: s.id, name: s.name, total: GOODS.reduce((n, g) => n + (report.produced[s.id]?.[g] ?? 0), 0) }))
       .sort((a, b) => b.total - a.total)[0];
-    this.news = [`Harvest is in. ${best?.name} produced the most this month.`];
+    this.news = [{ text: `Harvest is in. ${best?.name} produced the most this month.`, who: best ? [best.id] : [] }];
   }
 
   private reportUpkeep(): void {
     const state = this.requireState();
     const report = state.history.at(-1);
     const shortages = report?.shortages ?? [];
-    const hungry = state.players.filter((p) => p.hungry).map((p) => p.name);
+    const hungry = state.players.filter((p) => p.hungry);
     this.news = [
-      shortages.length > 0 ? `The store ran out of ${shortages.join(' and ')}! Colonists are leaving.` : 'The colony is fed and growing.',
-      ...(hungry.length > 0 ? [`Hungry this month: ${hungry.join(', ')}.`] : []),
+      { text: shortages.length > 0 ? `The store ran out of ${shortages.join(' and ')}! Colonists are leaving.` : 'The colony is fed and growing.', who: [] },
+      ...(hungry.length > 0 ? [{ text: `Hungry this month: ${hungry.map((p) => p.name).join(', ')}.`, who: hungry.map((p) => p.id) }] : []),
     ];
   }
 
@@ -1670,6 +1731,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             droneFound: me.droneFound.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             politics: myPoliticsView(state, me.id),
+            deals: dealsView(state, me.id),
             installedThisTurn: me.installedThisTurn,
             worthParts: worthPartsOf(state, me.id),
             // At the last tick's time, not now: after a catch-up the view must show the words the tick compared (AM-11).
@@ -1703,7 +1765,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         wants: shipAnnounced(state) ? { ...state.ship.hold } : null,
       },
       treasury: { money: state.treasury.money, salesTax: state.treasury.salesTax },
-      news: this.news,
+      news: this.news.map((l) => l.text),
+      newsLines: this.news.map((l) => ({ text: l.text, who: [...l.who] })),
       scores:
         state.phase === 'gameOver'
           ? this.seats.map((s) => {
