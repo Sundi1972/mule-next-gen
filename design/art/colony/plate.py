@@ -44,7 +44,9 @@ E = G + AP
 # rocket), the land cut by the bottom edge. 76.19 px/m always; the hall is the grounds' centre here.
 LOOK_W = 109.65
 _w = round(1.463 * 2 * E * math.sqrt(2) * frame.PX_PER_M / 32) * 32
-FR = {"width": _w, "height": _w * 9 // 16, "centre": [_w // 2, round(0.669 * _w * 9 / 16)]}  # 3: 6464 x 3636, 5: 10240 x 5760
+# 3 x 3: the hall sits higher, at y 2350 (64.6 %), so a TV crop round the hall stays inside the plate (the manifest
+# guard T-AC-10 wants it in [1647, height - 1247]); the vignette, fade and tree belt follow the frame
+FR = {"width": _w, "height": _w * 9 // 16, "centre": [_w // 2, 2350 if N == 3 else round(0.669 * _w * 9 / 16)]}  # 3: 6464 x 3636, 5: 10240 x 5760
 BELT = 70.0  # trees across the whole oval, as ring.py (the fade and the front strip bound them)
 SHRUBS, EDGE = (50, 40) if N == 3 else (80, 64)
 PXM = frame.PX_PER_M
@@ -65,6 +67,11 @@ V0, V1 = -(FR["height"] - FR["centre"][1]) / PXM, FR["centre"][1] / PXM
 # ring.py's fade: centred 3 m (scaled) above the grounds' centre, 0.47 of the frame wide, reaching the bottom edge
 FC = (0.0, 3.0 * (U1 - U0) / LOOK_W)
 FADE = {"centre": FC, "ru": (U1 - U0) * 0.47, "rv": FC[1] - V0}
+
+
+# where the earth shows through the lawn: the noise band the mix ramps over (ring.py's 0.47..0.6 read browner and
+# patchier on these larger grounds than look.html's mostly green lawn). COLONY_PLATE_DIRT="lo,hi" for calibration only
+DIRT = tuple(float(v) for v in os.environ.get("COLONY_PLATE_DIRT", "0.58,0.68").split(","))
 
 
 def ground_mat(fade):
@@ -96,7 +103,7 @@ def ground_mat(fade):
     g4 = img_at(os.path.join(core.T, "Grass004", "Grass004_1K-JPG_Color.jpg"), 1.7)
     peb = img_at(os.path.join(core.T, "clean_pebbles", "clean_pebbles_diff_1k.jpg"), 1.6)
     grass = mix(nt, nz(0.08, 0.4, 0.6), mix(nt, 1.0, g4, (0.72, 0.78, 0.55, 1), "MULTIPLY"), mix(nt, 1.0, g1, (0.95, 0.95, 0.85, 1), "MULTIPLY"))
-    c = mix(nt, nz(0.12, 0.47, 0.6), grass, mix(nt, 1.0, peb, (0.62, 0.5, 0.38, 1), "MULTIPLY"))
+    c = mix(nt, nz(0.12, *DIRT), grass, mix(nt, 1.0, peb, (0.62, 0.5, 0.38, 1), "MULTIPLY"))
     link(nt, c, b.inputs["Base Color"])
     b.inputs["Roughness"].default_value = 0.92
     if not fade:
