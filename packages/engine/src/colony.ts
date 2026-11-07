@@ -13,7 +13,7 @@ import { GOODS, type Colony, type ColonyGauges, type FundLedger, type FundLine, 
 
 /** The colony at the start of a game played with politics. */
 export function newColony(month: number): Colony {
-  return { ledger: emptyLedger(month), projects: [], promises: [], permanentPrestige: 0, monthEnds: [], happiness: HAPPINESS.start, strike: null };
+  return { ledger: emptyLedger(month), projects: [], promises: [], permanentPrestige: 0, monthEnds: [], happiness: HAPPINESS.start, strike: null, welfare: null };
 }
 
 function emptyLedger(month: number): FundLedger {
