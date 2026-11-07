@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, cloneForSim, createGame, observe, orderGeoDrone, type GameState } from '../src/index.js';
+import { advancePhase, cloneForSim, createGame, DEVELOPMENT, observe, orderGeoDrone, type GameState } from '../src/index.js';
 
 /**
- * H-3 (WS6 UX audit): the land grant's "Your drone: …" line. At the grant the drone's plots are analysed and its
- * order is emptied, so the engine keeps what it surveyed, per player, for that month: `droneFound`.
+ * H-3 (WS6 UX audit): the land grant's "Your drone: …" line. The drone's plots are analysed when it is sent, and the
+ * grant empties its order, so the engine keeps what it surveyed, per player, for that month: `droneFound`.
  */
 const SEATS = ['brix', 'ossa', 'lena'];
 
@@ -31,7 +31,7 @@ describe("H-3: what the drone surveyed survives the land grant (droneFound)", ()
     orderGeoDrone(state, 'ossa', twoFree(state));
     const ordered = ossa(state).droneOrder.slice();
     expect(ordered).toHaveLength(2);
-    expect(ossa(state).droneFound, 'nothing found before the grant').toEqual([]);
+    expect(ossa(state).droneFound, 'found at Scan, before the grant').toEqual(ordered);
 
     toPhase(state, 'landGrant');
 
@@ -68,5 +68,47 @@ describe("H-3: what the drone surveyed survives the land grant (droneFound)", ()
     const sim = cloneForSim(state);
     sim.players.find((p) => p.id === 'ossa')!.droneFound.push(-1);
     expect(ossa(state).droneFound).toEqual(found);
+  });
+});
+
+describe('T-AC-1: the drone\'s ground lands at Scan', () => {
+  it('T-AC-1: the drone adds its plots to analysed and droneFound at once, charges once, refuses a second order until the land grant clears droneOrder', () => {
+    const state = newGame();
+    const plots = twoFree(state);
+    const indices = plots.map(({ x, y }) => y * state.width + x);
+    const money = ossa(state).money;
+    const capital = state.store.capital;
+
+    orderGeoDrone(state, 'ossa', plots);
+
+    expect(ossa(state).analysed, 'known at once, in planning, each plot once').toEqual(indices);
+    expect(ossa(state).droneFound).toEqual(indices);
+    expect(ossa(state).money).toBe(money - DEVELOPMENT.droneFee);
+    expect(state.store.capital).toBe(capital + DEVELOPMENT.droneFee);
+    for (const p of state.players.filter((q) => q.id !== 'ossa')) expect(p.analysed, `${p.id} learns nothing`).toEqual([]);
+    const seenByBrix = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
+    expect([seenByBrix.analysed, seenByBrix.droneFound], 'another seat sees none of it in planning').toEqual([[], []]);
+
+    expect(() => orderGeoDrone(state, 'ossa', plots)).toThrow('A drone was already used this planning');
+    expect(ossa(state).money, 'charged once').toBe(money - DEVELOPMENT.droneFee);
+
+    const analysed = ossa(state).analysed.slice();
+    toPhase(state, 'landGrant');
+    expect(ossa(state).droneOrder, 'the land grant clears the order').toEqual([]);
+    expect(ossa(state).analysed, 'the land grant adds nothing').toEqual(analysed);
+    expect(ossa(state).droneFound, 'and keeps what Scan found').toEqual(indices);
+  });
+
+  it('T-AC-1: an owned plot that is not listed is refused with today\'s words, and nothing is charged or learned', () => {
+    const state = newGame();
+    const owned = state.tiles.find((t) => t.owner === null && t.terrain !== 'store')!;
+    owned.owner = 'brix';
+    const money = ossa(state).money;
+
+    expect(() => orderGeoDrone(state, 'ossa', [{ x: owned.x, y: owned.y }])).toThrow('The drone only flies over free or listed plots');
+    expect(ossa(state).money).toBe(money);
+    expect(ossa(state).analysed).toEqual([]);
+    expect(ossa(state).droneFound).toEqual([]);
+    expect(ossa(state).droneOrder).toEqual([]);
   });
 });

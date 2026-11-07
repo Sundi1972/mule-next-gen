@@ -12,11 +12,14 @@ import {
   corralTarget,
   createGame,
   emptyStock,
+  energyUseOf,
+  EVENTS,
   monthNeeds,
   MULE,
   mulePriceFor,
   type GameState,
   type LandGrantPlay,
+  type MonthEvent,
   type MonthReport,
   type Playbook,
   type ProductionLine,
@@ -156,6 +159,21 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     expect(auction(state)).toContain('Food and Energy in units: ');
   });
 
+  it('B fix 3: a plant pays its own use as the last production charged it, a cold snap included', () => {
+    const { state, plots } = table();
+    const plant = plots[1]!;
+    state.tiles[plant]!.outfit = 'energy';
+    const use = energyUseOf(state, state.tiles[plant]!);
+    const factor = EVENTS.colony.coldSnap.factor;
+    const made = use * factor + 3;
+    const last = state.history.at(-1)!;
+    last.produced.p0 = { ...emptyStock(), energy: made };
+    last.lines = [{ tile: plant, good: 'energy', made, parts: [{ why: 'ground', delta: made }] }];
+    expect(land(state)).toContain(`your plants made ${made - use} beyond their own use`);
+    last.events = [{ key: 'coldSnap' } as MonthEvent];
+    expect(land(state)).toContain(`your plants made ${made - use * factor} beyond their own use`);
+  });
+
   it("B fix 3: the auction brief, asked after production, does not count this month's Food twice: it is in what the seat holds, and upkeep eats next", () => {
     const { state } = table();
     const p0 = state.players.find((p) => p.id === 'p0')!;
@@ -175,12 +193,27 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     state.tiles[plots[1]!]!.outfit = 'energy';
     const p0 = state.players.find((p) => p.id === 'p0')!;
     p0.stock.food = 0;
-    const text = land(state);
-    expect(text).not.toContain('my Food and Energy are covered');
-    expect(text).toContain('I own a Food plot and an Energy plot');
+    // A level that looks ahead counts units (strategist.ts landDecision: its outlook's supply against monthNeeds), so its
+    // own words stand. Owning a farm and a plant, it is never told it lacks one.
+    for (const held of [0, 50]) {
+      p0.stock.food = held;
+      p0.stock.energy = held;
+      const text = land(state);
+      expect(text).not.toContain('I lack a Food plot or an Energy plot');
+      expect(text).not.toContain('I own a Food plot and an Energy plot');
+      expect(text).toMatch(/I still buy my Food and Energy|my Food and Energy are covered/);
+    }
+    p0.stock.food = 0;
+    // A level without a look-ahead still counts plots; the brief says so instead of "covered".
+    const rookie: Mind = { ...mind, levelId: 'rookie', level: AI_LEVELS.rookie };
+    const rookieText = landBrief(state, rookie, PERSONAS.trader, draft, []).text;
+    expect(rookieText).not.toContain('my Food and Energy are covered');
+    expect(rookieText).toContain('I own a Food plot and an Energy plot');
     state.tiles[plots[1]!]!.outfit = 'smithore';
     state.tiles[plots[0]!]!.outfit = 'smithore';
-    expect(land(state)).not.toContain('I still buy my Food and Energy');
+    const noFarm = landBrief(state, rookie, PERSONAS.trader, draft, []).text;
+    expect(noFarm).not.toContain('I still buy my Food and Energy');
+    expect(noFarm).toContain('I lack a Food plot or an Energy plot');
   });
 
   it('B fix 3: the development brief, asked at no point in play, is unchanged by these lines', () => {

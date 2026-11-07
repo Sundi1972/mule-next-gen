@@ -120,11 +120,11 @@ export function freePlots(state: GameState) {
 
 // --- Planning: geo drone ----------------------------------------------------
 
-/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results arrive when the land grant starts. */
+/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results are the player's at once, in this planning. */
 export function orderGeoDrone(state: GameState, playerId: string, plots: { x: number; y: number }[]): void {
   requirePhase(state, 'planning');
   const p = player(state, playerId);
-  if (p.droneOrder.length > 0) throw new RuleError('A drone is already on its way');
+  if (p.droneOrder.length > 0) throw new RuleError('A drone was already used this planning');
   if (plots.length === 0 || plots.length > DEVELOPMENT.dronePlots) throw new RuleError(`Pick 1 to ${DEVELOPMENT.dronePlots} plots`);
   const indices = plots.map(({ x, y }) => {
     const tile = plotAt(state, x, y);
@@ -135,6 +135,9 @@ export function orderGeoDrone(state: GameState, playerId: string, plots: { x: nu
   p.money -= DEVELOPMENT.droneFee;
   state.store.capital += DEVELOPMENT.droneFee;
   p.droneOrder = [...new Set(indices)];
+  // The ground is known at once, so it can be weighed in this planning; droneOrder still marks the drone used.
+  for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
+  p.droneFound = p.droneOrder.slice();
 }
 
 // --- Land grant -------------------------------------------------------------
@@ -526,10 +529,7 @@ export function advancePhase(state: GameState): void {
     for (const p of state.players) {
       p.claimsThisGrant = 0;
       p.doneWithLand = false;
-      // Drone results arrive in time to pick.
-      for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
-      // Kept for the month, so the phone can still say which plots the drone surveyed (H-3).
-      p.droneFound = p.droneOrder;
+      // The drone's results landed at Scan; the grant only frees the drone for next month. droneFound stays for the month.
       p.droneOrder = [];
     }
     newSweep(state, 0);
