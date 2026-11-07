@@ -1151,6 +1151,21 @@ because   without it a Claude seat would offer "my vote for X" and cast Y, break
 goal      S3-2 — still met (a keyless seat is unchanged)
 ```
 
+```
+AM-6 · 2026-11-07 · WS7 (build: S3-PR-1 group B, implementer's question) · a kept pact pays its victim once
+
+target    §2 S3-RULE-5 breach row 3, S3-RULE-3 "the victim of a broken pact"
+said      row 3 "moves per S3-RULE-3" read literally pays the victim `kept` (+3) again when a pact that already
+          ended kept turns broken, on top of the +3 it got at the end
+did       the victim gains `kept` on a breach only when the pact was still active. A pact that had ended kept turns
+          broken, brokenBy = saboteur, and the saboteur takes pactBroken (−20); both parties' earlier +3 stays and
+          the victim gains nothing more. Example: pact 3-5 kept in month 5 (each +3); month 8's investigation reveals
+          Lena's month-4 sabotage → broken, Lena −20, Brix unchanged.
+because   the kept limit already holds one kept gain per partner per term; the literal reading paid twice for one
+          promise, and across a term boundary escaped the limit
+goal      S3-1 — unchanged (the breach is still public and costs the breaker)
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: deal cards (a second writer inside Politics)
