@@ -14,6 +14,7 @@ import {
   taxBounds,
   type AiPersonaId,
   type Council,
+  type DealCard,
   type Election,
   type GameState,
   type Good,
@@ -25,6 +26,7 @@ import {
   type TaxPromise,
 } from '@mule/engine';
 import type { Act } from '../actions.js';
+import { breakGain, reputationCost } from '../politics-value.js';
 import type { Mind } from '../value.js';
 
 function samePromise(a: TaxPromise | undefined, b: TaxPromise): boolean {
@@ -57,6 +59,73 @@ export function goodsInReach(obs: GameState, id: PrestigeId): boolean {
     const made = Object.values(lastMonth).reduce((sum, row) => sum + row[good], 0);
     return held + obs.store.stock[good] + made >= need;
   });
+}
+
+/** G-5 C25: in the bands POLITICS.ai.colony.leanIn it will not back the sitting Governor while anyone else runs. */
+function leanAgainst(obs: GameState, candidates: readonly string[], office: Office): readonly string[] {
+  const sitting = obs.politics!.governor;
+  const unhappy = obs.colony !== null && POLITICS.ai.colony.leanIn.includes(moodBand(obs.colony.happiness));
+  if (office !== 'governor' || !unhappy || sitting === null || !candidates.includes(sitting)) return candidates;
+  const others = candidates.filter((id) => id !== sitting);
+  return others.length > 0 ? others : candidates;
+}
+
+/** The candidates holding the fewest plots among those it may back; more than one is a tie. */
+function fewestPlots(obs: GameState, pool: readonly string[]): string[] {
+  const fewest = Math.min(...pool.map((id) => plotsOwned(obs, id)));
+  return pool.filter((id) => plotsOwned(obs, id) === fewest);
+}
+
+/** What a law costs a player a month: an enact at its setting, a repeal at the setting in force (slice 2a RULE-45). */
+function lawCost(obs: GameState, proposal: LawProposal, playerId: string): number {
+  const setting = proposal.kind === 'enact' ? proposal.setting : obs.politics!.laws[proposal.law]?.setting;
+  if (setting === undefined) return 0;
+  return lawImpact(obs, { kind: 'enact', law: proposal.law, setting })[playerId]?.cost ?? 0;
+}
+
+/** An election ballot a seat is about to cast: the office and who stands for it. */
+export interface ElectionBallot {
+  office: Office;
+  candidates: readonly string[];
+}
+
+/** A law ballot a seat is about to cast: the proposal on the table. */
+export interface LawBallot {
+  proposal: LawProposal;
+}
+
+export type Ballot = ElectionBallot | LawBallot;
+
+/**
+ * The seat's own vote on a ballot, by today's rule and with no draw (slice 3 S3-C14): itself if it runs, else the
+ * candidate with the fewest plots, leaning against an unloved Governor; on a law, RULE-46's rows. Null where today's
+ * rule would draw: a tie, or a Rookie's guess. DealHand reads it to offer a vote, VoteHand to cast one.
+ */
+export function ownVote(obs: GameState, mind: Mind, ballot: ElectionBallot): string | null;
+export function ownVote(obs: GameState, mind: Mind, ballot: LawBallot): boolean | null;
+export function ownVote(obs: GameState, mind: Mind, ballot: Ballot): string | boolean | null {
+  return 'proposal' in ballot ? ownLawVote(obs, mind, ballot.proposal) : ownElectionVote(obs, mind, ballot);
+}
+
+function ownElectionVote(obs: GameState, mind: Mind, { office, candidates }: ElectionBallot): string | null {
+  if (candidates.includes(mind.me)) return mind.me;
+  if (mind.levelId === 'rookie') return null;
+  const tied = fewestPlots(obs, leanAgainst(obs, candidates, office));
+  return tied.length === 1 ? tied[0]! : null;
+}
+
+/** RULE-46's vote rows. */
+function ownLawVote(obs: GameState, mind: Mind, proposal: LawProposal): boolean | null {
+  const me = mind.me;
+  const politics = obs.politics!;
+  if (politics.governor === me) return true;
+  if (proposal.kind === 'enact' && proposal.law === 'landTax' && politics.baron === me) return false;
+  if (mind.levelId === 'rookie') return null;
+  const costs = obs.players.map((p) => lawCost(obs, proposal, p.id)).sort((a, b) => a - b);
+  const half = Math.floor(costs.length / 2); // literal-ok: the middle of a list
+  const median = costs.length % 2 === 1 ? costs[half]! : (costs[half - 1]! + costs[half]!) / 2; // literal-ok: odd or even count
+  const mine = lawCost(obs, proposal, me);
+  return proposal.kind === 'enact' ? mine <= median : mine > median;
 }
 
 /**
@@ -162,30 +231,38 @@ export class VoteHand {
       const candidates = election.candidates[office];
       // literal-ok: an office is contested only with two or more candidates, a definition
       if (candidates.length < 2) continue;
-      act({ type: 'vote', office, candidate: this.choose(obs, candidates, office) });
+      const own = this.choose(obs, candidates, office);
+      const card = this.activeCard(obs, (t) => 'office' in t && t.office === office && candidates.includes(t.candidate));
+      act({ type: 'vote', office, candidate: this.keepOrBreak(obs, card, own, card && 'office' in card.terms ? card.terms.candidate : own) });
     }
   }
 
   /**
-   * Itself if it runs; a Rookie's seeded guess; else the smallest landowner, so the table leans against the leader.
-   * A tie is a seeded draw, not the lower seat: in month 1 nobody owns land (AM-10). A lone minimum draws nothing.
+   * ownVote, and where that is null, the draw: a Rookie's seeded guess, or a tie broken among the tied, not by seat
+   * (AM-10: in month 1 nobody owns land). A lone minimum draws nothing.
    */
   private choose(obs: GameState, candidates: readonly string[], office: Office): string {
-    if (candidates.includes(this.mind.me)) return this.mind.me;
-    const pool = this.leanAgainst(obs, candidates, office);
-    if (this.mind.levelId === 'rookie') return this.rng.pick(pool);
-    const fewest = Math.min(...pool.map((id) => plotsOwned(obs, id)));
-    const tied = pool.filter((id) => plotsOwned(obs, id) === fewest);
-    return tied.length === 1 ? tied[0]! : this.rng.pick(tied);
+    const own = ownVote(obs, this.mind, { office, candidates });
+    if (own !== null) return own;
+    const pool = leanAgainst(obs, candidates, office);
+    return this.rng.pick(this.mind.levelId === 'rookie' ? pool : fewestPlots(obs, pool));
   }
 
-  /** G-5 C25: in the bands POLITICS.ai.colony.leanIn it will not back the sitting Governor while anyone else runs. */
-  private leanAgainst(obs: GameState, candidates: readonly string[], office: Office): readonly string[] {
-    const sitting = obs.politics!.governor;
-    const unhappy = obs.colony !== null && POLITICS.ai.colony.leanIn.includes(moodBand(obs.colony.happiness));
-    if (office !== 'governor' || !unhappy || sitting === null || !candidates.includes(sitting)) return candidates;
-    const others = candidates.filter((id) => id !== sitting);
-    return others.length > 0 ? others : candidates;
+  /** The active vote card this seat gave whose terms the ballot takes, if any; the first when it gave several. */
+  private activeCard(obs: GameState, takes: (terms: Extract<DealCard['terms'], { kind: 'vote' }>) => boolean): DealCard | undefined {
+    return obs.politics!.deals.find((d) => d.status === 'active' && d.from === this.mind.me && d.terms.kind === 'vote' && takes(d.terms));
+  }
+
+  /**
+   * S3-RULE-10: with a card on the ballot, its own vote when that is the promised choice or when breaking pays
+   * (breakGain above the persona's honesty times what the broken vote costs its reputation); a Rookie always keeps.
+   * Nothing draws: `own` has already been chosen as today.
+   */
+  private keepOrBreak<T extends string | boolean>(obs: GameState, card: DealCard | undefined, own: T, promised: T): T {
+    if (!card || own === promised) return own;
+    if (this.mind.levelId === 'rookie') return promised;
+    const costOfBreaking = POLITICS.ai.deals.honesty[this.persona] * reputationCost(obs, this.mind.me, POLITICS.reputation.moves.voteBroken);
+    return breakGain(obs, this.mind.me, card) > costOfBreaking ? own : promised;
   }
 
   /**
@@ -199,26 +276,11 @@ export class VoteHand {
     return createRng((Math.imul(seatSeed, 1_000_003) ^ Math.imul(obs.month, 7_919)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per seat and month
   }
 
-  /** What a law costs a player a month: an enact at its setting, a repeal at the setting in force (slice 2a RULE-45). */
-  private lawCost(obs: GameState, proposal: LawProposal, playerId: string): number {
-    const setting = proposal.kind === 'enact' ? proposal.setting : obs.politics!.laws[proposal.law]?.setting;
-    if (setting === undefined) return 0;
-    return lawImpact(obs, { kind: 'enact', law: proposal.law, setting })[playerId]?.cost ?? 0;
-  }
-
-  /** RULE-46's vote rows. */
+  /** RULE-46's vote rows through ownVote; a Rookie's yes is the council's own draw. */
   private lawVote(obs: GameState, council: Readonly<Council>): boolean {
-    const me = this.mind.me;
-    const { proposal } = council;
-    const politics = obs.politics!;
-    if (politics.governor === me) return true;
-    if (proposal.kind === 'enact' && proposal.law === 'landTax' && politics.baron === me) return false;
-    if (this.mind.levelId === 'rookie') return this.council(obs).chance(POLITICS.ai.council.rookieYes);
-    const costs = obs.players.map((p) => this.lawCost(obs, proposal, p.id)).sort((a, b) => a - b);
-    const half = Math.floor(costs.length / 2); // literal-ok: the middle of a list
-    const median = costs.length % 2 === 1 ? costs[half]! : (costs[half - 1]! + costs[half]!) / 2; // literal-ok: odd or even count
-    const mine = this.lawCost(obs, proposal, me);
-    return proposal.kind === 'enact' ? mine <= median : mine > median;
+    const own = ownVote(obs, this.mind, { proposal: council.proposal }) ?? this.council(obs).chance(POLITICS.ai.council.rookieYes);
+    const card = this.activeCard(obs, (t) => 'law' in t);
+    return this.keepOrBreak(obs, card, own, card && 'yes' in card.terms ? card.terms.yes : own);
   }
 
   /** RULE-46's proposal: the law that costs the leader most against itself, put at its middle setting, or a repeal. */
@@ -243,7 +305,7 @@ export class VoteHand {
         ? { kind: 'repeal', law }
         : { kind: 'enact', law, setting: settings[Math.floor(settings.length / 2)]! }; // literal-ok: the middle setting
       if (waiting(proposal)) continue;
-      const [self, lead] = [this.lawCost(obs, proposal, me), this.lawCost(obs, proposal, leader)];
+      const [self, lead] = [lawCost(obs, proposal, me), lawCost(obs, proposal, leader)];
       candidates.push({ proposal, gain: inForce ? self - lead : lead - self });
     }
     const best = candidates.reduce<{ proposal: LawProposal; gain: number } | null>((b, c) => (b === null || c.gain > b.gain ? c : b), null);
@@ -251,7 +313,7 @@ export class VoteHand {
     let proposal = best.proposal;
     if (proposal.kind === 'enact' && Object.keys(politics.laws).length >= maxInForce) {
       const inForce = Object.keys(politics.laws) as LawId[];
-      const dearest = inForce.reduce((a, b) => (this.lawCost(obs, { kind: 'repeal', law: b }, me) > this.lawCost(obs, { kind: 'repeal', law: a }, me) ? b : a));
+      const dearest = inForce.reduce((a, b) => (lawCost(obs, { kind: 'repeal', law: b }, me) > lawCost(obs, { kind: 'repeal', law: a }, me) ? b : a));
       proposal = { ...proposal, replaces: dearest };
     }
     act({ type: 'propose', proposal });
