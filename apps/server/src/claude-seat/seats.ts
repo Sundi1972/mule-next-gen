@@ -19,9 +19,25 @@ export interface ClaudeSeat {
 /** Each started game's Claude seats by seat id, keyed by the game that hosts them; a disposed game takes its own along. */
 const tables = new WeakMap<object, Map<string, ClaudeSeat>>();
 
-/** Records a started game's Claude seat; a writer that is not a ClaudeSeatWriter (a test's brain) records nothing. */
-export function seatClaude(table: object, seatId: string, name: string, writer: PlaybookWriter | null): void {
-  if (!(writer instanceof ClaudeSeatWriter)) return;
+/** The ClaudeSeatWriter behind each writer that wraps one (the recorder's), by the wrapper; a dropped wrapper takes its entry along. */
+const behind = new WeakMap<object, ClaudeSeatWriter>();
+
+/**
+ * Names `writer` as the one behind `wrapper`, when it is a Claude seat's, so seatClaude finds the seat's writer through
+ * the wrapper the game is handed. Returns `wrapper`; any other writer registers nothing.
+ */
+export function wrapsClaudeSeat<W extends object>(wrapper: W, writer: PlaybookWriter): W {
+  if (writer instanceof ClaudeSeatWriter) behind.set(wrapper, writer);
+  return wrapper;
+}
+
+/**
+ * Records a started game's Claude seat: `given` is its ClaudeSeatWriter, or a wrapper wrapsClaudeSeat registered for
+ * one (the recorder's). Any other writer (a test's brain) records nothing.
+ */
+export function seatClaude(table: object, seatId: string, name: string, given: PlaybookWriter | null): void {
+  const writer = given instanceof ClaudeSeatWriter ? given : given ? behind.get(given) : undefined;
+  if (!writer) return;
   const seats = tables.get(table) ?? new Map<string, ClaudeSeat>();
   const seat = { name, writer };
   seats.set(seatId, seat);
