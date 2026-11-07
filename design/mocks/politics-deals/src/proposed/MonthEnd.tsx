@@ -4,7 +4,7 @@ import { cx, PlayerMark } from '@mule/ui';
 import { fmt, toSlot } from '../../../../../apps/web/src/game/derive';
 import { inCollapse, league, leaderWords } from '../../../../../apps/web/src/game/month-end';
 import { ChangeTag, type Density } from '../../../../../apps/web/src/components/MonthEnd';
-import { RepChip } from './parts';
+import { Marked, RepChip } from './parts';
 import { brokenMove, brokenWords } from './words';
 
 /*
@@ -34,7 +34,9 @@ export function BrokenCards({ view, month, density }: { view: MuleView; month: n
                 ✗
               </span>
               <PlayerMark slot={toSlot(who.slot)} species={who.species} size={tv ? 28 : 14} label={who.name} />
-              <span className="min-w-0 flex-1 leading-snug">{brokenWords(view, c)}</span>
+              <span className="min-w-0 flex-1 leading-snug">
+                <Marked text={brokenWords(view, c)} view={view} />
+              </span>
               <span data-num className={cx('shrink-0 font-mono font-bold text-alert', tv ? 'text-2xl' : 'text-xs')}>
                 −{-brokenMove(c)}
               </span>

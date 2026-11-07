@@ -311,6 +311,7 @@ const DECISIONS: [string, string][] = [
   ['Ballots', '“You promised Brix your vote” under the ballot’s legend, PROMISED on the candidate, picked on her phone only; she casts as she likes.'],
   ['TV break', 'A red banner under the planning header, in the news’s words, with the drop (50 → 40) beside the breaker’s chip; it holds for that planning.'],
   ['Month end', 'The month’s broken cards in one dashed list, under the colony panel on the TV and under the league on the phone.'],
+  ['AI mark', 'Heiko, 8 Nov: a computer seat’s name on a deal card carries a quiet “· AI” (the Talk list’s mark): card label, names, lines, My cards, the TV banner and month end. Not after a possessive; the label carries it there.'],
   ['Words', 'No pronouns anywhere: “Lena broke a promise to Brix: a vote for Brix” (finding F-3).'],
 ];
 

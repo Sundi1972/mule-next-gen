@@ -2,7 +2,7 @@ import { POLITICS } from '@mule/engine';
 import type { DealCard } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Button, Creature, cx } from '@mule/ui';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useHub, type HubNav } from '../../../../../apps/web/src/phone/hub/Hub';
 import { colorOf } from '../../../../../apps/web/src/phone/hub/politics/parts';
@@ -14,6 +14,45 @@ import { brokenWords } from './words';
  * Who gains `rep` (the chip after the name) and `open` (the name and chip open the player's card). The player's card is
  * also where a deal starts from a name (P1's "from the avatar or name", S3-C17).
  */
+
+// ---- Heiko's ruling (8 Nov): a computer seat's name on a deal card carries "· AI" ----------------------------------
+
+/**
+ * Stand-in for chat/Chat.tsx's AiMark (team-lead: landing on trunk shortly); the build imports that one. Exactly the
+ * Talk list's mark (apps/web/src/phone/parts.tsx:168).
+ */
+export function AiMark() {
+  return (
+    <span className="text-holo" data-testid="ai-mark">
+      {' '}
+      · AI
+    </span>
+  );
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * A card's words with the mark after each computer seat's name. Not after a possessive ("Ossa’s vote"): there the
+ * card's label carries it ("Card from Ossa · AI").
+ */
+export function Marked({ text, view }: { text: string; view: Pick<MuleView, 'players'> }) {
+  const ai = view.players.filter((p) => p.isAi).map((p) => escapeRe(p.name));
+  if (ai.length === 0) return <>{text}</>;
+  const parts = text.split(new RegExp(`\\b(${ai.join('|')})\\b(?![’']s)`, 'g'));
+  return <>{parts.map((p, i) => (i % 2 === 1 ? <Fragment key={i}>{p}<AiMark /></Fragment> : p))}</>;
+}
+
+/** Who on a card: the name, its chip, and the mark for a computer seat. */
+export function CardWho(props: Parameters<typeof Who>[0]) {
+  const ai = props.view.players.find((p) => p.id === props.id)?.isAi;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Who {...props} />
+      {ai && <AiMark />}
+    </span>
+  );
+}
 
 // ---- P4 · the chip ------------------------------------------------------------------------------------------
 
@@ -225,7 +264,9 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: Pick<MuleV
               {rows.map((r) => (
                 <li key={r.key} className="flex items-baseline gap-2" data-testid={`reason-${r.key}`}>
                   <span className="shrink-0 font-mono text-[10px] text-ink-3">M{r.month}</span>
-                  <span className="min-w-0 flex-1">{r.words}</span>
+                  <span className="min-w-0 flex-1">
+                    <Marked text={r.words} view={view} />
+                  </span>
                   {r.move !== 0 && (
                     <span data-num className="shrink-0 font-mono font-bold text-alert">
                       −{-r.move}

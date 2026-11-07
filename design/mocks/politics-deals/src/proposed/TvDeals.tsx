@@ -2,7 +2,7 @@ import type { MuleView } from '@mule/protocol';
 import { PlayerMark } from '@mule/ui';
 import { toSlot } from '../../../../../apps/web/src/game/derive';
 import { brokenIn } from './MonthEnd';
-import { RepChip } from './parts';
+import { Marked, RepChip } from './parts';
 import { brokenMove, brokenWords } from './words';
 
 /*
@@ -30,7 +30,7 @@ export function TvBreakBanner({ game }: { game: MuleView }) {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="label-caps text-base! text-alert-ink">{c.terms.kind === 'pact' ? 'A pact was broken' : 'A promise was broken'}</span>
               <span className="font-display text-3xl font-semibold leading-tight text-alert-ink" data-testid={`tv-break-${c.id}-words`}>
-                {brokenWords(game, c)}
+                <Marked text={brokenWords(game, c)} view={game} />
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end gap-1">

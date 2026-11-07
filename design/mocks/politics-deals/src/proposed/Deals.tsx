@@ -7,7 +7,7 @@ import { useClient, useClientState } from '../../../../../apps/web/src/net/react
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { OnlyYou } from '../../../../../apps/web/src/phone/hub/OnlyYou';
 import { REFUSE_BELOW } from '../fixture';
-import { RepChip, shellOf, Who } from './parts';
+import { CardWho, Marked, RepChip, shellOf, Who } from './parts';
 import { bindsWords, lawUp, monthsWords, nameOf, stakesWords, statusWords, titleWords } from './words';
 
 /*
@@ -256,7 +256,7 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
     <div className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={`Deal card for ${c.other.name}`} data-testid="composer-a">
       <header className="flex items-center gap-1.5 border-b border-holo-faint py-0.5 pl-3 pr-1">
         <span className="whitespace-nowrap text-xs font-semibold text-ink-2">Card for</span>
-        <Who view={c.view} id={to} size={14} rep />
+        <CardWho view={c.view} id={to} size={14} rep />
         <Button size="md" variant="ghost" className="ml-auto px-2.5" onClick={onClose} data-testid="composer-a-close">
           Close
         </Button>
@@ -291,7 +291,7 @@ export function DealComposerInline({ to, kind, onClose }: { to: string; kind?: D
     <section ref={ref} className="flex shrink-0 flex-col gap-1.5 rounded-panel border-2 border-dashed border-holo bg-holo-soft p-2" aria-label={`Draft deal card for ${c.other.name}`} data-testid="composer-b">
       <span className="flex items-center gap-1">
         <span className="label-caps text-[10px]!">Draft · card for</span>
-        <Who view={c.view} id={to} size={14} rep />
+        <CardWho view={c.view} id={to} size={14} rep />
       </span>
       <ComposerFields c={c} testid="composer-b" />
       <ComposerNotes c={c} testid="composer-b" />
@@ -318,26 +318,28 @@ function DealFace({ c, tone = 'solid', expiry = false, testid, children }: { c: 
   return (
     <section className={cx('flex shrink-0 flex-col gap-1 rounded-panel border-2 p-2', tone === 'solid' ? 'border-holo bg-holo-soft' : 'border-holo-line bg-panel')} data-testid={testid} data-status={c.status}>
       <span className="flex items-center justify-between gap-1">
-        <span className="label-caps truncate text-[10px]!">Card {c.from === me.id ? `to ${nameOf(view, c.to, me.id)}` : `from ${nameOf(view, c.from, me.id)}`}</span>
+        <span className="label-caps truncate text-[10px]!" data-testid={`${testid}-label`}>
+          <Marked text={`Card ${c.from === me.id ? `to ${nameOf(view, c.to, me.id)}` : `from ${nameOf(view, c.from, me.id)}`}`} view={view} />
+        </span>
         <span className="shrink-0 whitespace-nowrap">
           <OnlyYou text="You two" />
         </span>
       </span>
       <span className="font-display text-base font-semibold leading-tight" data-testid={`${testid}-title`}>
-        {titleWords(view, c, me.id)}
+        <Marked text={titleWords(view, c, me.id)} view={view} />
       </span>
       <span className="text-xs leading-snug" data-testid={`${testid}-binds`}>
-        {bindsWords(view, c, me.id)}
+        <Marked text={bindsWords(view, c, me.id)} view={view} />
       </span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" data-testid={`${testid}-names`}>
-        <Who view={view} id={c.from} me={me.id} size={14} rep open testid={`${testid}-from`} />
+        <CardWho view={view} id={c.from} me={me.id} size={14} rep open testid={`${testid}-from`} />
         <span aria-hidden className="text-ink-3">
           ·
         </span>
-        <Who view={view} id={c.to} me={me.id} size={14} rep open testid={`${testid}-to`} />
+        <CardWho view={view} id={c.to} me={me.id} size={14} rep open testid={`${testid}-to`} />
       </span>
       <span className="text-[11px] leading-snug text-ink-2" data-testid={`${testid}-stakes`}>
-        {stakesWords(view, c, me.id)}
+        <Marked text={stakesWords(view, c, me.id)} view={view} />
         {expiry && <> Unanswered, it expires when planning ends.</>}
       </span>
       {children}
@@ -373,7 +375,7 @@ export function OutgoingDeal({ c }: { c: DealCard }) {
       <span className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-sm font-semibold text-holo" data-testid={`outgoing-${c.id}-waiting`}>
           <span aria-hidden className="size-2 animate-pulse rounded-full bg-holo" />
-          {statusWords(view, c, me.id)}
+          <Marked text={statusWords(view, c, me.id)} view={view} />
         </span>
         <Button size="md" variant="ghost" className="-mr-2" onClick={() => client.intent({ type: 'withdrawDeal', id: c.id })} data-testid={`outgoing-${c.id}-withdraw`}>
           Withdraw
@@ -395,8 +397,13 @@ export function DealLine({ c, testid }: { c: DealCard; testid?: string }) {
         {MARK[c.status]}
       </span>
       <span className="min-w-0">
-        <strong className="font-semibold">{titleWords(view, c, me.id)}</strong>
-        <span className="text-ink-2"> · {statusWords(view, c, me.id)}</span>
+        <strong className="font-semibold">
+          <Marked text={titleWords(view, c, me.id)} view={view} />
+        </strong>
+        <span className="text-ink-2">
+          {' '}
+          · <Marked text={statusWords(view, c, me.id)} view={view} />
+        </span>
       </span>
     </span>
   );
@@ -446,8 +453,12 @@ function MyDealRow({ c }: { c: DealCard }) {
         <DealLine c={c} testid={`my-deal-${c.id}-line`} />
       </span>
       <span className="flex flex-wrap items-center gap-x-1.5 pl-[18px] text-[11px] text-ink-2">
-        with <Who view={view} id={other} me={me.id} size={12} rep open testid={`my-deal-${c.id}-with`} />
-        {c.status === 'active' && <span data-testid={`my-deal-${c.id}-binds`}>· {bindsWords(view, c, me.id)}</span>}
+        with <CardWho view={view} id={other} me={me.id} size={12} rep open testid={`my-deal-${c.id}-with`} />
+        {c.status === 'active' && (
+          <span data-testid={`my-deal-${c.id}-binds`}>
+            · <Marked text={bindsWords(view, c, me.id)} view={view} />
+          </span>
+        )}
         {c.settled !== null && <span className="font-mono text-[10px] text-ink-3">· month {c.settled}</span>}
       </span>
     </div>
