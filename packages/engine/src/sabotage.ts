@@ -269,8 +269,15 @@ function fineOpenCases(state: GameState): void {
   for (const order of state.politics!.sabotage.filter((o) => o.culpritPublic && !o.fine)) levy(state, order.id, POLITICS.sheriff.fine.standard, 'standard');
 }
 
-/** Charge the month's crew costs at upkeep. */
-export function settleSabotage(_state: GameState): void {}
+/** At upkeep: each player's crews for the month, what they have at most, to nobody (S4-RULE-9); in the last month, open cases pay the standard fine (S4-RULE-8). */
+export function settleSabotage(state: GameState): void {
+  if (!state.politics) return;
+  for (const p of state.players) {
+    const due = state.politics.sabotage.filter((o) => o.by === p.id && o.month === state.month && o.outcome !== 'pending').reduce((sum, o) => sum + o.cost, 0);
+    p.money -= Math.max(0, Math.min(p.money, due));
+  }
+  if (isGameOver(state)) fineOpenCases(state);
+}
 
 /** Levy the standard fine on cases left unfined, when planning ends (S4-RULE-8); the last upkeep does the same in settleSabotage. */
 export function closeCases(state: GameState): void {
