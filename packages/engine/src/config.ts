@@ -1777,6 +1777,11 @@ export const STRATEGIST = {
     canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
     /** "Hurts the leader": what the plan that fences in the leader scores. */
     hurtsLeader: 0.7,
+    /**
+     * A plan worth under this share of the best plan's worth is not offered to the decider (T-AC-14). The shortlist's
+     * utility tolerance alone let a plan at 43% of the best through once lever B valued Medicine works (PR-5).
+     */
+    offerShare: 0.5,
   },
   /**
    * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
