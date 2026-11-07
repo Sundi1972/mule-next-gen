@@ -12,6 +12,15 @@ from mathutils import Vector
 from . import core
 
 R = {}
+# the blue hour's sky fill: 0.6 (was 0.42), so the plate's apron and place grass at dusk measure within ~15 % of
+# look.html's dusk (AM-7; measure.py: 0.60 gave 0.92/1.01 of look, 0.65 0.96/1.08 but the land at the frame's
+# bottom edge 1.20, 0.75 gave 1.03/1.18). COLONY_DUSK_BG overrides
+# it for calibration runs only
+DUSK_BG = float(os.environ.get("COLONY_DUSK_BG", "0.6"))
+# the blue hour's warm fill: a low warm light from behind the camera, the colony's own lamps and windows spilling on
+# the faces we see, so facades read bright and warm at dusk as in look.html's lit still (AM-7 check 5). Low (12 deg),
+# and linked off the ground. COLONY_DUSK_FILL overrides it for calibration runs only
+DUSK_FILL = float(os.environ.get("COLONY_DUSK_FILL", "2.4"))
 
 
 def rig():
@@ -35,7 +44,30 @@ def rig():
     bg = wn.nodes["Background"]
     core.link(wn, core.sock(tint, "Result", True, "RGBA"), bg.inputs["Color"])
     bpy.ops.object.light_add(type="SUN")
-    R.update(bg=bg, tint=core.sock(tint, "B", False, "RGBA"), sun=bpy.context.active_object)
+    sun = bpy.context.active_object
+    bpy.ops.object.light_add(type="SUN")
+    fill = bpy.context.active_object
+    e, a = math.radians(12), math.radians(-45)  # from the camera's side (south-east), az ccw from east
+    fill.rotation_euler = Vector((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e))).to_track_quat("Z", "Y").to_euler()
+    fill.data.color = (1.0, 0.72, 0.45)
+    fill.data.angle = math.radians(8)
+    # no shadow: it stands for bounced light, and a 12 deg light's shadow would run ~28 m over a layer's catcher and
+    # be painted over the buildings behind it (measured: the Hospital's darkened the hall's parapet)
+    for attr in ("use_shadow",):
+        if hasattr(fill.data, attr):
+            setattr(fill.data, attr, False)
+    if hasattr(fill.data, "cycles") and hasattr(fill.data.cycles, "cast_shadow"):
+        fill.data.cycles.cast_shadow = False
+    # and none on the ground (light linking): it must not lift the apron, the grass or a layer's own ground, which
+    # are measured against look.html's dusk without it. Ground = any mesh under 0.35 m tall, and the terrain
+    nofill = bpy.data.collections.new("no_fill")
+    for o in list(scene.objects):
+        if o.type == "MESH" and (o.dimensions.z < 0.35 or o.name.startswith(("terrain", "apron", "shadow_catcher"))):
+            nofill.objects.link(o)
+    fill.light_linking.receiver_collection = nofill
+    for co in nofill.collection_objects:
+        co.light_linking.link_state = "EXCLUDE"
+    R.update(bg=bg, tint=core.sock(tint, "B", False, "RGBA"), sun=sun, fill=fill)
 
 
 def set_sun(elev, az, energy, color, angle):
@@ -62,10 +94,12 @@ def apply(name):
     else:
         # blue hour, not sunset: a cool sky does the fill and the sun only grazes, so lit windows carry the picture
         set_sun(3, 200, 0.5, (1.0, 0.5, 0.3), 2.0)
-        R["bg"].inputs["Strength"].default_value = 0.0 if glow else 0.42
+        R["bg"].inputs["Strength"].default_value = 0.0 if glow else DUSK_BG
         R["tint"].default_value = (0.32, 0.48, 1.0, 1)
         scene.view_settings.exposure = 0.55
     R["sun"].hide_render = glow
+    R["fill"].data.energy = DUSK_FILL
+    R["fill"].hide_render = name in ("day", "glow")
     scene.render.film_transparent = not glow  # the glow layer is added on black; the others composite by alpha
     for s, v in core.GLOW:
         s.default_value = v if glow or lit else 0.0

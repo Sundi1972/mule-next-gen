@@ -1,13 +1,13 @@
-"""Proof composite: the grounds plate, then flush building layers by pixel offset from the hall's centre, far to near
-(col + row), the way the game will lay them; dusk adds each layer's glow (screen) right after its picture, so a
-nearer building still covers a farther one's light. Then the same at ring.py's scale beside a crop of its render.
-Places are given in the 5 x 5 grid (the hall at (2, 2)); every plate extent puts the hall on its own hall pixel.
-Run: blender -b -P composite.py -- <proof-dir> <ring-dir> <plate> kind:col:row [kind:col:row ...]
-  reads  <proof-dir>/<plate>-{day,dusk}.png and <plate>.json (plate3, plate5), the flush layers
-         <proof-dir>/flush/kit/<kind>/standing-{day,dusk,glow}.png, <ring-dir>/colony_{day,dusk}.png
-  writes <proof-dir>/<plate>-composite-{day,dusk}.png (full res), -tv.png (whole plate at ring scale),
-         -compare-{day,dusk}.png (composite | ring.py, the same window round the hall, ring scale),
-         -1280-{day,dusk}.png (the whole composite at 1280 x 720 | ring.py's still at 1280 x 720)"""
+"""Composite the grounds the way the game will lay them: a grounds plate, its glow screened over it at dusk, then
+the flush building layers far to near (centre col + row), each placed by the offset of its footprint's centre from
+the hall's pixel and anchored on its own frame's centre (frame.json beside its renders); at dusk each layer's glow
+is laid right after it, so a nearer building still covers a farther one's light. Then side by side with look.html.
+Places are RULE-32b grid places on the 5 x 5 grounds (x right, y down, the hall at (2, 2)); w is 1 or 2.
+Run: blender -b -P composite.py -- <src> <look-dir> <plate> <out-dir> <tag> kind:stage:x:y:w [...]
+  reads  <src>/<plate>-{day,dusk,glow}.png and <plate>.json, <src>/<kind>/<stage>-{day,dusk,glow}.png and frame.json,
+         <look-dir>/colony_{day,dusk}.png (look.html's colony stills, decoded)
+  writes <out-dir>/<plate>-<tag>-{day,dusk}.png (full res) and <plate>-<tag>-1280-{day,dusk}.png (ours at
+         1280 x 720 | look.html at 1280 x 720)"""
 import json
 import math
 import os
@@ -17,8 +17,9 @@ import bpy
 import numpy as np
 
 a = sys.argv[sys.argv.index("--") + 1 :]
-P, RING, PLATE, SPECS = a[0], a[1], a[2], [s.split(":") for s in a[3:]]
-meta = json.load(open(os.path.join(P, f"{PLATE}.json")))
+SRC, RING, PLATE, OUT, TAG = a[0], a[1], a[2], a[3], a[4]
+SPECS = [s.split(":") for s in a[5:]]
+meta = json.load(open(os.path.join(SRC, f"{PLATE}.json")))
 HX, HY = meta["hall"]
 SX, SY = meta["place_step"]
 PXM = meta["px_per_m"]
@@ -64,7 +65,7 @@ def over(dst, src, x, y):
     dst[y0:y1, x0:x1] = np.concatenate([rgb, oa], 2)
 
 
-ADD = os.environ.get("GLOW_BLEND", "add") == "add"  # add = CSS plus-lighter (what light does); screen = the page today
+ADD = os.environ.get("GLOW_BLEND", "screen") == "add"  # add = CSS plus-lighter (what light does); screen = the page today
 
 
 def screen(dst, src, x, y):
@@ -98,35 +99,31 @@ def shrink(arr, f):
     return (a[y0][:, x0] * (1 - fy) * (1 - fx) + a[y0][:, x1] * (1 - fy) * fx + a[y1][:, x0] * fy * (1 - fx) + a[y1][:, x1] * fy * fx).astype(np.float32)
 
 
-layers = sorted(((k, int(c), int(r)) for k, c, r in SPECS), key=lambda t: (t[1] + t[2], t[1]))
+layers = []
+for kind, stage, x, y, w in SPECS:
+    x, y, w = int(x), int(y), int(w)
+    gx, gy = x + (w - 1) / 2, y + (w - 1) / 2  # the footprint's centre, in places
+    layers.append((gx + gy, gx, kind, stage, gx, gy))
+layers.sort()
+os.makedirs(OUT, exist_ok=True)
 for li in ("day", "dusk"):
-    canvas = load(os.path.join(P, f"{PLATE}-{li}.png"))
-    for kind, c, r in layers:
-        dc, dr = c - 2, r - 2
-        cx, cy = HX + SX * (dc - dr), HY + SY * (dc + dr)  # the place's centre pixel
-        base = os.path.join(P, "flush", "kit", kind, "standing")
-        pic = load(f"{base}-{li}.png")
-        x, y = round(cx - 800), round(cy - 1000)
-        over(canvas, pic, x, y)
+    canvas = load(os.path.join(SRC, f"{PLATE}-{li}.png"))
+    if li == "dusk":
+        screen(canvas, load(os.path.join(SRC, f"{PLATE}-glow.png")), 0, 0)
+    for _, _, kind, stage, gx, gy in layers:
+        fr = json.load(open(os.path.join(SRC, kind, "frame.json")))
+        dc, dr = gx - 2, gy - 2
+        cx, cy = HX + SX * (dc - dr), HY + SY * (dc + dr)  # the footprint centre's pixel on the plate
+        x0, y0 = round(cx - fr["centre"][0]), round(cy - fr["centre"][1])
+        base = os.path.join(SRC, kind, stage)
+        over(canvas, load(f"{base}-{li}.png"), x0, y0)
         if li == "dusk" and os.path.exists(f"{base}-glow.png"):
-            screen(canvas, load(f"{base}-glow.png"), x, y)
-        print(f"COLONY {li}: {kind} at place ({c}, {r}), centre px ({cx:.1f}, {cy:.1f})", flush=True)
-    save(canvas, os.path.join(P, f"{PLATE}-composite-{li}.png"))
-    f = PXM / RING_PXM
-    tv = shrink(canvas, f)
-    save(flatten(tv), os.path.join(P, f"{PLATE}-composite-{li}-tv.png"))
+            screen(canvas, load(f"{base}-glow.png"), x0, y0)
+        print(f"COLONY {li}: {kind}/{stage} at ({gx}, {gy}), centre px ({cx:.1f}, {cy:.1f})", flush=True)
+    save(canvas, os.path.join(OUT, f"{PLATE}-{TAG}-{li}.png"))
     ring = load(os.path.join(RING, f"colony_{li}.png"))
-    # the same window round the hall in both, in ring pixels (the ring's frame ends 283 px below its hall)
-    up, down = 430, min(330, int(ring.shape[0] - RING_HALL[1]))
-    hw = 560
-    ttx, tty = HX / f, HY / f
-    a_ = flatten(tv)[round(tty) - up : round(tty) + down, round(ttx) - hw : round(ttx) + hw]
-    b_ = flatten(ring)[round(RING_HALL[1]) - up : round(RING_HALL[1]) + down, round(RING_HALL[0]) - hw : round(RING_HALL[0]) + hw]
-    gap = np.ones((a_.shape[0], 16, 4), np.float32)
-    gap[..., :3] = 0.5
-    save(np.concatenate([a_, gap, b_], 1), os.path.join(P, f"{PLATE}-compare-{li}.png"))
     small = flatten(shrink(canvas, canvas.shape[1] / 1280))[:720]
     rs = flatten(shrink(ring, ring.shape[1] / 1280))[:720]
     gap = np.ones((720, 16, 4), np.float32)
     gap[..., :3] = 0.5
-    save(np.concatenate([small, gap, rs], 1), os.path.join(P, f"{PLATE}-1280-{li}.png"))
+    save(np.concatenate([small, gap, rs], 1), os.path.join(OUT, f"{PLATE}-{TAG}-1280-{li}.png"))

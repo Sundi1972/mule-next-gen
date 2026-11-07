@@ -1,6 +1,7 @@
 """The one camera every picture shares (ART-DIRECTION §2), the render settings, and the run loop of a kind script.
 Orthographic 2:1 dimetric from the south-east, 21 m across 1600 px, the place's centre at pixel (800, 1000), so a
 picture composites by position alone and there is ~15 m of height room above the centre."""
+import json
 import math
 import os
 import sys
@@ -118,6 +119,8 @@ def run(kind, stages, build, glowless=("closed",), fr=None, dress=None):
         out = os.path.join(out, "kit")
         print(f"COLONY KITS_DIR is set: kit props ON, writing to {out}", flush=True)
     os.makedirs(os.path.join(out, kind), exist_ok=True)
+    with open(os.path.join(out, kind, "frame.json"), "w") as f:  # the frame these pictures were taken in: publish.sh
+        json.dump({**(fr or DEFAULT), "places": (fr or DEFAULT).get("places", 1)}, f)  # reads it over FRAME
     for stage in want:
         t0 = time.time()
         core.reset()
