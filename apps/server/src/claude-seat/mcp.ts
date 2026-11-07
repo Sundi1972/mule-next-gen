@@ -8,7 +8,7 @@ import { replySchema, WRITER_SYSTEM } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { RoomRegistry } from '@tabletop/core';
 import { withGameOver, type SeatLookup } from './lookup.js';
-import { claudeSeatAt, type ClaudeSeat } from './seats.js';
+import { claudeSeatAt, waitForSeat, type ClaudeSeat } from './seats.js';
 
 const MINUTE_MS = 60_000;
 
@@ -71,7 +71,7 @@ const STILL_OPEN = 'This ask is still open: answer it now with submit_plan.';
 type Refusal = { kind: 'busy'; retry_s: number } | { kind: 'no_such_seat' | 'taken_back' | 'game_over' };
 
 /** A code's seat as a call acts on it: its id, and its writer once the game has started. */
-type Found = { seatId: string; claude: ClaudeSeat | null };
+type Found = { table: object; seatId: string; claude: ClaudeSeat | null };
 
 /** RULE-2's budget: one for the whole server, a fixed window from its first wrong code. */
 class WrongCodes {
@@ -129,7 +129,7 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
     if (answer.state !== 'live') return { kind: answer.state };
     const claude = claudeSeatAt(answer.table, answer.seatId);
     if (claude?.writer.over) return { kind: 'game_over' };
-    return { seatId: answer.seatId, claude };
+    return { table: answer.table, seatId: answer.seatId, claude };
   };
 
   const tools = {
@@ -142,9 +142,11 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
     }),
 
     async wait_for_my_turn(found: Found, _args: Record<string, unknown>, signal: AbortSignal) {
-      const writer = found.claude?.writer;
-      // Before the game starts there is no writer yet: hold, then "again", as for a turn that has not come.
-      const ask = writer ? await writer.waitForAsk(holdMs, signal) : await held(holdMs, signal);
+      // Before the game starts there is no writer yet: hold until the game records the seat.
+      const seated = found.claude ?? (await waitForSeat(found.table, found.seatId, holdMs, signal));
+      const writer = seated?.writer;
+      // A seat recorded during the hold was recorded by Start, which asked its month-1 plan in the same tick: no second hold.
+      const ask = !writer ? null : found.claude ? await writer.waitForAsk(holdMs, signal) : writer.openAsk();
       if (writer?.over) return { kind: 'game_over' };
       if (!ask) return { kind: 'again' };
       return { kind: 'ask', ask_id: ask.id, phase: ask.phase, persona: writer!.seat.persona, digest: null, brief: ask.brief, edits_allowed: ask.offers, ms_left: ask.msLeft };
@@ -233,18 +235,6 @@ function readBody(req: IncomingMessage, cap: number): Promise<string | 'too_larg
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
-  });
-}
-
-/** Resolves null after `ms`, or at once when `signal` aborts. */
-function held(ms: number, signal: AbortSignal): Promise<null> {
-  return new Promise((resolve) => {
-    const done = () => {
-      clearTimeout(timer);
-      resolve(null);
-    };
-    const timer = setTimeout(done, ms);
-    signal.addEventListener('abort', done, { once: true });
   });
 }
 

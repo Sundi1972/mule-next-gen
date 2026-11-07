@@ -23,8 +23,38 @@ const tables = new WeakMap<object, Map<string, ClaudeSeat>>();
 export function seatClaude(table: object, seatId: string, name: string, writer: PlaybookWriter | null): void {
   if (!(writer instanceof ClaudeSeatWriter)) return;
   const seats = tables.get(table) ?? new Map<string, ClaudeSeat>();
-  seats.set(seatId, { name, writer });
+  const seat = { name, writer };
+  seats.set(seatId, seat);
   tables.set(table, seats);
+  for (const wake of [...(waiting.get(table) ?? [])]) wake(seatId, seat);
+}
+
+type Wake = (seatId: string, seat: ClaudeSeat) => void;
+
+/** Waits held before a game starts, by the game they wait on. */
+const waiting = new WeakMap<object, Set<Wake>>();
+
+/** The Claude seat once its game records it, within `holdMs`; null when the hold ends or `signal` aborts first. */
+export function waitForSeat(table: object, seatId: string, holdMs: number, signal?: AbortSignal): Promise<ClaudeSeat | null> {
+  const now = claudeSeatAt(table, seatId);
+  if (now || signal?.aborted) return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const wakes = waiting.get(table) ?? new Set<Wake>();
+    waiting.set(table, wakes);
+    const done = (seat: ClaudeSeat | null) => {
+      wakes.delete(wake);
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
+      resolve(seat);
+    };
+    const wake: Wake = (id, seat) => {
+      if (id === seatId) done(seat);
+    };
+    const stop = () => done(null);
+    const timer = setTimeout(stop, holdMs);
+    signal?.addEventListener('abort', stop, { once: true });
+    wakes.add(wake);
+  });
 }
 
 /** The Claude seat `seatId` of the game `table`, or null before that game starts. */
