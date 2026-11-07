@@ -17,6 +17,7 @@ import {
   type OverruleTarget,
   type Phase,
   type PrestigeId,
+  type SabotageTarget,
   type TaxPromise,
 } from '@mule/engine';
 
@@ -72,7 +73,15 @@ export type AiAction =
   /** Planning: take back a card the other player has not answered. */
   | { type: 'withdrawDeal'; id: string }
   /** Planning: accept or decline a card offered to this seat. */
-  | { type: 'answerDeal'; id: string; accept: boolean };
+  | { type: 'answerDeal'; id: string; accept: boolean }
+  /** Planning: order sabotage against a target, or withdraw this month's order with null (slice 4 S4-RULE-2). */
+  | { type: 'sabotage'; target: SabotageTarget | null }
+  /** Planning, the Sheriff once the votes are over: the whole list of plots guarded this month (S4-RULE-6). */
+  | { type: 'guard'; tiles: number[] }
+  /** Planning, the Sheriff once the votes are over: investigate a public order whose culprit is unknown (S4-RULE-7). */
+  | { type: 'investigate'; order: string }
+  /** Planning, the Sheriff once the votes are over: fine a revealed culprit; amount is the base before the ban's multiplier (S4-RULE-8). */
+  | { type: 'fine'; order: string; amount: number };
 
 /** Plays one action. Returns false when the rules refused it (a RuleError), so the hands move on to the next item. */
 export type Act = (action: AiAction) => boolean;
@@ -477,6 +486,42 @@ const DESCRIBED = {
     legalWhen: () => ['Cards are answered in planning', 'That card is no longer open', 'You already have a pact with {name}'],
     cost: null,
     args: { id: "the card's id, 'deal-…'", accept: 'true to accept, false to decline' },
+  },
+  sabotage: {
+    type: 'sabotage',
+    command: 'sabotage',
+    phases: ['planning'],
+    does: () => "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
+    legalWhen: () => ['This game plays without sabotage', 'Orders are given in planning', "Pick another player's plot", 'That plot makes nothing to cut', 'Pick a good', 'A crew costs {cost} cr; you have {money}'],
+    cost: null, // the crew is charged at upkeep, by the order's kind, never when the order is given
+    args: { target: "{ kind: 'powerCut', tile } or { kind: 'rumour', good, dir: 'up' | 'down' } or null to withdraw" },
+  },
+  guard: {
+    type: 'guard',
+    command: 'guard',
+    phases: ['planning'],
+    does: () => "The Sheriff posts the whole list of plots guarded this month (any owner's); a guarded plot's cut always fails and names its saboteur. It replaces the earlier list.",
+    legalWhen: () => ['This game plays without sabotage', 'Guards are posted once the votes are over', 'Only the Sheriff posts guards', "Guards watch players' plots", 'You have {count} guards'],
+    cost: null,
+    args: { tiles: 'the plots to guard, as tile indices' },
+  },
+  investigate: {
+    type: 'investigate',
+    command: 'investigate',
+    phases: ['planning'],
+    does: () => 'The Sheriff investigates one public incident whose culprit is unknown; it may name the culprit or go cold. One investigation a month.',
+    legalWhen: () => ['This game plays without sabotage', 'Investigations are made once the votes are over', 'Only the Sheriff investigates', 'One investigation a month', 'No such incident', 'That one is solved', 'The trail went cold on that one'],
+    cost: null,
+    args: { order: "the incident's order id, 'sab-…'" },
+  },
+  fine: {
+    type: 'fine',
+    command: 'fine',
+    phases: ['planning'],
+    does: () => 'The Sheriff fines a revealed culprit once; the base is multiplied by any sabotage ban and shared with the victim.',
+    legalWhen: () => ['This game plays without sabotage', 'Fines are levied once the votes are over', 'Only the Sheriff fines', 'Only a revealed culprit is fined', 'Already fined', "You can't fine yourself", 'A fine is 50 to 300 cr, in steps of 50'],
+    cost: null,
+    args: { order: "the incident's order id, 'sab-…'", amount: 'the base fine in credits: 50 to 300 in steps of 50' },
   },
 } satisfies Described;
 
