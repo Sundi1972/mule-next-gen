@@ -194,4 +194,20 @@ describe('hands fix 1: whatIf refuses a route MULE the hands would refuse (route
     expect(unreachablePlot(state, plot)).toBe(false);
     expect(await whatIfRoute(state, waterOn(plot))).toEqual([]);
   });
+
+  it('hands fix 1: a second MULE is judged after the first is installed: the same outfit on the same plot is refused as stale', async () => {
+    const { state, plot } = lakeTable(10, 1);
+    const twice = [...waterOn(plot).slice(0, 3), ...waterOn(plot)];
+    const rejected = await whatIfRoute(state, twice);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toMatchObject({ path: '/development/route/5', to: { act: 'install', plot } });
+    expect(rejected[0]!.why).toMatch(/^route step 5: /);
+  });
+
+  it("hands fix 1: a route refused outright names only its own refusal, never the kept draft's steps", async () => {
+    const { state } = lakeTable(10, 0);
+    const rejected = await whatIfRoute(state, [{ act: 'outfit', outfit: 'water' }]);
+    expect(rejected.length).toBeGreaterThan(0);
+    expect(rejected.every((r) => r.path === '/development/route')).toBe(true);
+  });
 });
