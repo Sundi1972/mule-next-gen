@@ -50,3 +50,33 @@ Draw inside `design/mocks/politics-frame` (`src/slots.tsx`, `src/App.tsx`). No n
 - **P9:** election day's rows, as built (the Sheriff row comes back).
 - **P10:** production's event show (WS8's visuals), the dark plot on the map, a month-end line.
 - **P11:** the fifth law, the sabotage ban, in the Governor's law list and the law ballot.
+
+## The contract (slice 4, on trunk since #662 / batch 78, e1e4794a; Heiko approved the six choices 7 Nov 12:54Z)
+
+Files: `packages/protocol/src/index.ts` (IncidentView ~:328, MyView.sabotage/sheriff ~:394, MuleView.sabotage ~:513,
+ShowEventView.sabotage ~:753, intents ~:49), `packages/engine/src/types.ts:640` (SabotageTarget, SabotageOrder).
+- Intents: `{type:'sabotage', target: SabotageTarget|null}` (null withdraws this month's order) · Sheriff after the
+  votes: `{type:'guard', tiles:number[]}` (the whole list), `{type:'investigate', order}`, `{type:'fine', order, amount}`
+  (amount = base, before the ban's multiplier).
+- `SabotageTarget`: `{kind:'powerCut', tile}` | `{kind:'rumour', good, dir:'up'|'down'}`.
+- `IncidentView` (public): id (opaque), month, kind, victim|null, at|null, good, dir?, worked, culprit|null (public or
+  own), how: 'guard'|'caught'|'investigation'|null, investigated, fine {due, paid, toVictim, by:'sheriff'|'standard'}|null.
+- `MyView.sabotage` (own phone): order (this month's pending), canOrder: true|'off'|'notPlanning', owed (crew cost at
+  upkeep), mine: IncidentView & {public, outcome: 'pending'|'done'|'failed'|'caught'}.
+- `MyView.sheriff` (the sitting Sheriff only): canAct: true|'off'|'notPlanning'|'votesOpen', guards (tile indices), max,
+  investigationsLeft, fineable (order ids), steps (fine bases allowed), multiplier (the ban's, now).
+- `MuleView.sabotage` (everyone): terms per kind {cost, success, detect}, incidents (public), sheriff {guards,
+  investigations, investigationsLeft}. `reputationReasons[player]` gains `{kind:'caught', month}`.
+- Show event: `sabotage?: {order, culprit|null, worked, guarded}`.
+- Heiko's rulings: an investigation finds the culprit half the time ("Solved: it was Lena" / "The trail went cold");
+  no separate sabotage switch; ids are opaque; caught costs −10 reputation, −20 more under a pact.
+
+## Build plan (pages, in this order)
+
+1. Hardest first, two variants: the Sheriff's desk (P7 + P8: investigate, fine, the map in Guard mode).
+2. P6: Look on a rival's plot → "Sabotage this plot · Only you" → the order sheet (cost, success, detect, Order in
+   secret, withdraw); the pending order and owed cost; Market's "Start a rumour".
+3. P10: TV production's event show: "Caught!" (guarded / caught), "A plot went dark" (undetected), the dark plot on the
+   map, the month-end line; the phones' private lines (the culprit's, the victim's, the Sheriff's).
+4. P9: election day with the Sheriff row; P11: the sabotage ban in the law list and the ballot.
+Real components from apps/web (hub desks, LookPanel, HoloMap flag 'sabotage', the event show) wherever they exist.
