@@ -596,6 +596,12 @@ open, so the chat can resend before the phase starts; before, it counted as the 
 built-in plan. Also, from the PM's ruling of 7 Nov: RULE-2 row 3's "game over" is decided in claude-seat from the game's
 own state, around the Room's lookup; the Room answers "taken back" only.
 
+**Amendment 4 (7 Nov, WS2, inside the lane, from WS4's #641): a closed table's codes answer "taken back".** WS4 retires
+every code of a room that leaves the registry (close, error, idle sweep, shutdown) and never reissues one, so after a
+table closes RULE-2 row 3 answers "taken back", not "game over" (a call held in a started game at that moment still gets "game over"; one held in the lobby gets "again", then "taken back").
+The sentence Claude reads covers both: "This seat is no longer in play: the host took it back or the table closed. Stop
+playing it." Agreed with the PM (WS4's question, 7 Nov); no WS4 change.
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the Claude seat's MCP endpoint

@@ -354,6 +354,9 @@ describe('/mcp, stateless, the seat code on every call', () => {
     for (const tool of ['join', 'wait_for_my_turn', 'submit_plan']) {
       expect(await client.call(tool, { code, ask_id: 'x', edits: [], line: '' })).toMatchObject({ kind: 'taken_back' });
     }
+    // A closed table's codes answer taken_back too (WS4's room retirement), so Claude is told it may be either, and to stop.
+    const said = await client.text('join', { code });
+    expect(said).toMatch(/^This seat is no longer in play: the host took it back or the table closed\. Stop playing it\./);
   });
 
   it('T-AC-8: after wrongCodesPerMinute wrong codes every call gets busy until refill; taken-back codes don\'t draw; big bodies refused', async () => {
