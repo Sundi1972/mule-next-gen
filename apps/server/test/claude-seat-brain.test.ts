@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, SeatInfo } from '@tabletop/core';
+import type { Spoken } from '../src/brain/chat.js';
 import { createBrain, type BrainSeat } from '../src/brain/index.js';
 import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
 import { ClaudeSeatWriter } from '../src/claude-seat/writer.js';
@@ -55,6 +56,26 @@ describe('a Claude seat in the brain', () => {
     expect(brain.deciderFor(seat('s3'))).not.toBeNull();
     brain.finish();
     expect(sdkModule.create).toBeNull();
+  });
+
+  it('T-AC-3: a Claude seat speaks with the same voice on a keyed host as on a keyless one', () => {
+    const records: Spoken[] = [
+      { month: 1, phase: 'landGrant', by: 'top', line: 'I take the river plot.' },
+      { month: 1, phase: 'auction', by: 'llm', line: 'Ore for sale.' },
+    ];
+    const heard = (env: Record<string, string>) => {
+      const said: string[] = [];
+      const brain = createBrain({ gameId: 'g-voice', env });
+      const speak = brain.chatter(seat('s2', 'claude'), (line) => said.push(line));
+      for (const record of records) speak(record);
+      brain.finish();
+      return said;
+    };
+
+    const keyless = heard({});
+
+    expect(keyless).toEqual(['I take the river plot.', 'Ore for sale.']);
+    expect(heard({ ANTHROPIC_API_KEY: 'test-key-not-real' })).toEqual(keyless);
   });
 
   it('B-AC-9: a keyless game with a Claude seat writes plans and no paid ledger line', async () => {
