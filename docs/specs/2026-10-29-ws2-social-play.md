@@ -348,8 +348,8 @@ tomorrow     MUST let a Smart or Claude Code seat's recorded reasoning set its v
 logic        → §2 RULE-B6 · evaluated at each ballot VoteHand casts · inputs bind from the seat's playbook in effect ·
              writes nothing but the vote intent VoteHand already sends
 seam         packages/ai/src/hands/vote.ts::VoteHand (WS7: an optional third constructor argument, read in `choose`'s
-             caller `vote` and in `lawVote`); packages/engine/src/playbook.ts::Playbook (WS1: the optional field);
-             apps/server/src/mule-game.ts::MuleGame.start (WS3: passes the port where `voteHands` are built)
+             caller `vote` and in `lawVote`); packages/engine/src/playbook.ts::Playbook (WS3: the optional field);
+             apps/server/src/mule-game.ts::MuleGame.start (WS3: passes the one port to the seat's VoteHand and DealHand)
 senior       junior would: let the reply cast the vote intent itself, or add a second vote path beside VoteHand ·
              senior does: one port in DealPort's style, so the vote stays where WS7's timing, ballot checks and
              keep/break already are; a recorded value replays, a phase never waits for a model, null is today's game
@@ -457,10 +457,17 @@ inputs   port: the seat has a VotePort (Smart or Claude Code seat; Classic → n
          ballot: a candidate on it / yes / no, or null · promise: the seat holds an active vote card on this ballot
          (WS7 slice 3; keyless in the RC)
 first match wins
+  0  the seat runs for this office                  own = its own candidacy; the port is not asked (WS7 cond. 1)
   1  port absent or said = null                     own = VoteHand's keyless choice, as today (existing, pinned)
-  2  said names someone not on the ballot           own = the keyless choice; ledger 'vote_clamped'
+  2  said names someone not in `candidates`         own = the keyless choice, as if null; never an invalid ballot,
+                                                    never a throw (WS7 cond. 2); ledger 'vote_clamped'
   3  otherwise                                      own = said
 then     WS7's S3-RULE-10 runs with this own: no promise → vote own; a promise → keep or break by its rows
+two reads the same port answers twice: WS7's `ownVote(obs, mind, ballot, port?)` at deal-offer time (slice 3 AM-5,
+         S3-PR-4) and VoteHand at the ballot. mule-game passes the SAME VotePort to the seat's VoteHand and its
+         DealHand (WS3). Both read recorded state only (Playbook.politics, recorded replies), so a replay gives both
+         the same answers (WS7 cond. 3); an answer that changed between the two reads is itself recorded, and is the
+         persuasion working: the seat keeps or breaks its card per S3-RULE-10
 unknown  null means "Claude has recorded no vote for this ballot", not "abstain": the keyless rule votes. A vote
          recorded for an earlier ballot never carries over (the port answers per ballot, from the playbook in effect).
 timing   the port is read when VoteHand casts (after its seeded pause, POLITICS.ai.actMs); a recorded reply whose edit
@@ -479,7 +486,8 @@ examples → §6: Claude recorded "governor: Kai", Kai on the ballot → votes K
   | { rule: AiAction['type'] }`. `messages` is never recorded. Non-breaking for WS3: RecordedWrite is unchanged.
 - **Playbook edits** (MODIFIED, WS1's validatePlan, C3, C6): `/strategy/stances/<player>`, `/rivalReads/<player>` and,
   with C6, `/politics/...`. Each is clamped or refused by validatePlan, as every edit is.
-- **`Playbook.politics?: PoliticsPlay`** (ADDED, additive, WS1's types; WS3 and WS7 agree; C6):
+- **`Playbook.politics?: PoliticsPlay`** (ADDED, additive; WS3's type in engine playbook.ts, WS9's clamps, WS1 OK'd the
+  shape, AM-B5; the ONE politics field: RC carries `votes` and `law` for C12, WS9's later politics part extends it; C6):
   `{ run: { office: Office; promise?: TaxPromise } | null; votes: Partial<Record<Office, PlayerId | null>>;
   taxTarget?: number }`. Playbook stays `v: 1` (optional field); a playbook without it plays as today.
 - **`PlanningPlay.offers?`** (ADDED, additive, WS1's types; C10): the card proposals, shape WS7's card intent's.
@@ -552,8 +560,8 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 - **R-B3 · the paired tournament costs money.** UBER-AC-B3 and B5 need it: about 8 seeds × 2 arms, roughly $7.6 for
   the social arm at 4 AI seats plus $3.3 for the off arm, about $11. Mitigation: B-6's paid runs go to the PM with the
   cost stated first; a smaller first pass (4 seeds, about $5.5) shows direction before the full run.
-- **R-B4 · upstream contracts:** WS1 (validatePlan clamps for stances, rivalReads, politics; the playbook's optional
-  `politics` and `offers`), WS7 (VoteHand plays the politics section; cards in slice 3), WS6 (the mute control, card
+- **R-B4 · upstream contracts:** WS3 (the playbook's optional `politics` and `offers`, engine playbook.ts), WS9
+  (validatorFor clamps for stances, rivalReads, politics), WS1 (the shapes' OK; values), WS7 (VoteHand plays the politics section; cards in slice 3), WS6 (the mute control, card
   screens), WS3 (C5's and C9's named edits in mule-game.ts and protocol, C8's in record.ts and replay.ts).
   Mitigation: B-1 needs only WS1's stances/rivalReads clamps; the rest gate later PRs.
 - **R-B5 · Haiku late in 5-seat games** gives weaker reasoning in the last months (S-B1: Haiku invents details more
@@ -600,14 +608,16 @@ Code-only; no existing state to reach. The mute starts unset for every player.
   ```
   **The vote seam (C12) and who builds it.** The smallest shape that keeps HC-B3: Claude's vote is a recorded playbook
   value (`politics.votes`, `politics.law`), and VoteHand asks a port for it at the ballot, in WS7's DealPort style, null
-  meaning the keyless rule. Lane split (the PM takes it to WS7 and WS1 for OKs):
-  - **WS1** (about 0.5 day): `Playbook.politics?` with `votes?` and `law?` (packages/engine/src/playbook.ts, additive,
-    playbook v1 rule) and their clamps in the validator (packages/ai/src/playbook/validate.ts::validatorFor). No new
-    values.
-  - **WS7** (about 0.5 day): `VotePort` in packages/ai/src/hands/vote.ts; VoteHand's optional third constructor
-    argument, read in `vote` (election, per contested office) and `lawVote` before the keyless rule; the slice-3
-    `ownVote` reads it too (WS7's call); the null-port pin (T-AC-B9).
-  - **WS3** (about 0.25 day): mule-game.ts named edits: pass the seat's port where `voteHands` are built
+  meaning the keyless rule. Lane split (PM, 7 Nov: WS1 OK'd the shape; owners corrected to the files' owners):
+  - **WS3** (about 0.25 day): `Playbook.politics?` with `votes?` and `law?` (packages/engine/src/playbook.ts, additive,
+    playbook v1 rule). No new values.
+  - **WS9** (about 0.25 day): their clamps in the validator (packages/ai/src/playbook/validate.ts::validatorFor).
+  - **WS7** (about 0.5 day, OK'd 7 Nov; built in S3-PR-4 as slice 3 AM-5): `VotePort` in
+    packages/ai/src/hands/vote.ts; VoteHand's optional third constructor argument, read in `vote` (election, per
+    contested office) and `lawVote` before the keyless rule; `ownVote(obs, mind, ballot, port?)` reads it too; the
+    null-port pin (T-AC-B9); RULE-B6 rows 0 and 2 (WS7's conditions 1-2).
+  - **WS3** (as well, about 0.25 day): mule-game.ts named edits: pass the seat's ONE port to both its VoteHand and
+    its DealHand where `voteHands` are built
     (MuleGame.start), and `to` into the TableTalk heard hands an AI seat (C5's edit).
   - **WS2** (about 1 day): the brief's ballot lines (C1: candidates, promises, the open law, its own promised votes via
     WS7's promisedVotes once slice 3 lands: not on trunk at 7ecddae5, through observe); the writer's `/politics/...` edits (C3); `votePortFor(seat)` from the
