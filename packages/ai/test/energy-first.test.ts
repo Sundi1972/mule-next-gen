@@ -89,16 +89,22 @@ describe('STRATEGIST.energyFirst: a seat with no Energy plant installs one first
   });
 
   it("on, leading a fitted MULE none of its plots may take (a smelter under an emission cap the air is over): the pick is 'stop', never an empty shortlist", () => {
-    const pick = (energyFirst: boolean) => {
-      STRATEGIST.energyFirst = energyFirst;
+    const capped = () => {
       const state = game(false);
       state.politics = { ...state.politics!, laws: { emissionCap: { setting: 50, since: 1 } } };
       state.air = 55;
       state.players.find((p) => p.id === 'ai0')!.carriedMule = 'alloy';
-      return draftMulePick({ state, seat: 'ai0', mind, seed: 1, phase: 'development' }, 0, undefined, null);
+      return state;
     };
-    // The case: Energy installs are allowed, so the rule is live and rules out "Keep the cash".
-    expect(decide(false, true).all.some((c) => c.action.kind === 'install' && c.action.outfit === 'energy' && !c.veto)).toBe(true);
+    const pick = (energyFirst: boolean) => {
+      STRATEGIST.energyFirst = energyFirst;
+      return draftMulePick({ state: capped(), seat: 'ai0', mind, seed: 1, phase: 'development' }, 0, undefined, null);
+    };
+    // The case, on the same state: an Energy install is allowed, so the rule is live and rules out "Keep the cash".
+    STRATEGIST.energyFirst = true;
+    const { all } = developDecision(observe(capped(), 'ai0'), mind, 0);
+    expect(all.some((c) => c.action.kind === 'install' && c.action.outfit === 'energy' && !c.veto)).toBe(true);
+    expect(all.find((c) => c.action.kind === 'stop')!.veto).toBe('no Energy plant of my own yet');
 
     expect(pick(true)).toEqual({ kind: 'stop' });
     expect(pick(false)).toEqual({ kind: 'stop' });
