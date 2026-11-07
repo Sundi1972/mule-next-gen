@@ -11,7 +11,7 @@ S4-C1+; rules S4-RULE-1+; constraints S4-HC-n; ACs S4-B-AC-n / S4-T-AC-n.
 **Binding inputs (WS7, 7 Nov):** the frozen contract types for slices 3-5 (`SabotageTarget`, `SabotageOrder`,
 `Politics.sabotage` as the whole game's orders, `Politics.guards`, `captureOdds`, the HC-4 observe rule) and slice
 3's spec (`docs/specs/2026-11-07-ws7-slice3-deals.md` on `ws7-slice3-deals` @ 8ebc6857: `diplomacy.ts`'s
-`pactBreach`, `pactBetween`, `sabotagePossible`, `moveReputation`, `RepCause`). This spec adopts them as written,
+`pactBreach`, `pactBetween`, `sabotagePossible`, `reputationReasons`; reputation through `reputationShift`). This spec adopts them as written,
 and §3 lists the few additive fields it asks for.
 
 ---
@@ -97,8 +97,8 @@ half-day contract commit (§12). The thin baseline is about 3 PRs (§0.1).
 ban as the fifth law.** Orders are secret and resolve when production starts, in a new
 `packages/engine/src/sabotage.ts` (already a WS7 path in SEAMS). The effect rides the existing event pipeline
 (a power cut is a production event that takes the plot's output to 0, as a flood does), so the production
-show, the per-plot lines and the TV event layer carry it. Captures move reputation through slice 3's
-`moveReputation` (diplomacy.ts, designed; cause `'caught'`) and call its `pactBreach`. Fines move through
+show, the per-plot lines and the TV event layer carry it. Captures move reputation through
+`politics.ts::reputationShift` (the only writer, as slice 3 keeps it) and call slice 3's `pactBreach`. Fines move through
 `colony.ts`'s fund. AI seats act through two new hands called from `VoteHand`'s
 planning step. About 9 PRs.
 
@@ -297,16 +297,17 @@ depends_on   S4-C2 (data: worked rumours)
 S4-C4 · ADDED · a revealed saboteur loses reputation, breaks pacts and opens a case
 
 today        reputationShift moves a player's reputation within POLITICS.reputation (used by the blamed-for-
-             unrest event). Slice 3 (designed, ws7-slice3-deals @ 8ebc6857) wraps it in diplomacy.ts's
-             moveReputation(state, id, delta, cause, withId?, cardId?) as the only caller, adds pacts with
-             pactBreach / pactBetween, and a sabotagePossible(state) that returns false until this slice.
+             unrest event). Slice 3 (designed, ws7-slice3-deals @ e6cc7850) keeps reputationShift as the only writer, adds
+             pacts with pactBreach / pactBetween, a sabotagePossible(state) that returns false until this slice,
+             and reputationReasons(state, playerId), the chip's public reasons.
              anchors: packages/engine/src/politics.ts::reputationShift, ::voteWeight
              verified_by: read (trunk); slice 3's spec §3 (designed, not built)
 tomorrow     MUST, at every attribution (guarded, caught on the spot, or revealed by an investigation): set
-             culpritPublic, move the culprit's reputation by moveReputation(state, culprit,
-             POLITICS.reputation.moves.caught × the ban's multiplier, 'caught', victim), and, when there is a
-             victim, call pactBreach(state, culprit, victim, order.month) (S4-RULE-5). MUST add 'caught' to
-             RepCause and POLITICS.reputation.moves. MUST replace sabotagePossible's body (S4-RULE-5).
+             culpritPublic, move the culprit's reputation by reputationShift(state, culprit,
+             POLITICS.reputation.moves.caught × the ban's multiplier), and, when there is a victim, call
+             pactBreach(state, culprit, victim, order.month) (S4-RULE-5). MUST add caught to
+             POLITICS.reputation.moves, and a { kind: 'caught'; month } member to slice 3's reputationReasons
+             (a public, attributed order is a reason). MUST replace sabotagePossible's body (S4-RULE-5).
 logic        → §2 S4-RULE-5 · evaluated at resolution and at an investigation
 seam         the new sabotage.ts's private reveal(), the one place every reveal goes through
 senior       junior would: apply the reputation loss in three places (production, investigation, the view)
@@ -314,8 +315,8 @@ senior       junior would: apply the reputation loss in three places (production
              same, and slice 3's hook has one caller
 mechanism    sprout
 call sites   resolveSabotage, investigate
-depends_on   S4-C2 · slice 3's diplomacy.ts (moveReputation, pactBreach; contract, stubbable if slice 3's
-             engine PR lands later: pactBreach returns false, moveReputation calls reputationShift)
+depends_on   S4-C2 · slice 3's diplomacy.ts (pactBreach, reputationReasons; contract, stubbable if slice 3's
+             engine PR lands later: pactBreach returns false)
 ```
 
 ```
@@ -740,7 +741,7 @@ S4-RULE-5 · An attribution                                          shape: sequ
 
 on every attribution (guarded, caught on the spot, or revealed by an investigation), in this order:
   1  culpritPublic = true (on the spot, outcome 'caught'; an investigation leaves the outcome 'done')
-  2  moveReputation(state, culprit, POLITICS.reputation.moves.caught × multiplier, 'caught', victim)
+  2  reputationShift(state, culprit, POLITICS.reputation.moves.caught × multiplier)
      (slice 3's only writer; multiplier = the ban's setting in force now, else 1)
   3  victim ≠ null → pactBreach(state, culprit, victim, order.month)  (slice 3, S3-RULE-5: breaks a pact
      that bound in the order's month, once per card; −20 pactBroken on top, so −30 in all)
@@ -1016,7 +1017,7 @@ export interface SabotageFine { base: number; due: number; paid: number; toVicti
 // the posted price before each shift, so endRumours restores it exactly (a ratio cannot invert the rounding).
 // A void order is removed from Politics.sabotage, so no 'void' outcome is needed.
 
-// RepCause (slice 3) gains: | 'caught'          POLITICS.reputation.moves gains: caught: -10
+// slice 3's reputationReasons gains: | { kind: 'caught'; month: number }   POLITICS.reputation.moves gains: caught: -10
 // LawId gains:     | 'sabotageBan'
 // EventKey gains:  | 'powerCut' | 'marketRumour'      EventKind gains: | 'sabotage'
 // MonthEvent gains: sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean }
@@ -1037,7 +1038,7 @@ MonthEvent[]` · `applyRumours(state): void` · `endRumours(state): void` · `se
 `isPublicOrder(order): boolean` (S4-RULE-3's public).
 `events.ts` (WS1) exports `storeEvent(state, key, phase, player?)` (today's private `offMapAtStore`).
 `diplomacy.ts` (slice 3, WS7): this slice replaces `sabotagePossible`'s body (S4-RULE-5) and calls
-`moveReputation` and `pactBreach`; `pactBetween` feeds the order screen's warning and captureCost.
+`reputationShift` and `pactBreach`; `pactBetween` feeds the order screen's warning and captureCost.
 
 **Slice 5's input (named here; slice 5 provides it):** `securitySpend(state: GameState): number`, the credits
 on the Security line this month (the frozen Budget has a 'security' line that joins after RC). Slice 5
@@ -1168,7 +1169,7 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-T-AC-1 (serves S4-B-AC-6) | S4-RULE-2's eight rows, each verdict and message | S4-C1 | engine test | — |
 | S4-T-AC-2 (serves S4-B-AC-1, S4-B-AC-2) | S4-RULE-3's six rows; both draws are made for every non-void order whatever the guard | S4-C2 | engine test, seeded | — |
 | S4-T-AC-3 (serves S4-B-AC-2) | the cut's part is the plot line's last (why 'event', event 'powerCut'); the plot's runMonths still counts | S4-C2 | the production line | — |
-| S4-T-AC-4 (serves S4-B-AC-1, S4-B-AC-8) | S4-RULE-5's order: moveReputation(culprit, caught × multiplier, 'caught', victim), then pactBreach called once with (culprit, victim, order.month), not for a rumour; an investigation months later still calls pactBreach with the order's month; sabotagePossible is true exactly when politics and POLITICS.sabotage.on | S4-C4 | engine test with a spy hook | — |
+| S4-T-AC-4 (serves S4-B-AC-1, S4-B-AC-8) | S4-RULE-5's order: reputationShift(culprit, caught × multiplier), then pactBreach called once with (culprit, victim, order.month), not for a rumour; an investigation months later still calls pactBreach with the order's month; sabotagePossible is true exactly when politics and POLITICS.sabotage.on | S4-C4 | engine test with a spy hook | — |
 | S4-T-AC-5 (serves S4-B-AC-3, S4-B-AC-4) | S4-RULE-6, -7, -8 rows; the standard fine at planning's end and at the last upkeep; a short culprit pays what they have; fines never enter treasury.paid | S4-C5 S4-C8 | engine test | — |
 | S4-T-AC-6 (serves S4-B-AC-5) | after endRumours every posted price equals postPrices's; two opposite rumours cancel | S4-C3 | engine test | — |
 | S4-T-AC-7 (serves S4-B-AC-6) | observe() for each seat follows S4-RULE-12's observe column | S4-C9 | engine test | — |
@@ -1332,7 +1333,7 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 
 | PR | Owner | Days | Starts after | Contents |
 |---|---|---|---|---|
-| PR-0 contract | WS3 + WS7 | 0.5 | — | S4-C20: types (frozen + §3's additions), protocol, isIntent, NoticeEntry, config, sabotage.ts stubs; stubs for slice 3's pactBreach / pactBetween / moveReputation and slice 5's securitySpend under their own names, only where those slices have not landed |
+| PR-0 contract | WS3 + WS7 | 0.5 | — | S4-C20: types (frozen + §3's additions), protocol, isIntent, NoticeEntry, config, sabotage.ts stubs; stubs for slice 3's pactBreach / pactBetween and slice 5's securitySpend under their own names, only where those slices have not landed |
 | PR-1 engine | WS7 (+ WS3/WS1 named edits) | 2 | PR-0 | S4-C1..C8 + game.ts, production.ts, events.ts lines |
 | PR-2 observe | WS1 | 0.5 | PR-0 | S4-C9 |
 | PR-3 values + sim | WS1 | 2 | PR-0 (rows need PR-1, PR-4) | S4-C11, S4-C12 |

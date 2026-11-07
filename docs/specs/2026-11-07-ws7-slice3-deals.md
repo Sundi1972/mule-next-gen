@@ -99,7 +99,7 @@ tab, at most five sections per phone screen, an action starts where its target i
 | The ballot opens and Lena holds a vote promise | Lena: "You promised Brix your vote", Brix preselected; she still casts | nothing | nothing |
 | The result shows: Lena **kept** it | Lena's chip +3 beside her name everywhere; My cards: kept | the chip change only | the chip change on the players strip |
 | The result shows: Lena **broke** it | Lena's chip −10; My cards: broken | the chip change and the broken card in public: "Lena broke her promise to Brix: to vote for Brix" | a break banner and the news line (P5) |
-| Lena is caught sabotaging Brix during a pact (slice 4) | "Caught!" adds "… and broke her pact with Brix"; her chip −20 | same | same |
+| Lena is caught sabotaging Brix during a pact (slice 4) | "Caught!" adds "… and broke her pact with Brix"; her chip −30 (−10 caught, slice 4; −20 pactBroken) | same | same |
 | A pact runs out unbroken | both: "Pact kept", +3 each (only where sabotage is on) | the chip change | the chip change |
 | Every moment | a reputation chip beside every player's name: phone standings, hub names, TV players strip (P4); tapping it lists the public reasons (broken cards, unrest) | same | same |
 | The month end | — | the month's broken cards | the same on the TV's month end |
@@ -892,7 +892,7 @@ monthEndDeals(state, gameOver: boolean): void                             // gam
 pactBreach(state, saboteurId: string, victimId: string, sabotageMonth: number): boolean   // slice 4 calls it
 pactBetween(state, a: string, b: string, month?: number): DealCard | null
 sabotagePossible(state): boolean                                          // false until slice 4
-reputationReasons(state, playerId: string): ({ kind: 'broken'; card: DealCard } | { kind: 'unrest'; month: number })[]
+reputationReasons(state, playerId: string): ({ kind: 'broken'; card: DealCard } | { kind: 'unrest'; month: number } | { kind: 'caught'; month: number })[]   // 'caught': slice 4
 ```
 
 ```ts
@@ -913,7 +913,7 @@ PoliticsView +=
   /** Every broken card of the game, newest first: public (partyTo). Optional only for older fixtures. */
   brokenDeals?: DealCard[];
   /** Per player, the public reasons their reputation moved (reputationReasons), for the chip's tap. Optional only for older fixtures. */
-  reputationReasons?: Record<string, ({ kind: 'broken'; id: string } | { kind: 'unrest'; month: number })[]>;
+  reputationReasons?: Record<string, ({ kind: 'broken'; id: string } | { kind: 'unrest'; month: number } | { kind: 'caught'; month: number })[]>;   // 'caught': slice 4
 
 MyView +=
   /** This player's own cards; null with politics off. Optional only for older fixtures: the server always sends it. */
