@@ -335,6 +335,8 @@ export interface MonthEvent {
   effects?: EventEffect[];
   /** The colony's objects it damaged (a riot); absent when it damaged none. */
   objects?: { id: PrestigeId; becomes: 'damaged' }[];
+  /** A sabotage order's effect (slice 4): the culprit only if attributed by then; a later investigation does not rewrite it. */
+  sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean };
 }
 
 export interface EventWarning {
@@ -408,7 +410,7 @@ export interface GameState {
 /** Where money comes into the colony fund from. */
 export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
 /** What the colony fund pays out for. */
-export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay';
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'welfare' | 'security';
 
 /** One month's money into and out of the colony fund. */
 export interface FundLedger {
@@ -448,6 +450,8 @@ export interface Colony {
   happiness: number;
   /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
   strike: Strike | null;
+  /** This month's Welfare payment (slice 5): who got it and how much; null when none. */
+  welfare: { month: number; to: string; paid: number } | null;
 }
 
 /** The colony's mood band, from happiness. See G-5 RULE-20. */
@@ -550,6 +554,140 @@ export interface Politics {
   laws: Partial<Record<LawId, { setting: number; since: number }>>;
   /** The month each failed proposal failed, by `kind:law`: it may not come back for POLITICS.council.retryMonths. */
   failed: Record<string, number>;
+  /** Every deal card of the game, settled ones too (slice 3). A seat sees the cards it is party to, and broken ones. */
+  deals: DealCard[];
+  /** Every sabotage order of the game (slice 4). A seat sees its own, and caught or revealed ones. */
+  sabotage: SabotageOrder[];
+  /** This month's guarded tiles (slice 4). Only the Sheriff sees them. */
+  guards: number[];
+  /** This auction's worked rumours (slice 4): each good's posted price before its shift, so the auction's end restores it exactly. */
+  rumoured: { good: Good; from: number }[];
+  /** The colony budget in force (slice 5); null means POLITICS.budget.default. */
+  budget: Budget | null;
+  /** The budget when this month's planning opened: an overrule restores it, as taxAtStart does the tax. */
+  budgetAtStart: Budget | null;
+  /** This month's overrule or no-confidence vote (slice 5); null in a month without one. */
+  overrule: Overrule | null;
+  /** Tax and budget overrules passed since termStart. */
+  overruled: number;
+  /** The month a snap election falls in, or null. */
+  snapMonth: number | null;
+  /** This term's Sheriff inquiry into the Governor, or null. */
+  inquiry: { term: number; record: InquiryRecord; finding: boolean } | null;
+}
+
+/** What a deal card binds (slice 3). A card moves nothing of value (HC-3). */
+export type DealTerms =
+  /** Mutual: neither party sabotages the other while it binds. */
+  | { kind: 'pact' }
+  /** `from` votes for `candidate` in the next election for `office`. */
+  | { kind: 'vote'; office: Office; candidate: string }
+  /** `from` votes yes or no on the next law ballot. */
+  | { kind: 'vote'; law: true; yes: boolean };
+
+/** A deal card between two players (slice 3). */
+export interface DealCard {
+  /** 'deal-<n>', from a counter in state, so a replay makes the same ids. */
+  id: string;
+  /** The proposer. */
+  from: string;
+  /** The receiver. */
+  to: string;
+  terms: DealTerms;
+  /** Month offered. */
+  offered: number;
+  /** Last month it binds, inclusive. */
+  until: number;
+  status: 'offered' | 'active' | 'declined' | 'withdrawn' | 'expired' | 'kept' | 'broken';
+  brokenBy: string | null;
+  /** Month it was kept, broken, declined, withdrawn or expired; null while offered or active. */
+  settled: number | null;
+}
+
+/** An offer as a phone or a hand sends it: the terms, and for a pact its months (one of POLITICS.deals.pactMonths). */
+export interface DealOffer {
+  to: string;
+  terms: DealTerms;
+  months?: number;
+}
+
+/** What a sabotage order aims at (slice 4). */
+export type SabotageTarget =
+  /** The victim is the tile's owner when the order resolves. */
+  | { kind: 'powerCut'; tile: number }
+  | { kind: 'rumour'; good: Good; dir: 'up' | 'down' };
+
+/** One player's sabotage order (slice 4). */
+export interface SabotageOrder {
+  /** 'sab-<n>'. */
+  id: string;
+  /** The orderer. Engine state always holds it; only observe() sets null, on another seat's order whose culprit is not public. */
+  by: string | null;
+  month: number;
+  target: SabotageTarget;
+  cost: number;
+  outcome: 'pending' | 'done' | 'failed' | 'caught';
+  /** True once caught, or once an investigation reveals the culprit. */
+  culpritPublic: boolean;
+  /** Set when it resolves: the tile's owner then; null for a rumour, and while pending. */
+  victim?: string | null;
+  /** Set when it resolves: whether the effect happened. */
+  worked?: boolean | null;
+  /** The month the Sheriff investigated it; null if never. */
+  investigated?: number | null;
+  /** The fine levied on it, once. */
+  fine?: SabotageFine | null;
+}
+
+/** A fine the Sheriff (or the standard fine) levied on a sabotage order's culprit (slice 4). */
+export interface SabotageFine {
+  base: number;
+  due: number;
+  paid: number;
+  toVictim: number;
+  by: 'sheriff' | 'standard';
+  month: number;
+}
+
+/** A line of the colony budget (slice 5). */
+export type BudgetLine = 'projects' | 'welfare' | 'security';
+
+/** How the Governor shares out the fund above COLONY.reserve (slice 5). */
+export interface Budget {
+  month: number;
+  /** The Governor, or null for the default. */
+  setBy: string | null;
+  /** Whole percent per line; the sum is at most 100, and the rest stays in the fund. */
+  shares: Record<BudgetLine, number>;
+}
+
+/** What a vote of this kind can undo; 'confidence' is the Sheriff's inquiry's no-confidence motion. */
+export type OverruleTarget = 'tax' | 'budget' | 'confidence';
+/** Why a player may not call an overrule on a target now. */
+export type OverruleWhy = 'politicsOff' | 'notNow' | 'noGovernor' | 'governor' | 'called' | 'notYet' | 'sheriffOnly' | 'unchanged';
+
+/** This month's overrule or no-confidence motion: called in planning, voted as planning ends, revealed, over (slice 5). */
+export interface Overrule {
+  month: number;
+  target: OverruleTarget;
+  caller: string;
+  stage: 'called' | 'ballot' | 'reveal' | 'over';
+  /** Ms of the reveal shown; 0 until it starts. */
+  clockMs: number;
+  /** Secret: each voter's yes (undo it) or no. Only the voter may see their own. */
+  ballots: Record<string, boolean>;
+  done: string[];
+  /** Fixed when the ballot closes. */
+  result: { passed: boolean; yes: number; no: number; total: number; needed: number } | null;
+}
+
+/** The Governor's public record for the term, as the inquiry reads it (slice 5). */
+export interface InquiryRecord {
+  /** Months a tax promise was broken. */
+  brokenPromises: number[];
+  /** Broken DealCard ids. */
+  brokenDeals: string[];
+  overruled: number;
 }
 
 export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap';

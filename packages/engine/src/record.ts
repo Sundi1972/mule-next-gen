@@ -1,6 +1,6 @@
 /** A game's record: every input it read, in order, so the server can replay it exactly. Types and pure helpers only. */
 import * as config from './config.js';
-import type { AuctionSide, Good, Phase } from './types.js';
+import type { AuctionSide, DealCard, Good, Phase, SabotageTarget } from './types.js';
 import type { Playbook, PlayerId, PlotIndex, Strategy } from './playbook.js';
 
 /** Claude's answer as play used it: the structural subset of @mule/ai's Choice. */
@@ -46,6 +46,14 @@ export type NoticeEntry = { type: 'notice'; at: number; seq: number; month: numb
   | { kind: 'declare'; seat: PlayerId; good: Good; side: AuctionSide }
   | { kind: 'trade'; good: Good; buyer: PlayerId | 'store' | 'ship'; seller: PlayerId | 'store'; price: number; qty: number }
   | { kind: 'sale'; item: 'plot' | 'mule'; plot: PlotIndex; seller: PlayerId; buyer: PlayerId | 'store'; price: number }
+  /** A deal card changed status (politics slice 3). `parties` on every event but 'broken', which is public; a consumer skips a notice whose parties exclude its seat. */
+  | { kind: 'deal'; event: DealCard['status']; deal: DealCard; parties?: [PlayerId, PlayerId] }
+  /** A sabotage order resolved (slice 4): public with culprit null unless culpritPublic for a done or caught order; private, parties [by], for the orderer's own failed or void order. */
+  | { kind: 'sabotage'; order: string; target: SabotageTarget['kind']; victim: PlayerId | null; outcome: 'done' | 'failed' | 'caught' | 'void'; culprit: PlayerId | null; parties?: [PlayerId] }
+  /** The Sheriff investigated an order (slice 4): public. */
+  | { kind: 'investigation'; order: string; solved: boolean; culprit: PlayerId | null }
+  /** A fine on an order's culprit (slice 4): public. */
+  | { kind: 'fine'; order: string; culprit: PlayerId; due: number; paid: number; toVictim: number }
 );
 
 /** As frozen in playbook schema v1. */
