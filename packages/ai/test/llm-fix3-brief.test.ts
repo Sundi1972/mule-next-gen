@@ -211,7 +211,9 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     expect(rookieText).toContain('I own a Food plot and an Energy plot');
     state.tiles[plots[1]!]!.outfit = 'smithore';
     state.tiles[plots[0]!]!.outfit = 'smithore';
-    expect(land(state)).not.toContain('I still buy my Food and Energy');
+    const noFarm = landBrief(state, rookie, PERSONAS.trader, draft, []).text;
+    expect(noFarm).not.toContain('I still buy my Food and Energy');
+    expect(noFarm).toContain('I lack a Food plot or an Energy plot');
   });
 
   it('B fix 3: the development brief, asked at no point in play, is unchanged by these lines', () => {

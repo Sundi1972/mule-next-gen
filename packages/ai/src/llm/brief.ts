@@ -5,6 +5,7 @@ import {
   corralTarget,
   emptyStock,
   energyUseOf,
+  EVENTS,
   GOODS,
   isFactory,
   monthNeeds,
@@ -262,25 +263,26 @@ function plotOutputLines(obs: GameState, me: PlayerId): string[] {
 }
 
 /**
- * Food and Energy in units: what the seat holds and its own plots made at the last production (a plant's output net of
- * its own use, each plant charged min(made, use) as runProduction charges it: lastSupply), against what the engine says it burns (monthNeeds): its household's
- * Food at upkeep, its plots' and works' Energy at production. What the plots make counts where it comes before the
- * burn: Energy always (plants run first in production); Food only before production (the land brief, at upkeep), since
- * after it (the auction brief) this month's Food is in what the seat holds, and upkeep eats next.
- */
-/**
  * What the seat's own plots supplied of a good at the last production: for Energy, what its plants made less what they
- * paid for their own use, each charged min(made, use) from its line, as runProduction charges it (outlook.ts produce).
+ * paid for their own use. Each plant pays min(made, use) from its line, its use times the cold snap's factor when one
+ * struck that production, as runProduction charges it (outlook.ts produce).
  */
 function lastSupply(obs: GameState, me: PlayerId, made: Stock, good: 'food' | 'energy'): number {
   if (good !== 'energy') return made[good];
-  const lines = obs.history.at(-1)?.lines ?? [];
-  const paid = lines
+  const last = obs.history.at(-1);
+  const cold = last?.events?.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
+  const paid = (last?.lines ?? [])
     .filter((l) => l.good === 'energy' && obs.tiles[l.tile]?.owner === me)
-    .reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(obs, obs.tiles[l.tile]!)), 0);
+    .reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(obs, obs.tiles[l.tile]!) * cold), 0);
   return Math.max(0, made.energy - paid);
 }
 
+/**
+ * Food and Energy in units: what the seat holds and its own plots made at the last production (a plant's output net of
+ * its own use: lastSupply), against what the engine says it burns (monthNeeds): its household's Food at upkeep, its plots' and works' Energy at production. What the plots make counts where it comes before the
+ * burn: Energy always (plants run first in production); Food only before production (the land brief, at upkeep), since
+ * after it (the auction brief) this month's Food is in what the seat holds, and upkeep eats next.
+ */
 function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): string {
   const p = obs.players.find((q) => q.id === me)!;
   const made = obs.history.at(-1)?.produced[me] ?? emptyStock();
@@ -318,14 +320,16 @@ function muleLine(obs: GameState, me: PlayerId): string {
 const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), ''];
 
 /**
- * The land plans' "Feeds me" reason counts plots, not units (strategist.ts landDecision: a Food plot and an Energy plot
- * owned). The brief says what it counted, so it never claims a coverage the units line contradicts (B fix 3).
+ * The land plans' "Feeds me" reason, for a level without a look-ahead, counts plots, not units (strategist.ts
+ * landDecision: a Food plot and an Energy plot owned). The brief says what it counted, so it never claims a coverage the
+ * units line contradicts (B fix 3). A level that looks ahead counts units, so its words stand.
  */
 const FEEDS_ME: readonly [string, string][] = [
   ['my Food and Energy are covered', 'I own a Food plot and an Energy plot'],
   ['I still buy my Food and Energy', 'I lack a Food plot or an Energy plot'],
 ];
-const plotsCounted = (line: string) => FEEDS_ME.reduce((l, [said, counted]) => l.replace(said, counted), line);
+const plotsCounted = (mind: Mind, line: string) =>
+  mind.level.lookAhead ? line : FEEDS_ME.reduce((l, [said, counted]) => l.replace(said, counted), line);
 
 const valueText = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -426,7 +430,7 @@ export function landBrief(
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
     'Land plans for this month, best first:',
-    ...options.map((o, i) => `${plotsCounted(optionLine(o))}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText)}`),
+    ...options.map((o, i) => `${plotsCounted(mind, optionLine(o))}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText)}`),
     '',
     'Your draft land grant:',
     ...draftLines(draft.landGrant),
