@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PERSONAS, createGame, GROWN_BASE, observe, PRICE, STRATEGIST, type GameState, type Outfit, type Tile } from '@mule/engine';
+import { advancePhase, AI_PERSONAS, createGame, GROWN_BASE, observe, storeSellAt, STRATEGIST, type GameState, type Outfit, type Tile } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { landDecision } from '../src/strategist.js';
@@ -51,7 +51,8 @@ describe('AM-17, ruling A: the AI counts a plant net', () => {
 
     // One unit, at the store's ask capped at a few times its reference price, times the persona's reserve weight.
     const store = short.state.store;
-    const unit = Math.min(store.posted.energy * (1 + PRICE.storeSpread), store.refPrice.energy * STRATEGIST.reservePriceCap) * AI_PERSONAS.cautious.reserve;
+    const ask = storeSellAt(short.state, 'energy', store.posted.energy, { exact: true });
+    const unit = Math.min(ask, store.refPrice.energy * STRATEGIST.reservePriceCap) * AI_PERSONAS.cautious.reserve;
     expect(Math.abs(diff - unit)).toBeLessThanOrEqual(1);
   });
 

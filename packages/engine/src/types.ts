@@ -172,6 +172,26 @@ export interface Store {
   refPrice: Stock;
   /** Off-world price for each good: what the export ship pays for its first unit. */
   offWorld: Stock;
+  /**
+   * What each good's walk this month taught the store, read when it next posts prices. Optional, so records saved
+   * before it existed still load.
+   */
+  lastWalk?: Partial<Record<Good, WalkLesson>>;
+  /** The band each good was posted in this month, which sets its spread; a good without one is normal, so older records load. */
+  band?: Partial<Record<Good, PriceBand>>;
+}
+
+/** How short the colony is of a good when its price is posted (pricing RULE-6); off-world is a good only export buyers want. */
+export type PriceBand = 'offWorld' | 'normal' | 'tight' | 'short' | 'severe';
+
+/** One good's walk, as the store's next prices read it (pricing spec §3). */
+export interface WalkLesson {
+  /** The highest price paid between players while the store had none for sale, or null. */
+  soldOutHigh: number | null;
+  /** The highest price a unit traded at between players, or null when none traded. */
+  highTrade: number | null;
+  /** True when the store wanted the good as it came up and wanted no more when its walk finished. */
+  dryBudget: boolean;
 }
 
 /** The colony government's money, filled only by taxes, fines and donations. */
@@ -222,6 +242,11 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
+  /**
+   * The colonists' meal at this upkeep (needs C1, RULE-1): how many ate, before the month's growth, and of Food and of
+   * Water their need and what they took, unrounded. Absent in older reports.
+   */
+  colonistMeal?: { colonists: number; food: { need: number; took: number }; water: { need: number; took: number } };
   /** The production events that fired this month, in the order they fired. Absent in older reports. */
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
