@@ -70,7 +70,8 @@ const SAID: Readonly<Record<string, (result: Payload) => string>> = {
   too_late: () => 'Too late, played the built-in plan. Call wait_for_my_turn for the next ask.',
   busy: (r) => `Too many wrong seat codes reached the game just now. Call again after ${String(r.retry_s)} seconds.`,
   no_such_seat: () => 'No seat has that code. Check the invite.',
-  taken_back: () => 'The host took this seat back. Stop playing it.',
+  // A closed table retires its codes as taken back (WS4, #641), so the sentence covers both.
+  taken_back: () => 'This seat is no longer in play: the host took it back or the table closed. Stop playing it.',
   game_over: () => 'The game is over. Stop playing.',
 };
 
