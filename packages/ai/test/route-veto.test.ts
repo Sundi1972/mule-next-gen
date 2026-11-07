@@ -55,6 +55,15 @@ describe('unreachablePlot: a lake plot no shore reaches can never get a MULE', (
     expect(unreachablePlot(state, tileIndex(state.width, 10, 0))).toBe(true);
     expect(unreachablePlot(state, tileIndex(state.width, 10, 1))).toBe(false);
   });
+
+  it("a lake plot nobody holds, judged for a seat: whose only shore is that seat's own land (seed 4, plot 25), unreachable for it and reachable for another", () => {
+    const state = development(4);
+    const plot = tileIndex(state.width, 10, 1);
+    own(state, 9, 2);
+    expect(state.tiles[plot]!.owner).toBeNull();
+    expect(unreachablePlot(state, plot, simFloorConfig(), ME), 'for ai0').toBe(true);
+    expect(unreachablePlot(state, plot, simFloorConfig(), 'ai1'), 'for ai1').toBe(false);
+  });
 });
 
 /** ai0's floor walk from where it stands at the start of development, with `left` seconds on the clock. */
