@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, createGame, observe, STRATEGIST, type GameState, type Tile } from '@mule/engine';
+import { draftMulePick } from '../src/playbook/draft.js';
 import { developDecision } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
 
@@ -71,5 +72,21 @@ describe('STRATEGIST.energyFirst: a seat with no Energy plant installs one first
     };
 
     expect(run(true)).toEqual(run(false));
+  });
+
+  it("on, leading a fitted MULE none of its plots may take (a smelter under an emission cap the air is over): the pick is 'stop', never an empty shortlist", () => {
+    const pick = (energyFirst: boolean) => {
+      STRATEGIST.energyFirst = energyFirst;
+      const state = game(false);
+      state.politics = { ...state.politics!, laws: { emissionCap: { setting: 50, since: 1 } } };
+      state.air = 55;
+      state.players.find((p) => p.id === 'ai0')!.carriedMule = 'alloy';
+      return draftMulePick({ state, seat: 'ai0', mind, seed: 1, phase: 'development' }, 0, undefined, null);
+    };
+    // The case: Energy installs are allowed, so the rule is live and rules out "Keep the cash".
+    expect(decide(false, true).all.some((c) => c.action.kind === 'install' && c.action.outfit === 'energy' && !c.veto)).toBe(true);
+
+    expect(pick(true)).toEqual({ kind: 'stop' });
+    expect(pick(false)).toEqual({ kind: 'stop' });
   });
 });
