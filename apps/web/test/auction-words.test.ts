@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { shipWants, ShipWants, storeWords, TvReadout, walkHint } from '../src/components/AuctionParts';
 
-const view = { players: [{ id: 'lena', name: 'Lena' }, { id: 'acc', name: 'The Accountant' }, { id: 'kai', name: 'Kai' }] } as unknown as MuleView;
+const view = { players: [{ id: 'lena', name: 'Lena', slot: 0 }, { id: 'acc', name: 'The Accountant', slot: 1 }, { id: 'kai', name: 'Kai', slot: 2 }] } as unknown as MuleView;
 
 const walker = (id: string, side: WalkerView['side'], price: number, units = 3): WalkerView => ({ id, side, price, at: price, dir: 0, done: false, units });
 
@@ -183,7 +183,31 @@ describe('a tie between the ship and the store goes to the ship, as the engine s
   it("the TV's readout names the ship as the highest bid", () => {
     const a = auction({ good: 'crystite', storeBuys: 100, shipPays: 100, walkers: [walker('lena', 'seller', 150)] });
     const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: a }));
-    expect(html).toContain('100 · the ship');
-    expect(html).not.toContain('100 · the store');
+    const text = html.replace(/<[^>]+>/g, '');
+    expect(text).toContain('100 · ship');
+    expect(text).not.toContain('100 · store');
+  });
+});
+
+describe("the TV's readout, one line a value, as the couch reads it", () => {
+  /** Each value's words, and the label of each mark in it. */
+  const read = (a: AuctionView) =>
+    [...renderToStaticMarkup(createElement(TvReadout, { view, auction: a })).matchAll(/<dd[^>]*>(.*?)<\/dd>/g)].map((m) => ({
+      text: m[1]!.replace(/<[^>]+>/g, ''),
+      marks: [...m[1]!.matchAll(/role="img"[^>]*aria-label="([^"]+)"/g)].map((x) => x[1]),
+    }));
+
+  it("a player's value leads with the price, then their mark, the creature the board draws, then their name", () => {
+    const [ask, bid] = read(auction({ walkers: [walker('acc', 'seller', 118), walker('lena', 'seller', 140), walker('kai', 'buyer', 131)], deals: [{ buyer: 'kai', seller: 'acc', price: 118, units: 12 }] }));
+    expect(ask).toEqual({ text: '118 · The Accountant', marks: ['The Accountant'] });
+    expect(bid).toEqual({ text: '131 · Kai', marks: ['Kai'] });
+  });
+
+  it('a house says its own short word, "store" or "ship", with no mark and no "the"', () => {
+    const [ask, bid] = read(auction({ storeSells: 60, storeForSale: 4, storeBuys: 40, shipPays: 50, walkers: [walker('lena', 'seller', 70)] }));
+    expect(ask).toEqual({ text: '60 · store', marks: [] });
+    expect(bid).toEqual({ text: '50 · ship', marks: [] });
+    const [, storeBid] = read(auction({ storeBuys: 40, walkers: [walker('lena', 'seller', 70)] }));
+    expect(storeBid).toEqual({ text: '40 · store', marks: [] });
   });
 });

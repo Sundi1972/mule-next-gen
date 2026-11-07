@@ -172,6 +172,19 @@ function bestBids(samples: Sample[]): Sample[] {
 
 const flushMoney = () => Object.fromEntries(AIS.map((a) => [a.id, FLUSH]));
 
+/** a3's money − reserve at the short table: over the plot's minimum, under a1's and a2's plotRoom (SHORT). */
+const A3_KEPT = 280;
+
+/**
+ * SHORT, with a3 (bare, so plotRoom keeps back one MULE) given A3_KEPT over its cash reserve and that MULE: its
+ * money − reserve is A3_KEPT whatever the store's prices make the reserve, so a1 and a2 bid past it and a3 presses to it.
+ */
+function shortMoney(seed: number): Record<string, number> {
+  const probe = landAuction(seed, { money: SHORT, keepBack: true, bare: ['a3'], glut: true });
+  const mind = probe.seats[2]!.mind;
+  return { ...SHORT, a3: A3_KEPT + cashReserve(observe(probe.state, mind.me), mind) - mulePriceFor(probe.state, 'a3') };
+}
+
 /** A MULE minimum just under the lowest MULE value at a flush table, so every AI bids and its value is the cap. */
 function flushMuleMin(seed: number): number {
   const { state, seats } = landAuction(seed, { money: flushMoney() });
@@ -187,7 +200,7 @@ describe('AI seats at the land auction', () => {
     for (const seed of SEEDS) {
       // Short of money, the plot's bidding stops at money − reserve for a3, which holds no idle plot, and at plotRoom
       // for the others, which keep back a MULE for their idle plot too.
-      const short = landAuction(seed, { money: SHORT, keepBack: true, bare: ['a3'], glut: true });
+      const short = landAuction(seed, { money: shortMoney(seed), keepBack: true, bare: ['a3'], glut: true });
       // Flush, with a MULE minimum just under every AI's MULE value, the MULE's bidding stops at its value.
       const flush = landAuction(seed, { money: flushMoney(), muleMin: flushMuleMin(seed) });
       for (const [table, kind] of [
@@ -205,7 +218,7 @@ describe('AI seats at the land auction', () => {
     // Two long ticks, then a short one: a leader that stood through a long tick may finish its walk on the short one.
     // The short table only: its limits are the ones in reach, and the long-tick rows below cover the rest.
     for (const seed of SEEDS) {
-      const { state, hands } = landAuction(seed, { money: SHORT, keepBack: true, bare: ['a3'], glut: true });
+      const { state, hands } = landAuction(seed, { money: shortMoney(seed), keepBack: true, bare: ['a3'], glut: true });
       for (const s of play(state, hands, [300, 300, 37]).samples) expect(s.price, `seed ${seed}, ${s.id} on ${s.lot.id}`).toBeLessThanOrEqual(Math.max(s.limit, s.lo));
     }
     expect(reserveCapped, 'in some short run an AI bid a plot up to money − reserve').toBeGreaterThan(0);

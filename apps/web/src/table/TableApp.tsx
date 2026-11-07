@@ -17,7 +17,7 @@ import {
   storeSellsWord,
   StoreBox,
   TvReadout,
-  TvSoldOutBox,
+  TvSoldOutRow,
   WaitingToPick,
   type DealRow,
 } from '../components/AuctionParts';
@@ -25,7 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
-import { Chip, claudeChip, isClaude } from '../components/ClaudeSeat';
+import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -33,7 +33,7 @@ import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, sec
 import { inCollapse, ordinal } from '../game/month-end';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { connectedIn, hostMayContinue, pickedIn, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
+import { claudeIn, connectedIn, hostMayContinue, pickedIn, pickedPlayers, ranOut, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
@@ -277,6 +277,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   else if (phase === 'production') side = <HarvestSide game={game} />;
   else {
     const connected = connectedIn(table.seats);
+    const claude = claudeIn(table.seats);
     const waiting = stillPlanning(game.players, connected);
     const host = game.players.find((p) => p.id === table.hostId);
     // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
@@ -304,7 +305,30 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? (p.isAi ? 'AI · READY' : 'READY') : p.isAi ? 'AI' : '…'}</span>} />
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
-            {readyRows(game.players, connected).map((row) => {
+            {readyRows(game.players, connected, claude).map((row) => {
+              if (row.kind === 'claude')
+                return (
+                  <li key={`claude-${row.status}`} className="flex items-center gap-3" data-testid={`tv-ready-claude-${row.status}`} data-count={row.seats.length}>
+                    <span aria-hidden className="w-9 shrink-0" />
+                    <span className="flex shrink-0 -space-x-1.5">
+                      {row.seats.map((s) => (
+                        <PlayerMark key={s.id} slot={toSlot(s.slot)} size={22} glow={row.status === 'thinking'} />
+                      ))}
+                    </span>
+                    {/* Beside the built-in note the names would keep only a few letters: the creatures say who. */}
+                    {playsBuiltIn(row.status) ? (
+                      <span className="flex-1" />
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate font-display text-xl font-semibold" data-testid="tv-ready-claude-names">
+                        {row.seats.map((s) => s.name).join(', ')}
+                      </span>
+                    )}
+                    {/* The note wraps under the words when the column is narrow (five seats at full size), never past its edge. */}
+                    <span className={cx('flex min-w-0 flex-wrap justify-end gap-x-2 font-mono text-sm', row.status === 'thinking' ? 'animate-pulse text-holo' : 'text-warn')}>
+                      {foldedClaudeWords(row.status, row.seats.length).map((w) => w && <span key={w} className="whitespace-nowrap">{w}</span>)}
+                    </span>
+                  </li>
+                );
               if (row.kind === 'ais')
                 return (
                   <li key="ais" className="flex items-center gap-3 opacity-60" data-testid="tv-ready-ais" data-count={row.seats.length}>
@@ -330,17 +354,30 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                   </li>
                 );
               const s = row.seat;
+              const status = claude(s.id);
               const isAway = !s.isAi && s.away;
-              const state = s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+              const state = status ? STATUS_CHIP[status] : s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+              // HC-3: a Claude seat is never waited for here; its status is a label, and only READY dims it.
+              const dim = status ? status === 'ready' : s.isAi || s.ready;
+              const tone = status === 'thinking' ? 'text-holo' : playsBuiltIn(status) || isAway ? 'text-warn' : status || s.ready || s.isAi ? 'text-ink-3' : 'text-holo';
               return (
-                <li key={s.id} className={cx('flex items-center gap-3', (s.isAi || s.ready) && 'opacity-60')}>
+                <li key={s.id} className={cx('flex items-center gap-3', dim && 'opacity-60')} data-testid={`tv-ready-${s.id}`}>
                   {/* Their place by Worth, the number everyone sees. */}
                   <span data-num className="w-9 shrink-0 font-mono text-sm text-ink-3" data-testid={`tv-rank-${s.id}`}>
                     {ordinal(places.get(s.id) ?? game.players.length)}
                   </span>
-                  <PlayerMark slot={toSlot(s.slot)} size={22} glow={!(s.isAi || s.ready)} />
-                  <span className="flex-1 truncate font-display text-xl font-semibold">{s.name}</span>
-                  <span className={cx('font-mono text-sm', isAway ? 'text-warn' : s.ready || s.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
+                  <PlayerMark slot={toSlot(s.slot)} size={22} glow={!dim} />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate font-display text-xl font-semibold" data-testid="tv-ready-name">
+                      {s.name}
+                      {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
+                    </span>
+                    {/* Under the name, not beside it: beside, it leaves the name a few letters. */}
+                    {playsBuiltIn(status) && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
+                  </span>
+                  <span className={cx('font-mono text-sm', tone, status === 'thinking' && 'animate-pulse')} data-testid={`tv-state-${s.id}`}>
+                    {state}
+                  </span>
                 </li>
               );
             })}
@@ -438,7 +475,7 @@ function MarketTiles({ game }: { game: MuleView }) {
         <div key={r.good} className="flex flex-col gap-1 bg-panel p-3">
           <GoodTag good={r.good} name />
           <span data-num className="font-mono text-3xl font-bold">
-            {r.price} <span className="text-base font-normal text-ink-3">cr</span>
+            {r.storeSells === null ? '—' : <>{r.storeSells} <span className="text-base font-normal text-ink-3">cr</span></>}
           </span>
           <span data-num className={cx('font-mono text-xs', r.cover < 0.5 ? 'text-alert' : r.cover < 1 ? 'text-warn' : 'text-ink-3')}>
             {r.cover >= 99 ? 'no demand' : `${r.cover} months cover`}
@@ -494,9 +531,10 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const ship = shipWants(game, auction);
   // The side pick has no clock (A-7): who has picked, who is still picking, and the host who can move on for them.
   const connected = connectedIn(table.seats);
-  const waiting = status ? stillPicking(game, connected) : [];
+  const waiting = status ? stillPicking(game, connected, claudeIn(table.seats)) : [];
+  const builtIn = ranOut(game);
   const host = game.players.find((p) => p.id === table.hostId);
-  const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
+  const picked = pickedPlayers(game.players, waiting);
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
       {/* The good leads the headline, its glyph first (Heiko, 5 Nov). */}
@@ -510,7 +548,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               <div className="flex shrink-0 items-center gap-4" data-testid="tv-pick-bar">
                 {/* The time bar's height, not ReadyCount's TV chip: a taller row pushes the ship panel off the screen. */}
                 <span className="flex h-8 shrink-0 items-center rounded-chip border border-holo-line bg-holo-soft px-4 font-mono text-2xl font-bold leading-none text-holo" data-testid="ready-count">
-                  {picked.filter((p) => p.isAi || p.ready).length} / {picked.length} PICKED
+                  {picked.filter((p) => p.ready).length} / {picked.length} PICKED
                 </span>
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="text-2xl leading-tight text-ink-2">
@@ -565,9 +603,11 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
           {/* The side fits its own height, so every running deal stays in sight (PM rulings 5 and 6 Nov): when the deals
               don't fit at full size the side is drawn smaller, never the board, which keeps one size as deals come and
               go. Size-contained, it takes the row's height and never sets it. */}
-          <FitHeight className="w-[300px] shrink-0 [contain:size]" innerClassName="gap-4" gives>
-            <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
-              <GoodTag good={auction.good} name className="text-2xl" />
+          <FitHeight className="w-[300px] shrink-0 [contain:size]" innerClassName={status ? 'gap-4' : 'gap-2'} gives>
+            {/* On the walk the header already names the good, its glyph first, so the box keeps the stage and the units
+                traded: one row when both fit, else two short lines. */}
+            <div className={cx('rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow', status ? 'flex flex-col gap-1' : 'flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1')} data-testid="tv-stage-box">
+              {status && <GoodTag good={auction.good} name className="text-2xl" />}
               <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')} data-testid="tv-stage">
                 {stageName}
               </span>
@@ -577,17 +617,42 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                 </span>
               )}
             </div>
-            {!status && stock === 0 && <TvSoldOutBox auction={auction} />}
             {status ? (
               <ul className="flex flex-col gap-2" data-testid="tv-picked">
                 {game.players.map((p) => {
                   const s = auction.walkers.find((w) => w.id === p.id)?.side;
-                  const done = p.isAi || pickedIn(game, p.id);
+                  const wait = waiting.find((w) => w.id === p.id && w.until !== undefined);
+                  const done = !wait && (p.isAi || pickedIn(game, p.id));
                   const away = !connected(p.id);
+                  const name = (
+                    <>
+                      <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} glow={!done} />
+                      <span className="min-w-0 flex-1 truncate font-display text-xl font-semibold" data-testid="tv-picked-name">
+                        {p.name}
+                      </span>
+                    </>
+                  );
+                  if (builtIn.has(p.id))
+                    return (
+                      <li key={p.id} className="flex flex-col opacity-60" data-testid={`tv-picked-${p.id}`}>
+                        <span className="flex items-center gap-3">{name}</span>
+                        <span className="flex flex-wrap items-baseline gap-x-2 pl-[34px] font-mono">
+                          <span className="text-base font-bold text-warn">CLAUDE · READY</span>
+                          <span className="text-sm text-ink-3">plays its built-in plan</span>
+                        </span>
+                      </li>
+                    );
+                  // In this 300 px column the countdown beside the name would leave the name no room: it goes under it.
+                  if (wait)
+                    return (
+                      <li key={p.id} className="flex flex-col" data-testid={`tv-picked-${p.id}`}>
+                        <span className="flex items-center gap-3">{name}</span>
+                        <ClaudeCountdownWord until={wait.until!} status={wait.status} className={cx('pl-[34px] font-mono text-base font-bold', playsBuiltIn(wait.status) ? 'text-warn' : 'text-holo')} />
+                      </li>
+                    );
                   return (
                     <li key={p.id} className="flex items-center gap-3" data-testid={`tv-picked-${p.id}`}>
-                      <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} glow={!done} />
-                      <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+                      {name}
                       <span className={cx('font-mono text-lg font-bold', !done ? (away ? 'text-warn' : 'text-holo') : s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
                         {!done ? (away ? 'AWAY · PICKING' : 'PICKING') : `${SIDE_WORD[s ?? 'pass'].toUpperCase()} ✓`}
                       </span>
@@ -620,6 +685,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                   <dt className="label-caps">Stock</dt>
                   <dd data-num className={cx('text-2xl font-bold', stock === 0 ? 'text-alert' : 'text-ink')}>{stock}</dd>
                 </div>
+                {stock === 0 && <TvSoldOutRow auction={auction} />}
               </dl>
             )}
             {auction.shipPays !== null && (
@@ -769,8 +835,9 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
             </MonthScoreColumn>
             <div className="flex flex-col gap-4">
               <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
-              <ColonyPanel view={game} density="tv" />
-              <BuildSite colony={game.colony} players={game.players} size="tv" />
+              <ColonyPanel view={game} density="tv" besideGauges />
+              {/* One line a project, so six seats fit TV-FIT's floor; the funding, pips and plaques are on the phones. */}
+              <BuildSite colony={game.colony} players={game.players} size="tv" compact />
             </div>
           </div>
         ) : (

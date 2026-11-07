@@ -603,6 +603,12 @@ export interface AuctionView {
   upNext: Good | null;
   /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
   receipt: GoodReceipt | null;
+  /**
+   * At the first good's side pick, each Claude seat it waits for, with the server time (epoch ms) the wait ends. A seat
+   * whose plan comes in time leaves the list; one whose wait ends without a plan stays with `builtin` for the rest of
+   * that side pick. Absent when nobody is listed.
+   */
+  waitingForClaude?: { seatId: string; until: number; builtin?: true }[];
   /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
   tally: number | null;
 }
@@ -784,6 +790,16 @@ export interface ProductionView {
   hurry?: ProductionHurryView | null;
 }
 
+/**
+ * The colonists' meal at a month end (needs C6): how many colonists ate, before the month changed their number, and of
+ * Food and of Water what they took of their need, in whole units as the month-end line shows them.
+ */
+export interface ColonistMealView {
+  colonists: number;
+  food: { took: number; need: number };
+  water: { took: number; need: number };
+}
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -808,10 +824,16 @@ export interface MuleView {
   /** The air at last month's end (upkeep), level and band as `air` showed them then; null in month 1. */
   lastAir: MuleView['air'] | null;
   /**
-   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when they
-   * went short, because the store ran out or its price was beyond their wages (the engine's colonistsHungry). Null otherwise.
+   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when the
+   * store ran out of their Food or Water (the engine's colonistsHungry). Null otherwise.
    */
   colonistsFed: boolean | null;
+  /**
+   * At the month end, as colonistsFed: how many colonists ate and, of Food and of Water, what they took of their need
+   * (needs C6). Whole units as the line shows them: need rounded up; took equal to it when they got it all, else
+   * rounded down. Null outside the month end or when the report has no meal; absent from an older server.
+   */
+  colonistMeal?: ColonistMealView | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };

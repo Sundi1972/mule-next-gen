@@ -1,4 +1,4 @@
-import type { Good, Outfit, Phase, Player } from './types.js';
+import type { Good, Office, Outfit, Phase, Player } from './types.js';
 
 /**
  * A seat's playbook: the plan the AI plays a phase by, in real time, without a model call. The engine always drafts a
@@ -102,6 +102,8 @@ export interface Playbook {
   landGrant?: LandGrantPlay;
   development?: DevelopmentPlay;
   auction?: Partial<Record<Good, GoodPlay>>;
+  /** The seat's own votes at the next ballots: a candidate per office, yes or no on the law. Absent, it votes by its keyless rule. */
+  politics?: { votes?: Partial<Record<Office, PlayerId>>; law?: boolean };
   /** Reserved for buying from the store outside the auction. */
   store?: never;
   /** Claude's notes on each rival; nothing plays from free text. */

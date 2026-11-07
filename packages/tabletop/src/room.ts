@@ -1,4 +1,4 @@
-import type { ChatMessage, ClientEnvelope, SeatKind, ServerEnvelope, TableView } from './protocol.js';
+import type { ChatMessage, ClaudeStatus, ClientEnvelope, SeatKind, ServerEnvelope, TableView } from './protocol.js';
 
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
@@ -93,6 +93,8 @@ export interface Game<Intent, GameView> {
   heard?(from: string, text: string, to?: string): void;
   /** The seat's screen was replaced by another device; drop any input the old screen was holding. Not a disconnect. */
   seatMoved?(seatId: string): void;
+  /** A Claude seat's status for every screen (C6); undefined while its chat has not called. Call `changed()` when it moves. */
+  claudeStatus?(seatId: string): ClaudeStatus | undefined;
   dispose?(): void;
   /**
    * The game itself, when the room hosts a wrapper of it (the server's recorder): what a Claude seat's code names as its
@@ -111,7 +113,7 @@ export interface RoomOptions<Intent, GameView> {
   emotes?: readonly string[];
   /** The values a seat may pick in the lobby. Absent: the game has no choices to make. */
   picks?: readonly string[];
-  /** Cleans chat text, for example with a family-friendly filter. Return '' to drop the message. */
+  /** Cleans chat text and a joining player's name, for example with a family-friendly filter. Return '' to drop the message; a name it drops becomes "Player". */
   moderate?(text: string): string;
   /** Errors whose message is shown to the player instead of thrown. */
   isUserError?(err: unknown): boolean;
@@ -399,7 +401,7 @@ export class Room<Intent, View> {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
     }
-    const seat = back ?? this.addSeat(cleanName(name) || 'Player', false);
+    const seat = back ?? this.addSeat(this.opts.moderate(cleanName(name)) || 'Player', false);
     this.letGoOfOtherSeats(conn, seat);
     seat.conn = conn;
     if (back) this.game.connectionChanged?.(seat.id, true);
@@ -617,8 +619,7 @@ export class Room<Intent, View> {
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
         ...(!this.started && this.game.defaultPick ? { defaultPick: this.game.defaultPick(i, this.seats.length) } : {}),
         ...(s.kind ? { kind: s.kind } : {}),
-        // C6 fills the live status; until a Claude chat calls, the seat waits.
-        ...(s.kind === 'claude' ? { claude: 'waiting' as const } : {}),
+        ...(s.kind === 'claude' ? { claude: this.game.claudeStatus?.(s.id) ?? 'waiting' } : {}),
         // T-AC-5: the code lets whoever holds it play the seat, so it goes to the host's own view and no other.
         ...(s.seatCode && seatId !== null && seatId === this.hostId ? { seatCode: s.seatCode } : {}),
       })),

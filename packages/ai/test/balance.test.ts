@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   advanceGrant,
   advancePhase,
+  cloneForSim,
   AI_LEVELS,
   claimPlot,
   AI_PERSONAS,
@@ -13,6 +14,8 @@ import {
   litPlot,
   mulePriceFor,
   observe,
+  nextPostedPrice,
+  postPrices,
   STRATEGIST,
   takeMule,
   walkSeconds,
@@ -303,12 +306,16 @@ describe('land claims when every seat wants the same plots', () => {
   });
 });
 
-/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`, Food to spare. */
-function grantWithFarms(smithore: number): GameState {
+/**
+ * Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`, Food
+ * to spare. `normal` sets Smithore's normal (and off-world) price too, for a price under today's: the store never posts under it.
+ */
+function grantWithFarms(smithore: number, normal?: number): GameState {
   const state = fourSeatsWithWater(3, WATER_TO_SPARE);
   state.store.stock.food = FOOD_TO_SPARE;
   while (state.phase !== 'landGrant') advancePhase(state);
   state.store.posted.smithore = smithore;
+  if (normal !== undefined) Object.assign(state.store, { refPrice: { ...state.store.refPrice, smithore: normal }, offWorld: { ...state.store.offWorld, smithore: normal } });
   const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
   Object.assign(food!, { owner: 'ai0', outfit: 'food' });
   Object.assign(energy!, { owner: 'ai0', outfit: 'energy' });
@@ -323,7 +330,7 @@ describe('land plans by worth', () => {
     expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
     for (const option of rich.options) expect(option.value).toBeGreaterThan(best / 2);
     // Negative case: at month 1's own Smithore price the farm plan is worth about 70% of the mines, and stays on offer.
-    const even = landDecision(observe(grantWithFarms(31), 'ai0'), traderMind);
+    const even = landDecision(observe(grantWithFarms(31, 31), 'ai0'), traderMind);
     const top = Math.max(...even.all.map((c) => c.value));
     expect(even.options.some((c) => c.value < top && c.value > top / 2)).toBe(true);
   });
@@ -417,11 +424,22 @@ describe('factories', () => {
 });
 
 describe('shortage foresight', () => {
-  it('T-AC-5: a seat prices Water at what colonists would pay once its outlook shows Water running short', () => {
-    // Colonists pay at most 120 a unit, the store adds 10%: 120 / 1.1 is about 109.
-    const ceiling = 120 / 1.1;
-    const short = outlook(observe(developmentWithWater(0), 'ai0'), 'ai0', { lookAhead: true });
+  it('T-AC-5: a seat prices Water at what the store posts after its colonists went short, once its outlook shows Water running short', () => {
+    // Colonists pay no wages since needs C2: the shortage's price is the store's own, the severe band it posts the
+    // month after its colonists went short of Water (pricing RULE-6 row 2).
+    const dry = developmentWithWater(0);
+    const posting = cloneForSim(dry);
+    postPrices(posting);
+    expect(posting.store.band?.water, 'the premise: Water is posted severe').toBe('severe');
+    const ceiling = nextPostedPrice(posting, 'water', undefined, ['water']);
+    const short = outlook(observe(dry, 'ai0'), 'ai0', { lookAhead: true });
     expect(short.later('water')).toBeGreaterThanOrEqual(ceiling);
+    // The shortage comes later than the month the forecast reads: 20 Water on the shelf posts normal now and next
+    // month, and runs out inside the horizon. The forecast still reaches the store's price after its colonists went
+    // short (outlook's rollForward raises it to that posting); the rollout's own postings alone read 50.
+    const later = outlook(observe(developmentWithWater(20), 'ai0'), 'ai0', { lookAhead: true });
+    expect(later.price('water'), 'the premise: Water is posted normal now').toBeLessThan(ceiling / 2);
+    expect(later.later('water')).toBeGreaterThanOrEqual(ceiling);
     // Negative case: with Water to spare the forecast stays a market price, far under the ceiling.
     const plenty = outlook(observe(developmentWithWater(300), 'ai0'), 'ai0', { lookAhead: true });
     expect(plenty.later('water')).toBeLessThan(ceiling / 2);

@@ -5,12 +5,15 @@ import {
   colonyPrestige,
   commission,
   createGame,
+  exportDemand,
+  monthlyDemand,
   payGrant,
   PRESTIGE,
   repair,
   RuleError,
   runColony,
   storeQuotes,
+  UPKEEP,
   type GameState,
   type PrestigeId,
   type Project,
@@ -57,7 +60,8 @@ function standing(state: GameState, id: PrestigeId): void {
 describe('prestige objects: commissioned, funded, built, kept up', () => {
   it('B-AC-21: Lena commissions the hospital; the fund pays and buys its goods at upkeep, it builds, then stands, counts its prestige and pays upkeep each month after', () => {
     const row = PRESTIGE.hospital;
-    const state = governedGame(1_200);
+    // Enough over the credits and the reserve to buy the Electronics at the store's selling price.
+    const state = governedGame(2_000);
     state.store.stock.electronics = 5;
     commission(state, 'lena', 'hospital');
     expect(project(state, 'hospital').stage).toBe('commissioned');
@@ -190,5 +194,40 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(project(state, 'spaceport').funded.credits, 'the earlier one is topped up first').toBe(PRESTIGE.spaceport.credits);
     expect(project(state, 'hospital').funded.credits, 'the rest goes to the later one').toBe(60);
     expect(state.treasury.money).toBe(COLONY.reserve);
+  });
+});
+
+describe('C49: a waiting building pulls on the store (G-5 AM-17)', () => {
+  /** The Hospital, open, with its credits paid and its goods short by `missing` Electronics. */
+  function hospitalAt(state: GameState, stage: Project['stage'], missing: number): void {
+    const row = PRESTIGE.hospital;
+    const goods = { electronics: (row.goods.electronics ?? 0) - missing };
+    state.colony = {
+      ...state.colony!,
+      projects: [{ id: 'hospital', stage, funded: { credits: row.credits, goods }, monthsLeft: null, since: 1, plaque: {} }],
+    };
+  }
+
+  it("C49: an open commissioned Hospital missing 1 Electronics adds 1 to the store's monthly Electronics demand", () => {
+    const state = governedGame();
+    const base = monthlyDemand(state).electronics;
+    hospitalAt(state, 'commissioned', 1);
+    expect(monthlyDemand(state).electronics).toBe(base + 1);
+  });
+
+  it('C49: a fully funded or building Hospital adds nothing', () => {
+    const state = governedGame();
+    const base = monthlyDemand(state);
+    hospitalAt(state, 'commissioned', 0);
+    expect(monthlyDemand(state)).toEqual(base);
+    hospitalAt(state, 'building', 1);
+    expect(monthlyDemand(state)).toEqual(base);
+  });
+
+  it('C49: politics off, no colony, the demand is unchanged', () => {
+    const off = governedGame(0, false);
+    expect(off.colony).toBeFalsy();
+    // Without a colony, Electronics' buyers are the colonists' want (the lane's needs AM-2) and the export ship: no building adds to them.
+    expect(monthlyDemand(off).electronics).toBe(off.colonists / UPKEEP.colonistsPerElectronics + exportDemand(off).electronics);
   });
 });

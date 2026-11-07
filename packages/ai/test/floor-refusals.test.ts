@@ -22,6 +22,7 @@ import {
   type Outfit,
 } from '@mule/engine';
 import { installable, placePoint, plotErrandSeconds, pubMargin } from '../src/floor-time.js';
+import { lookFirstPrices } from './look-first-prices.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { outlook } from '../src/outlook.js';
@@ -240,10 +241,12 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
   it('FM-led-analyse: a seat that starts development leading a lot MULE installs it first, and no analysis it sets off for is refused', () => {
     // A MULE won at the land auction is led into development (lots.ts: carriedMule = the lot's outfit). While it leads one,
     // a plot's button offers INSTALL, not ANALYSE, so analyses queued ahead of the install are refused on the plot.
-    const state = development(4);
+    // Seed 14: since the colonists' full need counts in the demand (needs C2), seed 4's seat no longer wants an analysis.
+    const state = development(14);
     ownNearest(state, 4);
     const me = state.players.find((p) => p.id === ME)!;
     me.carriedMule = 'food';
+    lookFirstPrices(state);
     const cfg = quietConfig();
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
     const gains = idleGains(state, seat, 'food');
@@ -299,7 +302,7 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     const cfg = quietConfig();
     const c = buildFloor(state, cfg).colonists.find((x) => x.id === ME)!;
     const index = state.tiles.indexOf(mine);
-    const errand = (work: number) => plotErrandSeconds(state, cfg, c, index, work) + pubMargin(cfg, c);
+    const errand = (work: number) => plotErrandSeconds(state, cfg, c, index, work, 'analyse') + pubMargin(cfg, c);
     // Halfway between the two, and the ticks the hand spends deciding before it sets off.
     const seconds = (errand(0) + errand(analysisSeconds(state, ME))) / 2 + (3 * cfg.steer.tickMs) / MS_PER_SECOND; // literal-ok: the start, the decision and the first step's tick
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
