@@ -892,7 +892,11 @@ describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)
     const { host, unmount } = speak(me, from);
     const colonist = element(element(host, layer)!, `colonist-${from}`);
     expect(colonist).not.toBeNull();
-    expect(element(colonist!, `chat-bubble-${from}`)?.textContent).toBe('Race you to the corral');
+    const bubble = element(colonist!, `chat-bubble-${from}`);
+    // Kai (s3) is a computer seat: his bubble opens with the quiet AI mark (Heiko, 7 Nov); a person's has none.
+    const ai = from === 's3';
+    expect(element(bubble!, 'ai-mark') !== null, `the AI mark on ${from}'s bubble`).toBe(ai);
+    expect(bubble?.textContent).toBe(`${ai ? 'AI · ' : ''}Race you to the corral`);
     unmount();
   });
 
