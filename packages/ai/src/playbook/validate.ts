@@ -1,6 +1,8 @@
 import {
   AI_PLANS,
   cloneForSim,
+  DEV_STEER,
+  floorConfig,
   GAME,
   GOOD_CONFIG,
   GOODS,
@@ -15,6 +17,7 @@ import {
   STRATEGIST,
   unlist,
   type DevelopmentPlay,
+  type FloorConfig,
   type GameState,
   type Good,
   type Outfit,
@@ -22,6 +25,7 @@ import {
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
+import { installable } from '../floor-time.js';
 import { goodPlan, outfitName, shortfallHold } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import type { Mind } from '../value.js';
@@ -72,6 +76,8 @@ interface Ctx {
   pb: Playbook;
   /** The hold the engine's fresh draft plays for a good, under the strategy that plays. */
   freshHold: (good: Good) => number;
+  /** Where the game steers (DEV_STEER.on), the floor a route's installs are walked on; null where it taps. */
+  floor: FloorConfig | null;
 }
 
 type Row = (value: unknown, ctx: Ctx, unit: string[]) => Verdict;
@@ -137,7 +143,11 @@ function notes(v: unknown, max: number, maxName: string): Verdict {
   return clamped(cut, v.length > max ? `AI_PLANS.bounds.${maxName}` : 'AI_PLANS.bounds.rivalReadChars');
 }
 
-/** RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. */
+/**
+ * RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. An
+ * install the hands could never play is refused here too, so the draft's route plays instead of a dropped MULE: a lake
+ * no shore reaches on the floor (as hands/develop.ts::unreachablePlot judges it), and a plot whose MULE already carries the outfit (no swap; routeVeto).
+ */
 function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
   if (!Array.isArray(route)) return ['not a list of steps', 0];
   const cap = AI_PLANS.bounds.routeSteps;
@@ -163,6 +173,10 @@ function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
         if (!OUTFITS.includes(outfit.outfit as Outfit)) return ['no such outfit', outfitAt];
         if (install.act !== 'install') return ['buyMule not followed by outfit and install', installAt];
         if (!isMine(ctx, install.plot)) return [isPlot(ctx, install.plot) ? 'not your plot' : 'no such plot', installAt];
+        const plot = install.plot as number;
+        // hands/develop.ts::unreachablePlot for an own plot, read here through floor-time: the hands' module reaches brain.ts (INV-2).
+        if (ctx.floor && ctx.state.tiles[plot]!.terrain === 'lake' && !installable(ctx.state, ctx.floor, ctx.seat, plot)) return [`lake: no shore reaches plot ${plot}`, installAt];
+        if (ctx.state.tiles[plot]!.outfit === outfit.outfit) return [`plot ${plot} already has a ${outfitName(outfit.outfit as Outfit)}`, installAt];
         i = installAt;
         break;
       }
@@ -520,6 +534,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     pb,
     // A profile with no level has no draft of its own, so it buys nothing (RULE-2's safe side).
     freshHold: (good) => (profile.mind.level ? (engineDraft(['auction', good]).auction?.[good]?.hold ?? 0) : 0),
+    // The switch alone: a harness that plays with `walking` false taps, and there a lake no shore reaches still installs (AM-36).
+    floor: DEV_STEER.on ? floorConfig() : null,
   };
   /**
    * Each accepted edit, with the keys of the value it set (an append's `-` as the index it took) and the length of each
