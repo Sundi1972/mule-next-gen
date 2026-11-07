@@ -172,6 +172,37 @@ describe('B-AC-9 (WS6 ruling and PM ruling, 7 Nov): the map rendered at a measur
     expect(r.free).toBe(false);
   });
 
+  it('SA-1372 (WS6 ruling in #636, 6a8f0046): on a phone plot under 24 px the STORE sign is not drawn; from 24 px it is; the store plot keeps its label', async () => {
+    const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, terrain: 'store' } : t));
+    const read = (map: FakeElement) => ({ sign: !!byId(map, 'map-store'), label: byId(map, 'map-plot-1-1')?.getAttribute('aria-label') });
+    for (const plot of [12.8, 23.9]) expect(await at(plot, null, read, plots), `${plot} px`).toEqual({ sign: false, label: 'Colony store' });
+    expect((await at(24, null, read, plots)).sign).toBe(true);
+  });
+
+  it('SA-1372: the TV keeps its STORE sign at any plot size (#656 review)', async () => {
+    const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, terrain: 'store' } : t));
+    layout.width = 12.8 * 4;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host as unknown as HTMLElement);
+    root.render(createElement(HoloMap, { width: 4, height: 3, tiles: plots, density: 'tv' }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    try {
+      expect(byId(host, 'map-store')).toBeDefined();
+    } finally {
+      root.unmount();
+      document.body.removeChild(host);
+      layout.width = MAP_PX;
+    }
+  });
+
+  it('SA-1372 (WS6 ruling in #636): under 16 px a plot with a MULE and no dots draws no special badge: the MULE wins, as on a dots plot; from 16 px it keeps it', async () => {
+    const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, owner: 0, good: 'food', special: { kind: 'oasis' } } : t));
+    const read = (map: FakeElement) => ({ badge: !!byId(map, 'special-glyph-1-1'), mule: !!byId(map, 'installed-1-1') });
+    expect(await at(12.8, null, read, plots)).toEqual({ badge: false, mule: true });
+    expect(await at(16, null, read, plots)).toEqual({ badge: true, mule: true });
+  });
+
   it('SA-1372 (#640 review): on a 12.8 px plot a special without dots keeps its badge inside, 2 px in, off the next plot’s chip at its foot', async () => {
     const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, special: { kind: 'oasis' } } : t.x === 2 && t.y === 1 ? { ...t, ground: { food: 2 } } : t));
     const badge = await at(12.8, null, (map) => byId(map, 'special-glyph-1-1')?.findAll('span')[0]?.style, plots);

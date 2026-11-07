@@ -1637,6 +1637,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           doneDeveloping: p.doneDeveloping,
           colonist: this.steering ? steeredColonistView(state, this.steering.floor, s.id, (tick) => this.steering!.origin + tick * this.realTickMs()) : null,
           condition: this.conditionIn(state, s.id),
+          reputation: p.reputation,
         };
       }),
       me: me
