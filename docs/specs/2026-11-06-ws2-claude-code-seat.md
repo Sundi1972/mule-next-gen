@@ -602,6 +602,13 @@ table closes RULE-2 row 3 answers "taken back", not "game over" (a call held in 
 The sentence Claude reads covers both: "This seat is no longer in play: the host took it back or the table closed. Stop
 playing it." Agreed with the PM (WS4's question, 7 Nov); no WS4 change.
 
+**Note (7 Nov, WS2, from the wave-1 end check at 21a77b5e): the land ask's window is set by how fast the host taps
+Ready.** The land ask (RULE-2's ask at upkeep) is cancelled when the land grant starts, and the grant starts once upkeep
+and then planning have both been readied. A host who taps Ready at once closes the window in under a second, so a Claude
+seat plays its built-in land pick; in the end check 8 of 24 asks per seat missed this way (16/24, Gate P1 failed). No
+rule change yet: the PM ordered a paced rerun (Ready after 8 s, then 3 s); if 8 s clears 90%, the fast-host case goes to
+Heiko as a decision (a planning hold against variant d-ii). A projected land ask is ruled out.
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: the Claude seat's MCP endpoint

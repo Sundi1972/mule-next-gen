@@ -243,17 +243,21 @@ condition); tell the PM, since it narrows G-1's reach.
 
 ### Task 1.10: the side pick waits up to 45 s for a Claude seat — C7
 
-*State 7 Nov 10:38Z:* #634 (WS3) open; WS2 OK given on 2eb53e7f, head now 9be702cc.
+*Done 7 Nov:* #634 (WS3) merged at 7dadf86b; WS2 OK given on 2eb53e7f.
 
 **ACs verified:** B-AC-5 · **Spec:** §1 C7, §2 RULE-6 · **Files:** Modify `apps/server/src/mule-game.ts` (`scheduleAuctionTick`, `auctionDone`), Test `apps/server/test/claude-seat-side-pick.test.ts`
-- [ ] **Step 1: Write the failing test `B-AC-5: no plan → Done at 45 s on the built-in plan; a plan at 20 s → Done at 20 s`** — Altitude: promise (side-pick end time, fake clock); later goods don't wait; Continue still ends it.
-- [ ] **Step 2: Run** — FAIL. **Step 3: Implement C7 per spec §1 C7 and §2 RULE-6** (in_place). **Step 4: Run** — PASS; auction e2e and side-pick tests green with no Claude seat (C7's pin). **Step 5: Commit** `feat(C7): side pick waits for a Claude seat (verifies B-AC-5)`.
+- [x] **Step 1: Write the failing test `B-AC-5: no plan → Done at 45 s on the built-in plan; a plan at 20 s → Done at 20 s`** — Altitude: promise (side-pick end time, fake clock); later goods don't wait; Continue still ends it.
+- [x] **Step 2: Run** — FAIL. **Step 3: Implement C7 per spec §1 C7 and §2 RULE-6** (in_place). **Step 4: Run** — PASS; auction e2e and side-pick tests green with no Claude seat (C7's pin). **Step 5: Commit** `feat(C7): side pick waits for a Claude seat (verifies B-AC-5)`.
 
 ### PR-1c merge gate
-- [ ] B-AC-5 green; failing test first; `pnpm typecheck && pnpm test` and `pnpm e2e` green; one review.
+- [x] B-AC-5 green; failing test first; `pnpm typecheck && pnpm test` and `pnpm e2e` green; one review.
+  - *Merged 7 Nov:* #634 at 7dadf86b.
 
 ### Gate: End of Phase P1 (wave 1)
 - [ ] UBER-AC-1 for Claude Code: one game, two Claude seats, two Claude Code sessions on plans with `ANTHROPIC_API_KEY` unset, nobody touching them; per seat ≥90% answered in time, cross-seat refusals 0, ledger paid lines 0 (WS2 runs it; numbers in the PR body). Then main merge with Heiko's OK via the PM.
+  - *7 Nov, at 21a77b5e: FAILED* — 16/24 (67%) per seat; cross-seat 0; paid lines 0. All 8 misses per seat are the land
+    ask, closed 0.3–0.5 s after it opened because the scripted host pressed Ready at once (§8). Paced rerun (host Ready
+    8 s, then 3 s, after each wait) in progress; PR-1b's merge to main is held until this gate passes.
 
 ## Phase 2 — wave 2: the table sees what the seat is doing
 
@@ -374,3 +378,17 @@ Gated by S1's answer (D-1 b's condition, above).
   subscribes `ctx.changed()`) and the record.ts wrapper follow once those two are on ws2-brain (WS2 sends the SHA via
   the PM). WS3 confirmed the countdown field `AuctionView.waitingForClaude?: { seatId; until }[]` (server epoch ms,
   present only while the first side pick holds kept Claude seats), frozen in a first commit on ws2-brain after #634.
+- **7 Nov — wave 1 complete on ws2-brain; Task 1.10 and PR-1c ticked.** #655 merged at ed8e8293: the seat-code lookup
+  swap to `RoomRegistry.seatForCode`, plus the recorder-wrapper fix — `wrapsClaudeSeat(wrapper, writer)` in
+  `claude-seat/seats.ts` lets `seatClaude` find the `ClaudeSeatWriter` behind the recorder's `{write}` wrapper, with a
+  WS3 named edit in record.ts at 364d6559 (WS3's OK). #634 (C7, WS3) merged at 7dadf86b. #668 merged at 67edd812:
+  `AuctionView.waitingForClaude?: { seatId; until; builtin?: true }[]` (the countdown field, `builtin` marking a seat
+  whose wait ended on its built-in plan). #667 merged at 21a77b5e: the `taken_back` sentence per spec Amendment 4.
+- **7 Nov — Gate P1 (the wave-1 end check) FAILED at 21a77b5e: 16/24 (67%) answered in time per seat.** Cross-seat
+  refusals 0, ledger paid lines 0. Every miss (8 per seat) is the land ask: it is asked at upkeep and cancelled when the
+  land grant starts, and the scripted host pressed Ready at once through upkeep and planning, so the ask closed 0.3–0.5 s
+  after it opened. Development asks were answered in 3–9 s; the land ask in months 3, 6 and 9, where the window held, in
+  3–5 s. The finding: the land ask's window is set by how fast the host taps Ready (spec §8 note). PM rulings: (a) rerun
+  with the host pressing Ready 8 s after each wait, then at 3 s; (d) no fix work until (a) reports. If 8 s clears 90%
+  the realistic table is fine and the fast-host case goes to Heiko as a card — a planning hold (b) against variant d-ii;
+  (c), a projected land ask, is ruled out. PR-1b's merge to main is held until Gate P1 passes.
