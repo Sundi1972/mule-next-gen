@@ -208,7 +208,12 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
 
     const none = governed(1_000);
     withBudget(none, shares(100, 0));
-    expect(welfareRecipient(none), 'row 1: a Welfare share of 0').toBeNull();
+    worth(none, { lena: 9_000, kai: 10_500, brix: 14_000, ossa: 16_000 });
+    expect(welfareRecipient(none), 'row 1 names the recipient at a 0% share too (AM-8)').toBe('kai');
+    const before = money(none, 'kai');
+    runColony(none, []);
+    expect(money(none, 'kai'), 'and a 0% share pays nothing').toBe(before);
+    expect(none.colony!.welfare, 'and records no payment').toBeNull();
     const off = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
     expect(welfareRecipient(off), 'row 1: politics off').toBeNull();
     const alone = governed(1_000);
