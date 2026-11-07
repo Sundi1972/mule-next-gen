@@ -62,6 +62,36 @@ export const PRICE = {
 };
 
 /**
+ * As each month opens, the export goods' off-world prices walk (pricing RULE-3): the log of the price keeps `phi` of
+ * its distance from the centre's, plus a seeded swing, then is clamped. Food, Water and Energy are not exported; their
+ * off-world price stays put.
+ */
+export const OFF_WORLD = {
+  /** Crystite: normally about 90, rarely 40, very rarely 300. */
+  crystite: {
+    /** The price Crystite's walk returns to, and opens the game at. */
+    centre: 90,
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into: the bigger, the wilder the swings. */
+    sigma: 0.35,
+    /** The lowest off-world price. */
+    min: 40,
+    /** The highest off-world price. */
+    max: 300,
+  },
+  /** Every other export good, centred on its GOOD_CONFIG refPrice. */
+  others: {
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into. */
+    sigma: 0.18,
+    /** The price stays within this share of its centre, above or below. */
+    band: 0.5,
+  },
+};
+
+/**
  * Off-world demand per player per month: what the export ship's buyers take.
  * Food, Water and Energy don't travel well, so only the colony wants them.
  * The colony is self-contained: nothing is imported.
@@ -312,6 +342,8 @@ export const MULE = {
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Nor rises above this, so a MULE costs at most twice its labour and Smithore at the store's price (pricing C4). */
+  maxFactor: 2.0,
   /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,

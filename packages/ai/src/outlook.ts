@@ -12,6 +12,7 @@ import {
   nextPostedPrice,
   runProduction,
   runUpkeep,
+  stepOffWorld,
   emptyStock,
   energyUseOf,
   EVENTS,
@@ -82,6 +83,8 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
     }
     if (isGameOver(sim)) return { ...flat(), final: true };
     sim.month++;
+    // The month opens as the engine opens it: on a what-if copy the ship's prices move along their expected path.
+    stepOffWorld(sim);
     lastShortages = shortages;
     ({ made, plantsUse } = produce(sim, me));
   }

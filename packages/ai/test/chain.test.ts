@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, monthlyDemand, MULE, observe, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, monthlyDemand, MULE, observe, OFF_WORLD, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
@@ -12,6 +12,17 @@ import { canFeed, chainInputs, chainLinks, chainOf, chainOutlook, installGain, l
 const ME = 'ai0';
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
 const WORKS: Outfit[] = ['alloy', 'electronics'];
+
+// The ship's Electronics price holds where pricedAt sets it: the off-world walk (pricing C3) would pull it back to its
+// reference, and a forecast with it (pricing §3). It holds within the month only: a real month opening still clamps it
+// to the walk's band.
+const savedPhi = OFF_WORLD.others.phi;
+beforeEach(() => {
+  OFF_WORLD.others.phi = 1;
+});
+afterEach(() => {
+  OFF_WORLD.others.phi = savedPhi;
+});
 
 /**
  * Development in month 1: ai0 holds the given plots on row 0, analysed, with cash and a full larder; the others hold
@@ -41,8 +52,8 @@ function development(plots: { x: number; outfit?: Outfit; ground?: Partial<typeo
  * Electronics at `price` as the store itself keeps posting it, with or without the store's bands (C17): `price` is
  * their normal, off-world and posted price, and the colony's shelf holds two months of its Electronics demand, so the
  * bands post normal and the price neither climbs nor falls. A hand-set price alone moves under the bands (by up to a
- * quarter a month toward the band's posting), so the seat would weigh another. Asserted: its outlook reads `price` now
- * and later.
+ * quarter a month toward the band's posting), so the seat would weigh another. The off-world price holds there too
+ * (OFF_WORLD.others.phi 1, above). Asserted: its outlook reads `price` now and later.
  */
 function pricedAt(state: GameState, price: number): GameState {
   Object.assign(state.store, {
