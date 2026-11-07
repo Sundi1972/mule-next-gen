@@ -904,6 +904,24 @@ not this  C49's waiting buildings' Electronics (G-5 AM-17) raise demand.electron
 goal      G-1 unchanged
 ```
 
+```
+AM-3 · 2026-11-07 · WS5 · PM ruling (Task 6.0, option 1), for Heiko to verify · built by WS1 (AM-18) and PR-6 / PR-8
+target    §1 C10, C11 (the CONSUMPTION table's Water column); §1 C14 and §2 RULE-12 (a crew left short); §2 RULE-10
+said      each plot's crew drinks ¼ to ½ Water at the month end (a farm's ½ is irrigation), summed and rounded up once,
+          and a crew short of Water works slower (RULE-12)
+did       Water is one production input, owned by WS1's balance AM-18 (Heiko, 5 Nov): farms use 2, every other raw
+          plot 1, factories through their recipe, taken once at production after the household's drink; a short plot
+          turns off (20%), as with Energy. The CONSUMPTION table keeps Food only: RULE-10 reads Water = 1 (the
+          household) with no table term, and RULE-12's slow crew reads Food only. A farm's irrigation is AM-18's 2.
+because   both were approved and unbuilt; together a farm would draw Water twice (2 at production, ½ at month end) and
+          a short plot would be both turned off and slowed. This honours both rulings: AM-18's "each plot should
+          consume some water … same as Energy" (5 Nov), and "each production uses different amounts of food, water"
+          (6 Nov), since AM-18's amounts differ by plot
+goal      G-1 unchanged; one rule per good, read once
+folded    §1 C10, C11, C14 and §2 RULE-10, RULE-12 read with AM-3; docs/rulebook/production.html#plot-consumption and
+          #crew-short describe it. WS1 builds AM-18 in PR-5's supply pass (S1 due 8 Nov 08:00Z)
+```
+
 ## §9 · Ownership Boundaries
 
 No ownership change. `colony.ts` stays the sole writer of the colony (the memory lives there);
