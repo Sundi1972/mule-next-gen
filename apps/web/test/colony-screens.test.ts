@@ -667,7 +667,7 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     const screen = tv(at('planning', 1, parkAt('building')));
     screen.send(at('upkeep', 1, parkAt('standing')));
     expect(screen.opener()?.getAttribute('data-opener')).toBe('still');
-    expect(screen.opener()?.getAttribute('data-leaning')).toBeUndefined();
+    expect(screen.opener()?.getAttribute('data-leaning')).toBeNull();
     expect(screen.shows('tv-monthend')).toBe(false);
     pass(2_900);
     expect(screen.shows('tv-grounds-opener')).toBe(true);
