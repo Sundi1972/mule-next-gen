@@ -214,7 +214,7 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
     expect(kept(written)).not.toContain(MARK);
   });
 
-  it('hands-refusals fix: a reason past BRAIN.writeReasonChars is cut to that many code points and its edit plays; only the reason is cut, never the value (8 deep4 replies were refused whole for it)', async () => {
+  it('hands-refusals fix: FM-reason-too-long: a reason past BRAIN.writeReasonChars is cut to that many code points and its edit plays; only the reason is cut, never the value (8 deep4 replies were refused whole for it)', async () => {
     // A wave is two UTF-16 units: the cut counts code points, as the cap does, and never splits one.
     const long = '🌊'.repeat(BRAIN.writeReasonChars + 5);
     const cut = '🌊'.repeat(BRAIN.writeReasonChars);

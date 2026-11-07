@@ -43,7 +43,7 @@ const lineOf = (text: string, head: string) => text.split('\n').find((l) => l.st
 const waterOn = (plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit: 'water' }, { act: 'install', plot }, { act: 'pub' }];
 
 describe('hands-refusals fix: a plot the floor never walks to is one no MULE can be installed on', () => {
-  it('hands-refusals fix: the land brief marks a lake whose only shore is a corner (seed 4, plot 25: 2-4 AI 1 routed onto it six months) wherever it names it, and a cut-off plains plot too', () => {
+  it('hands-refusals fix: FM-no-walk: the land brief marks a lake whose only shore is a corner (seed 4, plot 25: 2-4 AI 1 routed onto it six months) wherever it names it, and a cut-off plains plot too', () => {
     const state = game(4);
     const corner = tileIndex(state.width, 10, 1);
     // The deep4 case: a shore stand exists, so the hands' lake check passes, but no walk reaches it.
@@ -73,7 +73,7 @@ describe('hands-refusals fix: a plot the floor never walks to is one no MULE can
     expect(lineOf(pocketText, 'Seat 0 (you):')).toBe(`Seat 0 (you): 1 plot — plot ${plains} cut off: no MULE can be installed`);
   });
 
-  it("hands-refusals fix: whatIf refuses a route MULE onto a plot no walk reaches, on its install step, with why, where the hands would refuse it a turn later as 'the walk takes Infinity s'", async () => {
+  it("hands-refusals fix: FM-no-walk: whatIf refuses a route MULE onto a plot no walk reaches, on its install step, with why, where the hands would refuse it a turn later as 'the walk takes Infinity s'", async () => {
     const state = game(4, ['a', 'b', 'c', 'd']);
     const corner = tileIndex(state.width, 10, 1);
     tileAt(state.tiles, state.width, 10, 1)!.owner = 'a';
@@ -98,7 +98,7 @@ describe('hands-refusals fix: a sweep that spoils Energy whole', () => {
     GOOD_CONFIG.energy.spoilage = saved;
   });
 
-  it("hands-refusals fix: with GOOD_CONFIG.energy.spoilage at 1 the auction brief comes back, and its Energy line says no holding covers next month's use", () => {
+  it("hands-refusals fix: FM-energy-spoils-whole: with GOOD_CONFIG.energy.spoilage at 1 the auction brief comes back, and its Energy line says no holding covers next month's use", () => {
     const state = game(7);
     // A Food plot, so next production uses Energy.
     const plot = state.tiles.findIndex((t) => t.terrain === 'plains');

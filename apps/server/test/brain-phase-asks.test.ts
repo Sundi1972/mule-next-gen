@@ -545,7 +545,7 @@ describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { time
 });
 
 describe('hands-refusals fix: "Last time" tells only what last month\'s reply had refused', { timeout: 30_000 }, () => {
-  it("hands-refusals fix: a development edit the rules clamped is told in that month's upkeep brief, and not again a month later when that month's land write carried no development edit (deep4: 2-4 AI 3 was told a month-10 refusal again in month 11)", async () => {
+  it("hands-refusals fix: FM-stale-feedback: a development edit the rules clamped is told in that month's upkeep brief, and not again a month later when that month's land write carried no development edit (deep4: 2-4 AI 3 was told a month-10 refusal again in month 11)", async () => {
     const withDevelopment = JSON.stringify({
       edits: [
         { path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' },
