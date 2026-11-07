@@ -113,6 +113,12 @@ function upstreamFirst(installed: readonly Outfit[], standing: readonly Outfit[]
 /** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off. */
 const CHAIN_ON_MONTHS = 3;
 
+/**
+ * The 30-seed sweeps play 30 to 31 whole development phases at 100 ms ticks: 1 to 2 s alone, over vitest's default
+ * 5 s on a loaded CI runner (over 5000 ms in #591's check, 5815 ms in #598's). The work is inherent, so they get room.
+ */
+const SWEEP_TIMEOUT_MS = 30_000;
+
 /** Runs `fn` with chains switched on, then puts the switch back. */
 function withChains<T>(fn: () => T): T {
   const shipped = AI_PLANS.chain.months;
@@ -140,7 +146,7 @@ function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
 }
 
 describe('a factory chain (AM-33)', () => {
-  it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
+  it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', { timeout: SWEEP_TIMEOUT_MS }, () => withChains(() => {
     // Every seat seed 1-30: the plan is Electronics, and no works goes in before the links it needs.
     const broken: string[] = [];
     for (let seed = 1; seed <= 30; seed++) {
@@ -156,7 +162,7 @@ describe('a factory chain (AM-33)', () => {
     expect(['rareEarth', 'smithore'], `installed ${installed.join(', ')}`).toContain(installed[0]);
   }));
 
-  it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
+  it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', { timeout: SWEEP_TIMEOUT_MS }, () => withChains(() => {
     const plots = [{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' as Outfit }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' as Outfit }, { x: 4 }, { x: 6 }, ...FARMS];
     const broken: string[] = [];
     for (let seed = 1; seed <= 30; seed++) {

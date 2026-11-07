@@ -206,13 +206,16 @@ export function takeSide(board: WalkBoard, market: WalkMarket, playerId: string,
   if (side === 'buyer') w.price = Math.max(0, Math.min(board.lo, ...others.filter((x) => activeSeller(market, x)).map((x) => rounded(x) - 1)));
 }
 
-/** True while some trade could still happen on this board: someone could sell to someone who could buy. */
+/**
+ * True while some trade could still happen on this board: someone could sell to someone who could buy. A seller never
+ * stands under sellerFloor, so only a buyer who can pay it, or a house buying at or above it, could still buy.
+ */
 export function tradePossible(board: WalkBoard, market: WalkMarket): boolean {
   const sellLine = market.houseSells?.price() ?? null;
-  const floor = market.floor() ?? 1;
+  const floor = sellerFloor(board, market);
   const sellers = board.walkers.filter((w) => activeSeller(market, w));
   const buyers = board.walkers.filter((w) => w.side === 'buyer');
-  const housesBuy = market.houseBuys.some((h) => h.price() !== null);
+  const housesBuy = market.houseBuys.some((h) => (h.price() ?? -Infinity) >= floor);
   if (sellers.length > 0 && (housesBuy || buyers.some((b) => market.money(b.id) >= floor))) return true;
   return sellLine !== null && buyers.some((b) => market.money(b.id) >= sellLine);
 }
