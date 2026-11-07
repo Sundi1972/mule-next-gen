@@ -83,17 +83,18 @@ export const adoptedNow = (obs: GameState, mind: Mind): AdoptedFields | null => 
 export interface Yield {
   made: number;
   energy: number;
-  /** Water it uses a month (AM-18): a well's own is paid from its output. */
-  water: number;
+  /** Water it uses a month (AM-18): a well's own is paid from its output. Absent or 0 with AM-18 off. */
+  water?: number;
   /** Factory inputs other than Energy and Water, per run. */
   inputs: Partial<Stock>;
   air: number;
   crew: number;
 }
 
-/** A factory's recipe inputs but its Energy, per run. */
+/** A factory's recipe inputs but its Energy, per run; with AM-18 on, its Water is its use (factoryWaterUse) instead. */
 function inputsOf(good: ProcessedGood): Partial<Stock> {
   const { energy: _e, ...inputs } = RECIPES[good].inputs;
+  if (plotWaterOn()) inputs.water = UPKEEP.factoryWaterUse[good];
   return inputs;
 }
 
@@ -148,7 +149,7 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
   if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - STRATEGIST.greenBeltCost : -STRATEGIST.greenBeltCost;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
   // A plant or a well pays its own use from what it makes (AM-17 R2, AM-18 W5): only the rest is its to sell or to use.
-  const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : outfit === 'water' && plotWaterOn() ? Math.max(0, y.made - y.water) : y.made;
+  const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : outfit === 'water' && plotWaterOn() ? Math.max(0, y.made - (y.water ?? 0)) : y.made;
   let revenue = afterTax(obs, made * P(outfit, made));
   // Output is sold at its own month's auction, before upkeep spoils it: held 0 months.
   const each = AI_VALUE.unit ? carrySell(obs, outfit, mind, P(outfit, made), 0) : 0;
@@ -163,7 +164,7 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
     revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, made)));
   }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
-  const water = outfit === 'water' || y.water === 0 ? 0 : y.water * P('water', -y.water);
+  const water = outfit === 'water' || !y.water ? 0 : y.water * P('water', -y.water);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
   const crew = full ? y.crew * (P('food') / UPKEEP.crewPerFood + P('water') / UPKEEP.crewPerWater) : 0;
   const air = full ? y.air * airUnitCost(obs) : 0;
