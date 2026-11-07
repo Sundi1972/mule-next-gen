@@ -52,8 +52,8 @@ async function toFirstSidePick(game: MuleGame, fake: ReturnType<typeof fakeConte
 }
 
 interface SidePick {
-  /** When the Claude seat was first Done, from the side pick's start; null if never while it lasted. */
-  claudeDone: number | null;
+  /** When the Claude seat was first Done, from the side pick's start: at the latest, when the side pick ended. */
+  claudeDone: number;
   /** When the side pick ended, from its start. */
   ended: number;
 }
@@ -70,7 +70,8 @@ async function runSidePick(game: MuleGame, fake: ReturnType<typeof fakeContext>,
   for (let t = 0; t <= 2 * WAIT_MS; t += WALK.tickMs) {
     const v = view(game);
     const age = fake.ctx.now() - opened;
-    if (!sidePick(v, good)) return { claudeDone, ended: age };
+    // Without the host's Continue a side pick ends only once every seat is Done: a seat Done in its last tick was Done then.
+    if (!sidePick(v, good)) return { claudeDone: claudeDone ?? age, ended: age };
     if (claudeDone === null && doneAt(v, CLAUDE)) claudeDone = age;
     for (const d of due) {
       if (!d.ran && age >= d.ms) {
@@ -95,7 +96,7 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     const pick = await runSidePick(game, fake, good);
 
     expect(pick.claudeDone, 'not Done before the wait is up').toBeGreaterThanOrEqual(WAIT_MS);
-    expect(pick.claudeDone!).toBeLessThanOrEqual(WAIT_MS + PRESS_MS);
+    expect(pick.claudeDone).toBeLessThanOrEqual(WAIT_MS + PRESS_MS);
     expect(pick.ended).toBeLessThanOrEqual(WAIT_MS + PRESS_MS);
     expect(writerOf(game).openAsk(), 'its ask was aborted at the wait’s end').toBeNull();
   });
@@ -111,7 +112,7 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     const pick = await runSidePick(game, fake, good, { 20_000: answer });
 
     expect(pick.claudeDone).toBeGreaterThanOrEqual(20_000);
-    expect(pick.claudeDone!).toBeLessThanOrEqual(20_000 + PRESS_MS);
+    expect(pick.claudeDone).toBeLessThanOrEqual(20_000 + PRESS_MS);
     expect(pick.ended).toBeLessThanOrEqual(20_000 + PRESS_MS);
   });
 
@@ -133,7 +134,7 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     const pick = await runSidePick(game, fake, next!);
 
     expect(pick.ended).toBeLessThan(WAIT_MS);
-    expect(pick.claudeDone ?? 0).toBeLessThanOrEqual(PRESS_MS);
+    expect(pick.claudeDone).toBeLessThanOrEqual(PRESS_MS);
   });
 
   it('B-AC-5 (RULE-6): the host’s Continue still ends the side pick at once; the seat’s ask is aborted and a later answer is too late', async () => {
