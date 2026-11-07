@@ -1,7 +1,7 @@
 import type { PlayerView } from '@mule/protocol';
 import { Button, cx, PlayerMark } from '@mule/ui';
 import { useState } from 'react';
-import { Chip, ClaudeCountdown, STATUS_CHIP } from '../../components/ClaudeSeat';
+import { Chip, ClaudeCountdown, playsBuiltIn, STATUS_CHIP } from '../../components/ClaudeSeat';
 import { toSlot } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
@@ -38,8 +38,8 @@ export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { se
 }
 
 /**
- * Each Claude seat's own line, while the table is not waiting for it (HC-3): its status, and when offline, that it plays
- * its built-in plan. A seat in `waiting` shows there instead, so it shows once.
+ * Each Claude seat's own line, while the table is not waiting for it (HC-3): its status, and when offline or never
+ * connected, that it plays its built-in plan. A seat in `waiting` shows there instead, so it shows once.
  */
 export function ClaudeLines({ waiting }: { waiting: readonly Seat[] }) {
   const { table, view } = usePhoneGame();
@@ -52,7 +52,7 @@ export function ClaudeLines({ waiting }: { waiting: readonly Seat[] }) {
         <PlayerMark slot={toSlot(p.slot)} size={14} glow={status !== 'ready'} />
         <span className="font-semibold">{p.name}</span>
         <Chip word={STATUS_CHIP[status]} testid="claude-line-chip" />
-        {status === 'offline' && <span className="text-xs text-ink-2">plays its built-in plan</span>}
+        {playsBuiltIn(status) && <span className="text-xs text-ink-2">plays its built-in plan</span>}
       </span>
     );
   });

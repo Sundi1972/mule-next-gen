@@ -47,6 +47,9 @@ export const claudeChip = (seat: Pick<Seat, 'claude'>): ChipWord => STATUS_CHIP[
 
 export const isClaude = (seat: Seat) => seat.kind === 'claude';
 
+/** In play, whether the seat plays its built-in plan: offline, or its chat never connected (WS6 ruling, #663). */
+export const playsBuiltIn = (status: ClaudeStatus | undefined) => status === 'offline' || status === 'waiting';
+
 /** Seconds as the side pick's countdown shows them: 0:32. */
 export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 

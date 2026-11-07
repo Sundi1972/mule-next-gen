@@ -25,7 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
-import { Chip, claudeChip, ClaudeCountdownWord, isClaude, STATUS_CHIP } from '../components/ClaudeSeat';
+import { Chip, claudeChip, ClaudeCountdownWord, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -336,7 +336,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               const state = status ? STATUS_CHIP[status] : s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               // HC-3: a Claude seat is never waited for here; its status is a label, and only READY dims it.
               const dim = status ? status === 'ready' : s.isAi || s.ready;
-              const tone = status === 'thinking' ? 'text-holo' : status === 'offline' || isAway ? 'text-warn' : status || s.ready || s.isAi ? 'text-ink-3' : 'text-holo';
+              const tone = status === 'thinking' ? 'text-holo' : playsBuiltIn(status) || isAway ? 'text-warn' : status || s.ready || s.isAi ? 'text-ink-3' : 'text-holo';
               return (
                 <li key={s.id} className={cx('flex items-center gap-3', dim && 'opacity-60')} data-testid={`tv-ready-${s.id}`}>
                   {/* Their place by Worth, the number everyone sees. */}
@@ -348,7 +348,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                     {s.name}
                     {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
                   </span>
-                  {status === 'offline' && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
+                  {playsBuiltIn(status) && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
                   <span className={cx('font-mono text-sm', tone, status === 'thinking' && 'animate-pulse')} data-testid={`tv-state-${s.id}`}>
                     {state}
                   </span>
