@@ -337,13 +337,13 @@ export const MULE = {
   /** The store builds MULEs for every seat's corralPerPlayer, plus this many. */
   spareInCorral: 2,
   /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
-  scarcityUp: 0.15,
+  scarcityUp: 0.25,
   surplusDown: 0.1,
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
-  /** Nor rises above this, so a MULE costs at most twice its labour and Smithore at the store's price (pricing C4). */
-  maxFactor: 2.0,
+  /** Nor rises above this, so a MULE costs at most four times its labour and Smithore at the store's price (pricing C4). */
+  maxFactor: 4.0,
   /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
