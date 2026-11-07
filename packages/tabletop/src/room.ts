@@ -113,7 +113,7 @@ export interface RoomOptions<Intent, GameView> {
   emotes?: readonly string[];
   /** The values a seat may pick in the lobby. Absent: the game has no choices to make. */
   picks?: readonly string[];
-  /** Cleans chat text, for example with a family-friendly filter. Return '' to drop the message. */
+  /** Cleans chat text and a joining player's name, for example with a family-friendly filter. Return '' to drop the message; a name it drops becomes "Player". */
   moderate?(text: string): string;
   /** Errors whose message is shown to the player instead of thrown. */
   isUserError?(err: unknown): boolean;
@@ -401,7 +401,7 @@ export class Room<Intent, View> {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
     }
-    const seat = back ?? this.addSeat(cleanName(name) || 'Player', false);
+    const seat = back ?? this.addSeat(this.opts.moderate(cleanName(name)) || 'Player', false);
     this.letGoOfOtherSeats(conn, seat);
     seat.conn = conn;
     if (back) this.game.connectionChanged?.(seat.id, true);

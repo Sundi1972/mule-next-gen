@@ -441,6 +441,12 @@ describe('shortage foresight', () => {
     const ceiling = nextPostedPrice(posting, 'water', undefined, ['water']);
     const short = outlook(observe(dry, 'ai0'), 'ai0', { lookAhead: true });
     expect(short.later('water')).toBeGreaterThanOrEqual(ceiling);
+    // The shortage comes later than the month the forecast reads: 20 Water on the shelf posts normal now and next
+    // month, and runs out inside the horizon. The forecast still reaches the store's price after its colonists went
+    // short (outlook's rollForward raises it to that posting); the rollout's own postings alone read 50.
+    const later = outlook(observe(developmentWithWater(20), 'ai0'), 'ai0', { lookAhead: true });
+    expect(later.price('water'), 'the premise: Water is posted normal now').toBeLessThan(ceiling / 2);
+    expect(later.later('water')).toBeGreaterThanOrEqual(ceiling);
     // Negative case: with Water to spare the forecast stays a market price, far under the ceiling.
     const plenty = outlook(observe(developmentWithWater(300), 'ai0'), 'ai0', { lookAhead: true });
     expect(plenty.later('water')).toBeLessThan(ceiling / 2);
