@@ -6,6 +6,7 @@ import {
   isFactory,
   monthNeeds,
   needsOf,
+  playersUse,
   RECIPES,
   runProduction,
   UPKEEP,
@@ -151,5 +152,13 @@ describe('AM-18: every plot uses Water at production, and turns off without it',
     lay(state, [{ good: 'food', out: 4 }, { good: 'smithore', out: 3 }, { good: 'water', out: 3 }, { good: 'alloy' }]);
 
     expect(monthNeeds(state, 'p0').water).toBe(drink(state) + 2 + 1 + 1);
+  });
+
+  it("the store counts the plots' Water as the players' use, on top of their drink, a well's own aside", () => {
+    const state = colony();
+    const drinks = () => state.players.reduce((n, p) => n + needsOf(state, p.id).water, 0);
+    lay(state, [{ good: 'food', out: 4 }, { good: 'smithore', out: 3 }, { good: 'water', out: 3 }, { good: 'alloy' }]);
+
+    expect(playersUse(state).water).toBe(drinks() + 2 + 1 + 1);
   });
 });
