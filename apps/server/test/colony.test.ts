@@ -152,24 +152,28 @@ describe('the colony at the table', () => {
     expect(game.viewFor(null).tiles.map((t) => t.owner)).toEqual(owners);
   });
 
-  it("RULE-32 (C48): every screen's colony view carries each building's place on the grounds: the Hospital commissioned first at 0, the Park next at 1", () => {
+  it("RULE-32b (AM-18): every screen's colony view carries each building's block on the grounds as place: the Hospital commissioned first at (2,1), the Park next at (3,1), the Stadium 2×2", () => {
     const { game, state } = governed();
-    game.handle('s1', { type: 'commission', id: 'hospital' });
-    state.colony!.projects.find((p) => p.id === 'hospital')!.stage = 'standing';
-    game.handle('s1', { type: 'commission', id: 'park' });
+    for (const id of ['hospital', 'park'] as const) {
+      game.handle('s1', { type: 'commission', id });
+      state.colony!.projects.find((p) => p.id === id)!.stage = 'standing';
+    }
+    game.handle('s1', { type: 'commission', id: 'stadium' });
     for (const viewer of [null, 's1', 's2']) {
-      expect(game.viewFor(viewer).colony!.projects.map((p) => [p.id, p.slot]), `${viewer ?? 'the TV'}'s view`).toEqual([
-        ['hospital', 0],
-        ['park', 1],
+      expect(game.viewFor(viewer).colony!.projects.map((p) => [p.id, p.place]), `${viewer ?? 'the TV'}'s view`).toEqual([
+        ['hospital', { x: 2, y: 1, w: 1, h: 1 }],
+        ['park', { x: 3, y: 1, w: 1, h: 1 }],
+        ['stadium', { x: 3, y: 2, w: 2, h: 2 }],
       ]);
+      expect(game.viewFor(viewer).colony!.projects[0], 'the view carries place, not the engine slot').not.toHaveProperty('slot');
     }
   });
 
-  it('RULE-32: a project holding no place shows slot null, never undefined', () => {
+  it('RULE-32b: a project holding no block shows place null, never undefined', () => {
     const { game, state } = governed();
     game.handle('s1', { type: 'commission', id: 'hospital' });
     delete state.colony!.projects[0]!.slot;
-    expect(game.viewFor(null).colony!.projects[0]!.slot).toBeNull();
+    expect(game.viewFor(null).colony!.projects[0]!.place).toBeNull();
   });
 
   it("C35, AM-13: the colony view's refPrice is the store's price today for every good the catalogue needs, and a gift's plaque grows by exactly units × that price", () => {

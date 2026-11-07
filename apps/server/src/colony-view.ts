@@ -1,5 +1,5 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { allPrices, colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
+import { allPrices, colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, groundsPlace, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
@@ -31,7 +31,7 @@ export function colonyView(state: GameState): ColonyView | null {
         funded: { credits: p.funded.credits, goods: { ...p.funded.goods } },
         buildMonths: row.buildMonths,
         monthsLeft: p.monthsLeft,
-        slot: p.slot ?? null,
+        place: groundsPlace(p),
         prestige: row.prestige,
         upkeep: row.upkeep,
         repairCost: p.stage === 'damaged' ? row.repairCost : null,

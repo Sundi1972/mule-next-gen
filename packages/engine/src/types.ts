@@ -430,7 +430,7 @@ export interface Project {
   since: number;
   /** Each donor's credits plus goods at reference price. */
   plaque: Record<string, number>;
-  /** Its place on the colony's own grounds, 0..COLONY.groundsSlots−1, in growth order (G-5 RULE-32); null or absent holds none. */
+  /** Its place on the colony's own grounds: the anchor cell of its block, y × size + x (G-5 RULE-32b); null or absent holds none. */
   slot?: number | null;
 }
 
