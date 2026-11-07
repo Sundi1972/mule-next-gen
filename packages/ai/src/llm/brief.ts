@@ -6,8 +6,6 @@ import {
   DEV_STEER,
   crewOf,
   emptyStock,
-  energyUseOf,
-  EVENTS,
   GOOD_CONFIG,
   GOODS,
   isFactory,
@@ -48,6 +46,7 @@ import { optionLine, tableTalkBlock } from './prompt.js';
 import type { LandDraft } from '../playbook/index.js';
 import type { Feedback } from './writer.js';
 import { GRANTED } from './granted.js';
+import { energyAt, energyToKeep, useRule } from './energy.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -296,39 +295,58 @@ function plotOutputLines(obs: GameState, me: PlayerId): string[] {
 }
 
 /**
- * What the seat's own plots supplied of a good at the last production: for Energy, what its plants made less what they
- * paid for their own use. Each plant pays min(made, use) from its line, its use times the cold snap's factor when one
- * struck that production, as runProduction charges it (outlook.ts produce).
+ * Food and Energy in units. Food: what the seat holds and its plots made at the last production, against the Food its
+ * household eats at upkeep (monthNeeds); what the plots make counts only before production (the land brief, at upkeep),
+ * since after it (the auction brief) this month's Food is in what the seat holds, and upkeep eats next. Energy:
+ * energyLine.
  */
-function lastSupply(obs: GameState, me: PlayerId, made: Stock, good: 'food' | 'energy'): number {
-  if (good !== 'energy') return made[good];
-  const last = obs.history.at(-1);
-  const cold = last?.events?.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
-  const paid = (last?.lines ?? [])
-    .filter((l) => l.good === 'energy' && obs.tiles[l.tile]?.owner === me)
-    .reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(obs, obs.tiles[l.tile]!) * cold), 0);
-  return Math.max(0, made.energy - paid);
+function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean, development: DevelopmentPlay | null): string {
+  const p = obs.players.find((q) => q.id === me)!;
+  const food = (obs.history.at(-1)?.produced[me] ?? emptyStock()).food;
+  const need = monthNeeds(obs, me).food;
+  const verdict = (held: number, makes: number) => (held + makes >= need ? 'covered' : `short by ${need - held - makes}`);
+  const foodText = afterProduction
+    ? `Food — you hold ${p.stock.food}, the ${food} your plots made at the last production included, against ${need} your household eats a month: ${verdict(p.stock.food, 0)}`
+    : `Food — you hold ${p.stock.food} and your plots made ${food} at the last production, against ${need} your household eats a month: ${verdict(p.stock.food, food)}`;
+  return `Food and Energy in units: ${foodText}; ${energyLine(obs, me, afterProduction, development)}`;
 }
 
 /**
- * Food and Energy in units: what the seat holds and its own plots made at the last production (a plant's output net of
- * its own use: lastSupply), against what the engine says it burns (monthNeeds): its household's Food at upkeep, its plots' and works' Energy at production. What the plots make counts where it comes before the
- * burn: Energy always (plants run first in production); Food only before production (the land brief, at upkeep), since
- * after it (the auction brief) this month's Food is in what the seat holds, and upkeep eats next.
+ * Energy in units, against the rule production turns plots off by (energyAt): what the seat holds at the next
+ * production, plus what its plants make there on their ground beyond their own use, against what its other plots and
+ * works use. Asked before that production (the land brief), what the seat holds is what it reads, no goods auction
+ * comes between, and the drafted route's MULEs are installed first, so they count. Asked after it (the auction brief),
+ * upkeep spoils first, so the seat must end the auction holding more; next month's MULEs are not drafted yet, so the
+ * line gives the holding for one and two more use. Events and a cold snap are rolled at the production: not counted.
  */
-function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): string {
-  const p = obs.players.find((q) => q.id === me)!;
-  const made = obs.history.at(-1)?.produced[me] ?? emptyStock();
-  const need = monthNeeds(obs, me);
-  const verdict = (held: number, makes: number, needs: number) => (held + makes >= needs ? 'covered' : `short by ${needs - held - makes}`);
-  const food = lastSupply(obs, me, made, 'food');
-  const energy = lastSupply(obs, me, made, 'energy');
-  const foodText = afterProduction
-    ? `Food — you hold ${p.stock.food}, the ${food} your plots made at the last production included, against ${need.food} your household eats a month: ${verdict(p.stock.food, 0, need.food)}`
-    : `Food — you hold ${p.stock.food} and your plots made ${food} at the last production, against ${need.food} your household eats a month: ${verdict(p.stock.food, food, need.food)}`;
+function energyLine(obs: GameState, me: PlayerId, afterProduction: boolean, development: DevelopmentPlay | null): string {
+  const held = obs.players.find((q) => q.id === me)!.stock.energy;
+  const head = `Energy — you hold ${held}`;
+  if (afterProduction && obs.month >= endMonth(obs)) return `${head}, and this is the last month: no production uses Energy again.`;
+  const { supply, need, installs } = energyAt(obs, me, afterProduction ? null : development);
+  const when = afterProduction ? "next month's" : "this month's";
+  const drafted = installs > 0 ? `, the ${plural(installs, 'MULE')} your draft route installs included` : '';
+  const weighed = `${head}; at ${when} production your plants make ${supply} beyond their own use on their ground (an event can change that), against the ${need} your plots and works use there${drafted}`;
+  const off = 'production turns plots off, the biggest use first, until the rest fit';
+  if (!afterProduction) {
+    const verdict =
+      held + supply >= need
+        ? `covered for ${held + supply - need} more use (${useRule()}); past that ${off}, and no Energy can be bought before it`
+        : `short by ${need - held - supply}: ${off}, and no Energy can be bought before it`;
+    return `${weighed}: ${verdict}.`;
+  }
+  const keepFor = (more: number) => energyToKeep(need + more - supply);
+  const keep = keepFor(0);
+  const spoils = `${pct(GOOD_CONFIG.energy.spoilage)} of what you hold spoils at upkeep, rounded down, and the depot keeps at most ${UPKEEP.depotCapacity}`;
+  if (keep === null) return `${weighed}. ${spoils}, too little with what your plants make, so no holding covers it: next month ${off}.`;
+  const verdict = held >= keep ? 'covered' : `short by ${keep - held}, or next month ${off}`;
+  const hold = (more: number) => {
+    const k = keepFor(more);
+    return k === null ? 'no holding covers it' : `hold ${k}`;
+  };
   return (
-    `Food and Energy in units: ${foodText}; ` +
-    `Energy — you hold ${p.stock.energy} and your plants made ${energy} beyond their own use, against ${need.energy} your plots and works use a production: ${verdict(p.stock.energy, energy, need.energy)}.`
+    `${weighed}. To cover it, end this auction holding ${keep}: ${spoils}: ${verdict}. ` +
+    `If next month's MULEs add 1 more use (${useRule()}), ${hold(1)}; 2 more, ${hold(2)}.`
   );
 }
 
@@ -435,7 +453,12 @@ function muleLine(obs: GameState, me: PlayerId): string {
 }
 
 /** What the seat's plots made, and its Food, Energy and Water in units: the land and auction briefs'. */
-const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), waterLine(obs, me, afterProduction), ''];
+const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean, development: DevelopmentPlay | null = null) => [
+  ...plotOutputLines(obs, me),
+  feedLine(obs, me, afterProduction, development),
+  waterLine(obs, me, afterProduction),
+  '',
+];
 
 /**
  * The land plans' "Feeds me" reason, for a level without a look-ahead, counts plots, not units (strategist.ts
@@ -550,7 +573,7 @@ export function landBrief(
     'Who owns the land:',
     ...ownership(obs, mind.me),
     '',
-    ...madeLines(obs, mind.me, false),
+    ...madeLines(obs, mind.me, false, development),
     priceLine(obs, state.history),
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
     muleLine(obs, mind.me),

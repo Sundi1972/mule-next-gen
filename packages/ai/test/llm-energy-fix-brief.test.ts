@@ -157,11 +157,13 @@ describe('energy fix: the Energy verdict agrees with the production that follows
     const plant = plots[0]!;
     const net = plantNet(state, plant);
     const use = plots.slice(1).reduce((n, i) => n + energyUseOf(state, state.tiles[i]!), 0);
-    /** Upkeep, then next month's production, on a copy where p0 ends the auction holding `held`. */
-    const nextProduction = (held: number) => {
+    /** Upkeep, then next month's production with `more` Food MULEs installed, on a copy where p0 ends the auction holding `held`. */
+    const nextProduction = (held: number, more = 0) => {
       const copy = structuredClone(state);
       p0(copy).stock.energy = held;
       runUpkeep(copy);
+      const free = copy.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : []));
+      for (const i of free.slice(0, more)) Object.assign(copy.tiles[i]!, { owner: 'p0', outfit: 'food' });
       return turnsOff(copy);
     };
     // Holding exactly what the plots use beyond the plants' make: covered today, but upkeep spoils some of it.
@@ -174,6 +176,16 @@ describe('energy fix: the Energy verdict agrees with the production that follows
     // Two more held outlast the spoilage.
     p0(state).stock.energy = held + 2;
     expect(nextProduction(held + 2)).toBe(false);
-    expect(energyClause(auction(state))).toMatch(/: covered/);
+    const clause = energyClause(auction(state));
+    expect(clause).toMatch(/: covered/);
+
+    // The holdings it names are the least that upkeep then production keep whole: today's plots, and one or two more use.
+    const said = clause.match(/end this auction holding (\d+):.*If next month's MULEs add 1 more use \(.*\), hold (\d+); 2 more, hold (\d+)\./);
+    expect(said, clause).not.toBeNull();
+    const [keep, keep1, keep2] = said!.slice(1).map(Number) as [number, number, number];
+    for (const [more, k] of [[0, keep], [1, keep1], [2, keep2]] as const) {
+      expect(nextProduction(k, more), `${more} more`).toBe(false);
+      expect(nextProduction(k - 1, more), `${more} more, one less held`).toBe(true);
+    }
   });
 });
