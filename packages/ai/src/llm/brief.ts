@@ -6,13 +6,16 @@ import {
   emptyStock,
   energyUseOf,
   EVENTS,
+  GOOD_CONFIG,
   GOODS,
   isFactory,
   monthNeeds,
   MS_PER_SECOND,
   MULE,
   mulePriceFor,
+  needsOf,
   observe,
+  PERCENT,
   scoreParts,
   SPECIES_PERK,
   type DevelopmentPlay,
@@ -25,9 +28,11 @@ import {
   type Playbook,
   type PlayerId,
   type ProductionLine,
+  type RawGood,
   type Species,
   type Stock,
   type Strategy,
+  UPKEEP,
 } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
@@ -299,6 +304,47 @@ function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): strin
   );
 }
 
+const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
+
+/** What upkeep leaves of `held` Water for the next production, as runUpkeep plays it: the drink, then spoilage rounded down. */
+const waterAfterUpkeep = (held: number, drink: number) => Math.floor(Math.max(0, held - drink) * (1 - GOOD_CONFIG.water.spoilage));
+
+/** The least Water the seat may end the auction with and still hold `need` when the next production checks it. */
+function waterToKeep(need: number): number {
+  let held = need;
+  while (waterAfterUpkeep(held, need) < need) held++;
+  return held;
+}
+
+/**
+ * Water in units, against the check production makes before any plot runs (production.ts runProduction's `dry`): an
+ * owner holding less than needsOf's water has its irrigated plots make UPKEEP.shortOutputShare. Asked before the next
+ * production (the land brief), what the seat holds is what that check reads, and no goods auction comes between.
+ * Asked after it (the auction brief), upkeep drinks and spoils first, so the seat must end the auction holding more.
+ */
+function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): string {
+  const held = obs.players.find((q) => q.id === me)!.stock.water;
+  const need = needsOf(obs, me).water;
+  const farms = obs.tiles.filter((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? '')).length;
+  const kind = UPKEEP.irrigated.map((g: RawGood) => GOOD_NAME[g]).join(' or ');
+  const plots = farms === 1 ? `your ${kind} plot` : `your ${farms} ${kind} plots`;
+  const cut = `${plots} ${farms === 1 ? 'makes' : 'make'} ${pct(UPKEEP.shortOutputShare)} of ${farms === 1 ? 'its' : 'their'} output`;
+  const head = `Water in units: you hold ${held}`;
+  const drink = `${head}; your household and crew drink ${need} at upkeep, and`;
+  if (afterProduction && obs.month >= obs.maxMonths) return `${drink} this is the last month: no production checks Water again.`;
+  if (farms === 0) return `${drink} with no ${kind} plot of yours, going short of Water cuts nothing.`;
+  if (!afterProduction) {
+    const verdict = held >= need ? 'covered' : `short by ${need - held}, so ${cut} at that production, and no Water can be bought before it`;
+    return `${head}, against the ${need} the next production checks you hold (what your household and crew drink a month, at your MULEs today): ${verdict}.`;
+  }
+  const keep = waterToKeep(need);
+  const verdict = held >= keep ? 'covered' : `short by ${keep - held}, or ${cut} next month`;
+  return (
+    `${head}. To keep ${plots} whole next month, end this auction holding ${keep}: upkeep drinks ${need}, ` +
+    `${pct(GOOD_CONFIG.water.spoilage)} of the rest spoils, rounded down, and the next production checks you still hold ${need}: ${verdict}.`
+  );
+}
+
 /**
  * Where MULEs come from, as upkeep builds them (upkeep.ts): the corral now and this month's price to the seat; the
  * store's Smithore, and what the next upkeep builds from it, filling the corral back to corralTarget at
@@ -316,8 +362,8 @@ function muleLine(obs: GameState, me: PlayerId): string {
   );
 }
 
-/** What the seat's plots made, and its Food and Energy in units: the land and auction briefs' (B fix 3). */
-const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), ''];
+/** What the seat's plots made, and its Food, Energy and Water in units: the land and auction briefs'. */
+const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), waterLine(obs, me, afterProduction), ''];
 
 /**
  * The land plans' "Feeds me" reason, for a level without a look-ahead, counts plots, not units (strategist.ts

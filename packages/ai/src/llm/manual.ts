@@ -132,12 +132,12 @@ const PHASES: Record<Exclude<Phase, 'gameOver'>, () => string> = {
 };
 
 /**
- * The Water cut, and how it stacks on the Energy cut, as production.ts runProduction applies them: switchOff, then
- * halve on what the parts add up to after it.
+ * The Water cut, how it stacks on the Energy cut, and when it is decided, as production.ts runProduction applies them:
+ * `dry` before any plot runs, switchOff, then halve on what the parts add up to after it.
  */
 function waterCut(): string {
   const irrigated = UPKEEP.irrigated.map((g) => GOOD_NAME[g]).join(' or ');
-  return `A ${irrigated} plot also needs Water: when its owner holds less Water than their household and crew drink, it makes ${pct(UPKEEP.shortOutputShare)} of what it would, rounded down; one also turned off for want of Energy takes both cuts, the Water cut on what the Energy cut left.`;
+  return `A ${irrigated} plot also needs Water: when its owner holds less Water than their household and crew drink, it makes ${pct(UPKEEP.shortOutputShare)} of what it would, rounded down; one also turned off for want of Energy takes both cuts, the Water cut on what the Energy cut left. Who is short of Water is decided as production begins, before any plot runs, from the Water the last upkeep left: Water made at a production waters the next one.`;
 }
 
 /** How the store makes MULEs and prices them: upkeep.ts builds them, game.ts moves the factor, economy.ts mulePrice. */
