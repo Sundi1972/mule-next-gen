@@ -477,6 +477,14 @@ unknown  null means "Claude has recorded no vote for this ballot", not "abstain"
          recorded for an earlier ballot never carries over (the port answers per ballot, from the playbook in effect).
 timing   the port is read when VoteHand casts (after its seeded pause, POLITICS.ai.actMs); a recorded reply whose edit
          takes effect after the seat cast changes nothing for that ballot (the ballot is cast once)
+guards   (WS9 #691 AM-37 traps, PM ruling 7 Nov; must hold, with a test, BEFORE brief.ts offers `/politics/...`)
+         · a reply whose only accepted edits are votes does NOT switch on the drafted development or auction play: a
+           vote-only `by: 'llm'` adoption leaves the seat's development and auction exactly as with no reply (T-AC-B11);
+           a fix in validate.ts or draft.ts is WS9's, asked through the PM
+         · RC has no null in `politics.votes`: a recorded vote can be changed but not withdrawn back to the keyless
+           rule; the brief says so ("you can change a vote you recorded, not take it back")
+         · the monthly reply is bounded by the brief built at upkeep two months before the election (e-2); month 1's
+           ballot is reachable only by a recorded whisper reply
 offered  the ballot lines of the brief, the ask and any persuasion prompt never offer Claude a choice rows 0 and 0b
          take away (a vote on an office it runs for; a law vote as Governor), and DealHand never offers a vote on the
          seat's own office (WS7 slice 3 AM-8, #658 19a6aae2)
@@ -571,6 +579,7 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 | B-AC-B9 (HC-B7) | Given a table with a human and a computer seat / When the computer seat posts a table line and whispers the human / Then both show the "· AI" mark on the human's phone and the table line shows it on the TV; a human's line never does. | the phone and TV (browser, front to back) | a human's whisper → no mark | WS6, WS4 (C4 sends the lines) |
 | T-AC-B9 (B-AC-B8) | RULE-B6 rows 1-3 with its examples; a null port gives VoteHand's intents and draws byte-identical to today's on a seeded game. | VoteHand's intents; the election and council streams | a port naming a withdrawn candidate → keyless + 'vote_clamped' | C12 |
 | T-AC-B10 (B-AC-B6, C13) | A Claude Code seat whispered by a human gets the whisper from wait_for_my_turn, answers with answer_whisper inside its hold, and the answer reaches the human in the same phase through RULE-B3's caps and RULE-B2's guard; a wrong code is refused (claude-seat RULE-2). | delivered chat; the MCP results | a third whisper in the phase → no whisper result; a false declared price → dropped | C13 C7 |
+| T-AC-B11 (B-AC-B8, C12) | Given a seat whose reply's only accepted edits are `/politics/votes`, When it is adopted `by: 'llm'`, Then the seat's development and auction intents are byte-identical to the same game with no reply (the drafted play stays off). | the seat's development and auction intents on a seeded game | a reply that also edits the route → the route plays (positive control) | C12 |
 
 ## §7 · Risks & Spikes `[review-only]`
 - **R-B1 (accepted, pinned):** a false claim in prose with no number and no declared fact ("the store is out of
