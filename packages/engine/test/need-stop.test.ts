@@ -78,9 +78,9 @@ function waterSellerToStore(units: number): { state: GameState; need: number } {
 }
 
 describe('RULE-4: a seller stops at the amount they must hold', () => {
-  it('B-AC-B1: holding 12 Water and needing 4, walking to the store line sells 8, not the 9th; the seller stands one step above the line, held, and nothing more sells over 5 s', () => {
+  it('B-AC-B1: holding 12 Water and needing 6 (AM-18: the drink kept back, then the factory\'s 1), walking to the store line sells 6, not the 7th; the seller stands one step above the line, held, and nothing more sells over 5 s', () => {
     const { state, need } = waterSellerToStore(12);
-    expect(need, 'the factory makes p0 need Water: the arranged ground truth').toBe(4);
+    expect(need, 'the factory makes p0 need Water: the arranged ground truth').toBe(6);
 
     const trades = run(state, 15_000);
 
