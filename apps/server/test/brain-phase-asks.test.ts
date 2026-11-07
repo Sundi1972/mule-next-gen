@@ -543,3 +543,37 @@ describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { time
     expect(briefs[1]).toMatch(/Since your plan for month 2: your Worth .+ \(\+300\)/);
   });
 });
+
+describe('hands-refusals fix: "Last time" tells only what last month\'s reply had refused', { timeout: 30_000 }, () => {
+  it("hands-refusals fix: a development edit the rules clamped is told in that month's upkeep brief, and not again a month later when that month's land write carried no development edit (deep4: 2-4 AI 3 was told a month-10 refusal again in month 11)", async () => {
+    const withDevelopment = JSON.stringify({
+      edits: [
+        { path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' },
+        { path: '/development/timeBudgetMs', to: -5, reason: 'No time.' },
+      ],
+      line: '',
+    });
+    const landOnly = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }], line: '' });
+    const sdk = fakeSdk((n) => sdkMessage(n === 1 ? withDevelopment : landOnly, USED));
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const playbooks = new Playbooks({ brain: smartOn(sdk), source: playbookSource([seat]), seats: [seat] });
+    const told = '/development/timeBudgetMs (clamped to 0: a time of 0 or more)';
+
+    // Month 1: the land write carries a development edit, clamped at development's start.
+    playbooks.ask(state, 1);
+    for (const month of [1, 2]) {
+      await vi.advanceTimersByTimeAsync(0);
+      advanceTo(state, 'landGrant');
+      playbooks.takeEffect(state);
+      advanceTo(state, 'development');
+      playbooks.takePhase(state, 'development');
+      advanceTo(state, 'upkeep');
+      playbooks.ask(state, month + 1);
+    }
+    expect(sdk.calls).toBe(3);
+    expect(promptOf(sdk.requests[1]!.params).user).toContain(`Last time: the rules clamped or refused ${told}.`);
+    // Month 2's land write carried no development edit: month 1's clamp is not this month's.
+    expect(promptOf(sdk.requests[2]!.params).user).not.toContain(told);
+  });
+});

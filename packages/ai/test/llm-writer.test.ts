@@ -175,7 +175,6 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
   });
 
   const each: { cause: Cause; edit: Record<string, unknown>; path: string | null }[] = [
-    { cause: 'reason_too_long', edit: { path: '/landGrant/ranked', to: 'A', reason: MARK + 'x'.repeat(BRAIN.writeReasonChars) }, path: '/landGrant/ranked' },
     { cause: 'plan_not_offered', edit: { path: '/landGrant/ranked', to: MARK, reason: 'Take it.' }, path: '/landGrant/ranked' },
     { cause: 'plan_not_offered', edit: { path: '/landGrant/ranked', to: 'E', reason: 'Take it.' }, path: '/landGrant/ranked' },
     { cause: 'path_not_offered', edit: { path: `/landGrant/${MARK}`, to: 1, reason: 'Take it.' }, path: null },
@@ -215,12 +214,20 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
     expect(kept(written)).not.toContain(MARK);
   });
 
-  it("C2: a strategy reason past the cap refuses every strategy field, which all carry it, and keeps the land edits", async () => {
-    const { written, v } = await write('trader', replyText({ strategy: strategyReply({ reason: MARK + 'x'.repeat(BRAIN.writeReasonChars) }) }));
-    expect(written.refused.map((r) => r.cause)).toEqual(['reason_too_long', 'reason_too_long', 'reason_too_long']);
-    expect(paths(v.seen[0]!)).toEqual(['/landGrant/ranked']);
-    expect(written.reply.strategy).toBeUndefined();
-    expect(kept(written)).not.toContain(MARK);
+  it('hands-refusals fix: a reason past BRAIN.writeReasonChars is cut to that many code points and its edit plays; only the reason is cut, never the value (8 deep4 replies were refused whole for it)', async () => {
+    // A wave is two UTF-16 units: the cut counts code points, as the cap does, and never splits one.
+    const long = '🌊'.repeat(BRAIN.writeReasonChars + 5);
+    const cut = '🌊'.repeat(BRAIN.writeReasonChars);
+    const text = JSON.stringify({ strategy: strategyReply({ reason: long }), edits: [{ path: '/landGrant/ranked', to: 'A', reason: long }], line: '' });
+    const { written, v, brief } = await write('trader', text);
+    expect(written.refused).toEqual([]);
+    expect(v.seen[0]).toEqual([
+      { path: '/strategy/kind', to: 'specialist', reason: cut },
+      { path: '/strategy/moneyMaker', to: 'smithore', reason: cut },
+      { path: '/strategy/reason', to: cut, reason: cut },
+      { path: '/landGrant/ranked', to: brief.plans.find((p) => p.id === 'A')!.ranked, reason: cut },
+    ]);
+    expect(written.reply.strategy).toMatchObject({ kind: 'specialist', moneyMaker: 'smithore', reason: cut });
   });
 });
 

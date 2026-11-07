@@ -3,7 +3,8 @@
  * seat might claim or install on, so Claude stops asking for MULEs the hands must refuse (deep3 diaries).
  */
 import { describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, createGame, tileAt, tileIndex, type GameState, type LandGrantPlay, type Playbook, type Strategy } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, createGame, floorConfig, tileAt, tileIndex, type GameState, type LandGrantPlay, type Playbook, type Strategy } from '@mule/engine';
+import { doorTable } from '../src/floor-time.js';
 import { unreachablePlot } from '../src/hands/develop.js';
 import { landBrief, phaseBrief } from '../src/llm/brief.js';
 import { PERSONAS } from '../src/personas.js';
@@ -14,11 +15,14 @@ const mind: Mind = { me: 'p0', personaId: 'trader', persona: AI_PERSONAS.trader,
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 0, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
 const MARK = 'lake: no MULE can be installed';
 
-/** Seed 4's four-seat map (route-veto.test.ts's): (10, 0) is lake ringed by lake, (10, 1) lake with a free shore. */
+/**
+ * Seed 4's four-seat map (route-veto.test.ts's): (10, 0) is lake ringed by lake, (9, 1) lake with a free shore the floor
+ * walks to. Not (10, 1): its only shore is a corner, which no walk reaches (hands-refusals fix).
+ */
 function lakeTable(): { state: GameState; ringed: number; shore: number } {
   const state = createGame({ seed: 4, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `Seat ${i}`, isAi: true })) });
   const ringed = tileIndex(state.width, 10, 0);
-  const shore = tileIndex(state.width, 10, 1);
+  const shore = tileIndex(state.width, 9, 1);
   expect([state.tiles[ringed]!.terrain, state.tiles[shore]!.terrain]).toEqual(['lake', 'lake']);
   return { state, ringed, shore };
 }
@@ -44,11 +48,12 @@ describe('hands fix 2: the brief marks a lake plot no MULE can be installed on',
     const landGrant: LandGrantPlay = { ranked: [{ plot: ringed, value: 40 }, { plot: shore, value: 30 }], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 };
     const text = landBrief(state, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant }, []).text;
     expect(lineOf(text, 'Ranked:')).toBe(`Ranked: plot ${ringed} ${MARK} (40 cr), plot ${shore} (30 cr)`);
-    // Every plot a plan names is marked exactly when no MULE can be walked to it.
+    // Every plot a plan names is marked exactly when no MULE can be walked to it: no shore stand, or no walk from any door.
+    const noWalk = (plot: number) => [...doorTable(state, floorConfig()).values()].every((walks) => walks[plot]!.seconds === Infinity);
     const plans = text.slice(text.indexOf('Land plans for this month'), text.indexOf('Your draft land grant:'));
     const named = [...plans.matchAll(/plot (\d+)( lake: no MULE can be installed)? \(/g)];
     expect(named.length).toBeGreaterThan(0);
-    for (const [, plot, mark] of named) expect(!!mark, `plot ${plot}`).toBe(unreachablePlot(state, Number(plot)));
+    for (const [, plot, mark] of named) expect(!!mark, `plot ${plot}`).toBe(unreachablePlot(state, Number(plot)) || noWalk(Number(plot)));
   });
 
   it("hands fix 2: the draft development's route marks an install on an unreachable lake plot, and not one on a reachable plot", () => {
