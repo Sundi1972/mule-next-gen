@@ -1,7 +1,7 @@
 /** A Claude seat's playbook writer: its asks wait for whichever chat calls with the seat's code (spec C3). */
 import { randomUUID } from 'node:crypto';
 import type { AiPersonaId } from '@mule/engine';
-import { unusableReply, writeReply, type EditOffer, type PlanEdit, type Refusal, type WriterReply } from '@mule/ai';
+import { unusableReply, writeReply, type Cause, type EditOffer, type PlanEdit, type Refusal, type WriterReply } from '@mule/ai';
 import type { WriteKind } from '../brain/client.js';
 import type { PlaybookAsk, PlaybookWriter } from '../brain/index.js';
 
@@ -25,6 +25,8 @@ export interface SubmittedPlan {
 
 export type SubmitResult =
   | { kind: 'accepted'; accepted: PlanEdit[]; refused: Refusal[] }
+  /** Nothing in the plan could be read: not an answer, so the ask stays open for a resend. */
+  | { kind: 'unusable'; cause: Cause }
   | { kind: 'unknown_ask' }
   | { kind: 'answered' }
   | { kind: 'too_late' };
@@ -96,7 +98,7 @@ export class ClaudeSeatWriter implements PlaybookWriter {
     });
   }
 
-  /** Answers the seat's ask `askId` through the API writer's reply parser; only the first answer to an ask counts. */
+  /** Answers the seat's ask `askId` through the API writer's reply parser; only the first usable answer to an ask counts. */
   async submit(askId: string, plan: SubmittedPlan): Promise<SubmitResult> {
     const open = this.asks.get(askId);
     if (!open) return { kind: 'unknown_ask' };
@@ -106,6 +108,10 @@ export class ClaudeSeatWriter implements PlaybookWriter {
     const reply = { ...(plan.strategy === undefined ? {} : { strategy: plan.strategy }), edits: plan.edits, line: plan.line };
     const written = await writeReply(async () => ({ text: JSON.stringify(reply) }), open.ask);
     if (open.state !== 'answering') return { kind: 'too_late' };
+    if (written.reply.cause !== undefined) {
+      open.state = 'open';
+      return { kind: 'unusable', cause: written.reply.cause as Cause };
+    }
     open.state = 'answered';
     this.tally.answered += 1;
     this.tally.refused += written.refused.length;

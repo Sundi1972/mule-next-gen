@@ -54,17 +54,20 @@ const TOOLS = [
   },
 ] as const;
 
-/** What a refused call reads, by kind; the same text for a wrong, expired or guessed code (RULE-2). */
-const REFUSED = {
-  busy: 'Too many wrong seat codes reached the game just now. Call again after retry_s seconds.',
-  no_such_seat: 'No seat has that code. Check the invite.',
-  taken_back: 'The host took this seat back. Stop playing it.',
-  game_over: 'The game is over. Stop playing.',
-} as const;
+type Payload = { kind: string } & Record<string, unknown>;
+
+/** The sentence a result opens with, by kind; the same for a wrong, expired or guessed code (RULE-2). */
+const SAID: Readonly<Record<string, (result: Payload) => string>> = {
+  busy: (r) => `Too many wrong seat codes reached the game just now. Call again after ${String(r.retry_s)} seconds.`,
+  no_such_seat: () => 'No seat has that code. Check the invite.',
+  taken_back: () => 'The host took this seat back. Stop playing it.',
+  game_over: () => 'The game is over. Stop playing.',
+  unusable: (r) => `The plan could not be read (${String(r.cause)}). The ask is still open: fix the plan and resend it with submit_plan.`,
+};
 
 const STILL_OPEN = 'This ask is still open: answer it now with submit_plan.';
 
-type Refusal = { kind: 'busy'; retry_s: number } | { kind: Exclude<keyof typeof REFUSED, 'busy'> };
+type Refusal = { kind: 'busy'; retry_s: number } | { kind: 'no_such_seat' | 'taken_back' | 'game_over' };
 
 /** A code's seat as a call acts on it: its id, and its writer once the game has started. */
 type Found = { seatId: string; claude: ClaudeSeat | null };
@@ -198,10 +201,10 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
 }
 
 /** A tool's result: a sentence and the JSON for Claude to read, and the same object as structured content. */
-function resultOf(payload: { kind: string } & Record<string, unknown>): CallToolResult {
-  const refused = payload.kind in REFUSED ? `${REFUSED[payload.kind as keyof typeof REFUSED]}\n` : '';
+function resultOf(payload: Payload): CallToolResult {
+  const sentence = Object.hasOwn(SAID, payload.kind) ? `${SAID[payload.kind]!(payload)}\n` : '';
   // ms_left 0 is only the game's usual wait spent: the ask stays open until its phase starts, so 0 must not read as late.
-  const said = payload.kind === 'ask' && payload.ms_left === 0 ? `${STILL_OPEN}\n` : refused;
+  const said = payload.kind === 'ask' && payload.ms_left === 0 ? `${STILL_OPEN}\n` : sentence;
   return { content: [{ type: 'text', text: `${said}${JSON.stringify(payload)}` }], structuredContent: payload };
 }
 
