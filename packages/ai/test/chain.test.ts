@@ -14,7 +14,8 @@ const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rar
 const WORKS: Outfit[] = ['alloy', 'electronics'];
 
 // The ship's Electronics price holds where pricedAt sets it: the off-world walk (pricing C3) would pull it back to its
-// reference, and a forecast with it (pricing §3).
+// reference, and a forecast with it (pricing §3). It holds within the month only: a real month opening still clamps it
+// to the walk's band.
 const savedPhi = OFF_WORLD.others.phi;
 beforeEach(() => {
   OFF_WORLD.others.phi = 1;
