@@ -116,7 +116,9 @@ export async function runTable(game: Pick<Game<MuleIntent, MuleView>, 'viewFor' 
       for (const p of view.players) if (!p.isAi && game.viewFor(null).auction?.stage === 'status') game.handle(p.id, { type: 'ready' });
     }
     fake.advance(STEP_MS);
-    await vi.advanceTimersByTimeAsync(0);
+    // A model call's wait runs on the global timers, not the game's clock: they move together, so a call that never
+    // answers ends at its wait and frees the seat, as it does in play.
+    await vi.advanceTimersByTimeAsync(STEP_MS);
   }
   return starts;
 }
