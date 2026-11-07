@@ -32,8 +32,8 @@ import { useAuctionSound } from '../game/sound';
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
-import { connectedIn, pickedIn, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
-import { ReadyCount } from './hub/ReadyBar';
+import { claudeIn, connectedIn, pickedPlayers, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
+import { ClaudeLines, ReadyCount } from './hub/ReadyBar';
 import { AuctionHeadline } from '../components/AuctionHeadline';
 import { PhoneShell } from './Shell';
 import { stepDir, useWalkIntent } from './useWalkIntent';
@@ -105,10 +105,10 @@ export function Auction() {
     const ship = shipWants(view, auction);
     // A table the room has not listed yet counts every seat as connected.
     const connected = connectedIn(table.seats ?? []);
-    const waiting = stillPicking(view, connected);
+    const waiting = stillPicking(view, connected, claudeIn(table.seats ?? []));
     const others = waiting.filter((s) => s.id !== me.id);
     const isHost = table.hostId === me.id;
-    const picked = view.players.map((p) => ({ ...p, ready: pickedIn(view, p.id) }));
+    const picked = pickedPlayers(view.players, waiting);
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
@@ -164,6 +164,7 @@ export function Auction() {
                 )}
               </div>
             )}
+            <ClaudeLines waiting={waiting} />
           </>
         }
       >
