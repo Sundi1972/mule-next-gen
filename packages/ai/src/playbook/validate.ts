@@ -13,6 +13,7 @@ import {
   orderGeoDrone,
   outfitCostFor,
   outfitMule,
+  POLITICS,
   RuleError,
   STRATEGIST,
   unlist,
@@ -20,6 +21,7 @@ import {
   type FloorConfig,
   type GameState,
   type Good,
+  type Office,
   type Outfit,
   type Playbook,
   type PlayerId,
@@ -374,6 +376,26 @@ function sellerFloor(ctx: Ctx, good: Good): number {
 
 const perRow: Row = (v, ctx, unit) => (!ctx.others.has(unit[3]!) ? refuse('no such player') : oneOf(TACTICS, 'no such tactic')(v, ctx, unit));
 
+/** Who stands for `office` at its next ballot: on the ballot open now, and declared for the next. None without politics. */
+function onBallot(state: GameState, office: Office): string[] {
+  const p = state.politics;
+  if (!p) return [];
+  return [...(p.election?.stage === 'ballot' ? p.election.candidates[office] : []), ...p.candidates[office]];
+}
+
+/** RULE-1's politics rows (AM-37; spec B C12): a seat's recorded vote names a candidate standing; a law vote needs a law up. */
+const vote: Row = (v, ctx, unit) => {
+  const office = unit[2] as Office;
+  if (!(POLITICS.offices as readonly string[]).includes(office)) return refuse('no such office');
+  if (typeof v !== 'string' || !ctx.state.players.some((p) => p.id === v)) return refuse('no such player');
+  return onBallot(ctx.state, office).includes(v) ? ok(v) : refuse(`not on the ${office} ballot`);
+};
+const lawVote: Row = (v, ctx) => {
+  if (typeof v !== 'boolean') return refuse('not true or false');
+  const p = ctx.state.politics;
+  return p && (p.proposal !== null || p.council?.stage === 'ballot') ? ok(v) : refuse('no law on the ballot');
+};
+
 type Unit = { unit: string[]; row: Row } | { refused: string };
 const NO_FIELD: Unit = { refused: 'no such field' };
 const NOT_HERE: Unit = { refused: 'not in this playbook' };
@@ -392,6 +414,9 @@ function unitOf(segs: string[], pb: Playbook): Unit {
       return { unit: ['lessons'], row: lessons };
     case 'store':
       return { refused: 'no store play in v1' };
+    case 'politics':
+      if (a === 'votes') return b === undefined || c !== undefined ? NO_FIELD : { unit: ['politics', 'votes', b], row: vote };
+      return a === 'law' && b === undefined ? { unit: ['politics', 'law'], row: lawVote } : NO_FIELD;
     case 'planning':
     case 'landGrant':
     case 'development':
@@ -473,6 +498,8 @@ function unitsOf(pb: Playbook): string[][] {
     if (part?.market !== undefined) out.push(['auction', g, 'market']);
   }
   if (pb.store !== undefined) out.push(['store']);
+  for (const office of Object.keys(isObject(pb.politics) && isObject(pb.politics.votes) ? pb.politics.votes : {})) out.push(['politics', 'votes', office]);
+  if (isObject(pb.politics) && pb.politics.law !== undefined) out.push(['politics', 'law']);
   return out;
 }
 
@@ -487,6 +514,8 @@ function containersOf(pb: Playbook): string[][] {
     }
   }
   if (pb.rivalReads !== undefined) out.push(['rivalReads']);
+  if (pb.politics !== undefined) out.push(['politics']);
+  if (isObject(pb.politics) && pb.politics.votes !== undefined) out.push(['politics', 'votes']);
   return out;
 }
 
@@ -498,7 +527,7 @@ const holderOf = (unit: readonly string[]) => unit.slice(0, unit[0] === 'strateg
 
 /** A field the playbook may lack: one that fails step 5 is dropped; a field every playbook of its phase has stays. */
 const isOptional = (unit: readonly string[]) =>
-  ['rivalReads', 'lessons', 'store'].includes(unit[0]!) || (unit[1] === 'stances' && unit[2] !== undefined) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
+  ['rivalReads', 'lessons', 'store', 'politics'].includes(unit[0]!) || (unit[1] === 'stances' && unit[2] !== undefined) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
 
 const pathOf = (segs: readonly string[]) => `/${segs.map((k) => k.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
