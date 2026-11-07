@@ -1,8 +1,11 @@
+import { goodWords } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
+import { plotEvent, storeEvent } from './events.js';
 import { player } from './game.js';
 import { securitySpend } from './politics.js';
 import { createRng, seedOf } from './rng.js';
+import { PERCENT } from './units.js';
 import { GOODS, type GameState, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
 
 /**
@@ -25,8 +28,19 @@ function edit(state: GameState): NonNullable<GameState['politics']> {
 }
 
 /** Chance, 0..1, that this order is seen when it resolves (S4-RULE-3). */
-export function captureOdds(_state: GameState, _order: SabotageOrder): number {
-  return 0;
+export function captureOdds(state: GameState, order: SabotageOrder): number {
+  if (isGuarded(state, order)) return 1;
+  return orderTerms(state)[order.target.kind].detect;
+}
+
+/** The tiles the Sheriff's guards stand on now: the first guardsMax of politics.guards, in the order they were listed (S4-RULE-6). */
+function standingGuards(state: GameState): number[] {
+  return state.politics?.guards.slice(0, guardsMax(state)) ?? [];
+}
+
+/** Whether a power cut's plot is among the standing guards. A rumour has no plot to guard. */
+function isGuarded(state: GameState, order: SabotageOrder): boolean {
+  return order.target.kind === 'powerCut' && standingGuards(state).includes(order.target.tile);
 }
 
 const BASE_36 = 36; // literal-ok: the radix of an id tag, a definition
@@ -90,11 +104,75 @@ export function fineCulprit(_state: GameState, _playerId: string, _orderId: stri
 }
 
 /** Resolve every pending order, once, as production starts. */
-export function resolveSabotage(_state: GameState): void {}
+export function resolveSabotage(state: GameState): void {
+  if (state.whatIf || !state.politics) return;
+  const pending = pendingOrders(state);
+  if (pending.length === 0) return;
+  const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
+  const terms = orderTerms(state);
+  const voided = new Set<string>();
+  // Decide first, then write: a reveal edits the state, and the draws must not depend on what an earlier order caused.
+  const verdicts = pending.flatMap((order) => {
+    const tile = order.target.kind === 'powerCut' ? state.tiles[order.target.tile] : undefined;
+    if (order.target.kind === 'powerCut' && (!tile || tile.owner === null || tile.owner === order.by || !(GOODS as readonly string[]).includes(tile.outfit ?? ''))) {
+      voided.add(order.id);
+      return [];
+    }
+    // Both draws, for every order that stands, so the stream never depends on a guard.
+    const works = rng.chance(terms[order.target.kind].success);
+    const seen = rng.chance(captureOdds(state, order));
+    const guarded = isGuarded(state, order);
+    const victim = tile ? tile.owner : null;
+    const worked = !guarded && works;
+    const outcome: SabotageOrder['outcome'] = guarded || seen ? 'caught' : works ? 'done' : 'failed';
+    return [{ id: order.id, outcome, worked, victim, revealed: guarded || seen }];
+  });
+  if (voided.size > 0) {
+    const kept = state.politics.sabotage.filter((o) => !voided.has(o.id));
+    edit(state).sabotage = kept;
+  }
+  for (const { id, outcome, worked, victim, revealed } of verdicts) {
+    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim });
+    if (revealed) reveal(state, id);
+  }
+}
 
-/** The month's sabotage events for production to file. */
-export function sabotageEvents(_state: GameState): MonthEvent[] {
-  return [];
+/** This month's pending orders, in seat order and then in the order they were placed. */
+function pendingOrders(state: GameState): SabotageOrder[] {
+  const seat = (o: SabotageOrder) => state.players.findIndex((p) => p.id === o.by);
+  return state.politics!.sabotage.filter((o) => o.outcome === 'pending' && o.month === state.month).sort((a, b) => seat(a) - seat(b));
+}
+
+/** The one place a culprit becomes known: guard, catch on the spot, or investigation (S4-RULE-5). */
+function reveal(state: GameState, orderId: string): void {
+  edit(state).sabotage.find((o) => o.id === orderId)!.culpritPublic = true;
+}
+
+const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1);
+
+/** The month's sabotage events for production to file, in seat order: one for each order that was done or caught (S4-RULE-4). */
+export function sabotageEvents(state: GameState): MonthEvent[] {
+  if (state.whatIf || !state.politics) return [];
+  const seat = (o: SabotageOrder) => state.players.findIndex((p) => p.id === o.by);
+  const filed = state.politics.sabotage.filter((o) => o.month === state.month && (o.outcome === 'done' || o.outcome === 'caught')).sort((a, b) => seat(a) - seat(b));
+  return filed.map((order) => {
+    const culprit = order.culpritPublic ? order.by : null;
+    const worked = order.worked === true;
+    const guarded = isGuarded(state, order);
+    const sabotage = { order: order.id, culprit, worked, guarded };
+    const named = culprit === null ? '' : 'Caught! The saboteur is named.';
+    if (order.target.kind === 'powerCut') {
+      const tile = order.target.tile;
+      const event = plotEvent(state, 'powerCut', tile);
+      if (worked) return { ...event, line: `Someone cut the power to a ${capital(goodWords(state.tiles[tile]!.outfit as never))} plot: it makes nothing this month.`, sabotage };
+      return { ...event, plots: [], line: guarded ? 'Caught at a guarded plot: the power stays on.' : named, sabotage };
+    }
+    const { good, dir } = order.target;
+    const event = storeEvent(state, 'marketRumour', 'production');
+    const share = Math.round(POLITICS.sabotage.orders.rumour.shift * PERCENT);
+    const line = worked ? `A rumour: ${capital(goodWords(good))} opens ${share}% ${dir === 'up' ? 'higher' : 'lower'} at the auction.` : named;
+    return { ...event, line, sabotage };
+  });
 }
 
 /** Shift the posted prices by the month's worked rumours, after the auction posts them. */
@@ -131,8 +209,8 @@ export function canOrder(state: GameState, _playerId: string): true | 'off' | 'n
 }
 
 /** How many plots the Sheriff may guard this month. */
-export function guardsMax(_state: GameState): number {
-  return 0;
+export function guardsMax(state: GameState): number {
+  return POLITICS.sheriff.guards + Math.floor(securitySpend(state) / PER_SECURITY) * POLITICS.sheriff.guardsPerHundred;
 }
 
 /** Whether the player may guard, investigate and fine now, or why not. */
@@ -151,6 +229,6 @@ export function banMultiplier(_state: GameState): number {
 }
 
 /** Whether an order's effect or culprit is known to every seat (S4-RULE-3's public). */
-export function isPublicOrder(_order: SabotageOrder): boolean {
-  return false;
+export function isPublicOrder(order: SabotageOrder): boolean {
+  return order.outcome === 'done' || order.outcome === 'caught' || order.culpritPublic;
 }
