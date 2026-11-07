@@ -1,7 +1,7 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { COLONY_SCORE, DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
-import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
+import { allPrices, mulePrice, openingOffWorld, planShip, postPrices, stepOffWorld } from './economy.js';
 import { firePhase, rollPlayerEvent, storeOnStrike } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
@@ -80,7 +80,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
       capital: START.storeCapital,
       posted: { ...refPrice },
       refPrice,
-      offWorld: { ...refPrice },
+      offWorld: openingOffWorld(),
     },
     treasury: { money: 0, salesTax: TAX.salesTax, paid: {} },
     ship: planShip(options.seed, GAME.exportShipEvery, options.players.length),
@@ -96,8 +96,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     politics: options.politics === false ? null : newPolitics(),
     colony: options.politics === false ? null : newColony(1),
   };
-  // The first month's prices start where supply and demand put them.
-  for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  // The first month's prices are posted by the store's bands, from the normal prices.
+  postPrices(state);
   // Month 1's planning rolls here, as every later month's does in advancePhase (none fires before EVENTS.firstMonth).
   firePhase(state, 'planning');
   openPlanning(state);
@@ -549,7 +549,7 @@ export function advancePhase(state: GameState): void {
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
-    if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
+    if (soldOut) state.store.muleFactor = Math.min(MULE.maxFactor, state.store.muleFactor * (1 + MULE.scarcityUp));
     else if (state.store.mules >= state.store.mulesAtStart * MULE.surplusShare) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
     const { produced, pollutionBy, lines, events } = runProduction(state);
@@ -605,6 +605,7 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'planning') {
     state.month++;
+    stepOffWorld(state);
     state.monthEvents = [];
     for (const p of state.players) p.droneFound = [];
     // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.

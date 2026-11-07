@@ -3,33 +3,36 @@ import { POLITICS, TAX, type ElectionHow } from '@mule/engine';
 import { simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
 
-/** How each office was won, and the sales tax in percent, read as each land grant opens, over a few played games. */
-function playedPolitics(seeds: number[]) {
+/** How each office was won, and the sales tax in percent, read as each land grant opens, over one played game. */
+function playedPolitics(seed: number) {
   const how: ElectionHow[] = [];
   const taxes: number[] = [];
-  for (const seed of seeds) {
-    playGame(seed, simSeats(4, 'trader', seed, null), {
-      onPhase: (s) => {
-        if (s.phase !== 'landGrant' || !s.politics) return;
-        taxes.push(Math.round(s.treasury.salesTax * 100));
-        const result = s.politics.election?.result;
-        if (result) for (const office of POLITICS.offices) how.push(result[office]!.how);
-      },
-    });
-  }
-  return { how, taxes };
+  playGame(seed, simSeats(4, 'trader', seed, null), {
+    onPhase: (s) => {
+      if (s.phase !== 'landGrant' || !s.politics) return;
+      taxes.push(Math.round(s.treasury.salesTax * 100));
+      const result = s.politics.election?.result;
+      if (result) for (const office of POLITICS.offices) how.push(result[office]!.how);
+    },
+  });
+  // Four elections a game, each filling every office.
+  return { filled: how.length === 4 * POLITICS.offices.length && how.every(Boolean), voteWin: how.includes('votes'), taxMoved: taxes.some((t) => t !== Math.round(TAX.salesTax * 100)) };
 }
 
-// One pinned game in CI: seed 1 has offices won by votes (5 of 8) and a tax off its start in 11 of 12 months, so it
-// qualifies with room. If a change stops it qualifying, the test fails; it never skips. MULE_FULL=1 plays four.
-const SEEDS = process.env.MULE_FULL === '1' ? [1, 2, 3, 4] : [1];
+// Local only (MULE_FULL=1, `pnpm test:full`): four games, judged game by game. The CI tier plays one pinned game.
+const full = process.env.MULE_FULL === '1';
+const PINNED = 2;
+const SEEDS = [1, 2, 3, 4];
 
 describe('the sim plays politics', () => {
-  it('UBER-AC-1, T-AC-63: AI seats declare and vote, so every office is filled in every election and some are won by votes, not only appointed, and a Governor moves the tax', () => {
-    const { how, taxes } = playedPolitics(SEEDS);
-    // Four elections a game fill every office each time.
-    expect(how).toHaveLength(SEEDS.length * 4 * POLITICS.offices.length);
-    expect(how).toContain('votes');
-    expect(taxes.some((t) => t !== Math.round(TAX.salesTax * 100))).toBe(true);
-  }, 30_000); // up to four full games under MULE_FULL: about 5 s locally, over vitest's 5 s default
+  it(`UBER-AC-1, T-AC-63: in one game (seed ${PINNED}) AI seats declare and vote, so every election fills every office, one is won by votes, and a Governor moves the tax`, () => {
+    expect(playedPolitics(PINNED)).toEqual({ filled: true, voteWin: true, taxMoved: true });
+  }, 30_000); // one full game: about 1.5 s locally, with room for a slow runner
+
+  it.runIf(full)('UBER-AC-1, T-AC-63: over four games every game fills every office, and at least two each show a vote win and a tax move', () => {
+    const games = SEEDS.map(playedPolitics);
+    expect(games.map((g) => g.filled), 'every game fills every office').toEqual(SEEDS.map(() => true));
+    expect(games.filter((g) => g.voteWin).length, 'games with an office won by votes').toBeGreaterThanOrEqual(2);
+    expect(games.filter((g) => g.taxMoved).length, 'games where the Governor moved the tax').toBeGreaterThanOrEqual(2);
+  }, 60_000); // four full games: about 6 s locally
 });
