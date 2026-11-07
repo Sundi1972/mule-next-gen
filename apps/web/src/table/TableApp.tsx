@@ -1,7 +1,7 @@
 import { GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
-import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
+import { AiMark, Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import {
   boardWalkers,
   dealLine,
@@ -302,7 +302,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <News news={game.news} />
         </div>
         {phase !== 'planning' ? (
-          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? (p.isAi ? 'AI · READY' : 'READY') : p.isAi ? 'AI' : '…'}</span>} />
+          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? 'READY' : p.isAi ? '' : '…'}</span>} />
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
             {readyRows(game.players, connected, claude).map((row) => {
@@ -442,11 +442,21 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
   return (
     <ul className={cx('flex flex-col gap-2', className)}>
       {game.players.map((p) => (
-        <li key={p.id} className="flex items-center gap-3">
+        <li key={p.id} className="flex items-center gap-3" data-testid={`tv-player-${p.id}`}>
           <Speaker id={p.id} size="tv">
             <PlayerMark slot={toSlot(p.slot)} size={22} />
           </Speaker>
-          <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+          {/* A computer seat's mark (Heiko, 7 Nov) sits outside the name's truncation, so a long name never cuts it off. */}
+          <span className="flex min-w-0 flex-1 items-baseline font-display text-xl font-semibold">
+            <span className="truncate" data-testid="tv-player-name">
+              {p.name}
+            </span>
+            {p.isAi && (
+              <span className="shrink-0 whitespace-pre font-normal">
+                <AiMark />
+              </span>
+            )}
+          </span>
           {right(p)}
         </li>
       ))}
