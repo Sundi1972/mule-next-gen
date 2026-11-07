@@ -612,7 +612,7 @@ export type DealTerms =
 
 /** A deal card between two players (slice 3). */
 export interface DealCard {
-  /** 'deal-<n>', from a counter in state, so a replay makes the same ids. */
+  /** 'deal-<tag>', opaque, seeded from the card's number (AM-2). */
   id: string;
   /** The proposer. */
   from: string;

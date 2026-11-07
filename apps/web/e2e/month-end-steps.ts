@@ -1,6 +1,7 @@
 import type { MuleView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
 import type { MuleGame } from '../../server/src/mule-game.js';
+import { theTvMonthEnd } from './grounds-opener-steps';
 import { check, type GameStepContext } from './harness';
 
 /**
@@ -73,7 +74,7 @@ export async function theMonthEndHoldsForThePhone(ctx: GameStepContext, month: n
   const tvEnd = tv.getByTestId('tv-monthend');
   const onTo = end.getByTestId('ready');
   await onTo.waitFor({ timeout: MONTH_END_MS });
-  await tvEnd.waitFor({ timeout: PRESS_MS });
+  await theTvMonthEnd(tv);
   check((await text(onTo)) === `On to month ${month + 1}`, `B-AC-13: the phone's Ready at month ${month}'s end reads "On to month ${month + 1}", got "${await text(onTo)}"`);
   check(board(ctx).phaseEndsAt === null, `B-AC-13: month ${month}'s end has no clock on the server`);
   await phone.waitForTimeout(HOLD_MS);
@@ -114,7 +115,7 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
   const end = phone.locator('[data-phase=upkeep]');
   const tvEnd = tv.getByTestId('tv-monthend');
   await end.getByTestId('league').waitFor({ timeout: MONTH_END_MS });
-  await tvEnd.waitFor({ timeout: PRESS_MS });
+  await theTvMonthEnd(tv);
   const truth = board(ctx);
   const month = truth.month;
   check(last ? month === last.month + 1 : month === 1, `B-AC-12: this is the month after ${last ? `month ${last.month}` : 'none (month 1)'}, got month ${month}`);

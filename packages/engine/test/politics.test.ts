@@ -13,6 +13,7 @@ import {
   nextElectionMonth,
   player,
   POLITICS,
+  reputationShift,
   RuleError,
   runFor,
   scoreParts,
@@ -273,11 +274,22 @@ describe('C4: vote weight', () => {
     expect(voteWeight(state, 'ossa').parts.taxes).toBe(2);
     expect(voteWeight(state, 'ai1').parts.taxes).toBe(0);
 
-    for (const [reputation, part] of [[70, 1], [69, 0], [30, 0], [29, -1]] as const) {
+    // [reputation, its part, the total]: below 30 the part is -1 and the floor (S3-RULE-8) holds the total at 1.
+    for (const [reputation, part, total] of [[70, 1, 2], [69, 0, 1], [30, 0, 1], [29, -1, 1]] as const) {
       player(state, 'brix').reputation = reputation;
       expect(voteWeight(state, 'brix').parts.reputation).toBe(part);
-      expect(voteWeight(state, 'brix').total).toBe(1 + part);
+      expect(voteWeight(state, 'brix').total).toBe(total);
     }
+  });
+
+  it('S3-T-AC-7: voteWeight\'s total floors at POLITICS.weight.minVotes — reputation 20, no land, no taxes gives 1 with parts.reputation still −1', () => {
+    const state = newGame();
+    reputationShift(state, 'brix', 20 - player(state, 'brix').reputation);
+    expect(player(state, 'brix').reputation).toBe(20);
+    expect(voteWeight(state, 'brix')).toEqual({ total: POLITICS.weight.minVotes, parts: { base: 1, land: 0, reputation: -1, baron: 0, taxes: 0 } });
+    // One land vote's plots: 1 + 1 - 1 = 1, the floor not needed.
+    give(state, 'brix', POLITICS.weight.plotsPerVote);
+    expect(voteWeight(state, 'brix')).toEqual({ total: 1, parts: { base: 1, land: 1, reputation: -1, baron: 0, taxes: 0 } });
   });
 });
 
