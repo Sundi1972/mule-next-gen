@@ -1,7 +1,7 @@
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, OFF_WORLD, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { fundIn } from './colony.js';
 import { airBand } from './pollution.js';
-import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput } from './production.js';
+import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput, waterUseOf } from './production.js';
 import { createRng, seedOf, type Rng } from './rng.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type ExportShip, type GameState, type Good, type PriceBand, type Stock } from './types.js';
@@ -85,7 +85,7 @@ export function exportDemand(state: GameState): Stock {
 
 /**
  * What the players themselves use a month: Food and Water for their
- * households and crews, and the Energy their plots and factories burn.
+ * households and crews, and the Energy and Water their plots and factories use (AM-17, AM-18).
  */
 export function playersUse(state: GameState): { food: number; water: number; energy: number } {
   const use = { food: 0, water: 0, energy: 0 };
@@ -94,8 +94,11 @@ export function playersUse(state: GameState): { food: number; water: number; ene
     use.food += needs.food;
     use.water += needs.water;
   }
-  // A plant pays its own use from its own output (AM-17 R2, PM ruling A): it asks the store for nothing.
-  for (const t of state.tiles) if (t.outfit !== 'energy') use.energy += energyUseOf(state, t);
+  // A plant or a well pays its own use from its own output (AM-17 R2, PM ruling A; AM-18 W5): it asks the store for nothing.
+  for (const t of state.tiles) {
+    if (t.outfit !== 'energy') use.energy += energyUseOf(state, t);
+    if (t.outfit !== 'water') use.water += waterUseOf(t);
+  }
   return use;
 }
 
