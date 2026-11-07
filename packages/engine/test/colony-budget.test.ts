@@ -105,6 +105,19 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
     expect(to.to).not.toBe('lena');
     expect(money(state, to.to) - before.get(to.to)!).toBe(54);
 
+    // Only the Observatory is open (350 credits, 2 Crystite) and the store has no Crystite: the buildings take 350 of
+    // the 432 the Projects share allows, and the fund keeps the rest (AM-7).
+    const small = governed();
+    commission(small, 'lena', 'observatory');
+    small.store.stock.crystite = 0;
+    small.treasury.money = fundForSpare(540);
+    withBudget(small, shares(80, 10));
+    advanceTo(small, 'upkeep');
+    const needed = PRESTIGE.observatory.credits;
+    expect(small.history.at(-1)!.ledger!.out.project, 'buildings take what they need, under the limit').toBe(needed);
+    expect(project(small, 'observatory').funded.credits, 'the project holds exactly the credits it asked for').toBe(needed);
+    expect(small.treasury.money, 'the reserve, the 54 nobody took and the 82 the buildings did not need stay in the fund').toBe(COLONY.reserve + 540 - 54 - needed);
+
     const rich = commissioned(fundForSpare(6_000), shares(80, 10));
     advanceTo(rich, 'upkeep');
     expect(rich.history.at(-1)!.ledger!.out.welfare, 'a tenth of 6,000 is 600; the cap holds it').toBe(B.welfare.maxCredits);
