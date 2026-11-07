@@ -17,7 +17,7 @@ KITS = os.environ.get("KITS_DIR", "")
 # material-name fragment -> multiply on its base colour (or the colour, unmapped). The boxwood (WDC_PropFoliage_A): its
 # dense branch cards over a solid hedge core shade each other to a near-black ball under our light (the plate's dark
 # shrubs, AM-7): lifted toward the other shrubs' green
-TINTS = {"SandPile": (0.55, 0.4, 0.28), "BoxwoodBranch": (2.2, 2.0, 1.9), "GreenHedge": (2.2, 2.0, 1.9)}
+TINTS = {"SandPile": (0.55, 0.4, 0.28), "BoxwoodBranch": (3.2, 2.9, 2.5), "GreenHedge": (3.2, 2.9, 2.5)}
 _TEMPLATES = {}
 
 
