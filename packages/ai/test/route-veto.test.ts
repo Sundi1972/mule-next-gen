@@ -177,7 +177,7 @@ describe('routeVeto on an own plot that has a MULE: a different outfit is a swap
     expect(routeVeto(state, floored(state), { plot: idle!, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
   });
 
-  it("a swap while the seat leads a MULE fitted for another outfit is stale: the hand can't fit a led MULE again", () => {
+  it("a swap while the seat leads a MULE fitted for another outfit is stale: the hand never fits a led MULE again", () => {
     const state = development(4);
     const plot = ownPlains(state);
     state.tiles[plot]!.outfit = 'food';

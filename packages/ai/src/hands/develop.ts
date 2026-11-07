@@ -156,7 +156,7 @@ export interface RouteMule {
   outfit: Outfit | null;
 }
 
-/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the hand can't fit a led MULE again. */
+/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the engine's reoutfitMule would fit it again, but the hand never does. */
 const ledOffSwap = (p: Player): boolean => !!p.takenMule?.swapped && p.carriedMule === p.takenMule.outfit;
 
 /**
