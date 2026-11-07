@@ -1982,10 +1982,10 @@ export const BRAIN = {
   /**
    * brain:trial --deep, a monitoring run (deep2-opus, Heiko 6 Nov): every write thinks at writeCall's effort, with room
    * for long thinking and a long wait, and every call is recorded with its summarized thinking. Its ledgers
-   * (deep-*.jsonl) count against capUsd, Heiko's clearances together: deep2-opus $20 (6 Nov), and deep3-haiku with
-   * deep3-sonnet $45 (6 Nov, after the free gate), and deep4 haiku, sonnet and opus $115 (7 Nov, option C, after the free gate at
-   * 519238a8; $23.06 already spent then). Each run also gives its own --max-usd. A game's Smart seats may
-   * spend up to gameBudgetUsdMax.
+   * (deep-*.jsonl) count against capUsd, cumulative: a run starts only if what they hold plus its --max-usd stays
+   * within it. At 65 it held Heiko's deep2-opus $20 and deep3 $45 clearances (6 Nov). Raised for deep4 option C (7 Nov,
+   * after the free gate at 519238a8): the $23.06 the deep ledgers held then, plus deep4's arm caps (Haiku $5, Sonnet
+   * $30, Opus $80) = $138.06, rounded to 140. A game's Smart seats may spend up to gameBudgetUsdMax.
    */
   deep: { capUsd: 140, gameBudgetUsdMax: 10, writeCall: { effort: 'high', maxTokens: 16_000, timeoutMs: 180_000 } },
   /**
