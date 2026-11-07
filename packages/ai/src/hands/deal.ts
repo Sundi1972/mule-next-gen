@@ -267,11 +267,10 @@ export class DealHand {
     return obs.players.filter((p) => p.id !== this.mind.me).reduce<string | null>((best, p) => (best === null || cost(p.id) > cost(best) ? p.id : best), null);
   }
 
-  /** Row c: where sabotage can happen, a pact of the middle length to the player it is worth most with. */
+  /** Row c: where sabotage can happen, a pact of POLITICS.ai.deals.pactMonths to the player it is worth most with. */
   private pact(obs: GameState): Draft | null {
     if (!sabotagePossible(obs)) return null;
-    const { pactMonths } = POLITICS.deals;
-    const months = pactMonths[Math.floor(pactMonths.length / 2)]!;
+    const months = POLITICS.ai.deals.pactMonths;
     const open = obs.politics!.deals.filter((d) => d.terms.kind === 'pact' && (d.status === 'offered' || d.status === 'active'));
     // every offer test comes before the pick, so a best partner that fails one gives way to the next best
     const holding = new Set(obs.politics!.deals.filter((d) => d.from === this.mind.me && d.status === 'offered').map((d) => d.to));
