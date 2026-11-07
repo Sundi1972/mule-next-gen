@@ -10,7 +10,7 @@ import { RuleError } from './errors.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
-import type { CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Politics, TaxPromise } from './types.js';
+import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
@@ -715,4 +715,55 @@ export function lawImpact(state: GameState, proposal: LawProposal): Record<strin
     out[p.id] = { ...impact, cost: impact.cost === 0 ? 0 : -impact.cost };
   }
   return out;
+}
+
+// ---- Slice 5: the Governor's budget and the overrule vote. Names exported ahead of their bodies so callers compile.
+
+const notBuilt = (): never => {
+  throw new RuleError('Not built yet');
+};
+
+/** The lines the Governor may share the fund between, in order. See S5-RULE-1. */
+export function budgetLines(state: GameState): BudgetLine[] {
+  return notBuilt();
+}
+
+/** The shares in force: the default while none is set, a line not offered as 0. See S5-RULE-1. */
+export function budgetShares(state: GameState): Record<BudgetLine, number> {
+  return notBuilt();
+}
+
+/** What each share pays at today's fund (S5-RULE-3). */
+export function budgetCredits(state: GameState): Record<BudgetLine, number> {
+  return notBuilt();
+}
+
+/** The Governor sets the budget. See S5-RULE-2. */
+export function setBudget(state: GameState, playerId: string, shares: Record<BudgetLine, number>): void {
+  return notBuilt();
+}
+
+/** Per target: true, or why the player may not call an overrule now. See S5-RULE-6. */
+export function canOverrule(state: GameState, playerId: string): Record<OverruleTarget, true | OverruleWhy> {
+  return notBuilt();
+}
+
+/** A player calls this month's overrule on a target, or withdraws their call with null. See S5-RULE-6. */
+export function callOverrule(state: GameState, playerId: string, target: OverruleTarget | null): void {
+  return notBuilt();
+}
+
+/** As planning would end: a pending call opens its ballot. Returns whether it did. See S5-RULE-7. */
+export function openOverrule(state: GameState): boolean {
+  return notBuilt();
+}
+
+/** A voter's yes (undo it) or no on the open overrule ballot. */
+export function voteOverrule(state: GameState, voterId: string, yes: boolean): void {
+  return notBuilt();
+}
+
+/** Credits the Security line pays this month: slice 4 reads it. 0 until the Security line is built (AM-3). */
+export function securitySpend(state: GameState): number {
+  return 0;
 }

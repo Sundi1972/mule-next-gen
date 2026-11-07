@@ -475,3 +475,8 @@ export function payStrike(state: GameState, playerId: string): void {
   payOut(state, colony, 'strikePay', strike.cost);
   colony.strike = { ...strike, paid: true };
 }
+
+/** Who Welfare would go to now: the player in last place on Worth, never the Governor. See S5-RULE-4. */
+export function welfareRecipient(state: GameState): string | null {
+  throw new RuleError('Not built yet');
+}
