@@ -5,21 +5,26 @@ import {
   LAW_NAME,
   lawImpact,
   nextElectionMonth,
+  partyTo,
   PERCENT,
   POLITICS,
+  promisedVotes,
+  reputationReasons,
   taxBounds,
   votesOpen,
   voteWeight,
   type CeremonyBeat,
   type CeremonyBeats,
+  type DealCard,
   type ElectionHow,
   type GameState,
   type LawId,
   type LawImpact,
   type LawProposal,
+  type NoticeEntry,
   type Office,
 } from '@mule/engine';
-import type { CeremonyView, CouncilView, ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
+import type { CeremonyView, CouncilView, ElectionView, MyDealsView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
@@ -108,6 +113,10 @@ export function politicsView(state: GameState): PoliticsView | null {
     council: councilView(state),
     laws: structuredClone(p.laws),
     retry: Object.fromEntries(Object.entries(p.failed).map(([key, month]) => [key, month + POLITICS.council.retryMonths + 1])),
+    brokenDeals: visibleDeals(state, NO_SEAT).sort((a, b) => (b.settled ?? 0) - (a.settled ?? 0)),
+    reputationReasons: Object.fromEntries(
+      state.players.map(({ id }) => [id, reputationReasons(state, id).map((r) => (r.kind === 'broken' ? { kind: 'broken' as const, id: r.card.id } : { ...r }))]),
+    ),
   };
 }
 
@@ -173,6 +182,7 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
+    promised: structuredClone(promisedVotes(state, playerId)),
     ...(p.governor === playerId && state.phase === 'planning' && !votesOpen(state) ? { candidates: candidates(state) } : {}),
   };
 }
@@ -213,5 +223,60 @@ export function ceremonyNews(state: GameState, beforeMs: number, nameOf: (seatId
     .map(({ office }) => {
       const { winner, how } = result[office]!;
       return `${nameOf(winner)} is ${TITLE[office]} (${HOW[how]}).`;
+    });
+}
+
+/** No seat's id: partyTo passes a card to it only when the card is public. */
+const NO_SEAT = '';
+
+/** The cards `viewerId` may see by the one rule (partyTo), newest offer first, as copies. */
+function visibleDeals(state: GameState, viewerId: string): DealCard[] {
+  return [...(state.politics?.deals ?? [])].reverse().filter((card) => partyTo(viewerId, card)).map((card) => structuredClone(card));
+}
+
+/** A player's own cards for their phone: every card partyTo shows them, and how many more offers they may make now. */
+export function dealsView(state: GameState, playerId: string): MyDealsView | null {
+  const p = state.politics;
+  if (!p) return null;
+  const open = p.deals.filter((d) => d.from === playerId && d.status === 'offered').length;
+  return { cards: visibleDeals(state, playerId), offersLeft: Math.max(0, POLITICS.deals.maxOpenOffers - open), pactMonths: [...POLITICS.deals.pactMonths] };
+}
+
+/** A deal notice as mule-game's notify takes it: the month and phase are its own to add. */
+export type DealFact = Omit<Extract<NoticeEntry, { kind: 'deal' }>, 'type' | 'at' | 'seq' | 'month' | 'phase'>;
+
+/**
+ * What changed between two lists of cards, as the record's notices: a new card is noticed as offered, and each status
+ * it has moved to since as that status. Private to its two parties, but a broken card is public, so it carries none.
+ */
+export function dealNotices(before: readonly DealCard[], after: readonly DealCard[]): DealFact[] {
+  const was = new Map(before.map((card) => [card.id, card.status]));
+  const facts: DealFact[] = [];
+  const fact = (event: DealCard['status'], card: DealCard): DealFact =>
+    event === 'broken' ? { kind: 'deal', event, deal: structuredClone(card) } : { kind: 'deal', event, deal: structuredClone(card), parties: [card.from, card.to] };
+  for (const card of after) {
+    const old = was.get(card.id);
+    if (old === undefined) facts.push(fact('offered', { ...card, status: 'offered', brokenBy: null, settled: null }));
+    if (card.status !== (old ?? 'offered')) facts.push(fact(card.status, card));
+  }
+  return facts;
+}
+
+/** A reputation move as the news says it: "−10". */
+const points = (move: number): string => `${move < 0 ? '−' : '+'}${Math.abs(move)}`;
+
+/** One news line for every card that turned broken between the two lists: who broke what with whom, and what it cost. */
+export function dealNews(before: readonly DealCard[], after: readonly DealCard[], nameOf: (seatId: string) => string): string[] {
+  const was = new Map(before.map((card) => [card.id, card.status]));
+  const { voteBroken, pactBroken } = POLITICS.reputation.moves;
+  return after
+    .filter((card) => card.status === 'broken' && was.get(card.id) !== 'broken')
+    .map((card) => {
+      const breaker = card.brokenBy ?? card.from;
+      const other = breaker === card.from ? card.to : card.from;
+      const { terms } = card;
+      if (terms.kind === 'pact') return `${nameOf(breaker)} broke a pact with ${nameOf(other)}. Reputation ${points(pactBroken)}.`;
+      const what = 'office' in terms ? `a vote for ${nameOf(terms.candidate)}` : `a ${terms.yes ? 'yes' : 'no'} on the law`;
+      return `${nameOf(breaker)} broke a promise to ${nameOf(other)}: ${what}. Reputation ${points(voteBroken)}.`;
     });
 }
