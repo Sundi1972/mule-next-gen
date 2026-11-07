@@ -4,7 +4,7 @@
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type FundLine, type GameState, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Page } from 'playwright';
@@ -140,6 +140,7 @@ async function main(): Promise<void> {
     const expected = figureFor(colony().projects.find((p) => p.id === PROJECT)!);
     check(figure === expected, `B-AC-34-4: the ${PRESTIGE[PROJECT].name}'s line reads the server's "${expected}", got "${figure}"`);
     console.log(`✓ B-AC-34-4: the month end's build site shows the ${PRESTIGE[PROJECT].name} ${stage} on one line, "${figure}"`);
+    console.log(`✓ #tv-month-end-paid-out: two seats, month 1's end, the Wealth note reads ${await theFundPaidOut(tv, board())}`);
 
     // Month 2, to game over.
     await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
@@ -483,6 +484,12 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       ];
       check(staged.filter((p) => p.stage === 'building' || p.stage === 'commissioned').length === COLONY.maxOpen, `the staging has the most projects under way, ${COLONY.maxOpen}`);
       state.colony!.projects = staged.map(({ id, stage, monthsLeft }) => ({ id, stage, monthsLeft, since: 1, slot: null, funded: { credits: 120, goods: {} }, plaque: Object.fromEntries(donors) }));
+      // And the longest Wealth note a month end can have (#tv-month-end-paid-out): five figures on both sides, every line
+      // of the ledger paid, in the widest digits.
+      const report = [...state.history].reverse().find((r) => r.ledger);
+      check(report?.ledger?.month === state.month, `month ${state.month}'s end has its own ledger, got month ${report?.ledger?.month}`);
+      report.ledger.out = LONGEST_LEDGER;
+      state.treasury.money = 88_888;
       room.broadcast();
     });
     check(board().colony?.projects.length === 5, `five projects at the build site, got ${board().colony?.projects.length}`);
@@ -499,6 +506,7 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       check((await site.locator('li').count()) === 5, `the ${name} TV's build site has five lines, the standing park folded into one`);
       await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });
       console.log(`✓ B-AC-27-2: six seats, month 2's end, five projects, ${read}`);
+      console.log(`✓ #tv-month-end-paid-out: six seats, the longest ledger, the Wealth note reads ${await theFundPaidOut(page, board())}`);
     }
     // A late game's other end: all five standing share one line, and every name shows, wrapping rather than cut (review
     // of #672). The fewer lines leave the room.
@@ -529,6 +537,27 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await browser.close();
     await server.close();
   }
+}
+
+/** Every line the fund can pay, in the widest digits: 88,888 in all, beside a fund of 88,888. */
+const LONGEST_LEDGER: Partial<Record<FundLine, number>> = { officePay: 8_888, upkeep: 8_888, repair: 8_888, strikePay: 8_888, welfare: 8_888, security: 8_888, project: 35_560 };
+
+/**
+ * #tv-month-end-paid-out (PM ruling 7 Nov): the TV month end's Wealth note reads the fund and this month's paid-out total
+ * as the server has them, every line summed, and shows whole. The note is one line that truncates, so it never costs height.
+ */
+async function theFundPaidOut(tv: Page, g: MuleView): Promise<string> {
+  const c = g.colony;
+  check(c?.ledger?.month === g.month, `the month end's ledger is this month's (${g.month}), got ${c?.ledger?.month}`);
+  const total = Object.values(c.ledger.out).reduce((sum: number, n) => sum + (n ?? 0), 0);
+  const want = `fund ${c.fund.toLocaleString('en-US')} cr · paid out ${total.toLocaleString('en-US')}`;
+  const note = tv.getByTestId('tv-monthend').getByTestId('note-gauge-wealth');
+  await note.filter({ hasText: want }).waitFor({ timeout: PRESS_MS });
+  // A note that fits sizes to its words; one that does not is cut to its row, its words running past (scroll > client).
+  const fit = await note.evaluate((el) => ({ text: (el as HTMLElement).innerText, scroll: el.scrollWidth, client: el.clientWidth, row: el.parentElement!.clientWidth }));
+  check(fit.text === want, `the Wealth note reads "${want}", got "${fit.text}"`);
+  check(fit.scroll <= fit.client, `TV-FIT: the Wealth note "${want}" shows whole, ${fit.scroll} px in ${fit.client}`);
+  return `"${want}", whole (${fit.scroll} px of its ${fit.row} px row)`;
 }
 
 /**
