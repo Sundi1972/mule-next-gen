@@ -423,7 +423,8 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         // (i): the store's side neighbours show their dots, so its sign has dots beside it (WS6 ruling in #636).
         const store = state.tiles.find((t) => t.terrain === 'store');
         check(store, `${id}: the map has a store`);
-        const besideStore = [at(store.x - 1, store.y), at(store.x + 1, store.y)].filter((t): t is GameState['tiles'][number] => !!t && open(t));
+        // Never (f)'s plot, which must keep showing no dots (#656 review).
+        const besideStore = [at(store.x - 1, store.y), at(store.x + 1, store.y)].filter((t): t is GameState['tiles'][number] => !!t && open(t) && t !== hidden);
         check(besideStore.length > 0, `${id}: a plot beside the store that can show its dots`);
         for (const n of besideStore) {
           const was = n.outfit;
@@ -584,7 +585,7 @@ async function dotsFitTheirPlots(map: Locator, analysed: string[], id: string): 
  * border; and every tab, gem and badge in a small plot's strip is drawn at 3 px or more. Returns the counts and the smallest.
  */
 async function marksClearOfTheChips(map: Locator, id: string): Promise<{ marks: number; strip: number; smallest: number }> {
-  // The store's sign is not among the ruling's marks: its size on the small phone is with the PM (it reaches into its neighbours).
+  // The store's sign is not among the ruling's marks: under 24 px it is not drawn at all, checked apart (WS6 ruling in #636).
   const MARKS = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span', '[data-testid^=map-flag-]', '[data-testid^=installed-]', '[data-testid^=plot-object-] [data-num]'];
   const STRIP = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span'].map((m) => `[data-testid^=map-strip-] ${m}`);
   const [chips = [], marks = [], strip = []] = await rectsOf(map, ['[data-testid^=map-dots-]', MARKS.join(', '), STRIP.join(', ')]);

@@ -179,6 +179,23 @@ describe('B-AC-9 (WS6 ruling and PM ruling, 7 Nov): the map rendered at a measur
     expect((await at(24, null, read, plots)).sign).toBe(true);
   });
 
+  it('SA-1372: the TV keeps its STORE sign at any plot size (#656 review)', async () => {
+    const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, terrain: 'store' } : t));
+    layout.width = 12.8 * 4;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host as unknown as HTMLElement);
+    root.render(createElement(HoloMap, { width: 4, height: 3, tiles: plots, density: 'tv' }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    try {
+      expect(byId(host, 'map-store')).toBeDefined();
+    } finally {
+      root.unmount();
+      document.body.removeChild(host);
+      layout.width = MAP_PX;
+    }
+  });
+
   it('SA-1372 (WS6 ruling in #636): under 16 px a plot with a MULE and no dots draws no special badge: the MULE wins, as on a dots plot; from 16 px it keeps it', async () => {
     const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, owner: 0, good: 'food', special: { kind: 'oasis' } } : t));
     const read = (map: FakeElement) => ({ badge: !!byId(map, 'special-glyph-1-1'), mule: !!byId(map, 'installed-1-1') });
