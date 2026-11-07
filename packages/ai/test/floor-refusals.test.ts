@@ -302,7 +302,7 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     const cfg = quietConfig();
     const c = buildFloor(state, cfg).colonists.find((x) => x.id === ME)!;
     const index = state.tiles.indexOf(mine);
-    const errand = (work: number) => plotErrandSeconds(state, cfg, c, index, work) + pubMargin(cfg, c);
+    const errand = (work: number) => plotErrandSeconds(state, cfg, c, index, work, 'analyse') + pubMargin(cfg, c);
     // Halfway between the two, and the ticks the hand spends deciding before it sets off.
     const seconds = (errand(0) + errand(analysisSeconds(state, ME))) / 2 + (3 * cfg.steer.tickMs) / MS_PER_SECOND; // literal-ok: the start, the decision and the first step's tick
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });

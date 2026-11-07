@@ -695,6 +695,18 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     }
   });
 
+  it("C11 (AM-31): a computer seat's line under the clock carries the quiet \"· AI\" after its name, at 844 and 667 (Heiko, 7 Nov)", () => {
+    const kaiLast: ChatMessage[] = [CHAT[1]!, { ...CHAT[0]!, id: 3 }];
+    for (const w of [844, 667] as const) {
+      const html = phone(devView(), live(mine(5.5, 4.5)), w, kaiLast);
+      // On one row (667) the flex gap is the space after the colon; wrapped (844) a space is in the text.
+      expect(text(html, 'chat-line-3'), `${w}: Kai is an AI seat`).toMatch(/^Kai · AI: ?Crystite is up north$/);
+      expect(tag(inside(html, 'chat-line-3'), 'ai-mark'), `${w}: the mark`).not.toBeNull();
+    }
+    const person = phone(devView(), live(mine(5.5, 4.5)), 844, CHAT);
+    expect(inside(person, 'chat-line-2'), 'Ossa is a person: no mark').not.toContain('ai-mark');
+  });
+
   it('C11 (AM-31): at 667 the status bar over the map carries the newest line on one row, cut, after the pace line', () => {
     const html = phone(devView(), live(mine(5.5, 4.5)), 667, CHAT);
     const bar = inside(html, 'phone-status-bar');
@@ -713,7 +725,7 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     expect(rail.indexOf('data-testid="chat-ticker"')).toBeLessThan(rail.indexOf('data-testid="controls-legend"'));
     expect(tickerLines(html)).toEqual([2, 1]);
     for (const id of [1, 2]) expect(tag(html, `chat-line-${id}`)).toMatch(/line-clamp-3/);
-    expect(text(html, 'chat-line-1')).toBe('Kai: Crystite is up north');
+    expect(text(html, 'chat-line-1')).toBe('Kai · AI: Crystite is up north');
   });
 
   /** The fixture's map cut or grown to `w` × `h`: a table of 2–3 seats plays on 13 × 7, of 5–6 on 19 × 11. */
@@ -892,7 +904,11 @@ describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)
     const { host, unmount } = speak(me, from);
     const colonist = element(element(host, layer)!, `colonist-${from}`);
     expect(colonist).not.toBeNull();
-    expect(element(colonist!, `chat-bubble-${from}`)?.textContent).toBe('Race you to the corral');
+    const bubble = element(colonist!, `chat-bubble-${from}`);
+    // Kai (s3) is a computer seat: his bubble opens with the quiet AI mark (Heiko, 7 Nov); a person's has none.
+    const ai = from === 's3';
+    expect(element(bubble!, 'ai-mark') !== null, `the AI mark on ${from}'s bubble`).toBe(ai);
+    expect(bubble?.textContent).toBe(`${ai ? 'AI · ' : ''}Race you to the corral`);
     unmount();
   });
 

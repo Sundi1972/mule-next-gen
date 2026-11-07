@@ -293,10 +293,11 @@ table lists only what each screen shows and where. Each screen change in §1 has
 
 | Moment | Governor's phone | Every other phone | TV |
 |---|---|---|---|
-| **1 · Planning: the Governor sets the budget** [RC] (once the month's votes are over) | **P12 Governor desk**, beside the tax: a share per line in steps of `POLITICS.budget.step` %. Each line shows what it pays at today's fund ("Welfare 10%: about 120 cr to Kai, last on Worth"; "Projects 80%: about 430 cr toward the Observatory"), plus "Kept in the fund 10%". Set. | **P13 Council desk:** the budget as set, each line marked if it changed this month ("Welfare 0% → 10%"). | **P14** planning header, under the Governor's promise line (TvGovernorPromise's place): "Budget: Projects 80% · Welfare 10% → Kai · kept 10%", with changes marked. |
+| **1 · Planning: the Governor sets the budget** [RC] (once the month's votes are over) | **P12 Governor desk**, beside the tax: a share per line in steps of `POLITICS.budget.step` %. Each line shows what it pays at today's fund ("Welfare 10%: 54 cr to Kai, last on Worth"; "Projects 80%: up to 432 cr · the Observatory still needs 350 cr and 2 Crystite": §3's worked example, a spare of 540 cr; AM-5, AM-7), plus "Kept in the fund 10%, and what the buildings don't take". Set. | **P13 Council desk:** the budget as set, each line marked if it changed this month ("Welfare 0% → 10%"). | **P14** planning header, under the Governor's promise line (TvGovernorPromise's place): "Budget: Projects 80% · Welfare 10% → Kai · kept 10%", with changes marked. |
 | **2 · A player calls an overrule** [RC: tax; after RC: or budget] | The called setting turns read-only: "Frozen: Brix called an overrule vote on the tax, held as planning ends". | **P13:** "Call an overrule vote" starts at the tax line in the fund card (after RC, also at the budget line). Once someone calls, the caller sees "You called it" and Withdraw. Everyone else sees the call, and the button is gone (one call a month). | **P14:** a banner "Brix calls an overrule vote on the Governor's tax", plus the news line. |
 | **3 · Planning ends: the overrule ballot** [RC] | **P13 overrule ballot**, in the council's ballot place, the same as every phone. The Governor's ballot starts at No. | **P13 overrule ballot**, in the council's ballot place: "Undo the Governor's tax? 5% at the month's start → 10% now", Yes / No, "needs N of M votes", Cast. The caller's ballot starts at Yes. | **P14 overrule panel**, in the law ballot's frame (TvCouncil): the question, start vs now, who has voted (never how), "needs N of M votes". |
 | **4 · The reveal** (`POLITICS.overrule.revealMs`) [RC] | the result | the result | **P14:** "Yes 6 · needed 5: Overruled, the tax goes back to 5%", or "The Governor's tax stands". After RC, a second overrule adds "Snap election next month". |
+| *Ready words* (AM-5) [RC] | while the overrule ballot is open and you have not cast: "Vote on the overrule"; cast, others still voting: "Waiting for the overrule vote"; during the reveal: "Continue". WS6 may reword them in the mock; they always say what the table is waiting for | same | — |
 | **5 · Month end** [RC] | **P15** month-end colony panel: the fund's lines this month: office pay, upkeep, "Welfare 120 → Kai", "Buildings 430", and, after RC, "Security 200". | same | **P15:** the same lines in the TV's colony panel. |
 | **6 · The Sheriff opens an inquiry** [after RC] | **P13:** the record shown, and "Inquiry finds: … — no-confidence vote as planning ends". | the Sheriff's phone, **P16 Sheriff desk** (slice 4's desk): "Open an inquiry" (once a term). Every phone shows the record and the finding. | **P14:** "Sheriff Ossa opens an inquiry into Governor Lena", the record, then the finding or "dismissed". |
 | **7 · No-confidence ballot and reveal** [after RC] | as moment 3, with the question "No confidence in Governor Lena?" | as moment 3 | as moments 3-4; a pass shows "Snap election next month". |
@@ -898,6 +899,10 @@ runColony:
                       fundOut('security', want)
      c  [RC] projects: limit = floor(shares.projects × spare0 / 100); the commissioned buildings are funded
                       in commission order, as today, but credits and goods together take at most `limit`
+                      (AM-7) the limit is a ceiling, not a payment: each building takes only what it still
+                      needs (credits, then goods the store can sell), and the next commissioned building may
+                      take from what is left of the same limit. What no building takes stays in the fund: there
+                      is no Projects balance, and it is in next month's spare0.
   4  the mood steps, reading Welfare paid                            (G-5 RULE-20 + S5-RULE-5)
 why it never overspends   Σ shares ≤ 100 and each payment is floored, so a + b + c ≤ spare0. The reserve is
           never touched, and design 05's "cut every line by the same share" can never apply.
@@ -910,6 +915,9 @@ examples  fund 640 after office pay and upkeep, reserve 100 → spare0 540;
           shares projects 80 / welfare 10:
             welfare min(54, 200) = 54 to Kai; buildings take at most 432; 54 at least stays in the fund
           shares projects 100 / welfare 0 (the default): buildings take up to 540, as today
+          shares projects 80 / welfare 10, the Observatory (config: 350 cr, 2 Crystite) the only open building,
+          nothing funded yet, the store with no Crystite (it starts with none): it takes 350 of its 432;
+          the other 82, with the 54 kept, stay in the fund (AM-7)
           spare0 6,000 with welfare 10%: min(600, 200) = 200 (the cap)
           fund 90 → spare0 0 → nothing paid, nothing funded
 ```
@@ -922,7 +930,8 @@ evaluated  at upkeep, at S5-RULE-3 step 3a (who is last after this month's aucti
            welfareRecipient(state) at any moment, as "would go to X now".
 first match wins
   #   when                                                     then
-  1   politics off, or the Welfare share is 0                  nobody
+  1   politics off                                             nobody (AM-8: a 0% share still names who it
+                                                               would go to; step 3a pays nothing at 0%)
   2   no player but the Governor                               nobody
   3   one non-Governor has strictly the lowest Worth           that player
   4   a tie for the lowest Worth among non-Governors           a draw among them, on its own stream from (seed, month,
@@ -1046,7 +1055,7 @@ S5-RULE-10 · Who sees what                                            shape: de
   their credits at today's fund, the amount kept
   Welfare's recipient now, and who was paid              yes           yes            yes
   the call (caller, target), the frozen state            yes           yes            yes
-  the ballot's stage, who has voted, who is Done,        yes           yes            yes
+  the ballot's stage, who has cast (done; AM-5),          yes           yes            yes
   needed, total
   one player's ballot                                    the voter     no             no      (before and after the reveal)
   yes / no totals and the verdict                        every screen, from the reveal
@@ -1270,7 +1279,7 @@ export interface BudgetView {
   lines: { line: BudgetLine; share: number; start: number; maxShare: number; step: number; credits: number; maxCredits: number | null }[];
   /** 100 − Σ shares: stays in the fund. */
   kept: number;
-  /** Who Welfare would go to now (S5-RULE-4), or null. */
+  /** Who Welfare would go to now (S5-RULE-4), sent at every share, 0% included, so the Governor sees it before setting one; null only when S5-RULE-4 names nobody (AM-5). */
   welfareTo: string | null;
   /** The Governor who set it, or null for the default. */
   setBy: string | null;
@@ -1478,7 +1487,7 @@ with no `openOverrule` call the overrule never opens.
 | id | Cut | Given / When / Then | changes | observed_at | negative case |
 |---|---|---|---|---|---|
 | S5-B-AC-1 | RC | Given Lena governs in month 3 with two phones and AI seats · When she sets Projects 80, Welfare 10 · Then every phone's desk and the TV show "Welfare 10% → Kai" with its credits at today's fund; at the month end every screen shows the Welfare line paid to Kai, and Kai's money rose by that much at upkeep | S5-C1 C2 C8 C10 C11 C12 | the phone, TV and month-end DOM in the e2e; Kai's money in the server view before and after upkeep | Lena last on Worth: Welfare goes to the next-lowest, never to Lena |
-| S5-B-AC-2 | RC | Given 540 spare at upkeep, shares Projects 80 / Welfare 10 · When upkeep runs · Then Welfare pays 54, buildings take at most 432, and the rest stays; with 6,000 spare Welfare pays its 200 cap | S5-C2 | the month's ledger out and the projects' funded credits (engine) | budget null → buildings may take all 540, as today |
+| S5-B-AC-2 | RC | Given 540 spare at upkeep, shares Projects 80 / Welfare 10 · When upkeep runs · Then Welfare pays 54, buildings take at most 432, and the rest stays; when the only open building, the Observatory, still needs 350 cr and the store has no Crystite, it takes 350 and 82 more stay (AM-7); with 6,000 spare Welfare pays its 200 cap | S5-C2 | the month's ledger out and the projects' funded credits (engine) | budget null → buildings may take all 540, as today |
 | S5-B-AC-3 | RC | Given Lena raised the tax from 5% to 10% · When Brix calls a tax overrule and everyone presses Ready · Then the overrule ballot opens on every phone; once all have cast, every screen shows the totals and "Overruled" at once, and the next sale is taxed at 5% | S5-C4 C5 C7 C10 C11 | the phones' and TV's DOM; the seller's money after the first sale that month | yes below needed → "The Governor's tax stands", 10% applies |
 | S5-B-AC-4 | RC | Given Brix called a tax overrule · When Lena tries to change the tax · Then it is refused with "An overrule vote on the tax is called: it holds until it is settled" | S5-C4 | the RuleError message (server test) | with no call, the change succeeds |
 | S5-B-AC-5 | RC | Given an overrule ballot is open · When a human has not cast · Then nothing closes, however long; the host's Continue closes it and the news names them; in the reveal, Continue is refused | S5-C5 C7 | server state and news (server test) | every human has cast → it closes with no Continue |
@@ -1613,6 +1622,69 @@ AM-4 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recomme
 
 target    the decisions for Heiko
 did       D-S5-2 → A (as planning ends), D-S5-3 → A (snap election after two overrules, after RC), D-S5-4 → A (the Governor's public breaches, after RC). The build builds the spec as written.
+goal      S5-1 — unchanged
+```
+
+```
+AM-5 · 2026-11-07 · WS7, answering WS6's four questions while drawing P3 (#689), via PM
+
+target    What the table sees (P12 row, the Ready words), §3 BudgetView.welfareTo, S5-RULE-10, OverruleView.voted
+did       (1) P12's example numbers now come from §3's worked example (80% = 432 cr, 10% = 54 cr: one spare of
+          540 cr); the old "about 120" and "about 430" could not come from one fund. (2) welfareTo is sent at every
+          share, 0% included, so the Governor sees the recipient before setting a share; null only when S5-RULE-4
+          names nobody. (3) "Who has voted" on every screen is `done` (who has cast). `voted` holds the ballot
+          keys, which include the preset ballots (the caller's yes, the Governor's no), so no screen shows it
+          as "has voted"; the frozen type keeps the field. (4) The overrule ballot and its reveal get their own
+          Ready words.
+because   WS6 found the four drawing the mock; the screen must not say a preset ballot was cast
+goal      S5-1 — unchanged
+```
+
+```
+AM-6 · 2026-11-07 · WS7 (build: S5-PR-1 group B; the plan's drift item 7) · the promise is checked on the tax that stands
+
+target    §1 S5-C5 (the tally's effect), the tax promise check (colony.ts::keepPromise)
+said      nothing: game.ts::advancePhase calls keepPromise before closeVotes. When planning ends normally the overrule
+          is tallied at the end of its reveal, so the promise is checked on the tax put back; when the host's
+          Continue closes a still-open overrule ballot, closeVotes tallies it after the promise was checked
+did       on every path the Governor's promise is checked against the tax that stands as planning ends: a passed
+          overrule's restored tax. keepPromise reads the pending overrule's outcome through politics.ts's pure
+          tally, so the Continue path agrees with the normal one; game.ts (WS3) is not edited. Example: Lena
+          promised a cap of 10%, set 12%; the overrule passes → the tax is 10% again and the promise counts as
+          kept, on either path.
+because   two paths through the same month must not give two answers; the colony judges the tax it pays, and
+          the restore is what the overrule is for
+goal      S5-1 — unchanged
+```
+
+```
+AM-7 · 2026-11-07 · WS6's finding while drawing P12 (#689), via PM · a share the buildings don't need stays in the fund
+
+target    What the table sees (P12's Projects line and "Kept"), §2 S5-RULE-3 step 3c and its examples, §6 S5-B-AC-2
+said      "Projects 80%: 432 cr toward the Observatory", but config's Observatory costs 350 cr and 2 Crystite: it
+          can never take 432, and the spec did not say where the rest goes or what the line then reads
+did       the Projects share is a ceiling: each open building takes only what it still needs, in commission order,
+          the next one from what is left of the same limit; what no building takes stays in the fund (no Projects
+          balance; it is in next month's spare). P12 reads "Projects 80%: up to 432 cr", then each open building
+          and what it still needs ("· the Observatory still needs 350 cr and 2 Crystite"), from the colony view's
+          cost and funded the phone already holds; "Kept in the fund 10%, and what the buildings don't take".
+          `BudgetView.lines[].credits` stays the share's limit (budgetCredits, as built): no contract change. The
+          worked example now uses config's numbers: 350 of 432 taken, 82 more stay.
+because   a line that promised 432 toward a building that needs 350 would tell the Governor the wrong amount; "up
+          to" is true at every need, and the need is already on the phone
+goal      S5-1 — unchanged
+```
+
+```
+AM-8 · 2026-11-07 · WS7 (build: #701's boundary review, Important 2) · Welfare's recipient is named at 0% too
+
+target    §2 S5-RULE-4 row 1; colony.ts::welfareRecipient
+said      row 1 named nobody when the Welfare share is 0, while AM-5 sends welfareTo "at every share, 0% included"
+did       row 1 is "politics off" only: welfareRecipient names the player rows 2-4 pick at any share, so the
+          Governor's desk shows who Welfare would go to before a share is set. Paying is unchanged: S5-RULE-3
+          step 3a pays nothing when the want is 0.
+because   AM-5 is the later decision, made for the Governor's screen; the server cannot rebuild rows 2-4 itself
+          (the tie stream is the engine's)
 goal      S5-1 — unchanged
 ```
 

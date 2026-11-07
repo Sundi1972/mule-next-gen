@@ -2,6 +2,7 @@ import type { RawGood } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
 import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
+import { AiMark } from '../../chat/Chat';
 import { useTableChat } from '../../chat/store';
 import { plotName, toSlot } from '../../game/derive';
 import { OnlyYou } from '../hub/OnlyYou';
@@ -367,6 +368,7 @@ export function ChatTicker({ seat, keep, wrap = false, wide = false }: { seat: A
             </span>
             <strong className={wrap ? '' : 'shrink-0'}>
               {p.name}
+              {p.isAi && <AiMark />}
               {l.to ? ' 🔒' : ''}:
             </strong>
             <span className={wrap ? '' : 'truncate'}>
