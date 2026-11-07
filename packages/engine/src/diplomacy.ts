@@ -6,7 +6,7 @@
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
-import { editPolitics, nextElectionMonth } from './politics.js';
+import { editPolitics, nextElectionMonth, reputationShift } from './politics.js';
 import { createRng, seedOf } from './rng.js';
 import type { DealCard, DealOffer, GameState, Office, Politics } from './types.js';
 
@@ -31,6 +31,11 @@ function newId(state: GameState, taken: readonly DealCard[]): string {
     const tag = Array.from({ length: TAG_LENGTH }, () => rng.int(0, BASE_36 - 1).toString(BASE_36)).join('');
     if (!taken.some((d) => d.id === `deal-${tag}`)) return `deal-${tag}`;
   }
+}
+
+/** Whether a card is between these two players, whoever offered it. */
+function sameParties(card: DealCard, a: string, b: string): boolean {
+  return (card.from === a && card.to === b) || (card.from === b && card.to === a);
 }
 
 function nameOf(state: GameState, id: string): string {
@@ -115,8 +120,8 @@ export function offerDeal(state: GameState, from: string, offer: DealOffer): str
   if (open.some((d) => d.to === to)) throw new RuleError(`${nameOf(state, to)} has not answered your last card`);
   if (terms.kind === 'pact') {
     if (offer.months === undefined || !POLITICS.deals.pactMonths.includes(offer.months)) throw new RuleError(pactWords());
-    const between = politics.deals.some((d) => d.terms.kind === 'pact' && (d.status === 'offered' || d.status === 'active') && [d.from, d.to].sort().join() === [from, to].sort().join());
-    if (between) throw new RuleError(`You already have a pact with ${nameOf(state, to)}`);
+    const pending = politics.deals.some((d) => d.terms.kind === 'pact' && (d.status === 'offered' || d.status === 'active') && sameParties(d, from, to));
+    if (pending) throw new RuleError(`You already have a pact with ${nameOf(state, to)}`);
   } else if ('office' in terms) {
     if (!POLITICS.offices.includes(terms.office)) throw new RuleError(`The ${title(terms.office)} is not elected yet`);
   }
@@ -154,19 +159,81 @@ export function answerDeal(state: GameState, to: string, id: string, accept: boo
   let status: DealCard['status'] = 'active';
   if (!accept) status = 'declined';
   else if (open.terms.kind === 'vote' && ballotClosed(state, open)) status = 'expired';
-  else if (open.terms.kind === 'pact' && politics.deals.some((d) => d.terms.kind === 'pact' && d.status === 'active' && [d.from, d.to].sort().join() === [open.from, open.to].sort().join())) {
+  else if (open.terms.kind === 'pact' && politics.deals.some((d) => d.terms.kind === 'pact' && d.status === 'active' && sameParties(d, open.from, open.to))) {
     throw new RuleError(`You already have a pact with ${nameOf(state, open.from)}`);
   }
   const card = editPolitics(state).deals.find((d) => d.id === id)!;
   Object.assign(card, { status, settled: status === 'active' ? null : state.month });
 }
 
-/** Judges the active vote cards of a ballot whose result is taking effect (S3-RULE-4). */
-export function settleVotes(_state: GameState, _ballot: 'election' | 'law'): void {
-  throw new Error('NotImplemented: settleVotes');
+type Verdict = 'kept' | 'broken' | 'expired';
+
+/**
+ * S3-RULE-4: what the ballot made of an active vote card. An election card is judged on the closed election's own
+ * ballots and field; a law card on the council's ballots, where the Governor's opening yes counts as cast.
+ */
+function judge(state: GameState, card: DealCard): Verdict {
+  const politics = state.politics!;
+  const { terms } = card;
+  if (terms.kind !== 'vote') return 'expired';
+  if ('office' in terms) {
+    const field = politics.election?.candidates[terms.office] ?? [];
+    if (field.length < 2 || !field.includes(terms.candidate)) return 'expired';
+    return politics.election!.ballots[card.from]?.[terms.office] === terms.candidate ? 'kept' : 'broken';
+  }
+  return politics.council?.ballots[card.from] === terms.yes ? 'kept' : 'broken';
+}
+
+/**
+ * Whether `playerId` still gains from a kept card with `otherId` this term: the cards between them settled kept since
+ * politics.termStart, that paid the player, are fewer than the limit (S3-RULE-3). A pact pays only where sabotage can happen.
+ */
+function earnsKept(state: GameState, politics: Politics, playerId: string, otherId: string): boolean {
+  const paid = politics.deals.filter(
+    (d) =>
+      d.status === 'kept' &&
+      d.settled !== null &&
+      d.settled >= politics.termStart &&
+      sameParties(d, playerId, otherId) &&
+      (d.terms.kind === 'pact' ? sabotagePossible(state) : d.from === playerId),
+  );
+  return paid.length < POLITICS.reputation.keptPerPartnerPerTerm;
+}
+
+/** A player's gain from a card kept with `other`, within the limit. Call before the card itself is marked kept. */
+function rewardKept(state: GameState, politics: Politics, playerId: string, otherId: string): void {
+  if (earnsKept(state, politics, playerId, otherId)) reputationShift(state, playerId, POLITICS.reputation.moves.kept);
+}
+
+/** Settles a vote card on the editable politics, and moves the promiser's reputation. */
+function settleCard(state: GameState, politics: Politics, card: DealCard, verdict: Verdict): void {
+  if (verdict === 'kept') rewardKept(state, politics, card.from, card.to);
+  if (verdict === 'broken') reputationShift(state, card.from, POLITICS.reputation.moves.voteBroken);
+  Object.assign(card, { status: verdict, brokenBy: verdict === 'broken' ? card.from : null, settled: state.month });
+}
+
+/**
+ * The ballot's result is taking effect: every active vote card bound to it settles (S3-RULE-4). politics.ts calls it
+ * after its last write, since it copies Politics (editPolitics) and so replaces the object the caller holds.
+ */
+export function settleVotes(state: GameState, ballot: 'election' | 'law'): void {
+  const politics = state.politics;
+  if (!politics) return;
+  const due = politics.deals.filter((d) => d.status === 'active' && d.terms.kind === 'vote' && ('office' in d.terms) === (ballot === 'election') && d.until === state.month);
+  if (due.length === 0) return;
+  const verdicts = due.map((d) => [d.id, judge(state, d)] as const);
+  const editable = editPolitics(state);
+  for (const [id, verdict] of verdicts) settleCard(state, editable, editable.deals.find((d) => d.id === id)!, verdict);
 }
 
 /** Planning is closing: offered cards expire, and so does every active vote card whose until has come (S3-RULE-1). */
-export function closePlanningDeals(_state: GameState): void {
-  throw new Error('NotImplemented: closePlanningDeals');
+export function closePlanningDeals(state: GameState): void {
+  const open = (d: DealCard): boolean => d.status === 'offered' || (d.status === 'active' && d.terms.kind === 'vote' && d.until <= state.month);
+  if (!state.politics?.deals.some(open)) return;
+  for (const card of editPolitics(state).deals.filter(open)) Object.assign(card, { status: 'expired', settled: state.month });
+}
+
+/** Whether a sabotage can happen in this game, so a pact can be broken: false until slice 4 replaces this body. */
+export function sabotagePossible(_state: GameState): boolean {
+  return false;
 }

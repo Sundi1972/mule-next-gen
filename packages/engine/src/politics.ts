@@ -7,6 +7,7 @@
 import { fundIn, fundOut } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
+import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
@@ -359,12 +360,15 @@ function takeOffice(state: GameState, politics: Politics): void {
     politics.terms[winner] = (politics.terms[winner] ?? 0) + 1;
   }
   const governor = result.governor?.winner;
-  if (governor === undefined) return;
-  // The promise holds for the term; an appointed Governor made none.
-  politics.promise = result.governor!.how === 'appointed' ? null : (election.promises[governor] ?? null);
-  politics.promiseFrom = Math.round(state.treasury.salesTax * PERCENT);
-  const run = politics.governorRun;
-  politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
+  if (governor !== undefined) {
+    // The promise holds for the term; an appointed Governor made none.
+    politics.promise = result.governor!.how === 'appointed' ? null : (election.promises[governor] ?? null);
+    politics.promiseFrom = Math.round(state.treasury.salesTax * PERCENT);
+    const run = politics.governorRun;
+    politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
+  }
+  // Last, and on the new term: it copies Politics, so `politics` is stale after it.
+  settleVotes(state, 'election');
 }
 
 /** The winner of one office, with weights taken now, as the ballot closes. See WS7 spec RULE-3. */
@@ -583,14 +587,14 @@ function takeEffect(state: GameState, politics: Politics): void {
   council.stage = 'over';
   if (!result!.passed) {
     politics.failed[`${proposal.kind}:${proposal.law}`] = state.month;
-    return;
-  }
-  if (proposal.kind === 'repeal') {
+  } else if (proposal.kind === 'repeal') {
     delete politics.laws[proposal.law];
-    return;
+  } else {
+    if (!politics.laws[proposal.law] && proposal.replaces) delete politics.laws[proposal.replaces];
+    politics.laws[proposal.law] = { setting: proposal.setting, since: state.month };
   }
-  if (!politics.laws[proposal.law] && proposal.replaces) delete politics.laws[proposal.replaces];
-  politics.laws[proposal.law] = { setting: proposal.setting, since: state.month };
+  // Last: it copies Politics, so `politics` is stale after it.
+  settleVotes(state, 'law');
 }
 
 /**
