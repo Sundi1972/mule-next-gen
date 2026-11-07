@@ -4,14 +4,14 @@
  * GameState.politics. A tie nothing else breaks is drawn by lot on its own seeded
  * stream, so a replay from the seed draws the same and no other draw moves.
  */
-import { fundIn, fundOut } from './colony.js';
+import { fundIn, fundOut, spare } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
-import type { CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Politics, TaxPromise } from './types.js';
+import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Overrule, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
@@ -62,10 +62,12 @@ export function openPlanning(state: GameState): void {
   const p = edit(state);
   p.baron = landBaron(state, p.baron);
   p.taxAtStart = state.treasury.salesTax;
+  p.budgetAtStart = p.budget;
   p.election = POLITICS.electionMonths.includes(state.month)
     ? { stage: 'announce', ceremony: null, candidates: noCandidates(), promises: {}, ballots: {}, done: [], result: null }
     : null;
   p.council = null;
+  p.overrule = null;
   if (!p.election) openCouncil(state, p);
 }
 
@@ -435,6 +437,7 @@ export function setSalesTax(state: GameState, playerId: string, percent: number)
   if (state.phase !== 'planning') throw new RuleError('The tax is set in planning');
   if (politics.election && politics.election.stage !== 'over') throw new RuleError('Wait for the election to end');
   if (politics.governor !== id) throw new RuleError('Only the Governor sets the tax');
+  if (monthsOverrule(state)?.target === 'tax') throw new RuleError('An overrule vote on the tax is called: it holds until it is settled');
   const { low, high } = taxBounds(state);
   if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
   state.treasury.salesTax = percent / PERCENT;
@@ -469,9 +472,14 @@ function councilLive(state: GameState): boolean {
   return !!council && council.stage !== 'over';
 }
 
-/** Whether the colony is voting: the election or the law ballot is open in planning. See slice 2a RULE-40. */
+function overruleLive(state: GameState): boolean {
+  const stage = state.politics?.overrule?.stage;
+  return stage === 'ballot' || stage === 'reveal';
+}
+
+/** Whether the colony is voting: the election, the law ballot or the overrule ballot is open in planning. See slice 2a RULE-40, S5-RULE-7. */
 export function votesOpen(state: GameState): boolean {
-  return state.phase === 'planning' && (electionLive(state) || councilLive(state));
+  return state.phase === 'planning' && (electionLive(state) || councilLive(state) || overruleLive(state));
 }
 
 /** A small count as the sentence's first word, as RULE-41 writes it ("Three laws are in force"); digits past ten. */
@@ -554,15 +562,17 @@ function isCouncilDone(state: GameState, playerId: string): boolean {
   return state.phase === 'planning' && !!council && council.stage === 'ballot' && council.done.includes(playerId);
 }
 
-/** Presses Done on whichever vote is open: the election first, then the law ballot. */
+/** Presses Done on whichever vote is open: the election first, then the law ballot, then the overrule ballot. */
 export function votesDone(state: GameState, playerId: string, done = true): void {
   if (electionLive(state)) electionDone(state, playerId, done);
-  else councilDone(state, playerId, done);
+  else if (councilLive(state)) councilDone(state, playerId, done);
+  else overruleDone(state, playerId, done);
 }
 
 /** Whether the player is Done on the vote that is open. */
 export function isVotesDone(state: GameState, playerId: string): boolean {
-  return electionLive(state) ? isElectionDone(state, playerId) : isCouncilDone(state, playerId);
+  if (electionLive(state)) return isElectionDone(state, playerId);
+  return councilLive(state) ? isCouncilDone(state, playerId) : isOverruleDone(state, playerId);
 }
 
 /** The weighted tally at the ballot's close: the Governor's ballot breaks a tie. See slice 2a RULE-42. */
@@ -600,7 +610,7 @@ function takeEffect(state: GameState, politics: Politics): void {
 /**
  * Advances whichever vote is open by dt ms: the election (returning its result in the step its ballot closes), then
  * the law ballot, which opens once the election is over and closes at the step after every player is Done; only its
- * reveal has a clock. See slice 2a RULE-40.
+ * reveal has a clock. Once both are over it steps the overrule vote: the ballot closes after every player is Done, and only its reveal has a clock (S5-RULE-7). See slice 2a RULE-40.
  */
 export function stepVotes(state: GameState, dt: number): ElectionResult | null {
   if (state.phase !== 'planning' || !state.politics) return null;
@@ -610,7 +620,7 @@ export function stepVotes(state: GameState, dt: number): ElectionResult | null {
     return result;
   }
   const council = state.politics.council;
-  if (!council || council.stage === 'over') return null;
+  if (!council || council.stage === 'over') return stepOverrule(state, dt);
   if (council.stage === 'ballot') {
     if (state.players.every((p) => isCouncilDone(state, p.id))) tally(state, edit(state).council!);
     return null;
@@ -621,7 +631,7 @@ export function stepVotes(state: GameState, dt: number): ElectionResult | null {
   return null;
 }
 
-/** Leaving planning: closes the election, then tallies an open law ballot and lets its result take effect. See slice 2a RULE-40. */
+/** Leaving planning: closes the election, then tallies an open law ballot and lets its result take effect, then tallies an open overrule ballot and lets its result take effect, and a call that never got its ballot lapses (S5-RULE-7). See slice 2a RULE-40. */
 export function closeVotes(state: GameState): ElectionResult | null {
   const result = closeElection(state);
   if (councilLive(state)) {
@@ -629,6 +639,7 @@ export function closeVotes(state: GameState): ElectionResult | null {
     if (politics.council!.stage === 'ballot') tally(state, politics.council!);
     takeEffect(state, politics);
   }
+  closeOverrule(state);
   // A proposal from an earlier month had this planning for its ballot; one that never got it is dropped.
   const pending = state.politics?.proposal;
   if (pending && pending.month < state.month) edit(state).proposal = null;
@@ -723,4 +734,235 @@ export function lawImpact(state: GameState, proposal: LawProposal): Record<strin
     out[p.id] = { ...impact, cost: impact.cost === 0 ? 0 : -impact.cost };
   }
   return out;
+}
+
+// ---- Slice 5: the Governor's budget and the overrule vote.
+
+/** The lines the Governor may share the fund between, in order. RC offers Projects and Welfare; Security comes with S5-C13. See S5-RULE-1. */
+export function budgetLines(state: GameState): BudgetLine[] {
+  return state.politics ? ['projects', 'welfare'] : [];
+}
+
+/** The shares in force: the default while none is set, a line not offered as 0. See S5-RULE-1. */
+export function budgetShares(state: GameState): Record<BudgetLine, number> {
+  const set = state.politics?.budget?.shares ?? POLITICS.budget.default;
+  const offered = budgetLines(state);
+  const shares = { ...set };
+  for (const line of Object.keys(shares) as BudgetLine[]) if (!offered.includes(line)) shares[line] = 0;
+  return shares;
+}
+
+/** The most credits a month a line pays, or null when only the buildings' needs cap it. */
+export function lineMaxCredits(line: BudgetLine): number | null {
+  return line === 'projects' ? null : POLITICS.budget[line].maxCredits;
+}
+
+/** What each share pays at today's fund: the share of the spare above COLONY.reserve, floored, capped by the line. See S5-RULE-3. */
+export function budgetCredits(state: GameState): Record<BudgetLine, number> {
+  const room = spare(state);
+  const shares = budgetShares(state);
+  const credits = { projects: 0, welfare: 0, security: 0 };
+  for (const line of Object.keys(credits) as BudgetLine[]) {
+    credits[line] = Math.min(Math.floor((shares[line] * room) / PERCENT), lineMaxCredits(line) ?? Infinity);
+  }
+  return credits;
+}
+
+/** The Governor sets the budget: a whole-percent share per offered line, at most 100 in all. See S5-RULE-2. */
+export function setBudget(state: GameState, playerId: string, given: Record<BudgetLine, number>): void {
+  const { id } = player(state, playerId);
+  const politics = state.politics;
+  if (!politics) throw new RuleError("This game plays without the colony's council");
+  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Set the budget once the votes are over');
+  if (politics.governor !== id) throw new RuleError('Only the Governor sets the budget');
+  // Only the three lines are read: a line the phone left out is 0, a key it added is dropped.
+  const shares: Record<BudgetLine, number> = { projects: given.projects ?? 0, welfare: given.welfare ?? 0, security: given.security ?? 0 };
+  const offered = budgetLines(state);
+  const lines = Object.keys(shares) as BudgetLine[];
+  for (const line of lines) {
+    if (shares[line] !== 0 && !offered.includes(line)) throw new RuleError(`The colony has no ${line} line yet`);
+  }
+  const { step } = POLITICS.budget;
+  for (const line of offered) {
+    const max = POLITICS.budget[line].maxShare;
+    const share = shares[line];
+    if (!Number.isInteger(share) || share < 0 || share > max || share % step !== 0) {
+      throw new RuleError(`${line[0]!.toUpperCase()}${line.slice(1)} is 0% to ${max}%, in steps of ${step}`);
+    }
+  }
+  const total = lines.reduce((sum, line) => sum + shares[line], 0);
+  if (total > PERCENT) throw new RuleError(`The shares add up to ${total}%: at most ${PERCENT}%`);
+  edit(state).budget = { month: state.month, setBy: id, shares };
+}
+
+/** This month's overrule, in any stage, or null. */
+function monthsOverrule(state: GameState): Shared<Overrule> | null {
+  const overrule = state.politics?.overrule;
+  return overrule && overrule.month === state.month ? overrule : null;
+}
+
+/** Per target: true, or why the player may not call an overrule now. See S5-RULE-6. */
+export function canOverrule(state: GameState, playerId: string): Record<OverruleTarget, true | OverruleWhy> {
+  const { id } = player(state, playerId);
+  const politics = state.politics;
+  const all = (why: OverruleWhy): Record<OverruleTarget, OverruleWhy> => ({ tax: why, budget: why, confidence: why });
+  if (!politics) return all('politicsOff');
+  if (state.phase !== 'planning' || votesOpen(state)) return all('notNow');
+  if (politics.governor === null) return all('noGovernor');
+  if (politics.governor === id) return all('governor');
+  if (monthsOverrule(state)) return all('called');
+  const taxChanged = Math.round(state.treasury.salesTax * PERCENT) !== Math.round(politics.taxAtStart * PERCENT);
+  return { tax: taxChanged ? true : 'unchanged', budget: 'notYet', confidence: 'sheriffOnly' };
+}
+
+function overruleRefusal(state: GameState, why: OverruleWhy, target: OverruleTarget): string {
+  switch (why) {
+    case 'politicsOff':
+      return "This game plays without the colony's council";
+    case 'notNow':
+      return 'Call an overrule once the votes are over';
+    case 'noGovernor':
+      return 'There is no Governor to overrule';
+    case 'governor':
+      return "The Governor can't overrule themself";
+    case 'called':
+      return `${player(state, monthsOverrule(state)!.caller).name} already called this month's vote`;
+    case 'notYet':
+      return 'Only the tax can be overruled in this version';
+    case 'sheriffOnly':
+      return "Only the Sheriff's inquiry opens a no-confidence vote";
+    case 'unchanged':
+      return `The ${target} is as it was when the month began`;
+  }
+}
+
+/** A player calls this month's overrule on a target, or withdraws their call with null. See S5-RULE-6. */
+export function callOverrule(state: GameState, playerId: string, target: OverruleTarget | null): void {
+  const { id } = player(state, playerId);
+  if (target === null) {
+    const call = monthsOverrule(state);
+    if (state.politics && state.phase === 'planning' && !votesOpen(state) && call?.caller === id && call.stage === 'called') {
+      edit(state).overrule = null;
+      return;
+    }
+    // Rows 1 and 2 come first, as they do for a call.
+    const why = canOverrule(state, id).tax;
+    if (why === 'politicsOff' || why === 'notNow') throw new RuleError(overruleRefusal(state, why, 'tax'));
+    throw new RuleError('There is no call of yours to withdraw');
+  }
+  const why = canOverrule(state, id)[target];
+  if (why !== true) throw new RuleError(overruleRefusal(state, why, target));
+  edit(state).overrule = { month: state.month, target, caller: id, stage: 'called', clockMs: 0, ballots: {}, done: [], result: null };
+}
+
+/** As planning would end: a pending call opens its ballot, the caller's yes and the Governor's no preset. Returns whether it did. See S5-RULE-7. */
+export function openOverrule(state: GameState): boolean {
+  const call = monthsOverrule(state);
+  const governor = state.politics?.governor;
+  if (state.phase !== 'planning' || !call || call.stage !== 'called' || !governor || votesOpen(state)) return false;
+  const overrule = edit(state).overrule!;
+  overrule.stage = 'ballot';
+  overrule.ballots = { [overrule.caller]: true, [governor]: false };
+  overrule.done = [];
+  return true;
+}
+
+function liveOverrule(state: GameState): void {
+  if (state.phase !== 'planning' || state.politics?.overrule?.stage !== 'ballot') throw new RuleError('The overrule vote is not open');
+}
+
+/** A voter's yes (undo it) or no on the open overrule ballot; a later vote replaces it until the ballot closes. A cast ballot is Done. */
+export function voteOverrule(state: GameState, voterId: string, yes: boolean): void {
+  const voter = player(state, voterId);
+  liveOverrule(state);
+  const overrule = edit(state).overrule!;
+  overrule.ballots[voter.id] = yes;
+  if (!overrule.done.includes(voter.id)) overrule.done = [...overrule.done, voter.id];
+}
+
+function overruleDone(state: GameState, playerId: string, done: boolean): void {
+  const overrule = state.politics?.overrule;
+  if (state.phase !== 'planning' || overrule?.stage !== 'ballot' || overrule.done.includes(playerId) === done) return;
+  const o = edit(state).overrule!;
+  o.done = done ? [...o.done, playerId] : o.done.filter((d) => d !== playerId);
+}
+
+function isOverruleDone(state: GameState, playerId: string): boolean {
+  const overrule = state.politics?.overrule;
+  return state.phase === 'planning' && overrule?.stage === 'ballot' && overrule.done.includes(playerId);
+}
+
+/** The result of an overrule's ballot as it stands: more than half of all vote weight restores the start; an absent ballot is an abstention. See S5-RULE-8. */
+function overruleResult(state: GameState, overrule: Shared<Overrule>): NonNullable<Overrule['result']> {
+  let yes = 0;
+  let no = 0;
+  let total = 0;
+  for (const p of state.players) {
+    const weight = voteWeight(state, p.id).total;
+    total += weight;
+    const ballot = overrule.ballots[p.id];
+    if (ballot === true) yes += weight;
+    else if (ballot === false) no += weight;
+  }
+  // literal-ok: more than half of all votes is the rule's definition (S5-RULE-8)
+  const needed = Math.floor(total / 2) + 1;
+  return { passed: yes >= needed, yes, no, total, needed };
+}
+
+/** The tally at the ballot's close, then the reveal. */
+function tallyOverrule(state: GameState, overrule: Overrule): void {
+  overrule.result = overruleResult(state, overrule);
+  overrule.stage = 'reveal';
+  overrule.clockMs = 0;
+}
+
+/**
+ * The sales tax (a fraction) that stands as planning ends: a passed tax overrule's restored start, whatever stage its vote is in
+ * (an open ballot is read as closeVotes will tally it), otherwise the tax now. See S5 AM-6.
+ */
+export function taxAsPlanningEnds(state: GameState): number {
+  const call = monthsOverrule(state);
+  if (call?.target !== 'tax' || call.stage === 'called') return state.treasury.salesTax;
+  const result = call.stage === 'ballot' ? overruleResult(state, call) : call.result;
+  return result?.passed ? state.politics!.taxAtStart : state.treasury.salesTax;
+}
+
+/** A passed overrule restores the month's start; the reveal is over either way. */
+function overruleTakesEffect(state: GameState, politics: Politics): void {
+  const overrule = politics.overrule!;
+  overrule.stage = 'over';
+  if (overrule.result!.passed && overrule.target === 'tax') state.treasury.salesTax = politics.taxAtStart;
+}
+
+/** The overrule's part of a step: tallies once every player is Done, then runs the reveal's clock. */
+function stepOverrule(state: GameState, dt: number): null {
+  const overrule = state.politics?.overrule;
+  if (!overrule) return null;
+  if (overrule.stage === 'ballot') {
+    if (state.players.every((p) => isOverruleDone(state, p.id))) tallyOverrule(state, edit(state).overrule!);
+  } else if (overrule.stage === 'reveal') {
+    const politics = edit(state);
+    politics.overrule!.clockMs += dt;
+    if (politics.overrule!.clockMs >= POLITICS.overrule.revealMs) overruleTakesEffect(state, politics);
+  }
+  return null;
+}
+
+/** Leaving planning: an open ballot is tallied now and a revealing result takes effect; a call that never got its ballot lapses. */
+function closeOverrule(state: GameState): void {
+  const call = monthsOverrule(state);
+  if (!call) return;
+  if (call.stage === 'called') {
+    edit(state).overrule = null;
+    return;
+  }
+  if (call.stage === 'over') return;
+  const politics = edit(state);
+  if (call.stage === 'ballot') tallyOverrule(state, politics.overrule!);
+  overruleTakesEffect(state, politics);
+}
+
+/** Credits the Security line pays this month: slice 4 reads it. 0 until the Security line is built (AM-3). */
+export function securitySpend(state: GameState): number {
+  return 0;
 }

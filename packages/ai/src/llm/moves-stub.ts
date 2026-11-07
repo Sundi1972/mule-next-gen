@@ -48,6 +48,9 @@ export type IntentType =
   | 'repair'
   | 'propose'
   | 'voteLaw'
+  | 'setBudget'
+  | 'callOverrule'
+  | 'voteOverrule'
   | 'offerDeal'
   | 'withdrawDeal'
   | 'answerDeal'
@@ -336,6 +339,7 @@ export const MOVES: MoveTable = {
       refused('it is planning', 'The tax is set in planning'),
       refused("this month's election, if any, is over", 'Wait for the election to end'),
       refused('you are the Governor', 'Only the Governor sets the tax'),
+      refused('no overrule vote on the tax is open', 'An overrule vote on the tax is called: it holds until it is settled'),
       refused(`the percent is whole, at most ${TAX_STEP} from the month's starting rate, and ${TAX_MIN}% to ${TAX_MAX}%`, 'The tax can be <low>% to <high>% this month'),
     ],
     cost: null,
@@ -444,6 +448,50 @@ export const MOVES: MoveTable = {
     phases: ['planning'],
     does: () => 'Votes yes or no on the open law ballot; a later vote replaces it until the ballot closes.',
     legalWhen: () => [refused('the law ballot is open', 'The law ballot is not open')],
+    cost: null,
+    args: [{ name: 'yes', kind: 'boolean' }],
+  },
+  setBudget: {
+    type: 'setBudget',
+    command: 'setBudget',
+    phases: ['planning'],
+    does: () => "Shares the colony fund's spare credits between the budget's lines, in whole percent; the buildings, Welfare and the rest are paid from those shares at month end.",
+    legalWhen: () => [
+      refused('the game plays with a council', "This game plays without the colony's council"),
+      refused('the votes are over', 'Set the budget once the votes are over'),
+      refused('you are the Governor', 'Only the Governor sets the budget'),
+      refused('every line you share is one the colony has', 'The colony has no <line> line yet'),
+      refused(`a share is a whole number of percent, in steps of ${POLITICS.budget.step}, up to its line's limit`, `<Line> is 0% to <max>%, in steps of ${POLITICS.budget.step}`),
+      refused(`the shares add up to at most ${PERCENT}%`, `The shares add up to <total>%: at most ${PERCENT}%`),
+    ],
+    cost: null,
+    args: [{ name: 'shares', kind: 'enum', values: ['{ projects, welfare, security }'] }],
+  },
+  callOverrule: {
+    type: 'callOverrule',
+    command: 'callOverrule',
+    phases: ['planning'],
+    does: () => "Calls this month's overrule vote on a setting the Governor changed; null takes your own call back.",
+    legalWhen: () => [
+      refused('the game plays with a council', "This game plays without the colony's council"),
+      refused('the votes are over', 'Call an overrule once the votes are over'),
+      refused('the colony has a Governor', 'There is no Governor to overrule'),
+      refused('you are not the Governor', "The Governor can't overrule themself"),
+      refused('no vote is called this month', "<name> already called this month's vote"),
+      refused('the target is the tax', 'Only the tax can be overruled in this version'),
+      refused('the target is not the no-confidence vote', "Only the Sheriff's inquiry opens a no-confidence vote"),
+      refused('the setting changed since the month began', 'The <target> is as it was when the month began'),
+      refused('you have a call to withdraw', 'There is no call of yours to withdraw'),
+    ],
+    cost: null,
+    args: [{ name: 'target', kind: 'enum', values: ['tax', 'null'] }],
+  },
+  voteOverrule: {
+    type: 'voteOverrule',
+    command: 'voteOverrule',
+    phases: ['planning'],
+    does: () => "Votes yes (restore the setting the month began with) or no (keep the Governor's) on the open overrule ballot; a later vote replaces it until the ballot closes.",
+    legalWhen: () => [refused('the overrule ballot is open', 'The overrule vote is not open')],
     cost: null,
     args: [{ name: 'yes', kind: 'boolean' }],
   },
