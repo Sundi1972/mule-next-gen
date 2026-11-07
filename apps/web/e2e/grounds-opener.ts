@@ -138,6 +138,7 @@ async function main(): Promise<void> {
     const gone = Date.now() - pressed;
     await phone.locator('[data-phase=planning]').waitFor({ timeout: PRESS_MS });
     check(board().phase === 'planning' && board().month === 2, `everyone Ready moves the game to month 2's planning, got ${board().phase} ${board().month}`);
+    await tv.waitForFunction("window.__tvTimeline().at(-1).what !== 'opener:still'", undefined, { timeout: PRESS_MS });
     const month1 = await timeline(tv);
     const after = month1.slice(lastShown(month1, 'opener:still'));
     check(!after.some((s) => s.what === 'monthend'), `B-AC-6 (negative): Ready during the opener goes to planning without the month end, the TV showed ${after.map((s) => s.what).join(' → ')}`);
@@ -146,13 +147,16 @@ async function main(): Promise<void> {
     // Month 2's end: the Hospital has just come to stand.
     await throughTheMonth(phone, board, true);
     // Read while its 3 s still is up, beside the main TV's reads: after it the month end shows no grounds.
-    const reducedTv = readTheStill(still);
+    const reducedTv = readTheStill(still, board);
     // Awaited below; a failure before then is reported by the check that failed first.
     reducedTv.catch(() => undefined);
     await opener.and(tv.locator('[data-opener=full]')).waitFor({ timeout: SHOW_MS });
     const ending = board();
     check(ending.phase === 'upkeep' && ending.month === 2, `month 2 ends in upkeep, got ${ending.phase} ${ending.month}`);
     const hospital = ending.colony?.projects.find((p) => p.id === 'hospital');
+    // A place's number is its project's place in commission order: an AI seat may commission one too.
+    const placeOf = (id: string) => (ending.colony?.projects.findIndex((p) => p.id === id) ?? -1) + 1;
+    const [h, k] = [placeOf('hospital'), placeOf('park')];
     check(hospital?.stage === 'standing', `the server has the Hospital standing at month 2's end, got ${hospital?.stage}`);
     check((await opener.getAttribute('data-leaning'))?.split(' ').includes('hospital'), `T-AC-7: the opener leans in on the Hospital, got ${await opener.getAttribute('data-leaning')}`);
     const caption = (await tv.getByTestId('opener-caption').innerText()).replace(/\s+/g, ' ').trim();
@@ -163,11 +167,11 @@ async function main(): Promise<void> {
 
     // The pictures at dusk, back to front: each place drawn after every place behind it (col + row from the hall).
     const grounds = opener.getByTestId('colony-grounds');
-    await grounds.locator('[data-testid=glow-1]').waitFor({ timeout: PRESS_MS });
+    await grounds.locator(`[data-testid=glow-${h}]`).waitFor({ timeout: PRESS_MS });
     const order = await grounds.evaluate((svg) => [...svg.querySelectorAll('[data-testid^=place-]')].map((g) => Number(g.getAttribute('data-testid')!.slice('place-'.length))));
     const depth = (n: number) => depthOf(ending.colony!.projects[n - 1]!.place!);
-    check(order.length === 2 && order.every((n, i) => i === 0 || depth(order[i - 1]!) <= depth(n)), `the pictures sit back to front in the DOM, got places ${order.join(', ')} at depths ${order.map(depth).join(', ')}`);
-    const href = await grounds.locator('[data-testid=picture-1]').getAttribute('href');
+    check(order.length >= 2 && order.every((n, i) => i === 0 || depth(order[i - 1]!) <= depth(n)), `the pictures sit back to front in the DOM, got places ${order.join(', ')} at depths ${order.map(depth).join(', ')}`);
+    const href = await grounds.locator(`[data-testid=picture-${h}]`).getAttribute('href');
     check(href?.endsWith('hospital/standing-dusk@800.webp'), `B-AC-6: the Hospital shows its standing picture at dusk, got ${href}`);
     console.log(`✓ B-AC-6: month 2's end shows "${header}", "${caption}", leaning in on the Hospital, no chips; its picture ${href} with its glow; places ${order.join(', ')} back to front`);
 
@@ -189,8 +193,8 @@ async function main(): Promise<void> {
     check(read.leaning === null, `T-AC-8: with reduced motion nothing leans in, got ${read.leaning}`);
     check(read.caption.includes('the Hospital stands'), `T-AC-8: the still names the change, got "${read.caption}"`);
     console.log(`✓ T-AC-8: with reduced motion month 2's end is the still: "${read.caption}", no lean-in`);
-    const [shape, picture, glow, park] = read.parts;
-    check(blocked > 0 && shape && !picture && !glow, `B-AC-4 (negative): the blocked Hospital picture shows its SVG shape and no glow (${blocked} requests blocked), got shape/picture/glow ${read.parts.slice(0, 3).join('/')}`);
+    const [shape, picture, glow, park] = [`shape-${h}`, `picture-${h}`, `glow-${h}`, `picture-${k}`].map((id) => read.parts.includes(id));
+    check(blocked > 0 && shape && !picture && !glow, `B-AC-4 (negative): the blocked Hospital picture shows its SVG shape and no glow (${blocked} requests blocked), got ${read.parts.join(', ')}`);
     check(park, 'the Park beside it still shows its picture');
     console.log(`✓ B-AC-4 (negative): ${blocked} Hospital picture requests blocked → its SVG shape, its glow gone; the Park keeps its picture`);
 
@@ -211,17 +215,18 @@ async function main(): Promise<void> {
   }
 }
 
-/** The reduced-motion TV's opener at the month end, once the Hospital's blocked picture has fallen back to its shape. */
-async function readTheStill(tv: Page): Promise<{ kind: string | null; leaning: string | null; caption: string; parts: boolean[] }> {
+/** The reduced-motion TV's opener at the month end, once the Hospital's blocked picture has fallen back to its shape; the place testids it draws. */
+async function readTheStill(tv: Page, board: () => MuleView): Promise<{ kind: string | null; leaning: string | null; caption: string; parts: string[] }> {
   const opener = tv.getByTestId('tv-grounds-opener');
   await opener.waitFor({ timeout: SHOW_MS });
   await tv.getByTestId('tv-event-overlay').waitFor({ state: 'hidden', timeout: SHOW_MS });
-  await opener.getByTestId('shape-1').waitFor({ timeout: STILL_MS });
+  const hospital = (board().colony?.projects.findIndex((p) => p.id === 'hospital') ?? -1) + 1;
+  await opener.getByTestId(`shape-${hospital}`).waitFor({ timeout: STILL_MS });
   return opener.evaluate((root) => ({
     kind: root.getAttribute('data-opener'),
     leaning: root.getAttribute('data-leaning'),
     caption: (root.querySelector('[data-testid=opener-caption]') as HTMLElement).innerText.replace(/\s+/g, ' ').trim(),
-    parts: ['shape-1', 'picture-1', 'glow-1', 'picture-2'].map((id) => !!root.querySelector(`[data-testid=${id}]`)),
+    parts: [...root.querySelectorAll('[data-testid^=shape-], [data-testid^=picture-], [data-testid^=glow-]')].map((e) => e.getAttribute('data-testid')!),
   }));
 }
 
