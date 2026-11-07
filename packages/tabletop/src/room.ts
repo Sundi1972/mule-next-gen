@@ -186,6 +186,7 @@ export class Room<Intent, View> {
   private nextSeat = 1;
   /** Seat codes taken back or kicked: they answer "taken back" for the room's life and are never issued again. */
   private readonly deadCodes = new Set<string>();
+  private readonly issued = new Set<string>();
   private chatId = 0;
   private broadcastQueued = false;
 
@@ -355,6 +356,11 @@ export class Room<Intent, View> {
     return this.deadCodes.has(typed) ? { state: 'taken_back' } : null;
   }
 
+  /** Every seat code this room has issued, live or dead: the registry retires them all when the room goes. */
+  get seatCodes(): ReadonlySet<string> {
+    return this.issued;
+  }
+
   /** RULE-1: the host, in the lobby, sets a computer seat's kind; claude issues it a code, builtin kills the code at once. */
   private setSeatKind(by: string, target: string, kind: SeatKind): void {
     this.requireHost(by);
@@ -373,7 +379,9 @@ export class Room<Intent, View> {
   private freshSeatCode(): string {
     for (let i = 0; i < 100; i++) {
       const code = this.opts.newSeatCode().trim().toUpperCase();
-      if (this.seatForCode(code) === null) return code;
+      if (this.seatForCode(code) !== null) continue;
+      this.issued.add(code);
+      return code;
     }
     throw new Error('No free seat code after 100 draws');
   }

@@ -811,7 +811,7 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
   it('T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical', async () => {
     const { record } = await recordedGame({ ...NOTICE_GAME, market: true });
     const notices = record.events.map(factOf).filter((n) => n !== null);
-    // This game runs without politics: a deal or sabotage notice here has no phase and fails the check.
+    // This game runs without politics: a politics notice here has no entry in this table and fails the check.
     const phaseOf: Partial<Record<Notice['kind'], string>> = { claim: 'landGrant', declare: 'auction', trade: 'auction', sale: 'landAuction' };
     for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
     expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
