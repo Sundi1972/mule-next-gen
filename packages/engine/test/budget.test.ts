@@ -103,6 +103,7 @@ describe('S5-HC-5: politics off is untouched by slice 5', () => {
     expect(state.month).toBe(4);
     expect(state.politics).toBeNull();
     expect(state.colony).toBeNull();
-    await expect(stableJson(state)).toMatchFileSnapshot('./__snapshots__/politics-off-month-4.json');
+    // Indented, so a failing diff reads line by line; the keys are sorted by stableJson.
+    await expect(JSON.stringify(JSON.parse(stableJson(state)), null, 2)).toMatchFileSnapshot('./__snapshots__/politics-off-month-4.json');
   });
 });
