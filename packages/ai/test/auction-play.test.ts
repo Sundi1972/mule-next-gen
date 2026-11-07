@@ -454,12 +454,14 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(yieldTop).toBe(board.rival - 1);
     expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board).top).toBe(board.rival - 1);
     expect(probe(screen, { ...base, vsRival: 'yield', per: { ai2: 'undercut1' } }, board).targets).toEqual(undercut.targets);
-    // The seller's mirror, against a rival seller ahead at lo + 8 and a bid at the buyers' edge (a seller walks no lower
-    // than just over it, #291): yield stands one behind the rival, over it; undercut1 goes under it.
+    // The seller's mirror, against a rival seller ahead and a bid at the buyers' edge (a seller walks no lower than just
+    // over it, #291, nor into the buyers' zone under B, RULE-6): yield stands one behind the rival, over it; undercut1
+    // goes under it. The rival stands above B, so there is room under it whatever the store's spread puts B at.
+    const rival = Math.max(lo + 8, screen.auction!.zones.buyersTop + 3);
     const sellBase: GoodPlay = { ...seller, hold: 0, walkAway: lo + 3, start: lo + 3 };
-    const sellBoard = { mine: screen.auction!.hi, rival: lo + 8, bid: lo };
-    expect(sellerProbe(screen, { ...sellBase, vsRival: 'yield' }, sellBoard).bottom).toBe(lo + 9);
-    expect(sellerProbe(screen, { ...sellBase, vsRival: 'undercut1' }, sellBoard).bottom).toBeLessThan(lo + 8);
+    const sellBoard = { mine: screen.auction!.hi, rival, bid: lo };
+    expect(sellerProbe(screen, { ...sellBase, vsRival: 'yield' }, sellBoard).bottom).toBe(rival + 1);
+    expect(sellerProbe(screen, { ...sellBase, vsRival: 'undercut1' }, sellBoard).bottom).toBeLessThan(rival);
     // RULE-10's unit values come from the plan mind the source hands the hand (RULE-14), not the persona's. Holding 6
     // Food, its next unit is one to resell, so the cautious seat's speculate weight sets its ceiling; a monopolist's
     // plan multiplies that weight.

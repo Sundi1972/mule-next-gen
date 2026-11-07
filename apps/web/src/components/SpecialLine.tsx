@@ -2,7 +2,10 @@ import type { TileView } from '@mule/protocol';
 import { SPECIAL_NAME, SpecialBadge } from '@mule/ui';
 import { specialEffect } from '../game/derive';
 
-/** A plot card's special line, first under the plot's name: the badge, the kind in bold, and what it does. Nothing for a plain plot. */
+/**
+ * A plot card's special line, under the plot's name and ahead of what the card says about its ground: the badge, the
+ * kind in bold, and what it does. Nothing for a plain plot.
+ */
 export function SpecialLine({ special }: { special: TileView['special'] }) {
   if (!special) return null;
   return (
