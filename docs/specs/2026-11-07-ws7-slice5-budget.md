@@ -293,10 +293,11 @@ table lists only what each screen shows and where. Each screen change in §1 has
 
 | Moment | Governor's phone | Every other phone | TV |
 |---|---|---|---|
-| **1 · Planning: the Governor sets the budget** [RC] (once the month's votes are over) | **P12 Governor desk**, beside the tax: a share per line in steps of `POLITICS.budget.step` %. Each line shows what it pays at today's fund ("Welfare 10%: about 120 cr to Kai, last on Worth"; "Projects 80%: about 430 cr toward the Observatory"), plus "Kept in the fund 10%". Set. | **P13 Council desk:** the budget as set, each line marked if it changed this month ("Welfare 0% → 10%"). | **P14** planning header, under the Governor's promise line (TvGovernorPromise's place): "Budget: Projects 80% · Welfare 10% → Kai · kept 10%", with changes marked. |
+| **1 · Planning: the Governor sets the budget** [RC] (once the month's votes are over) | **P12 Governor desk**, beside the tax: a share per line in steps of `POLITICS.budget.step` %. Each line shows what it pays at today's fund ("Welfare 10%: 54 cr to Kai, last on Worth"; "Projects 80%: 432 cr toward the Observatory": §3's worked example, a spare of 540 cr; AM-5), plus "Kept in the fund 10%". Set. | **P13 Council desk:** the budget as set, each line marked if it changed this month ("Welfare 0% → 10%"). | **P14** planning header, under the Governor's promise line (TvGovernorPromise's place): "Budget: Projects 80% · Welfare 10% → Kai · kept 10%", with changes marked. |
 | **2 · A player calls an overrule** [RC: tax; after RC: or budget] | The called setting turns read-only: "Frozen: Brix called an overrule vote on the tax, held as planning ends". | **P13:** "Call an overrule vote" starts at the tax line in the fund card (after RC, also at the budget line). Once someone calls, the caller sees "You called it" and Withdraw. Everyone else sees the call, and the button is gone (one call a month). | **P14:** a banner "Brix calls an overrule vote on the Governor's tax", plus the news line. |
 | **3 · Planning ends: the overrule ballot** [RC] | **P13 overrule ballot**, in the council's ballot place, the same as every phone. The Governor's ballot starts at No. | **P13 overrule ballot**, in the council's ballot place: "Undo the Governor's tax? 5% at the month's start → 10% now", Yes / No, "needs N of M votes", Cast. The caller's ballot starts at Yes. | **P14 overrule panel**, in the law ballot's frame (TvCouncil): the question, start vs now, who has voted (never how), "needs N of M votes". |
 | **4 · The reveal** (`POLITICS.overrule.revealMs`) [RC] | the result | the result | **P14:** "Yes 6 · needed 5: Overruled, the tax goes back to 5%", or "The Governor's tax stands". After RC, a second overrule adds "Snap election next month". |
+| *Ready words* (AM-5) [RC] | while the overrule ballot is open and you have not cast: "Vote on the overrule"; cast, others still voting: "Waiting for the overrule vote"; during the reveal: "Continue". WS6 may reword them in the mock; they always say what the table is waiting for | same | — |
 | **5 · Month end** [RC] | **P15** month-end colony panel: the fund's lines this month: office pay, upkeep, "Welfare 120 → Kai", "Buildings 430", and, after RC, "Security 200". | same | **P15:** the same lines in the TV's colony panel. |
 | **6 · The Sheriff opens an inquiry** [after RC] | **P13:** the record shown, and "Inquiry finds: … — no-confidence vote as planning ends". | the Sheriff's phone, **P16 Sheriff desk** (slice 4's desk): "Open an inquiry" (once a term). Every phone shows the record and the finding. | **P14:** "Sheriff Ossa opens an inquiry into Governor Lena", the record, then the finding or "dismissed". |
 | **7 · No-confidence ballot and reveal** [after RC] | as moment 3, with the question "No confidence in Governor Lena?" | as moment 3 | as moments 3-4; a pass shows "Snap election next month". |
@@ -1046,7 +1047,7 @@ S5-RULE-10 · Who sees what                                            shape: de
   their credits at today's fund, the amount kept
   Welfare's recipient now, and who was paid              yes           yes            yes
   the call (caller, target), the frozen state            yes           yes            yes
-  the ballot's stage, who has voted, who is Done,        yes           yes            yes
+  the ballot's stage, who has cast (done; AM-5),          yes           yes            yes
   needed, total
   one player's ballot                                    the voter     no             no      (before and after the reveal)
   yes / no totals and the verdict                        every screen, from the reveal
@@ -1270,7 +1271,7 @@ export interface BudgetView {
   lines: { line: BudgetLine; share: number; start: number; maxShare: number; step: number; credits: number; maxCredits: number | null }[];
   /** 100 − Σ shares: stays in the fund. */
   kept: number;
-  /** Who Welfare would go to now (S5-RULE-4), or null. */
+  /** Who Welfare would go to now (S5-RULE-4), sent at every share, 0% included, so the Governor sees it before setting one; null only when S5-RULE-4 names nobody (AM-5). */
   welfareTo: string | null;
   /** The Governor who set it, or null for the default. */
   setBy: string | null;
@@ -1613,6 +1614,21 @@ AM-4 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recomme
 
 target    the decisions for Heiko
 did       D-S5-2 → A (as planning ends), D-S5-3 → A (snap election after two overrules, after RC), D-S5-4 → A (the Governor's public breaches, after RC). The build builds the spec as written.
+goal      S5-1 — unchanged
+```
+
+```
+AM-5 · 2026-11-07 · WS7, answering WS6's four questions while drawing P3 (#689), via PM
+
+target    What the table sees (P12 row, the Ready words), §3 BudgetView.welfareTo, S5-RULE-10, OverruleView.voted
+did       (1) P12's example numbers now come from §3's worked example (80% = 432 cr, 10% = 54 cr: one spare of
+          540 cr); the old "about 120" and "about 430" could not come from one fund. (2) welfareTo is sent at every
+          share, 0% included, so the Governor sees the recipient before setting a share; null only when S5-RULE-4
+          names nobody. (3) "Who has voted" on every screen is `done` (who has cast). `voted` holds the ballot
+          keys, which include the preset ballots (the caller's yes, the Governor's no), so no screen shows it
+          as "has voted"; the frozen type keeps the field. (4) The overrule ballot and its reveal get their own
+          Ready words.
+because   WS6 found the four drawing the mock; the screen must not say a preset ballot was cast
 goal      S5-1 — unchanged
 ```
 
