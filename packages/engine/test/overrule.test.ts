@@ -321,6 +321,18 @@ describe('S5-C5: the overrule ballot as planning ends', () => {
     expect(failedB.treasury.salesTax).toBe(0.1);
     expect(record(failedB)).toEqual([false]);
 
+    // (c) The reveal has begun: the stored result stands, so a weight that changes now cannot turn the promise.
+    // The fixture edits state directly, as the tally fixtures above do: the three yes voters' reputation drops to 0 (below repLow),
+    // and a fresh tally of the same ballot would now fail (the stored result still says passed).
+    const revealed = open(YES);
+    stepVotes(revealed, 0);
+    expect(revealed.politics!.overrule!.stage).toBe('reveal');
+    expect(revealed.politics!.overrule!.result!.passed).toBe(true);
+    for (const id of YES) revealed.players.find((p) => p.id === id)!.reputation = 0;
+    advancePhase(revealed);
+    expect(record(revealed)).toEqual([true]);
+    expect(revealed.treasury.salesTax).toBe(0.05);
+
     // A call that never got its ballot lapses: the raised tax stands and the promise is broken.
     const lapsed = promised();
     advancePhase(lapsed);
