@@ -55,6 +55,10 @@ describe('the grounds loader and the plate (AM-7, Task 4.3)', () => {
     ['plate "3" has no frame', (p) => void delete (p['3'] as Record<string, unknown>).frame],
     ["plate \"3\"'s frame has no number for its width", (p) => void (p['3']!.frame.width = 'wide')],
     ['the hall pixel is one number', (p) => void (p['5']!.frame.hall = [4480])],
+    ['plate "3"\'s frame is zero wide', (p) => void (p['3']!.frame.width = 0)],
+    ['plate "5"\'s frame is zero high', (p) => void (p['5']!.frame.height = 0)],
+    ['plate "5"\'s frame has a negative width', (p) => void (p['5']!.frame.width = -8960)],
+    ['plate "3"\'s frame has a negative height', (p) => void (p['3']!.frame.height = -3456)],
     ['plate "5" is missing', (p) => void delete p['5']],
     ['a plate key is no extent', (p) => void (p['7'] = p['5']!)],
   ])('T-AC-10: when %s, the plate is dropped, the pictures are kept and the grounds draw their SVG ground', async (_, spoil) => {
@@ -71,6 +75,21 @@ describe('the grounds loader and the plate (AM-7, Task 4.3)', () => {
     const { manifest } = await load({ ...structuredClone(shipped), plate: 'plate.webp' });
     expect(manifest).not.toBeNull();
     expect(manifest?.plate).toBeUndefined();
+  });
+
+  it.each<[string, (m: { frame: Record<string, unknown>; pictures: Record<string, Record<string, unknown>> }) => void]>([
+    ['the shared frame has a zero place', (m) => void (m.frame.place = 0)],
+    ['the shared frame has a negative place', (m) => void (m.frame.place = -1293)],
+    ['the shared frame is zero wide', (m) => void (m.frame.width = 0)],
+    ['the shared frame is zero high', (m) => void (m.frame.height = 0)],
+    ["the Spaceport's own frame has a zero place", (m) => void ((m.pictures.spaceport!.frame as Record<string, unknown>).place = 0)],
+  ])('HC-3: when %s, the whole manifest is dropped and every place draws its SVG shape', async (_, spoil) => {
+    const spoilt = withPlate();
+    spoil(spoilt as unknown as Parameters<typeof spoil>[0]);
+    const { manifest, html } = await load(spoilt);
+    expect(manifest).toBeNull();
+    expect(html).not.toContain('<image');
+    expect(html).toContain('data-testid="paving"');
   });
 
   it('HC-3: an unknown kind-level key under pictures still nulls the whole manifest, plate and all', async () => {
