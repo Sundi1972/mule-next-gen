@@ -1,6 +1,6 @@
 import { GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, GroundsOpener, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, useGroundsOpener, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { AiMark, Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import {
   boardWalkers,
@@ -39,6 +39,8 @@ import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
 import { placesOf } from '../phone/hub/standing';
 import { TvEventLayer } from '../events/TvEventLayer';
+import { overlayShowAt } from '../events/clock';
+import { Grounds } from '../components/Grounds';
 import { TvElection } from './TvElection';
 import { FitHeight, TvBody } from './TvFit';
 import { TvGovernorPromise } from './TvGovernorPromise';
@@ -228,8 +230,10 @@ export function tvChatLines(_game: Pick<MuleView, 'phase' | 'finished'>): number
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
+  // The month-end opener, after the month end's event show and before TvMonthEnd (spec C7, RULE-6).
+  const opener = useGroundsOpener(game, overlayShowAt(game, now) !== null);
   // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
-  const drift = useMonthEndDrift(game);
+  const drift = useMonthEndDrift(game, opener === null);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -246,7 +250,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        <TvMonthEnd game={game} drift={drift} />
+        {opener && game.colony ? <GroundsOpener opener={opener} colony={game.colony} month={game.month} Scene={Grounds} /> : <TvMonthEnd game={game} drift={drift} />}
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;

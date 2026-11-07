@@ -3,3 +3,7 @@ dist
 .vite
 current-selection.json
 review-notes.jsonl
+# KitBash3D local renders: never committed (spec AM-5)
+public/kit-look
+# shoot.mjs output: review shots, never committed
+review-loop/shots
