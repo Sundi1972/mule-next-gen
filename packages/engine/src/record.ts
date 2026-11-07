@@ -48,7 +48,7 @@ export type NoticeEntry = { type: 'notice'; at: number; seq: number; month: numb
   | { kind: 'sale'; item: 'plot' | 'mule'; plot: PlotIndex; seller: PlayerId; buyer: PlayerId | 'store'; price: number }
   /** A deal card changed status (politics slice 3). `parties` on every event but 'broken', which is public; a consumer skips a notice whose parties exclude its seat. */
   | { kind: 'deal'; event: DealCard['status']; deal: DealCard; parties?: [PlayerId, PlayerId] }
-  /** A sabotage order resolved (slice 4): public with culprit null unless culpritPublic for a done or caught order; private, parties [by], for the orderer's own failed or void order. */
+  /** A sabotage order resolved (slice 4). A done or caught order: public, culprit null unless culpritPublic. The orderer's own failed or void order: private, parties [by], with its culprit. */
   | { kind: 'sabotage'; order: string; target: SabotageTarget['kind']; victim: PlayerId | null; outcome: 'done' | 'failed' | 'caught' | 'void'; culprit: PlayerId | null; parties?: [PlayerId] }
   /** The Sheriff investigated an order (slice 4): public. */
   | { kind: 'investigation'; order: string; solved: boolean; culprit: PlayerId | null }

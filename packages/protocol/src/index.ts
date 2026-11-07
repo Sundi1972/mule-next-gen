@@ -153,7 +153,7 @@ export interface PlayerView {
     /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
     conditionPace: number;
   } | null;
-  /** 0..100, public on every screen, the TV's too (S3-RULE-7). The server always sends it; optional only so the web tests' hand-built players (13 files, several lanes) still type. */
+  /** 0..100, public on every screen, the TV's too (S3-RULE-7). The server always sends it; optional only so hand-built test players still type. */
   reputation?: number;
 }
 
@@ -352,7 +352,7 @@ export interface BudgetView {
   welfareTo: string | null;
   /** The Governor who set it, or null for the default. */
   setBy: string | null;
-  /** True from a call until planning ends, when the budget holds. */
+  /** True while the budget holds: never in RC; after RC, from any overrule call until planning ends. */
   frozen: boolean;
 }
 

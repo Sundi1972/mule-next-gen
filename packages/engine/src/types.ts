@@ -556,7 +556,7 @@ export interface Politics {
   failed: Record<string, number>;
   /** Every deal card of the game, settled ones too (slice 3). A seat sees the cards it is party to, and broken ones. */
   deals: DealCard[];
-  /** Every sabotage order of the game (slice 4). A seat sees its own, and caught or revealed ones. */
+  /** Every sabotage order of the game (slice 4). A seat sees its own, and every done or caught one (`by` null unless culpritPublic). */
   sabotage: SabotageOrder[];
   /** This month's guarded tiles (slice 4). Only the Sheriff sees them. */
   guards: number[];
