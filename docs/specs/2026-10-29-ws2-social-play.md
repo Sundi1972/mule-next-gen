@@ -474,6 +474,18 @@ unknown  null means "Claude has recorded no vote for this ballot", not "abstain"
          recorded for an earlier ballot never carries over (the port answers per ballot, from the playbook in effect).
 timing   the port is read when VoteHand casts (after its seeded pause, POLITICS.ai.actMs); a recorded reply whose edit
          takes effect after the seat cast changes nothing for that ballot (the ballot is cast once)
+written  (PM ruling (a), 7 Nov, from WS9's #691 AM-37: a vote in Playbook.politics is accepted only once its candidate has
+         declared) the `/politics/votes` edits come only from a reply adopted IN THE ELECTION MONTH AFTER ITS
+         DECLARATIONS: that month's planning-start ask, or a recorded whisper reply opened on a heard step during
+         announce (AM-B4). The ask shows the declared candidates. No ballot ask and no table wait: an AI acts 0.8-2.5 s
+         into the ballot (POLITICS.ai.actMs), shorter than any write, and HC-3 allows Claude one table wait only (the
+         first good's side pick). A candidate who declares later than that reply cannot get Claude's vote: that office
+         falls to row 1 (keyless). Scope note: no candidacy opens once an election month's planning has started except in
+         month 1 (WS7, 7 Nov: politics.ts `candidacyClosed` is true for announce when month > 1; rulebook
+         colony-and-politics.html:239), so this misses only month 1's election in the RC, plus a snap election's month
+         after the RC (S5-RULE-9). If
+         playtests show Claude's votes landing keyless too often, the fix is a ballot ask with a capped Claude wait,
+         a second table wait that is Heiko's call (not asked now)
 never    the port's answer comes from chat text (HC-B3): it is a value of the recorded playbook, set by the monthly
          reply or by a recorded reply opened on a heard step
 examples → §6: Claude recorded "governor: Kai", Kai on the ballot → votes Kai · recorded "Brix", Brix withdrew →
