@@ -1135,6 +1135,22 @@ did       D-S3-1 → A (campaign law promises after RC). The recorded reveal rul
 goal      S3-1, S3-2 — unchanged
 ```
 
+```
+AM-5 · 2026-11-07 · WS2's vote seam (Spec B v2 AM-B5 C12, #681), WS7's OK via PM · Claude can be persuaded
+
+target    §1 S3-C14, §2 S3-RULE-10, ownVote
+said      VoteHand's own vote is the keyless rule; ownVote(obs, mind, ballot) is today's choice without the tie draw
+did       Heiko kept "Claude can be persuaded to change its vote" in RC. VoteHand gains an optional third
+          constructor argument, WS2's VotePort { electionVote(office, candidates): PlayerId | null; lawVote(proposal):
+          boolean | null }, read before the keyless rule; null means the keyless rule. Three conditions (WS7): a seat
+          running for the office votes itself and the port is not asked; an electionVote outside the candidates
+          counts as null; the port answers from recorded state only (WS2's HC-B3), so a replay casts the same vote.
+          ownVote takes the same optional port, so DealHand's vote offer and the cast vote are one decision, and
+          S3-RULE-10 keeps or breaks against the port's choice as the seat's own vote. No port: unchanged (T-AC-B9).
+because   without it a Claude seat would offer "my vote for X" and cast Y, breaking its own card by construction
+goal      S3-2 — still met (a keyless seat is unchanged)
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: deal cards (a second writer inside Politics)

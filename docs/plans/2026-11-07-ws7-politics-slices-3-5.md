@@ -669,6 +669,18 @@ Before suggesting merge of `ws7-s3-engine` into `ws7-politics`:
   - Plan-drift corrections: WS1's values live in `packages/ai/src/politics-value.ts` (#669), not `value.ts`.
 - [ ] **Step 4: Run** `pnpm --filter @mule/ai test vote-hand council-ai` — expected PASS. **Commit** `feat(ai): S3-C14 VoteHand keeps or breaks a promised vote; ownVote (S3-T-AC-9)`.
 
+#### Task S3-4.1b — S3-C14 (slice 3 AM-5): WS2's VotePort in VoteHand and `ownVote`
+
+**Depends on:** S3-4.1 · **ACs verified:** WS2's T-AC-B9 (the null-port pin) and S3-T-AC-9's port rows · **Spec:** §1 S3-C14, §2 S3-RULE-10, §8 AM-5; WS2 Spec B v2 AM-B5 C12 (#681)
+
+- [ ] **Step 1: Strengthen `S3-T-AC-9` with the port rows, and write failing `T-AC-B9: no VotePort, the vote is unchanged`** — rows: a port that answers wins over the keyless rule in `vote` and `lawVote`; a port answering null leaves the keyless rule; an electionVote outside `candidates` counts as null; a seat running for the office votes itself and the port is not asked; `ownVote(obs, mind, ballot, port)` returns the port's answer, so DealHand's offer and the cast vote are one decision; with a promise held, S3-RULE-10 keeps or breaks against the port's choice as the seat's own vote.
+  - Altitude: unit at the hand's act boundary (the `vote`/`voteLaw` actions), as S3-T-AC-9.
+  - Negative case: T-AC-B9, no port, every existing vote-hand and council-ai test unchanged and the Rng called the same number of times.
+  - Traps: the port is a test double returning fixed answers; never a Claude call. The port interface is WS2's shape, verbatim.
+- [ ] **Step 2: Run** `pnpm --filter @mule/ai test vote-hand` — expected FAIL. **Commit** `test(ai): named edit vote-hand.test.ts — VotePort rows and T-AC-B9 (red, WS1)`.
+- [ ] **Step 3: Implement the VotePort per spec §8 AM-5** in `packages/ai/src/hands/vote.ts`: export the interface; VoteHand's optional third constructor argument; read in `choose` (after the self-vote) and `lawVote` before the keyless rule; validate the answer; `ownVote` takes an optional `port`. WS3's mule-game named edit (in #681's plan) passes the same port to the seat's VoteHand and DealHand; DealHand calls `ownVote` with it.
+- [ ] **Step 4: Run** `pnpm --filter @mule/ai test vote-hand council-ai` — expected PASS. **Commit** `feat(ai): VotePort, the seat's own vote can come from its recorded reasoning (slice 3 AM-5, T-AC-B9)`.
+
 #### Task S3-4.2 — S3-C13: DealHand answers and offers for every AI seat
 
 **Depends on:** S3-4.1 · **ACs verified:** S3-T-AC-8 · **Spec:** §1 S3-C13, §2 S3-RULE-9, §3 (DealPort), "Hand decisions and the values they need"
