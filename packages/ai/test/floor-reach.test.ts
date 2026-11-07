@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, floorConfig, terrainShare, tileAt, type GameState } from '@mule/engine';
+import { advancePhase, createGame, DEV_STEER, floorConfig, terrainShare, tileAt, tileIndex, type GameState } from '@mule/engine';
 import { installable, standPoint, tripSeconds } from '../src/floor-time.js';
+import { unreachablePlot } from '../src/hands/develop.js';
+import { draftPlaybook } from '../src/playbook/draft.js';
+import { validatorFor } from '../src/playbook/validate.js';
+import { AiSeat } from '../src/seat.js';
 
 const players = [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true }));
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
@@ -35,5 +39,29 @@ describe('one reachability rule: the plans, the hands and the gate call a plot r
     }
     expect(cornerOnly).toBe(41);
     expect(infinite).toEqual([]);
+  });
+
+  it('FM-floor-unreachable: the hands, the gate and the draft judge a plot shut in by lake as the plans do (seed 14)', () => {
+    // Seed 14's month-1 development: ai2 holds a plains plot in the pocket at (13, 6) and a plains plot a walk reaches.
+    const state = createGame({ seed: 14, players });
+    while (state.phase !== 'development') advancePhase(state);
+    for (const t of state.tiles) if (t.owner === 'ai2') t.owner = null;
+    const pocket = tileIndex(state.width, 13, 6);
+    state.tiles[pocket]!.owner = 'ai2';
+    const open = state.tiles.findIndex((t, i) => t.terrain === 'plains' && t.owner === null && i !== pocket && installable(state, floorConfig(), 'ai2', i));
+    state.tiles[open]!.owner = 'ai2';
+    const mind = new AiSeat({ id: 'ai2', name: 'AI 3', persona: 'trader', level: 'trader', seed: 102 }).mind;
+    const steering = DEV_STEER.on;
+    try {
+      DEV_STEER.on = true;
+      expect([unreachablePlot(state, pocket, floorConfig()), unreachablePlot(state, open, floorConfig())]).toEqual([true, false]);
+      const draft = draftPlaybook({ state, seat: 'ai2', mind, seed: 102, phase: 'development' });
+      expect(draft.development!.route).not.toContainEqual({ act: 'install', plot: pocket });
+      const route = [{ act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: pocket }, { act: 'pub' }];
+      const r = validatorFor({ mind, seed: 102 })(state, 'ai2', draft, [{ path: '/development/route', to: route, reason: 'a test edit' }]);
+      expect(r.rejected.find((x) => x.path === '/development/route')?.why).toBe(`route: no walk reaches plot ${pocket}, step 2`);
+    } finally {
+      DEV_STEER.on = steering;
+    }
   });
 });
