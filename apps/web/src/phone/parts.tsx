@@ -3,6 +3,7 @@ import type { ChatMessage, MuleView } from '@mule/protocol';
 import { EMOTES } from '@mule/protocol';
 import { Button, cx, GoodTag, hungerRule, Panel, PlayerMark, sickRule, type Good } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
+import { AiMark } from '../chat/Chat';
 import { player, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { usePhoneGame } from './game';
@@ -165,7 +166,7 @@ function ChatLine({ line, view }: { line: ChatMessage; view: MuleView }) {
       <div className="flex flex-col">
         <span className="text-xs font-semibold text-ink-2">
           {from?.name ?? 'Someone'}
-          {from?.isAi && <span className="text-holo"> · AI</span>}
+          {from?.isAi && <AiMark />}
         </span>
         <span className="leading-snug">{line.text}</span>
       </div>
