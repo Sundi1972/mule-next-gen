@@ -62,6 +62,8 @@ const REFUSED = {
   game_over: 'The game is over. Stop playing.',
 } as const;
 
+const STILL_OPEN = 'This ask is still open: answer it now with submit_plan.';
+
 type Refusal = { kind: 'busy'; retry_s: number } | { kind: Exclude<keyof typeof REFUSED, 'busy'> };
 
 /** A code's seat as a call acts on it: its id, and its writer once the game has started. */
@@ -197,7 +199,9 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
 
 /** A tool's result: a sentence and the JSON for Claude to read, and the same object as structured content. */
 function resultOf(payload: { kind: string } & Record<string, unknown>): CallToolResult {
-  const said = payload.kind in REFUSED ? `${REFUSED[payload.kind as keyof typeof REFUSED]}\n` : '';
+  const refused = payload.kind in REFUSED ? `${REFUSED[payload.kind as keyof typeof REFUSED]}\n` : '';
+  // ms_left 0 is only the game's usual wait spent: the ask stays open until its phase starts, so 0 must not read as late.
+  const said = payload.kind === 'ask' && payload.ms_left === 0 ? `${STILL_OPEN}\n` : refused;
   return { content: [{ type: 'text', text: `${said}${JSON.stringify(payload)}` }], structuredContent: payload };
 }
 
