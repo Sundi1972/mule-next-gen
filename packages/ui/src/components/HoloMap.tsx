@@ -291,7 +291,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               {owner && (
                 <span aria-hidden className={cx('absolute inset-[2%] rounded-[10%]', fade)} style={{ boxShadow: `inset 0 0 0 ${size.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
               )}
-              {strip && (
+              {strip && (strip.tab || strip.gems > 0 || strip.badge) && (
                 // z-[4], the tab's: above the badge layer of the plot up-left and the tint.
                 <span className={cx('pointer-events-none absolute z-[4] flex items-center', fade)} style={{ left: strip.top, top: strip.top, height: strip.size, gap: SMALL_STRIP.gap }} data-testid={`map-strip-${at}`}>
                   {owner && t.owner !== null && (
