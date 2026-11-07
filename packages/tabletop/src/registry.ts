@@ -9,7 +9,8 @@ export class RoomRegistry<Intent, View> {
   /**
    * The seat codes of every room that has left (closed, failed, swept, shut down), taken back (PM ruling (a) on #628's
    * review): a Claude chat still calling with one is told so, not counted as a wrong code, and no room issues it again.
-   * A few bytes a code, for the server's life.
+   * Each one costs roughly 50–80 bytes (a short string in a Set) for the server's life; a host flipping a seat's kind
+   * issues one per switch, so the rate limit is what bounds it.
    */
   private readonly retired = new Set<string>();
 
@@ -33,10 +34,13 @@ export class RoomRegistry<Intent, View> {
     return this.retired.has(code.trim().toUpperCase()) ? { state: 'taken_back' } : null;
   }
 
-  /** Drops a room, retiring its seat codes. */
-  private remove(code: string): Room<Intent, View> | undefined {
+  /**
+   * Drops a room, retiring its seat codes. `room`, when given, must be the one listed: a room code is reused once its room
+   * has gone, so a late close from an old room never drops (and retires the live codes of) the new room under its code.
+   */
+  private remove(code: string, room?: Room<Intent, View>): Room<Intent, View> | undefined {
     const entry = this.rooms.get(code);
-    if (!entry) return undefined;
+    if (!entry || (room && entry.room !== room)) return undefined;
     this.rooms.delete(code);
     for (const seatCode of entry.room.seatCodes) this.retired.add(seatCode);
     return entry.room;
@@ -56,7 +60,7 @@ export class RoomRegistry<Intent, View> {
     do {
       code = Array.from({ length: 4 }, () => CODE_LETTERS[Math.floor(this.random() * CODE_LETTERS.length)]).join('');
     } while (this.rooms.has(code));
-    const room = new Room<Intent, View>({ ...this.options, code, newSeatCode: () => this.newSeatCode(), onClose: () => void this.remove(code) });
+    const room = new Room<Intent, View>({ ...this.options, code, newSeatCode: () => this.newSeatCode(), onClose: () => void this.remove(code, room) });
     this.rooms.set(code, { room, idleSince: null });
     return room;
   }

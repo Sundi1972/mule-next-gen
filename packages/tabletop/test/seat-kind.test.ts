@@ -237,6 +237,29 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     expect(code).not.toBe('AAAA-00');
   });
 
+  it('#641 review: a late close from a swept room never drops the new room that took its room code, nor retires its codes', async () => {
+    let t = 0;
+    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix'], newToken: () => `t${++tokens}` }, () => 0, () => t);
+    const old = registry.create();
+    registry.sweep(1000);
+    t += 1000;
+    registry.sweep(1000);
+    expect(registry.get(old.code)).toBeUndefined();
+    const fresh = registry.create();
+    expect(fresh.code, 'the room code is reused').toBe(old.code);
+    const host = new Screen();
+    fresh.receive(host, host.from, { t: 'join', code: fresh.code, name: 'Host' });
+    fresh.receive(host, host.from, { t: 'addAi' });
+    await flush();
+    const ai = host.view().seats.find((s) => s.isAi)!.id;
+    fresh.receive(host, host.from, { t: 'setSeatKind', seatId: ai, kind: 'claude' });
+    await flush();
+    const code = host.view().seats.find((s) => s.id === ai)!.seatCode!;
+    old.fail();
+    expect(registry.get(fresh.code)).toBe(fresh);
+    expect(registry.seatForCode(code)).toMatchObject({ state: 'live', seatId: ai });
+  });
+
   it('RULE-1 row 1 (negative): only the host, only in the lobby, only on a computer seat', async () => {
     const { room, heiko, mia, brix, set } = await lobby();
     await set(mia, 'claude');
