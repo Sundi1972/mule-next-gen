@@ -1,6 +1,23 @@
-import { allPrices, BRAIN, observe, scoreParts, type GameState, type Phase, type Playbook, type PlayerId } from '@mule/engine';
+import {
+  allPrices,
+  BRAIN,
+  buyMule,
+  floorConfig,
+  installMule,
+  observe,
+  outfitMule,
+  RuleError,
+  scoreParts,
+  type DevelopmentPlay,
+  type GameState,
+  type Phase,
+  type Playbook,
+  type PlayerId,
+} from '@mule/engine';
+import { routeVeto } from '../hands/develop.js';
 import { monthSteps, type MonthSeat } from '../play.js';
 import type { AiSeat } from '../seat.js';
+import type { Mind } from '../value.js';
 import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
 import { newPlots, ownedPlots, resolveGranted } from './granted.js';
@@ -91,6 +108,45 @@ export interface WhatIfSim {
 
 const isEdit = (e: unknown): e is PlanEdit => isObject(e) && typeof e.path === 'string' && 'to' in e;
 
+const ROUTE_PATH = '/development/route';
+/** A route MULE's three steps: its buyMule, outfit and install, as the rules' route grammar reads them. */
+const MULE_STEPS = 3; // literal-ok: buyMule, outfit, install
+
+/**
+ * The MULEs of `route` the hands would refuse at development's start `at`, each named on its install step with
+ * routeVeto's reason. Each is judged on the state as its turn comes: the MULEs before it bought, fitted and installed
+ * by the engine's own moves. On the floor every development walks (C6), so a lake plot no shore reaches is refused,
+ * as in play; the walk's clock is not known here, so a walk too long for it is not.
+ */
+function handsRefuse(at: GameState, mind: Mind, route: DevelopmentPlay['route']): NonNullable<Playbook['rejected']> {
+  const refused: NonNullable<Playbook['rejected']> = [];
+  const view = structuredClone(at);
+  const floor = floorConfig();
+  for (let i = 0; i < route.length; i++) {
+    if (route[i]!.act !== 'buyMule') continue;
+    const outfit = route[i + 1]!.outfit!;
+    const install = i + MULE_STEPS - 1;
+    const plot = route[install]!.plot!;
+    i = install;
+    const veto = routeVeto(view, mind, { plot, outfit }, undefined, floor);
+    if (veto) {
+      refused.push({ path: `${ROUTE_PATH}/${install}`, to: route[install], why: `route step ${install}: ${veto}` });
+      continue;
+    }
+    // As the hands play it: a MULE it leads is this one, not bought again; one fitted already keeps its outfit.
+    const me = view.players.find((p) => p.id === mind.me)!;
+    const tile = view.tiles[plot]!;
+    try {
+      if (me.carriedMule === null) buyMule(view, mind.me);
+      if (me.carriedMule === 'empty') outfitMule(view, mind.me, outfit);
+      installMule(view, mind.me, tile.x, tile.y);
+    } catch (err) {
+      if (!(err instanceof RuleError)) throw err;
+    }
+  }
+  return refused;
+}
+
 export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): Promise<ToolResult> } {
   const obs = observe(state, seat);
   // The seat's plots as the tools were made, when the write was asked: a route's "granted" plot is one gained since.
@@ -131,7 +187,10 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
         const { edits: resolved, dropped } = resolveGranted(development, newPlots(at, seat, ownedAtAsk, playbook.landGrant?.ranked ?? []));
         atDevelopment.push(...dropped);
         if (resolved.length === 0) return null;
-        atDevelopment.push(...s.validator()(at, seat, draft, resolved).rejected);
+        const checked = s.validator()(at, seat, draft, resolved);
+        atDevelopment.push(...checked.rejected);
+        // The route the edits make, as the hands would play it: each MULE they would refuse is named (hands fix 1).
+        if (resolved.some((e) => e.path === ROUTE_PATH)) atDevelopment.push(...handsRefuse(at, s.mind, checked.playbook.development?.route ?? []));
         return resolved;
       };
       // observe() zeroes the seed: the month's dice are none of the live game's.
