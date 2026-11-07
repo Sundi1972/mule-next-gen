@@ -1,4 +1,4 @@
-import { LAW_NAME, POLITICS, type LawId, type LawImpact, type LawProposal } from '@mule/engine';
+import { LAW_NAME, lawOffered, POLITICS, type LawId, type LawImpact, type LawProposal } from '@mule/engine';
 import type { PoliticsView } from '@mule/protocol';
 import { Button, cx, PlayerMark } from '@mule/ui';
 import { useState, type ReactNode } from 'react';
@@ -249,7 +249,7 @@ function PickerA({ pol, candidates, start, onPropose }: { pol: PoliticsView; can
   return (
     <div className="flex flex-col gap-1.5" data-testid="picker-a">
       <ul className="flex flex-col gap-1">
-        {LAW_IDS.map((law) => {
+        {LAW_IDS.filter(lawOffered).map((law) => {
           const inForce = laws[law];
           const wait = waitOf(pol, view.month, 'enact', law);
           const repealWait = waitOf(pol, view.month, 'repeal', law);
