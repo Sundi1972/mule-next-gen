@@ -259,8 +259,10 @@
 <li><strong>Analyses</strong>: an unknown plot of its own is analysed when its best and second-best uses are within <span class="num">25%</span> of each other; at most <span class="num">2</span> a month (Rookie <span class="num">1</span>), never with fewer than <span class="num">20</span> seconds left.</li>
 <li><strong>Filters</strong>: only once the air is within <span class="num">10</span> points of Smoggy, on its own plots putting out more than <span class="num">1</span> air point a month, worst first, as far as its Alloy goes.</li>
 <li><strong>Air</strong>: at full scoring each air point a plot puts out costs it <span class="num">10</span> cr, rising as the air gets dirtier (doubled by Smoggy).</li>
+<li><strong>A plan's MULE over one already there</strong>: when a plan puts a MULE on a plot of the seat's that has a MULE with a different outfit, the seat swaps it, as you can: the new MULE goes in and it leads the old one. If the plan's next MULE is for an idle plot of its own, the old MULE goes there, keeping its outfit, and no second MULE is bought; otherwise it goes back to the corral at the end of the turn. A MULE with the same outfit is left alone, and the plan's MULE is replaced by the seat's own pick.</li>
+<li><strong>Lakes no shore reaches</strong>: a lake plot is worked from its shore. A lake ringed by other lake, or whose only shore is the seat's own land (where the button works the land underfoot), can never get a MULE. A plan's MULE for one is replaced by the seat's own pick, noted “lake: no shore reaches plot N”.</li>
 </ul>
-<p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::developDecision, analysesWanted, filtersWanted</code> · <code>packages/ai/src/hands/develop.ts::DevelopHand</code> · <code>packages/engine/src/config.ts::STRATEGIST, AI_HANDS.develop</code></p>
+<p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::developDecision, analysesWanted, filtersWanted</code> · <code>packages/ai/src/hands/develop.ts::DevelopHand, routeVeto, unreachablePlot</code> · <code>packages/engine/src/config.ts::STRATEGIST, AI_HANDS.develop</code></p>
 <p class="owner">Kept current by: WS1.</p>
 
 <h2 id="floor-walker">On the floor: walking, wolves and glints <span class="pill built">In the game</span></h2>
