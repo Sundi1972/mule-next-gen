@@ -446,3 +446,21 @@ no ruling of Heiko's changes.
 3. **Tests:** the B-AC-D2 table covers three rows: (a) no ship, (b) a ship above the store, which buys all it wants
    before the seller goes on to the store, and (c) the ship sailing mid-walk without moving B. The existing ship
    tests stay unchanged.
+
+## §13 · Amendment AM-4: as built, after #483 and #610 `[handoff]`
+
+Two places where the code is more exact than the text above, found in review, 7 Nov. Neither changes a ruling of
+Heiko's.
+
+1. **RULE-4 row 2, "the speed-up starts again from the first unit": only for a deal that starts afresh.** A house's
+   deal is one deal per house and serves its line in turns (`walk.ts`, the deal key; B-AC-4: "the speed-up carries on
+   across them"). A held seller who sells on at the store's line therefore starts slow only when nobody else is selling
+   to the store at that moment. If another seller keeps the store's deal running, the held seller joins it at its
+   current speed. Selling on to another player always starts a new deal, from the first unit.
+   - **Why it stays so:** a second speed for one house's line would make the turns uneven. The one-second hold, not the
+     speed, is what makes selling short a deliberate act.
+2. **The walk closes early once nobody can trade at B** (#610). A trade is possible only for a player who can pay B, or
+   for a house still buying at or above B, since no seller stands below B (RULE-6). A ship paying under B, or a buyer
+   holding less than B, no longer keeps the walk running to its clock. B-AC-D2's table gains a fourth row: (d) the
+   store has spent its budget and the other seats hold B − 1, so the walk closes; with exactly B, it runs on. A ship in
+   port paying B − 1 likewise lets the good be skipped, while one paying B opens the walk.
