@@ -22,8 +22,8 @@ export interface Box {
 
 /** Room left round the built area, as a share of its size. */
 const MARGIN = 0.05;
-/** Ground left round the occupied extent: half a place each way, on screen. */
-const ROOM = { x: W / 2, y: W / 4 };
+/** Ground left round the occupied extent: a quarter place each way, on screen. */
+const ROOM = { x: W / 4, y: W / 8 };
 /** How much closer the leaned-in view is: the scaffold's month-end move (look/Living.tsx, scale 1.55). */
 const LEAN_ZOOM = 1.55;
 /** Leaning in centres this high over the places' ground, in place units, so the buildings rather than their feet sit mid-screen. */

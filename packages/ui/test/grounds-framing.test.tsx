@@ -141,7 +141,10 @@ describe('T-AC-11: the grounds frame the occupied extent like look.html (spec AM
       expect(vb.w / vb.h, `aspect ${aspect}`).toBeCloseTo(aspect, 6);
       expect(within(vb, PLATE_BOX), `aspect ${aspect}`).toBe(true);
     }
-    // The Spaceport on the back 2×2 and the Stadium on the front one reach past the plate's top and bottom.
+    // The Spaceport on the back 2×2 and the Stadium on the front one reach past a smaller plate's top and bottom.
+    const small = { width: 8960, height: 5040, hall: [4480, 2640] as [number, number] };
+    const smallBox: Box = { x: -small.hall[0] * K, y: -small.hall[1] * K, w: small.width * K, h: small.height * K };
+    const manifest = { ...WITH_PLATE, plate: { ...PLATE, '5': { ...PLATE['5'], frame: small } } } as GroundsManifest;
     const spread: GroundsColony = {
       ...MONTH_12,
       projects: [
@@ -149,10 +152,10 @@ describe('T-AC-11: the grounds frame the occupied extent like look.html (spec AM
         { ...MONTH_12.projects[3]!, place: { x: 0, y: 0, w: 2, h: 2 } },
       ],
     };
-    const vb = viewBoxOf(render({ colony: spread }));
-    expect(within(vb, PLATE_BOX)).toBe(true);
-    expect(vb.h, 'shrunk to the plate').toBeCloseTo(PLATE_BOX.h, 6);
-    expect(tagsWith(render({ colony: spread }), 'data-testid="grounds-vignette"'), "the plate's own vignette shows").toHaveLength(0);
+    const vb = viewBoxOf(render({ colony: spread, manifest }));
+    expect(within(vb, smallBox)).toBe(true);
+    expect(vb.h, 'shrunk to the plate').toBeCloseTo(smallBox.h, 6);
+    expect(tagsWith(render({ colony: spread, manifest }), 'data-testid="grounds-vignette"'), "the plate's own vignette shows").toHaveLength(0);
   });
 
   it("T-AC-11: the opener's lean-in stays inside the framed view", () => {

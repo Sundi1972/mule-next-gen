@@ -107,7 +107,7 @@ function Callout({ n, p, c, r, words }: { n: number; p: GroundsProject; c: numbe
 const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonths: 1 };
 const HALL_BLOCK: GridPlace = { x: 2, y: 2, w: 1, h: 1 };
 
-/** Clear over the buildings, fading from halfway out to the page background at the view's corners. */
+/** The ground fading from halfway out to the page background at the view's corners; the buildings stand on it untouched. */
 function Vignette({ view }: { view: Box }) {
   const id = `grounds-vignette-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   return (
@@ -193,6 +193,8 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         <>
           <image href={plate.href} {...plate.box} data-testid="plate" onError={() => setFailedPlates((failed) => new Set(failed).add(plate.href))} />
           {plate.glow && plateGlow > 0 && <Glow key={plate.glow} href={plate.glow} opacity={plateGlow} box={plate.box} testid="glow-plate" />}
+          {/* On the view before the lean-in, so leaning in moves closer into the pool. */}
+          {shortOfPlate(view, plateArea) && <Vignette view={view} />}
         </>
       ) : (
         <>
@@ -226,8 +228,6 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         blocks={placed.map((q) => q.block)}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
-      {/* On the view before the lean-in, so leaning in moves closer into the pool rather than dimming what it leans on. */}
-      {shortOfPlate(view, plateArea) && <Vignette view={view} />}
       {chips &&
         placed.sort(inBack).map(({ n, p, col, row }) => (
           <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />
