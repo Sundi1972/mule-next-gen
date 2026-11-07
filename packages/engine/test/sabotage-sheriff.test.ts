@@ -145,7 +145,7 @@ const caught = () => POLITICS.reputation.moves.caught;
 describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
   sabotage(true);
 
-  it('S4-RULE-6 rows 1-3: the refusals, in the published words, change nothing', () => {
+  it('S4-T-AC-5: S4-RULE-6 rows 1-3: the refusals, in the published words, change nothing', () => {
     const rows: { row: string; make: () => GameState; by: string; then: string }[] = [
       { row: '1 sabotage off', make: () => { POLITICS.sabotage.on = false; return sheriffed().state; }, by: 'ossa', then: 'This game plays without sabotage' },
       { row: '1 politics off', make: () => Object.assign(sheriffed().state, { politics: null }), by: 'ossa', then: 'This game plays without sabotage' },
@@ -162,7 +162,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
     }
   });
 
-  it('S4-RULE-6 rows 4-6: a plot owned by nobody, more than the maximum, then the list replaces the earlier one', () => {
+  it('S4-T-AC-5: S4-RULE-6 rows 4-6: a plot owned by nobody, more than the maximum, then the list replaces the earlier one', () => {
     const { state, food, ore, own, bare } = sheriffed();
     const before = structuredClone(state.politics);
     expect(refused(() => setGuards(state, 'ossa', [food, bare]))).toBe("Guards watch players' plots");
@@ -178,13 +178,13 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
     expect(state.politics!.guards).toEqual([]);
   });
 
-  it('S4-RULE-6 row 5: counts distinct plots, so a plot listed twice is one guard', () => {
+  it('S4-T-AC-5: S4-RULE-6 row 5: counts distinct plots, so a plot listed twice is one guard', () => {
     const { state, food, ore } = sheriffed();
     setGuards(state, 'ossa', [food, food, ore]);
     expect(state.politics!.guards).toEqual([food, ore]);
   });
 
-  it('S4-RULE-6: sheriffCanAct names the reason', () => {
+  it('S4-T-AC-5: S4-RULE-6: sheriffCanAct names the reason', () => {
     const { state } = sheriffed();
     expect(sheriffCanAct(state, 'ossa')).toBe(true);
     expect(sheriffCanAct(state, 'lena')).toBe('notSheriff');
@@ -198,7 +198,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
 describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
   sabotage(true);
 
-  it('S4-RULE-7 row 1: refused as the guard rows, "investigates", in the published words', () => {
+  it('S4-T-AC-5: S4-RULE-7 row 1: refused as the guard rows, "investigates", in the published words', () => {
     const rows: { row: string; make: () => GameState; by: string; then: string }[] = [
       { row: 'sabotage off', make: () => { POLITICS.sabotage.on = false; return sheriffed().state; }, by: 'ossa', then: 'This game plays without sabotage' },
       { row: 'not planning', make: () => Object.assign(sheriffed().state, { phase: 'upkeep' }), by: 'ossa', then: 'Investigations are made once the votes are over' },
@@ -214,7 +214,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
     }
   });
 
-  it('S4-RULE-7 rows 3-5: an unknown or private incident, a solved one and one gone cold are refused and unchanged', () => {
+  it('S4-T-AC-5: S4-RULE-7 rows 3-5: an unknown or private incident, a solved one and one gone cold are refused and unchanged', () => {
     const { state } = sheriffed();
     const failed = addCase(state, { outcome: 'failed', worked: false });
     const solved = addCase(state, { outcome: 'caught', culpritPublic: true });
@@ -236,7 +236,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
     return { state, first, second };
   }
 
-  it('S4-RULE-7 row 6 and row 2: investigating solves (names the culprit, moves reputation once) or goes cold, at once; a second one that month is refused', () => {
+  it('S4-T-AC-5: S4-RULE-7 row 6 and row 2: investigating solves (names the culprit, moves reputation once) or goes cold, at once; a second one that month is refused', () => {
     let solved = 0;
     let cold = 0;
     for (let seed = 1; seed <= 80 && (!solved || !cold); seed++) {
@@ -260,7 +260,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
     expect(cold).toBeGreaterThan(0);
   });
 
-  it('S4-RULE-7 row 6: the draw keys on the order\'s position, never the id\'s text (AM-1), and is the same on a replay', () => {
+  it('S4-T-AC-5: S4-RULE-7 row 6: the draw keys on the order\'s position, never the id\'s text (AM-1), and is the same on a replay', () => {
     for (let seed = 1; seed <= 40; seed++) {
       const a = twoIncidents(seed);
       const b = twoIncidents(seed);
@@ -271,7 +271,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
     }
   });
 
-  it('S4-RULE-7 row 6: the odds are POLITICS.sheriff.investigateOdds: at 1 every investigation solves, at 0 none does', () => {
+  it('S4-T-AC-5: S4-RULE-7 row 6: the odds are POLITICS.sheriff.investigateOdds: at 1 every investigation solves, at 0 none does', () => {
     const saved = POLITICS.sheriff.investigateOdds;
     try {
       for (const [odds, want] of [[1, true], [0, false]] as const) {
@@ -286,7 +286,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
     }
   });
 
-  it('S4-RULE-7: the month\'s count is read off investigated, so next month the Sheriff may investigate again', () => {
+  it('S4-T-AC-5: S4-RULE-7: the month\'s count is read off investigated, so next month the Sheriff may investigate again', () => {
     const { state, first, second } = twoIncidents(3);
     investigate(state, 'ossa', first.id);
     state.month++;
@@ -297,7 +297,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
 describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
   sabotage(true);
 
-  it('S4-RULE-8 row 1: refused as the guard rows, "fines", in the published words', () => {
+  it('S4-T-AC-5: S4-RULE-8 row 1: refused as the guard rows, "fines", in the published words', () => {
     const rows: { make: () => GameState; by: string; then: string }[] = [
       { make: () => { POLITICS.sabotage.on = false; return sheriffed().state; }, by: 'ossa', then: 'This game plays without sabotage' },
       { make: () => Object.assign(sheriffed().state, { phase: 'auction' }), by: 'ossa', then: 'Fines are levied once the votes are over' },
@@ -313,7 +313,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     }
   });
 
-  it('S4-RULE-8 rows 2-5: an unrevealed case, a fined one, the Sheriff himself and a base off the steps are refused and nothing moves', () => {
+  it('S4-T-AC-5: S4-RULE-8 rows 2-5: an unrevealed case, a fined one, the Sheriff himself and a base off the steps are refused and nothing moves', () => {
     const { state } = sheriffed();
     const hidden = addCase(state);
     const done = addCase(state, { culpritPublic: true, fine: { base: 100, due: 100, paid: 100, toVictim: 0, by: 'sheriff', month: 4 } });
@@ -332,7 +332,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(state.treasury).toEqual(before.treasury);
   });
 
-  it('S4-RULE-8 row 6: the culprit pays, the victim gets the share, the fund keeps the rest, and treasury.paid does not move', () => {
+  it('S4-T-AC-5: S4-RULE-8 row 6: the culprit pays, the victim gets the share, the fund keeps the rest, and treasury.paid does not move', () => {
     const { state } = sheriffed();
     const order = addCase(state, { culpritPublic: true, victim: 'brix' });
     state.players.find((p) => p.id === 'lena')!.money = 500;
@@ -350,7 +350,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(state.colony!.ledger.out.restitution).toBe(toVictim);
   });
 
-  it('S4-RULE-8: a short culprit pays what they have, the victim\'s share is of what was paid, and the rest is waived', () => {
+  it('S4-T-AC-5: S4-RULE-8: a short culprit pays what they have, the victim\'s share is of what was paid, and the rest is waived', () => {
     const { state } = sheriffed();
     const order = addCase(state, { culpritPublic: true, victim: 'brix' });
     state.players.find((p) => p.id === 'lena')!.money = 80;
@@ -361,7 +361,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(orderOf(state, order.id).fine).toMatchObject({ base: 300, due: 300, paid: 80 });
   });
 
-  it('S4-RULE-8: a rumour has no victim, so the whole fine stays in the fund', () => {
+  it('S4-T-AC-5: S4-RULE-8: a rumour has no victim, so the whole fine stays in the fund', () => {
     const { state } = sheriffed();
     const order = addCase(state, { culpritPublic: true, victim: null });
     state.players.find((p) => p.id === 'lena')!.money = 500;
@@ -372,7 +372,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(state.colony!.ledger.out.restitution).toBeUndefined();
   });
 
-  it('S4-RULE-8: fineable lists the Sheriff\'s open revealed cases, never his own, never a fined or hidden one, and nothing for anyone else', () => {
+  it('S4-T-AC-5: S4-RULE-8: fineable lists the Sheriff\'s open revealed cases, never his own, never a fined or hidden one, and nothing for anyone else', () => {
     const { state } = sheriffed();
     addCase(state);
     const open = addCase(state, { culpritPublic: true });
@@ -384,7 +384,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(fineable(state, 'ossa')).toEqual([]);
   });
 
-  it('S4-RULE-8 standard: closeVotes levies the standard fine on every revealed unfined case, the Sheriff\'s own too, once; fines never enter treasury.paid', () => {
+  it('S4-T-AC-5: S4-RULE-8 standard: closeVotes levies the standard fine on every revealed unfined case, the Sheriff\'s own too, once; fines never enter treasury.paid', () => {
     const { state } = sheriffed();
     state.players.find((p) => p.id === 'lena')!.money = 500;
     state.players.find((p) => p.id === 'ossa')!.money = 500;
@@ -406,7 +406,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(state.players.map((p) => p.money)).toEqual(money);
   });
 
-  it('S4-RULE-8 standard: at the last upkeep an open case pays the standard fine, once (red until S4-1.8)', () => {
+  it('S4-T-AC-5: S4-RULE-8 standard: at the last upkeep an open case pays the standard fine, once (red until S4-1.8)', () => {
     const { state } = sheriffed();
     state.maxMonths = 4;
     state.phase = 'auction';
@@ -497,14 +497,14 @@ describe('S4-B-AC-6 (engine): the crew is paid at the month end', () => {
     while (ordered.phase !== 'upkeep') {
       advancePhase(ordered);
       advancePhase(control);
-      if (ordered.phase !== 'upkeep') expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena'));
+      if ((ordered.phase as string) !== 'upkeep') expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena'));
     }
     expect(ordered.phase).toBe('upkeep');
     expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena') - cost);
     for (const id of ['brix', 'ossa', 'kai']) expect(moneyOf(ordered, id)).toBe(moneyOf(control, id));
   });
 
-  it('S4-RULE-9: a player with less than the cost pays what they have, to nobody; the rest is waived', () => {
+  it('S4-B-AC-6: S4-RULE-9: a player with less than the cost pays what they have, to nobody; the rest is waived', () => {
     const { ordered, control } = twoMonths();
     while (ordered.phase !== 'auction') {
       advancePhase(ordered);
@@ -520,7 +520,7 @@ describe('S4-B-AC-6 (engine): the crew is paid at the month end', () => {
     expect(moneyOf(ordered, 'lena')).toBeGreaterThanOrEqual(0);
   });
 
-  it('S4-RULE-9: an order that went void (the plot lost its MULE) costs nothing', () => {
+  it('S4-B-AC-6: S4-RULE-9: an order that went void (the plot lost its MULE) costs nothing', () => {
     const { ordered, control, food } = twoMonths();
     ordered.tiles[food]!.outfit = null;
     control.tiles[food]!.outfit = null;
@@ -532,7 +532,7 @@ describe('S4-B-AC-6 (engine): the crew is paid at the month end', () => {
     expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena'));
   });
 
-  it('S4-RULE-9: a crew is charged once: the next month\'s upkeep takes nothing for last month\'s order', () => {
+  it('S4-B-AC-6: S4-RULE-9: a crew is charged once: the next month\'s upkeep takes nothing for last month\'s order', () => {
     const { ordered, control } = twoMonths();
     while (!(ordered.phase === 'upkeep' && ordered.month === 3)) {
       advancePhase(ordered);
