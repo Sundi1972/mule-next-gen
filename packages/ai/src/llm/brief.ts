@@ -315,11 +315,13 @@ function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): strin
 
 const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
 
-/** What upkeep leaves of `held` Water for the next production, as runUpkeep plays it: the drink, then spoilage rounded down. */
-const waterAfterUpkeep = (held: number, drink: number) => Math.floor(Math.max(0, held - drink) * (1 - GOOD_CONFIG.water.spoilage));
+/** What upkeep leaves of `held` Water for the next production, as runUpkeep plays it: the drink, spoilage rounded down, the depot cap. */
+const waterAfterUpkeep = (held: number, drink: number) =>
+  Math.min(UPKEEP.depotCapacity, Math.floor(Math.max(0, held - drink) * (1 - GOOD_CONFIG.water.spoilage)));
 
-/** The least Water the seat may end the auction with and still hold `need` when the next production checks it. */
-function waterToKeep(need: number): number {
+/** The least Water the seat may end the auction with and still hold `need` when the next production checks it; null when the depot cannot keep `need`. */
+function waterToKeep(need: number): number | null {
+  if (need > UPKEEP.depotCapacity) return null;
   let held = need;
   while (waterAfterUpkeep(held, need) < need) held++;
   return held;
@@ -347,6 +349,9 @@ function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): stri
     return `${head}, against the ${need} the next production checks you hold (what your household and crew drink a month, at your MULEs today): ${verdict}.`;
   }
   const keep = waterToKeep(need);
+  if (keep === null) {
+    return `${drink} the depot keeps at most ${UPKEEP.depotCapacity} Water after it, less than the ${need} the next production checks, so no holding keeps ${plots} whole next month.`;
+  }
   const verdict = held >= keep ? 'covered' : `short by ${keep - held}, or ${cut} next month`;
   return (
     `${head}. To keep ${plots} whole next month, end this auction holding ${keep}: upkeep drinks ${need}, ` +
