@@ -1,6 +1,7 @@
 import {
   analysisSeconds,
   DEVELOPMENT,
+  fineStepsWords,
   LOTS,
   MULE,
   mulePriceFor,
@@ -492,7 +493,7 @@ const DESCRIBED = {
     command: 'sabotage',
     phases: ['planning'],
     does: () => "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
-    legalWhen: () => ['This game plays without sabotage', 'Orders are given in planning', "Pick another player's plot", 'That plot makes nothing to cut', 'Pick a good', 'A crew costs {cost} cr; you have {money}'],
+    legalWhen: () => ['This game plays without sabotage', 'Orders are given in planning', "Pick another player's plot", 'That plot makes nothing to cut', 'Pick a good', 'A rumour moves a price up or down', 'A crew costs {cost} cr; you have {money}'],
     cost: null, // the crew is charged at upkeep, by the order's kind, never when the order is given
     args: { target: "{ kind: 'powerCut', tile } or { kind: 'rumour', good, dir: 'up' | 'down' } or null to withdraw" },
   },
@@ -519,9 +520,9 @@ const DESCRIBED = {
     command: 'fine',
     phases: ['planning'],
     does: () => 'The Sheriff fines a revealed culprit once; the base is multiplied by any sabotage ban and shared with the victim.',
-    legalWhen: () => ['This game plays without sabotage', 'Fines are levied once the votes are over', 'Only the Sheriff fines', 'Only a revealed culprit is fined', 'Already fined', "You can't fine yourself", 'A fine is 50 to 300 cr, in steps of 50'],
+    legalWhen: () => ['This game plays without sabotage', 'Fines are levied once the votes are over', 'Only the Sheriff fines', 'Only a revealed culprit is fined', 'Already fined', "You can't fine yourself", fineStepsWords()],
     cost: null,
-    args: { order: "the incident's order id, 'sab-…'", amount: 'the base fine in credits: 50 to 300 in steps of 50' },
+    args: { order: "the incident's order id, 'sab-…'", amount: `the base fine in credits: ${POLITICS.sheriff.fine.steps[0]} to ${POLITICS.sheriff.fine.steps.at(-1)} in steps of ${POLITICS.sheriff.fine.steps[1]! - POLITICS.sheriff.fine.steps[0]!}` },
   },
 } satisfies Described;
 
