@@ -1,4 +1,4 @@
-import { GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
+import { GOODS, isFactory, plotWaterOn, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ui';
 import type { Now } from '../Shell';
 import { freePlots } from './month-steps';
@@ -51,15 +51,16 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
       plotsOf.set(one, [(plotsOf.get(one)?.[0] ?? 0) + k, many]);
     }
     const words = [...plotsOf].map(([one, [k, many]]) => count(k, one, many));
-    const taking = factories.filter((f) => (RECIPES[f].inputs[good] ?? 0) > 0).length;
+    const taking = factories.filter((f) => (good === 'water' ? UPKEEP.factoryWaterUse[f] : (RECIPES[f].inputs[good] ?? 0)) > 0).length;
     if (taking > 0) words.push(count(taking, 'factory', 'factories'));
     return words;
   };
   const why = (g: Good): string => {
     const usedBy = [...new Set(factories)].filter((f) => (RECIPES[f].inputs[g] ?? 0) > 0);
     const inputs = usedBy.length > 0 ? `${and(usedBy.map((f) => GOOD_NAME[f]))} inputs` : '';
-    if (g === 'food') return usedBy.length > 0 ? `upkeep and ${inputs}` : 'upkeep';
-    if (g === 'water') return and(['upkeep', ...users('water', UPKEEP.waterUse)]);
+    // With AM-18 on, Water names the plots and factories that drink it, as Energy names its burners.
+    if (g === 'water' && plotWaterOn()) return and(['upkeep', ...users('water', UPKEEP.waterUse)]);
+    if (g === 'food' || g === 'water') return usedBy.length > 0 ? `upkeep and ${inputs}` : 'upkeep';
     if (g === 'energy') return and(users('energy', UPKEEP.energyUse));
     if (inputs) return inputs;
     return g === 'medicine' ? 'bad air' : '';
