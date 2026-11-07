@@ -134,6 +134,7 @@ Every handoff carries, verbatim:
 **Stop condition:** the hold that survived in every tested app is known, and whether a Desktop chat plays several
 months on its own (D-1 b's condition) is answered yes or no.
 
+- [x] **Claude Code half (7 Nov, WS2):** holds of 5/20/45 s returned, longer ones dropped at 60.0 s; `holdMs` = 45_000 merged in #621 (43fcb00f). Steps 1–4 below are the Desktop/phone half, still open with Heiko.
 - [ ] **Step 1:** Heiko runs the test from `seat-test-instructions.md` against the throwaway server (scratchpad `seat-test/server.mjs`, PID recorded in STATUS) through his own tunnel.
 - [ ] **Step 2:** Read `log.jsonl`: which holds (5/20/45/75/110/150/200 s) returned, `client_closed` events, calls per reply, months played before the chat stopped, phone locked vs unlocked.
 - [ ] **Step 3:** Stop the test server by PID (cwd checked) and confirm it is gone; confirm Heiko closed the tunnel.
@@ -157,6 +158,7 @@ condition); tell the PM, since it narrows G-1's reach.
 
 ### Gate: End of Phase P0
 - [ ] S1 numbers written into the spec; the mock approved at a named SHA; base `feat/strategist` green (pre-implementation checklist).
+  - *State 7 Nov 10:38Z:* S1 Claude Code half done (holdMs 45 s, #621); Desktop/phone half open. WS4's mock PR-0 #611 open (base `feat/strategist`, not merged). PR-1a #628 on trunk in batch 75 (52c54b07) and in ws2-brain via #643 (35042680).
 
 ## Phase 1 — wave 1: Claude Code plays a seat on the home Wi-Fi (G-1)
 
@@ -186,58 +188,62 @@ condition); tell the PM, since it narrows G-1's reach.
 
 ### PR-1a merge gate
 - [ ] B-AC-1 and T-AC-5 (views) green and named; failing-test commits first; `pnpm typecheck && pnpm test` green; e2e lobby green; rulebook chapter `computer-players.html#claude-code-seat` still true.
+  - *Merged 7 Nov:* PR-1a #628 reached trunk in PM batch 75 and ws2-brain in sync 3 (#643).
 
 ### Task 1.4: the config block and the SDK — C2
 
 **Files:** Modify `packages/engine/src/config.ts` (BRAIN block), `apps/server/package.json` + lockfile
-- [ ] **Step 1:** Add `BRAIN.claudeSeat` per §3 (holdMs from S1) and `BRAIN.minLineLetters`; add `@modelcontextprotocol/sdk`. Commit first so PR-1c can branch (`chore(C2): BRAIN.claudeSeat and the MCP SDK`).
+- [x] **Step 1:** Add `BRAIN.claudeSeat` per §3 (holdMs from S1) and `BRAIN.minLineLetters`; add `@modelcontextprotocol/sdk`. Commit first so PR-1c can branch (`chore(C2): BRAIN.claudeSeat and the MCP SDK`).
 
 ### Task 1.5: the writer — C3
 
 **ACs verified:** T-AC-2 · **Spec:** §1 C3, §2 RULE-3, RULE-4
 **Files:** Create `apps/server/src/claude-seat/writer.ts`; Test `apps/server/test/claude-seat-writer.test.ts`
-- [ ] **Step 1: Write the failing test `T-AC-2: write resolves no_reply in the tick its signal aborts; a later submit is too late`** — Altitude: unit (a race the route can't time reliably). Trap: assert in the same tick, not after a timer.
-- [ ] **Step 2: Run** — `pnpm --filter @mule/server test -- -t "T-AC-2"` · Expected: FAIL (module not found).
-- [ ] **Step 3: Implement C3 per spec §1 C3** — mechanism: new PlaybookWriter implementer; first answer wins.
-- [ ] **Step 4: Run** — PASS; Playbooks tests unchanged (C3's pin). **Step 5: Commit** `feat(C3): ClaudeSeatWriter (verifies T-AC-2)`.
+- [x] **Step 1: Write the failing test `T-AC-2: write resolves no_reply in the tick its signal aborts; a later submit is too late`** — Altitude: unit (a race the route can't time reliably). Trap: assert in the same tick, not after a timer.
+- [x] **Step 2: Run** — `pnpm --filter @mule/server test -- -t "T-AC-2"` · Expected: FAIL (module not found).
+- [x] **Step 3: Implement C3 per spec §1 C3** — mechanism: new PlaybookWriter implementer; first answer wins.
+- [x] **Step 4: Run** — PASS; Playbooks tests unchanged (C3's pin). **Step 5: Commit** `feat(C3): ClaudeSeatWriter (verifies T-AC-2)`.
 
 ### Task 1.6: writer chosen per seat kind, with or without a key — C4
 
 **ACs verified:** T-AC-3, B-AC-9 · **Files:** Modify `apps/server/src/brain/index.ts` (`createBrain`, `writerFor`), `apps/server/src/mule-game.ts::start` (seat kind to AiSeat; WS3 named edit)
-- [ ] **Step 1: Write the failing test `T-AC-3: keyless writerFor(claude seat) is a ClaudeSeatWriter; deciderFor null`** — Altitude: contract (brain test, `apps/server/test/claude-seat-brain.test.ts`); unset `ANTHROPIC_API_KEY` in the test.
-- [ ] **Step 2: Write the failing test `B-AC-9: a keyless game with a Claude seat writes plans and no paid ledger line`** — Altitude: promise (a real game through the fake MCP client of Task 1.7; read the ledger file).
-- [ ] **Step 3: Run both** — Expected: FAIL.
-- [ ] **Step 4: Implement C4 per spec §1 C4** — mechanism wrap.
-- [ ] **Step 5: Run** — PASS; keyed and keyless trial tests green (C4's pin). **Step 6: Commit** `feat(C4): writer per seat kind (verifies T-AC-3, B-AC-9)`.
+- [x] **Step 1: Write the failing test `T-AC-3: keyless writerFor(claude seat) is a ClaudeSeatWriter; deciderFor null`** — Altitude: contract (brain test, `apps/server/test/claude-seat-brain.test.ts`); unset `ANTHROPIC_API_KEY` in the test.
+- [x] **Step 2: Write the failing test `B-AC-9: a keyless game with a Claude seat writes plans and no paid ledger line`** — Altitude: promise (a real game through the fake MCP client of Task 1.7; read the ledger file).
+- [x] **Step 3: Run both** — Expected: FAIL.
+- [x] **Step 4: Implement C4 per spec §1 C4** — mechanism wrap.
+- [x] **Step 5: Run** — PASS; keyed and keyless trial tests green (C4's pin). **Step 6: Commit** `feat(C4): writer per seat kind (verifies T-AC-3, B-AC-9)`.
 
 ### Task 1.7: the /mcp route, stateless, code per call — C2
 
 **ACs verified:** T-AC-1, B-AC-3, B-AC-6, B-AC-7, T-AC-8, T-AC-5 (logs) · **Spec:** §1 C2, §2 RULE-2, RULE-3, RULE-4, §3 tools
 **Files:** Create `apps/server/src/claude-seat/mcp.ts`; Modify `apps/server/src/server.ts::handleHttp` (route line, WS3 named edit); Test `apps/server/test/claude-seat-mcp.test.ts` (a fake MCP client over real HTTP against a real Room + MuleGame)
-- [ ] **Step 1: Write the failing test `T-AC-1: every tool resolves the seat from its code only; no session id issued or read`** — Altitude: contract. Negative: seat A's code never touches seat B; a response never carries `Mcp-Session-Id`.
-- [ ] **Step 2: Write the failing test `B-AC-3: two seats, two clients, each seat's plans only from its own code`** — Altitude: promise (game record). Negative: client A submitting B's ask_id with A's code is refused.
-- [ ] **Step 3: Write the failing test `B-AC-6: a new client with the same code carries on and gets the open ask`**.
-- [ ] **Step 4: Write the failing test `B-AC-7: after switching to Built-in, the next call gets "seat taken back"`**.
-- [ ] **Step 5: Write the failing test `T-AC-8: after wrongCodesPerMinute wrong codes every call gets busy until refill; taken-back codes don't draw; big bodies refused`** — fake clock.
-- [ ] **Step 6: Write the failing test `T-AC-5: no server log line contains a seat code`** — capture the logger during the B-AC-3 game.
-- [ ] **Step 7: Run** — `pnpm --filter @mule/server test -- claude-seat-mcp` · Expected: FAIL.
-- [ ] **Step 8: Implement C2 per spec §1 C2, §2 RULE-2..4, §3** — mechanism sprout; SDK Streamable HTTP in stateless mode.
-- [ ] **Step 9: Run** — PASS; /ws, POST /rooms and static tests green. **Step 10: Commit** `feat(C2): stateless /mcp with the seat code per call (verifies T-AC-1, B-AC-3, B-AC-6, B-AC-7, T-AC-8, T-AC-5)`.
+- [x] **Step 1: Write the failing test `T-AC-1: every tool resolves the seat from its code only; no session id issued or read`** — Altitude: contract. Negative: seat A's code never touches seat B; a response never carries `Mcp-Session-Id`.
+- [x] **Step 2: Write the failing test `B-AC-3: two seats, two clients, each seat's plans only from its own code`** — Altitude: promise (game record). Negative: client A submitting B's ask_id with A's code is refused.
+- [x] **Step 3: Write the failing test `B-AC-6: a new client with the same code carries on and gets the open ask`**.
+- [x] **Step 4: Write the failing test `B-AC-7: after switching to Built-in, the next call gets "seat taken back"`**.
+- [x] **Step 5: Write the failing test `T-AC-8: after wrongCodesPerMinute wrong codes every call gets busy until refill; taken-back codes don't draw; big bodies refused`** — fake clock.
+- [x] **Step 6: Write the failing test `T-AC-5: no server log line contains a seat code`** — capture the logger during the B-AC-3 game.
+- [x] **Step 7: Run** — `pnpm --filter @mule/server test -- claude-seat-mcp` · Expected: FAIL.
+- [x] **Step 8: Implement C2 per spec §1 C2, §2 RULE-2..4, §3** — mechanism sprout; SDK Streamable HTTP in stateless mode.
+- [x] **Step 9: Run** — PASS; /ws, POST /rooms and static tests green. **Step 10: Commit** `feat(C2): stateless /mcp with the seat code per call (verifies T-AC-1, B-AC-3, B-AC-6, B-AC-7, T-AC-8, T-AC-5)`.
 
 ### Task 1.8: a late seat never holds the table — C3, C7 boundary
 
 **ACs verified:** B-AC-4
-- [ ] **Step 1: Write the failing test `B-AC-4: a Claude seat whose client never answers plays its built-in plan; the land grant starts on time`** — Altitude: promise (game record + timing); invariant: the seat is never `away`.
-- [ ] **Step 2: Run, implement any gap per HC-3, run, commit** `test(C3): late Claude seat never holds the table (verifies B-AC-4)`.
+- [x] **Step 1: Write the failing test `B-AC-4: a Claude seat whose client never answers plays its built-in plan; the land grant starts on time`** — Altitude: promise (game record + timing); invariant: the seat is never `away`.
+- [x] **Step 2: Run, implement any gap per HC-3, run, commit** `test(C3): late Claude seat never holds the table (verifies B-AC-4)`.
 
 ### Task 1.9: risk check R-2/R-3 — manual
 
 - [ ] **Step 1:** One full game on the Wi-Fi with Heiko's own Claude Code (`claude mcp add --transport http mule http://<host>:8787/mcp`), the invite pasted; record answered-in-time share per seat in the PR body.
 
 ### PR-1b merge gate
-- [ ] T-AC-1, T-AC-2, T-AC-3, T-AC-5, T-AC-8, B-AC-3, B-AC-4, B-AC-6, B-AC-7, B-AC-9 green and named; failing tests first; consumer-side contract: the fake MCP client is the consumer of §3's tools; `pnpm typecheck && pnpm test` green; one review (independent reviewer, `Review: APPROVE at <sha>`).
+- [x] T-AC-1, T-AC-2, T-AC-3, T-AC-5, T-AC-8, B-AC-3, B-AC-4, B-AC-6, B-AC-7, B-AC-9 green and named; failing tests first; consumer-side contract: the fake MCP client is the consumer of §3's tools; `pnpm typecheck && pnpm test` green; one review (independent reviewer, `Review: APPROVE at <sha>`).
+  - *Merged 7 Nov:* #618 at aa0d22da (head 95716b35).
 
 ### Task 1.10: the side pick waits up to 45 s for a Claude seat — C7
+
+*State 7 Nov 10:38Z:* #634 (WS3) open; WS2 OK given on 2eb53e7f, head now 9be702cc.
 
 **ACs verified:** B-AC-5 · **Spec:** §1 C7, §2 RULE-6 · **Files:** Modify `apps/server/src/mule-game.ts` (`scheduleAuctionTick`, `auctionDone`), Test `apps/server/test/claude-seat-side-pick.test.ts`
 - [ ] **Step 1: Write the failing test `B-AC-5: no plan → Done at 45 s on the built-in plan; a plan at 20 s → Done at 20 s`** — Altitude: promise (side-pick end time, fake clock); later goods don't wait; Continue still ends it.
@@ -356,3 +362,15 @@ Gated by S1's answer (D-1 b's condition, above).
 - **7 Nov — PR-2 scope from PR-1c's review (#634).** RULE-6's "Waiting for" countdown on TV and phone is made explicit in
   Task 2.1 (Steps 6–7, WS4; a WS3 view field for the side pick's deadline if none carries it). Replay of a game with a
   Claude seat is new Task 2.5 (WS2, WS3 named edit in record.ts), with new T-AC-9; spec §6 gains T-AC-9 when PR-2b starts.
+- **7 Nov — sync 3 brought PR-1a in (#643, 35042680); PR-1b ticked.** PR-1a #628 reached trunk in PM batch 75 and
+  ws2-brain through sync 3. The seat-code lookup swap to `RoomRegistry.seatForCode` is in progress on
+  `ws2-seat-lookup-swap`; the wave-1 end check (Gate P1) follows it. The status contract for PR-2a/PR-2b is frozen
+  (WS2 → PM, 7 Nov): `type ClaudeStatus = 'waiting'|'connected'|'thinking'|'ready'|'offline'`, `SeatView.claude?:
+  ClaudeStatus`; WS4's room.ts hosted `Game` gains `claudeStatus?(seatId)`, copied by `Room.viewFor` into
+  `SeatView.claude` for a claude-kind seat in every view (never with the code), views re-sent on `changed()`, stub
+  returns 'waiting'; WS2 (PR-2b) exports `claudeStatusOf(table, seatId, now?)` (RULE-5) and
+  `onClaudeStatusChange(table, listener): () => void`, firing on every transition including the offline timer at
+  lastCallAt + holdMs + offlineGraceMs; WS3's named edits in mule-game.ts (`claudeStatus` → `claudeStatusOf`, start
+  subscribes `ctx.changed()`) and the record.ts wrapper follow once those two are on ws2-brain (WS2 sends the SHA via
+  the PM). WS3 confirmed the countdown field `AuctionView.waitingForClaude?: { seatId; until }[]` (server epoch ms,
+  present only while the first side pick holds kept Claude seats), frozen in a first commit on ws2-brain after #634.
