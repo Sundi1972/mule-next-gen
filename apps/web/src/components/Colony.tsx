@@ -183,7 +183,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
       <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
-      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
+      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${Math.round(environment.value)}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
       <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
@@ -379,13 +379,14 @@ function ProjectLine({ p }: { p: ColonyProjectView }) {
 
 /**
  * Every standing project on one line after the rest, "Standing: Park · Hospital +5 prestige": a long game stands four
- * or five, and a line each drew six seats under TV-FIT's floor (PM ruling 7 Nov). Each name keeps its own project id.
+ * or five, and a line each drew six seats under TV-FIT's floor (PM ruling 7 Nov). Each name keeps its own project id;
+ * five names wrap to a second line rather than cut, the fewer lines leaving it the room.
  */
 function StandingLine({ projects }: { projects: ColonyProjectView[] }) {
   const prestige = projects.reduce((sum, p) => sum + p.prestige, 0);
   return (
     <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid="projects-standing">
-      <span className="min-w-0 truncate font-display text-xl font-semibold">
+      <span className="min-w-0 font-display text-xl font-semibold leading-tight">
         <span className="text-ok">Standing:</span>{' '}
         {projects.map((p, i) => (
           <span key={p.id} data-testid={`project-${p.id}`} data-stage="standing">

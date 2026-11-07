@@ -348,11 +348,9 @@ function TvHungryLine({ view, hungry }: { view: MuleView; hungry: ColonyReport['
 const HUNGRY_LINES_COMPACT = 2;
 
 /**
- * How the colony is doing, apart from the players: the air against last month, the colony fund's balance and who went
- * hungry. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
- */
-/**
- * How the colony is doing: the air and its change, the fund, who went hungry and the colonists. `besideGauges` is the TV
+ * How the colony is doing, apart from the players: the air against last month, the colony fund's balance, who went
+ * hungry and the colonists. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band
+ * across the TV. `besideGauges` is the TV
  * month end's, where the Environment and Wealth gauges above already show the air's level and band and the fund: the
  * panel keeps only the air's change, in its header (PM ruling 7 Nov, TV-FIT: five projects at six seats drew at 0.622).
  */

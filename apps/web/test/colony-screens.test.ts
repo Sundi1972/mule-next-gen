@@ -410,6 +410,15 @@ describe('C34: the build site at the TV month end, one line a project (PM ruling
     expect(has(panel, 'colony-hungry')).toBe(true);
   });
 
+  it('review of #672: a filtered plot leaves the air fractional; the Environment gauge reads it rounded, as the air trend does', () => {
+    const half = { ...MIDGAME, gauges: { ...MIDGAME.gauges, environment: 35.5 } };
+    expect(text(element(tv(half), 'gauge-environment'))).toMatch(/^Environment 36 /);
+  });
+
+  it('review of #672: five standing names wrap rather than cut', () => {
+    expect(element(tv(MIDGAME), 'projects-standing')).not.toMatch(/truncate/);
+  });
+
   it('B-AC-34-4 (negative): without politics the month end has no build site', () => {
     expect(has(onTv(game(null), TvMonthEnd), 'build-site')).toBe(false);
   });

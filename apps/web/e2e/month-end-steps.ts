@@ -38,20 +38,14 @@ function readNumber(text: string | null, what: string): number {
 }
 
 /**
- * The air as the TV month end shows it: with the colony on, the Environment gauge carries the level (the panel beside it
- * keeps only the change, PM ruling 7 Nov), once its count has landed on its data-to; without, the panel's own Air block.
+ * The air as the TV month end shows it: with the colony on, the Environment gauge carries the level, rounded as the
+ * server's air level is (the panel beside it keeps only the change, PM ruling 7 Nov; the month end lands only happiness,
+ * so the gauge needs no wait); without, the panel's own Air block.
  */
 async function tvAir(tvEnd: Locator): Promise<number> {
   const gauge = tvEnd.getByTestId('gauge-environment');
   if ((await gauge.count()) === 0) return readNumber(await tvEnd.getByTestId('air-level').textContent(), "the TV's air level");
-  const deadline = Date.now() + PRESS_MS * 4;
-  for (;;) {
-    const to = await gauge.getAttribute('data-to');
-    const shown = readNumber(await gauge.locator('[data-num]').first().textContent(), "the TV's Environment gauge");
-    if (to === null || Number(to) === shown) return shown;
-    check(Date.now() < deadline, `the TV's Environment gauge lands on ${to}, still at ${shown}`);
-    await new Promise((r) => setTimeout(r, 100));
-  }
+  return readNumber(await gauge.locator('[data-num]').first().textContent(), "the TV's Environment gauge");
 }
 
 const text = async (where: Locator) => ((await where.textContent({ timeout: PRESS_MS })) ?? '').replace(/\s+/g, ' ').trim();

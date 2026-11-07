@@ -500,6 +500,23 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });
       console.log(`✓ B-AC-27-2: six seats, month 2's end, five projects, ${read}`);
     }
+    // A late game's other end: all five standing share one line, and every name shows, wrapping rather than cut (review
+    // of #672). The fewer lines leave the room.
+    await held(server, code, async () => {
+      const room = server.registry.get(code)!;
+      const state = (room as unknown as { game: { state: GameState } }).game.state;
+      for (const p of state.colony!.projects) Object.assign(p, { stage: 'standing', monthsLeft: null });
+      room.broadcast();
+    });
+    const standing = tv.getByTestId('tv-monthend').getByTestId('projects-standing');
+    await standing.filter({ hasText: PRESTIGE.spaceport.name }).waitFor({ timeout: PRESS_MS });
+    const names = await standing.evaluate((li) => {
+      const span = li.firstElementChild as HTMLElement;
+      return { scroll: span.scrollWidth, client: span.clientWidth, lines: Math.round(span.getBoundingClientRect().height / parseFloat(getComputedStyle(span).lineHeight)) };
+    });
+    check(names.scroll <= names.client, `all five standing names show whole on the TV, ${names.scroll} px in ${names.client}`);
+    check((await tv.getByTestId('tv-monthend').getByTestId('build-site').locator('li').count()) === 1, 'all five standing take one line');
+    console.log(`✓ PM ruling 7 Nov: all five standing on one line, every name whole (${names.lines} text lines), scale ${await theTvScaleHolds(tv, 'six-seat month end, five standing')}`);
     console.log(`✓ TV-FIT floor ${TV_SCALE_FLOOR}, every screen at six seats over two months: ${await theTvScalesHeld(tv, 'six seats')}`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
