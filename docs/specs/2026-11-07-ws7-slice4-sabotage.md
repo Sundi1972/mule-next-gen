@@ -387,8 +387,8 @@ today        four laws in POLITICS.laws; the council's machinery, lawImpact, the
              apps/web/src/phone/hub/politics/LawPicker.tsx::settingWords, ::chipWords, ::LAW_MEANING,
              apps/web/src/table/TvCouncil.tsx
              verified_by: read
-tomorrow     MUST add sabotageBan with settings [2, 3] (a multiplier on the fine and the reputation loss of a
-             capture revealed while it is in force), through the existing council (propose, vote, three in
+tomorrow     MUST add sabotageBan with settings [2, 3] (a multiplier on a capture's reputation loss, by the ban
+             in force at the reveal, and on its fine, by the ban in force at the levy: S4-RULE-10), through the existing council (propose, vote, three in
              force, retry months). MUST give it a public "For you" preview (S4-RULE-10).
 logic        → §2 S4-RULE-10 · read at every attribution (reputation), every fine and every preview
 seam         config.ts POLITICS.laws; LawId (WS3 named edit); politics.ts LAW_NAME and enactImpact's switch
