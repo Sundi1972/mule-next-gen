@@ -1,6 +1,6 @@
 import { GOODS, moodBand, POLLUTION, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
-import { airBandStyle, cx, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
+import { airBandStyle, cx, GOOD_NAME, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
 import { inCollapse, league, winnerWords } from '../game/month-end';
@@ -338,8 +338,50 @@ export function ProjectRow({ p, players, size, plaque = true }: { p: ColonyProje
   );
 }
 
-/** Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. */
-export function BuildSite({ colony, players, size, action, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; className?: string }) {
+/**
+ * The one figure a project's stage turns on, as the TV month end shows it. Collecting: the share of its credits paid,
+ * or once those are in, the goods it still waits for (it builds only with both). Building: when it stands; the month
+ * end comes after the upkeep that counted this month down, so one month left stands at next month's end.
+ */
+function stageFigure(p: ColonyProjectView): string {
+  if (p.stage === 'building') return p.monthsLeft === 1 ? 'stands next month' : `stands in ${p.monthsLeft} months`;
+  if (p.stage !== 'commissioned') return `+${p.prestige} prestige`;
+  if (p.funded.credits < p.cost.credits) return `${Math.round((p.funded.credits / p.cost.credits) * 100)}% paid`;
+  const short = GOODS.flatMap((g) => {
+    const left = (p.cost.goods[g] ?? 0) - (p.funded.goods[g] ?? 0);
+    return left > 0 ? [`${left} ${GOOD_NAME[g]}`] : [];
+  });
+  return short.length > 0 ? `needs ${short.join(' · ')}` : '100% paid';
+}
+
+/**
+ * A project on one line, for the TV's month end: its name, its stage and the one figure that stage turns on. The
+ * funding bar, the build pips and the plaque are the phones' Colony desk's (PM ruling, 7 Nov: six seats with three
+ * full rows drew at 0.604, under TV-FIT's floor).
+ */
+function ProjectLine({ p }: { p: ColonyProjectView }) {
+  const dead = p.stage === 'closed' || p.stage === 'damaged';
+  const st = STAGE[p.stage];
+  const figure = stageFigure(p);
+  return (
+    <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid={`project-${p.id}`} data-stage={p.stage}>
+      <ObjectGlyph kind={p.id} size={24} className={cx('shrink-0', dead ? 'text-alert' : p.stage === 'standing' ? 'text-ok' : 'text-holo')} />
+      <span className="min-w-0 truncate font-display text-xl font-semibold">{p.name}</span>
+      <span className={cx('shrink-0 rounded-chip border px-1.5 font-mono text-xs font-bold uppercase', st.chip)} data-testid={`stage-${p.id}`}>
+        {st.label}
+      </span>
+      <span data-num className={cx('ml-auto shrink-0 font-mono text-lg font-bold', dead ? 'text-ink-3 line-through' : 'text-holo')} data-testid={`figure-${p.id}`}>
+        {figure}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. `compact`
+ * puts each on one line (ProjectLine), which has no room for buttons, so it draws no `action`.
+ */
+export function BuildSite({ colony, players, size, action, compact = false, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; compact?: boolean; className?: string }) {
   const tv = size === 'tv';
   return (
     <section className={cx('flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1.5 px-2.5 py-2', className)} aria-label="The colony's projects" data-testid="build-site">
@@ -355,12 +397,16 @@ export function BuildSite({ colony, players, size, action, className }: { colony
         </p>
       ) : (
         <ul className="flex flex-col">
-          {colony.projects.map((p) => (
-            <div key={p.id} className="flex flex-col">
-              <ProjectRow p={p} players={players} size={size} />
-              {action?.(p)}
-            </div>
-          ))}
+          {colony.projects.map((p) =>
+            compact ? (
+              <ProjectLine key={p.id} p={p} />
+            ) : (
+              <div key={p.id} className="flex flex-col">
+                <ProjectRow p={p} players={players} size={size} />
+                {action?.(p)}
+              </div>
+            ),
+          )}
         </ul>
       )}
     </section>
