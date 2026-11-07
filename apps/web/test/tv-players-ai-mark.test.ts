@@ -47,6 +47,9 @@ describe("the TV's players strip marks a computer seat (Heiko, 7 Nov)", () => {
     // The mark sits outside the name's truncation, so a long name never cuts it off.
     expect(element(kai, 'tv-player-name')).not.toContain('ai-mark');
     expect(kai).toContain('data-testid="ai-mark"');
+    // The mark's wrapper never shrinks and the name's box may: a long name gives way first.
+    expect(kai).toMatch(/<span class="[^"]*\bmin-w-0\b[^"]*"><span class="truncate" data-testid="tv-player-name">/);
+    expect(kai).toMatch(/<span class="[^"]*\bshrink-0\b[^"]*"><span[^>]*data-testid="ai-mark"/);
     expect(element(html, 'tv-player-s1')).not.toContain('ai-mark');
   });
 
