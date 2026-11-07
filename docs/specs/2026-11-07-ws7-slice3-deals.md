@@ -490,12 +490,12 @@ depends_on   S3-C13, S3-C15
 S3-C17 · ADDED · P1: "+ Deal" on a whisper opens the card composer
 ux           mock: WS6, to come (from PlanningHub.tsx's `add-deal` and `deal-card` placeholders at c312e7cb) ·
              GRAFT TARGET: new apps/web/src/phone/hub/politics/Deals.tsx (DealComposer), opened from its target player
-             (politics layout P0 option A, Heiko 7 Nov): apps/web/src/chat/Chat.tsx's whisper input, and the player's
+             (politics layout P0 option A, Heiko 7 Nov): apps/web/src/phone/parts.tsx::Chat's whisper input, and the player's
              avatar or name (apps/web/src/phone/hub/politics/parts.tsx::Who, the standings row)
 tomorrow     MUST offer a pact (POLITICS.deals.pactMonths) or the player's own vote (a candidate for each elected
              office's next election, from the declared candidates; or yes/no on the next law ballot when one is up), send
              offerDeal, and show the engine's refusal words.
-seam         Deals.tsx (WS7 path); Chat.tsx one mount (WS4 named edit); the Who and standings entry (WS7; WS4 named edit)
+seam         Deals.tsx (WS7 path); phone/parts.tsx::Chat one mount (WS4 named edit); the Who and standings entry (WS7; WS4 named edit)
 mechanism    fill_scaffold
 depends_on   S3-C10 (contract), WS6's approved mock (not stubbable)
 ```
@@ -503,12 +503,12 @@ depends_on   S3-C10 (contract), WS6's approved mock (not stubbable)
 ```
 S3-C18 · ADDED · P2 and P3: the incoming card and My cards
 ux           mock: WS6, to come · GRAFT TARGET: Deals.tsx (IncomingDeal, MyDeals); My cards is one section inside the
-             Talk desk, no new tab (politics layout P0 option A, Heiko 7 Nov); the thread mount in Chat.tsx (WS4);
+             Talk desk, no new tab (politics layout P0 option A, Heiko 7 Nov); the thread mount in phone/parts.tsx::Chat (WS4);
              the agenda entry "N deal offers" in apps/web/src/phone/hub/today.tsx (WS6, the mock's `deals` row)
 tomorrow     MUST show an offered card in the pair's whisper thread and on the agenda with both reputations and Accept /
              Decline (one tap each); MUST list every card of mine: offered (Withdraw), incoming, active (what it binds,
              until when), and settled (kept, broken, declined, withdrawn, expired).
-seam         Deals.tsx (WS7); Chat.tsx, today.tsx, desks.tsx (named edits to their owners)
+seam         Deals.tsx (WS7); phone/parts.tsx::Chat, today.tsx, desks.tsx (named edits to their owners)
 mechanism    fill_scaffold
 depends_on   S3-C10, WS6's mock
 ```
@@ -540,7 +540,10 @@ today        the election ballot and the law ballot show the choices and the vot
              verified_by: read
 tomorrow     MUST, when MyPoliticsView.promised names this ballot, say to whom and preselect the promised choice locally
              (no intent until the player casts: S3-HC-2, §0.1's rejected preset).
+             MUST count that preselection as the player's pick: the press that makes them Done on the ballot sends it
+             first, so casting as shown keeps the card (S3-RULE-12, AM-7).
 ux           mock: WS6, to come
+logic        → §2 S3-RULE-12
 mechanism    in_place
 depends_on   S3-C10, WS6's mock
 ```
@@ -566,7 +569,7 @@ depends_on   S3-C10, WS6's mock
 | `packages/ai/src/value.ts` | WS1 | cardWorth, trust, reputationCost, breakGain | C15 |
 | `packages/ai/src/{actions,play,sim}.ts` | WS1 | three AiActions; DealHand in the planning windows; the deals row | C16 |
 | `apps/web/src/phone/hub/politics/{Deals,parts,ElectionDay,LawBallot}.tsx` | WS7 path (build lane: PM's piece list) | composer, incoming card, My cards, Who chip, "You promised" | C17-C19, C21 |
-| `apps/web/src/chat/Chat.tsx` | WS4 | mount the composer on a whisper and the card in the thread | C17, C18 |
+| `apps/web/src/phone/parts.tsx::Chat` | WS4 | mount the composer on a whisper and the card in the thread | C17, C18 |
 | `apps/web/src/phone/hub/{desks,today}.tsx` | WS6 | My cards as one section of the Talk desk (no new tab, P0 option A); the agenda's "N deal offers" | C18 |
 | `apps/web/src/phone/hub/Standings.tsx`, `apps/web/src/table/TableApp.tsx`, `apps/web/src/components/MonthEnd.tsx` | WS4 | the chip; the TV strip's chip and TvDeals route; the month end's broken cards | C19, C20 |
 | `apps/web/src/table/TvDeals.tsx` (new) | WS7 (PM to confirm, as TvElection.tsx) | the break banner | C20 |
@@ -842,6 +845,34 @@ but 'broken' carries parties = [from, to]; 'broken' carries none (public). Each 
 order    the engine settles; the view and the news follow in the same tick, so the TV banner and the chip move together.
 ```
 
+```
+S3-RULE-12 · The phone's promised preselection (AM-7)                  shape: decision table
+
+evaluated_at  the phone, on the ballot that MyPoliticsView.promised names (ElectionDay.tsx's Ballot, LawBallot.tsx)
+inputs   this phone's own pick on that ballot (none | the promised choice | another choice | Abstain)
+         · the server's ballot for this player (none | some, e.g. cast from another device)
+         · the press that makes the player Done (Cast my vote; the law ballot's Ready) (pressed | not)
+first match wins
+  #   when                                                          then
+  1   the ballot is not one a card promised                         today's ballot, unchanged
+  2   the phone has its own pick (any choice, or Abstain)           the pick stands; the preselection is gone from the
+                                                                    first pick, and the press sends nothing more
+  3   no own pick, the server shows a ballot                        the server's ballot shows and stands
+  4   no own pick, no ballot, the Done press                        the phone sends the promised choice (`vote` for the
+                                                                    office's candidate | `voteLaw` with the promised
+                                                                    yes/no) and then the Done press, in that order: the
+                                                                    card settles kept (S3-RULE-4)
+  5   no press (the phone dropped, the host's Continue)             nothing is sent; no ballot cast → broken
+                                                                    (S3-RULE-4's unknown line)
+unknown  "no own pick" is this phone's knowledge (the held picks of ElectionDay.tsx): the server cannot tell an
+         abstention from no pick, so an explicit Abstain is row 2, never row 4.
+boundaries nothing is sent when the ballot opens or while the preselection only shows (S3-HC-2, §0.1's rejected
+         preset): the table learns of the vote only at the press, as for any voter.
+examples Lena promised Brix; she opens the ballot and taps Cast my vote → `vote governor brix`, then Cast → kept ·
+         she picks Ossa, then Cast → only her Ossa vote, broken · she taps Abstain, then Cast → no vote, broken ·
+         law promise "yes", she presses Ready without tapping → `voteLaw yes`, then Ready → kept
+```
+
 ## §3 · Contracts & Data Models `[handoff]`
 
 All ADDED unless marked; none breaking (new fields are optional or empty, new union members only). **The contract
@@ -1037,6 +1068,7 @@ the feature at the table.
 | S3-T-AC-13 | WITHDRAWN (AM-1) | — | — | — |
 | S3-T-AC-14 (serves B-AC-4) | S3-RULE-5: end kept with and without sabotagePossible (no gain without); breach rows 1-3, once per card, kept → broken | C4 | engine test (calls pactBreach directly) | breach for a month outside the pact → false |
 | S3-T-AC-15 (serves B-AC-4, UBER-AC-3 leg B's engine half) | pactBreach in month 4 of a 3-5 pact → broken, brokenBy = the saboteur, −20, the victim +3 where sabotagePossible, true | C4 | engine test | — |
+| S3-T-AC-16 (serves B-AC-2) | S3-RULE-12's rows on both ballots: with a promise and no pick, the Done press sends the promised choice and then the press, in that order; nothing is sent on open | C21 | web test | an own pick (another choice, or Abstain) sends no promised choice |
 
 Invariants for every test: no card moves money, goods, plots or MULEs; reputation stays in 0..100; a view, observe() or
 news line for a seat that is not a party never holds an unbroken card; `politics.deals` never shrinks.
@@ -1164,6 +1196,19 @@ did       the victim gains `kept` on a breach only when the pact was still activ
 because   the kept limit already holds one kept gain per partner per term; the literal reading paid twice for one
           promise, and across a term boundary escaped the limit
 goal      S3-1 — unchanged (the breach is still public and costs the breaker)
+```
+
+```
+AM-7 · 2026-11-07 · WS6's finding F-4 while drawing the ballot mock, via PM · casting as shown keeps the card
+
+target    §1 S3-C21; §2 S3-RULE-12 (new); §6 S3-T-AC-16 (new)
+said      S3-C21 preselected the promised choice "locally", with no intent until the player casts
+did       the preselection is the player's pick: the press that makes them Done (Cast my vote; the law ballot's Ready)
+          sends the promised choice first when the phone holds no pick of its own and the server no ballot. An own
+          pick, Abstain included, replaces it. Nothing is sent before the press, so §0.1's rejected preset still holds.
+because   the phone sends a pick only when tapped; a preselection never tapped sent no ballot, and casting as shown
+          broke the very card the player meant to keep
+goal      S3-2 — still met; S3-B-AC-2 now holds when the player only presses Cast
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
