@@ -53,7 +53,8 @@ describe('C1/C4: the brief for the next phase', () => {
     const brief = phaseBrief(state, mind, PERSONAS.trader, devDraft(state), 'development', [], { outcome: OUTCOME });
     const plot = PLOTS(state)[0]!;
     expect(brief.text).toContain('Your draft development:');
-    expect(brief.text).toContain(`Route: buy a MULE, outfit it for ${GOOD_NAME.food}, install it on plot ${plot}, the pub.`);
+    // Seed 7's plot 0 is a corner lake ringed by lake: no MULE can be walked to it, and the route says so (hands fix 2).
+    expect(brief.text).toContain(`Route: buy a MULE, outfit it for ${GOOD_NAME.food}, install it on plot ${plot} (lake: no MULE can be installed), the pub.`);
     expect(brief.text).toContain('Time budget: 30 s of your development time.');
     expect(brief.text).toContain('If the corral is sold out: pub.');
     expect(brief.text).toContain('What happened in your last phase (month 1, landGrant):');
