@@ -1,10 +1,11 @@
 import type { PlayerView } from '@mule/protocol';
 import { Button, cx, PlayerMark } from '@mule/ui';
 import { useState } from 'react';
+import { Chip, ClaudeCountdown, playsBuiltIn, STATUS_CHIP } from '../../components/ClaudeSeat';
 import { toSlot } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { connectedIn, continueQuestion, hostMayContinue, press, readyFooter, stageWords, viewerFirst, type Press, type ReadyWords, type Seat } from './ready';
+import { claudeIn, connectedIn, continueQuestion, hostMayContinue, planningProper, press, ranOut, readyFooter, sidePick, stageWords, viewerFirst, type Press, type ReadyWords, type Seat } from './ready';
 
 /** The ready count, where the clock used to be: planning has none. `label` is what it counts, such as the ballot's VOTED. */
 export function ReadyCount({ players, tv = false, label = 'READY' }: { players: readonly PlayerView[]; tv?: boolean; label?: string | undefined }) {
@@ -19,7 +20,7 @@ export function ReadyCount({ players, tv = false, label = 'READY' }: { players: 
   );
 }
 
-/** The names still planning, each with its creature, and an away mark for a dropped phone. */
+/** The names still planning, each with its creature, an away mark for a dropped phone, and off the TV a waited-for Claude seat's countdown. */
 export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { seats: readonly Seat[]; me: string | null; tv?: boolean; lead?: string }) {
   return (
     <span className={cx('flex flex-wrap items-center gap-x-2 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-for">
@@ -27,12 +28,38 @@ export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { se
       {viewerFirst(seats, me).map((s) => (
         <span key={s.id} className="flex items-center gap-1 font-semibold" data-testid={`waiting-${s.id}`}>
           <PlayerMark slot={toSlot(s.slot)} size={tv ? 30 : 14} glow={!s.away} />
-          {s.id === me ? 'you' : s.name}
+          <span data-testid="waiting-name">{s.id === me ? 'you' : s.name}</span>
           {s.away && <span className={cx('rounded-chip border border-warn/60 font-mono font-bold text-warn', tv ? 'px-2 text-lg' : 'px-1 text-[10px] @min-[1100px]/shell:text-xs')}>AWAY</span>}
+          {/* The TV counts down in its picked list, beside this box's narrow column: once is enough there. */}
+          {s.until !== undefined && !tv && <ClaudeCountdown until={s.until} status={s.status} testid="waiting-chip" />}
         </span>
       ))}
     </span>
   );
+}
+
+/**
+ * Each Claude seat's own line, while the table is not waiting for it (HC-3): its status, and when offline or never
+ * connected, that it plays its built-in plan. A seat in `waiting` shows there instead, so it shows once.
+ */
+export function ClaudeLines({ waiting }: { waiting: readonly Seat[] }) {
+  const { table, view } = usePhoneGame();
+  const claude = claudeIn(table.seats ?? []);
+  if (!planningProper(view) && !sidePick(view)) return null;
+  const builtIn = ranOut(view);
+  return view.players.map((p) => {
+    const status = claude(p.id);
+    if (!status || waiting.some((s) => s.id === p.id)) return null;
+    const done = builtIn.has(p.id);
+    return (
+      <span key={p.id} className={cx('flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm @min-[1100px]/shell:text-lg', done && 'opacity-60')} data-testid="claude-line">
+        <PlayerMark slot={toSlot(p.slot)} size={14} glow={!done && status !== 'ready'} />
+        <span className="font-semibold">{p.name}</span>
+        <Chip word={done ? 'CLAUDE · READY' : STATUS_CHIP[status]} testid="claude-line-chip" />
+        {(done || playsBuiltIn(status)) && <span className="text-xs text-ink-2">plays its built-in plan</span>}
+      </span>
+    );
+  });
 }
 
 /**
@@ -57,6 +84,7 @@ export function ReadyBar({ words: given, canReady = true }: { words?: ReadyWords
     return (
       <>
         {footer.waiting.length > 0 && <WaitingFor seats={footer.waiting} me={self.id} />}
+        <ClaudeLines waiting={footer.waiting} />
         <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={on('ready')} disabled={!canReady} data-testid="ready">
           {words.ready}
         </Button>
@@ -73,6 +101,7 @@ export function ReadyBar({ words: given, canReady = true }: { words?: ReadyWords
         {words.done}
       </span>
       {others.length > 0 ? <WaitingFor seats={others} me={self.id} lead={words.waiting} /> : <span className="text-sm text-ink-2">{words.all}</span>}
+      <ClaudeLines waiting={others} />
       {footer.host === 'continue' && (
         <Button size="md" variant="outline" className="w-full" onClick={on('continue')} data-testid="continue">
           Continue without {others.length === 1 ? others[0]!.name : 'them'}
