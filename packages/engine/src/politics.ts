@@ -885,7 +885,7 @@ function isOverruleDone(state: GameState, playerId: string): boolean {
 }
 
 /** The result of an overrule's ballot as it stands: more than half of all vote weight restores the start; an absent ballot is an abstention. See S5-RULE-8. */
-function overruleResult(state: GameState, overrule: Overrule): NonNullable<Overrule['result']> {
+function overruleResult(state: GameState, overrule: Shared<Overrule>): NonNullable<Overrule['result']> {
   let yes = 0;
   let no = 0;
   let total = 0;
