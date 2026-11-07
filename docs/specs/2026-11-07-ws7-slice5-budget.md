@@ -1632,6 +1632,23 @@ because   WS6 found the four drawing the mock; the screen must not say a preset 
 goal      S5-1 — unchanged
 ```
 
+```
+AM-6 · 2026-11-07 · WS7 (build: S5-PR-1 group B; the plan's drift item 7) · the promise is checked on the tax that stands
+
+target    §1 S5-C5 (the tally's effect), the tax promise check (colony.ts::keepPromise)
+said      nothing: game.ts::advancePhase calls keepPromise before closeVotes. When planning ends normally the overrule
+          is tallied at the end of its reveal, so the promise is checked on the tax put back; when the host's
+          Continue closes a still-open overrule ballot, closeVotes tallies it after the promise was checked
+did       on every path the Governor's promise is checked against the tax that stands as planning ends: a passed
+          overrule's restored tax. keepPromise reads the pending overrule's outcome through politics.ts's pure
+          tally, so the Continue path agrees with the normal one; game.ts (WS3) is not edited. Example: Lena
+          promised a cap of 10%, set 12%; the overrule passes → the tax is 10% again and the promise counts as
+          kept, on either path.
+because   two paths through the same month must not give two answers; the colony judges the tax it pays, and
+          the restore is what the overrule is for
+goal      S5-1 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change:
