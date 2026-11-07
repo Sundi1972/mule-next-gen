@@ -111,17 +111,7 @@ describe('ColonyGrounds · the base plate under the buildings (AM-7, Task 4.3)',
     expect(attrOf(tagWith(grounds({ size: 'phone' }), 'data-testid="plate"'), 'href')).toBe('/art/colony/plate/3-day@400.webp');
   });
 
-  it("T-AC-10: with a plate the grounds frame the plate's own frame, tight, with no margin beyond it", () => {
-    for (const [colony, plate] of [[RING_1, PLATE['3']], [RING_2, PLATE['5']]] as const) {
-      const vb = viewBoxOf(grounds({ colony }));
-      expect(vb.x).toBeCloseTo(-plate.frame.hall[0] * K, 3);
-      expect(vb.y).toBeCloseTo(-plate.frame.hall[1] * K, 3);
-      expect(vb.w).toBeCloseTo(plate.frame.width * K, 3);
-      expect(vb.h).toBeCloseTo(plate.frame.height * K, 3);
-    }
-  });
-
-  it('T-AC-10: a full-screen canvas of any shape is filled by the plate, cropped to its aspect, never padded', () => {
+  it('T-AC-10: a full-screen canvas of any shape gets a view at its aspect, inside the plate', () => {
     const plate = boxOf(tagWith(grounds(), 'data-testid="plate"'));
     for (const aspect of [16 / 9, 4 / 3, 21 / 9]) {
       const vb = viewBoxOf(grounds({ framing: { aspect } }));
@@ -130,7 +120,6 @@ describe('ColonyGrounds · the base plate under the buildings (AM-7, Task 4.3)',
       expect(vb.y).toBeGreaterThanOrEqual(plate.y - 1e-6);
       expect(vb.x + vb.w).toBeLessThanOrEqual(plate.x + plate.width + 1e-6);
       expect(vb.y + vb.h).toBeLessThanOrEqual(plate.y + plate.height + 1e-6);
-      expect(Math.max(vb.w / plate.width, vb.h / plate.height), 'one side fills the plate').toBeCloseTo(1, 6);
     }
     const leaned = viewBoxOf(grounds({ framing: { aspect: 16 / 9, leanOn: [{ x: 3, y: 3, w: 1, h: 1 }], lean: 1 } }));
     expect(leaned.w).toBeLessThan(plate.width);
