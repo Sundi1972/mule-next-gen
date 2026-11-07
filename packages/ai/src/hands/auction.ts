@@ -271,8 +271,8 @@ export class AuctionHand {
     }
     if (!finished) this.target = this.scheduled('buyer', this.target, a.elapsed);
     this.target = Math.max(a.zones.lo, Math.min(reach, this.target));
-    // At its limit with nobody meeting it, it is done; an ask inside the limit (at the limit, too) it walks on to take.
-    this.doneFlag = finished || (bestAsk > ceiling && this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
+    // Done at the highest it can stand, its limit or its reach, with no ask inside its limit and no deal of its own.
+    this.doneFlag = finished || (bestAsk > ceiling && this.target >= Math.min(ceiling, reach) && a.deals.every((d) => d.buyer !== me.id));
   }
 
   /** The play's limit: a buyer pays at most its walkAway, a seller asks at least it. */
