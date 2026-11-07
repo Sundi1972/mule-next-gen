@@ -365,14 +365,16 @@ function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk
  * On the floor (`floor`, its config; null where the game taps), `list` with every install on a lake no shore reaches
  * vetoed, as the hand's live legs price it (no stand, an endless walk) and as RULE-1 P8 refuses it (AM-36). The list
  * as it was when it holds none; developDecision's stop (`decided`'s) when no pick is left, as keepOutfit falls back to it
- * (a led MULE's list holds no stop). floor-time's installable: the hands' module reaches brain.ts (INV-2).
+ * (a led MULE's list holds no stop). That stop plays even where STRATEGIST.energyFirst ruled it out: the plant it was
+ * ruled out for is a lake no shore reaches. floor-time's installable: the hands' module reaches brain.ts (INV-2).
  */
 function shoreless(obs: GameState, mind: Mind, list: Shortlist<DevAction>, floor: FloorConfig | null, decided: Shortlist<DevAction>): Shortlist<DevAction> {
   if (!floor) return list;
   const dry = (a: DevAction): a is Extract<DevAction, { kind: 'install' }> => a.kind === 'install' && obs.tiles[a.index]!.terrain === 'lake' && !installable(obs, floor, mind.me, a.index);
   if (!list.all.some((c) => !c.veto && dry(c.action))) return list;
   const all = list.all.map((c) => (!c.veto && dry(c.action) ? candidate(c.key, c.label, c.action, c.value, c.considerations, `lake: no shore reaches plot ${c.action.index}`) : c));
-  const left = all.some((c) => !c.veto) ? all : decided.all.filter((c) => c.action.kind === 'stop');
+  const stop = decided.all.filter((c) => c.action.kind === 'stop').map((c) => (c.veto ? candidate(c.key, c.label, c.action, c.value, c.considerations) : c));
+  const left = all.some((c) => !c.veto) ? all : stop;
   return shortlist(left, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
