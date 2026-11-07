@@ -321,6 +321,24 @@ describe('/mcp, stateless, the seat code on every call', () => {
     expect(big.status).toBe(413);
     expect(logged.filter((line) => line.includes(codeA) || line.includes(takenBack))).toEqual([]);
   });
+
+  it('T-AC-8: a code the Room still answers live for a game that is over gets game_over and draws nothing', async () => {
+    const codes = new SeatCodeBook();
+    const { game, fake, codeA } = startedGame(codes);
+    // A seat whose game recorded no writer for it: only the game's own state can say the game is over.
+    const unseated = codes.issue(game, 's4');
+    const other = startedGame(codes);
+    const client = mcpClient(await serve(codes));
+    await playUntil(game, fake);
+    expect(game.viewFor(null).phase).toBe('gameOver');
+    expect(codes.lookup(unseated)).toMatchObject({ state: 'live' });
+    const limit = BRAIN.claudeSeat.wrongCodesPerMinute;
+
+    for (let i = 0; i < limit; i++) expect(await client.call('wait_for_my_turn', { code: i % 2 ? codeA : unseated })).toMatchObject({ kind: 'game_over' });
+    for (let i = 0; i < limit - 1; i++) expect(await client.call('join', { code: `WRNG-${String(i).padStart(2, '0')}` })).toMatchObject({ kind: 'no_such_seat' });
+
+    expect(await client.call('join', { code: other.codeA })).toMatchObject({ kind: 'joined', seat: 's2' });
+  });
 });
 
 describe('a late Claude seat', () => {
