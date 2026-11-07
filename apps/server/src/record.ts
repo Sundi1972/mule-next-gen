@@ -20,7 +20,8 @@ import {
 import type { Choice } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { TableError, type Game, type GameContext, type SeatInfo } from '@tabletop/core';
-import { createBrain, type BrainService } from './brain/index.js';
+import { createBrain, type BrainService, type PlaybookWriter } from './brain/index.js';
+import { wrapsClaudeSeat } from './claude-seat/seats.js';
 import { ledgerGameId, MuleGame, type Notice, type PlaybookNote } from './mule-game.js';
 
 // literal-ok: caps a refusal's or a failed call's message in the record; no effect on play
@@ -339,9 +340,9 @@ export class Recorder {
           const header = this.record.seats.find((s) => s.id === seat.id);
           if (header) header.smart = true;
         });
-        return {
+        return wrapsClaudeSeat<PlaybookWriter>({
           write: async (kind, ask) => this.call(seat.id, kind, () => writer.write(kind, ask), (r) => ({ write: structuredClone(r.reply) })),
-        };
+        }, writer);
       },
       chatter: (seat, say) => inner.chatter(seat, say),
       finish: () => inner.finish(),
