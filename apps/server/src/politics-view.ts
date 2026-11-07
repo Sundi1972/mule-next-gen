@@ -24,7 +24,7 @@ import {
   type NoticeEntry,
   type Office,
 } from '@mule/engine';
-import type { CeremonyView, CouncilView, ElectionView, MyDealsView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
+import type { CeremonyView, CouncilView, ElectionView, MyDealsView, MyPoliticsView, NewsLine, OfficeReveal, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
@@ -213,7 +213,7 @@ const TITLE: Record<Office, string> = { governor: 'Governor', sheriff: 'Sheriff'
  * The news as the show clock runs on from `beforeMs` to where it stands now: one line per office whose winner beat it
  * passed, in POLITICS.offices order. See WS7 spec C64.
  */
-export function ceremonyNews(state: GameState, beforeMs: number, nameOf: (seatId: string) => string): string[] {
+export function ceremonyNews(state: GameState, beforeMs: number, nameOf: (seatId: string) => string): NewsLine[] {
   const beats = beatsOf(state);
   const result = state.politics?.election?.result;
   if (!beats || !result) return [];
@@ -222,7 +222,7 @@ export function ceremonyNews(state: GameState, beforeMs: number, nameOf: (seatId
     .filter(({ at }) => beforeMs < at.winner && at.winner <= ms)
     .map(({ office }) => {
       const { winner, how } = result[office]!;
-      return `${nameOf(winner)} is ${TITLE[office]} (${HOW[how]}).`;
+      return { text: `${nameOf(winner)} is ${TITLE[office]} (${HOW[how]}).`, who: [winner] };
     });
 }
 
@@ -266,7 +266,7 @@ export function dealNotices(before: readonly DealCard[], after: readonly DealCar
 const points = (move: number): string => `${move < 0 ? '−' : '+'}${Math.abs(move)}`;
 
 /** One news line for every card that turned broken between the two lists: who broke what with whom, and what it cost. */
-export function dealNews(before: readonly DealCard[], after: readonly DealCard[], nameOf: (seatId: string) => string): string[] {
+export function dealNews(before: readonly DealCard[], after: readonly DealCard[], nameOf: (seatId: string) => string): NewsLine[] {
   const was = new Map(before.map((card) => [card.id, card.status]));
   const { voteBroken, pactBroken } = POLITICS.reputation.moves;
   return after
@@ -275,8 +275,11 @@ export function dealNews(before: readonly DealCard[], after: readonly DealCard[]
       const breaker = card.brokenBy ?? card.from;
       const other = breaker === card.from ? card.to : card.from;
       const { terms } = card;
-      if (terms.kind === 'pact') return `${nameOf(breaker)} broke a pact with ${nameOf(other)}. Reputation ${points(pactBroken)}.`;
-      const what = 'office' in terms ? `a vote for ${nameOf(terms.candidate)}` : `a ${terms.yes ? 'yes' : 'no'} on the law`;
-      return `${nameOf(breaker)} broke a promise to ${nameOf(other)}: ${what}. Reputation ${points(voteBroken)}.`;
+      if (terms.kind === 'pact') return { text: `${nameOf(breaker)} broke a pact with ${nameOf(other)}. Reputation ${points(pactBroken)}.`, who: [breaker, other] };
+      if ('office' in terms) {
+        const text = `${nameOf(breaker)} broke a promise to ${nameOf(other)}: a vote for ${nameOf(terms.candidate)}. Reputation ${points(voteBroken)}.`;
+        return { text, who: [breaker, other, terms.candidate] };
+      }
+      return { text: `${nameOf(breaker)} broke a promise to ${nameOf(other)}: a ${terms.yes ? 'yes' : 'no'} on the law. Reputation ${points(voteBroken)}.`, who: [breaker, other] };
     });
 }

@@ -135,16 +135,16 @@ describe('dealNews: the wording of a break, per kind of card', () => {
   const news = (c: DealCard) => dealNews([was(c)], [c], (id) => names[id]!);
 
   it.each([
-    [{ kind: 'vote', office: 'governor', candidate: 's4' } as const, 'Heiko broke a promise to Lena: a vote for Kai. Reputation −10.'],
-    [{ kind: 'vote', law: true, yes: true } as const, 'Heiko broke a promise to Lena: a yes on the law. Reputation −10.'],
-    [{ kind: 'vote', law: true, yes: false } as const, 'Heiko broke a promise to Lena: a no on the law. Reputation −10.'],
-    [{ kind: 'pact' } as const, 'Heiko broke a pact with Lena. Reputation −20.'],
-  ])('%j reads %j', (terms, line) => {
-    expect(news(card(terms))).toEqual([line]);
+    [{ kind: 'vote', office: 'governor', candidate: 's4' } as const, 'Heiko broke a promise to Lena: a vote for Kai. Reputation −10.', ['s1', 's2', 's4']],
+    [{ kind: 'vote', law: true, yes: true } as const, 'Heiko broke a promise to Lena: a yes on the law. Reputation −10.', ['s1', 's2']],
+    [{ kind: 'vote', law: true, yes: false } as const, 'Heiko broke a promise to Lena: a no on the law. Reputation −10.', ['s1', 's2']],
+    [{ kind: 'pact' } as const, 'Heiko broke a pact with Lena. Reputation −20.', ['s1', 's2']],
+  ])('%j reads %j, naming %j', (terms, text, who) => {
+    expect(news(card(terms))).toEqual([{ text, who }]);
   });
 
   it('a pact broken by its receiver names the proposer as the other party', () => {
-    expect(news(card({ kind: 'pact' }, 's1', 's2', 's2'))).toEqual(['Lena broke a pact with Heiko. Reputation −20.']);
+    expect(news(card({ kind: 'pact' }, 's1', 's2', 's2'))).toEqual([{ text: 'Lena broke a pact with Heiko. Reputation −20.', who: ['s2', 's1'] }]);
   });
 
   it('only a card that turns broken makes news: an offer, a kept pact or an already broken card makes none', () => {
