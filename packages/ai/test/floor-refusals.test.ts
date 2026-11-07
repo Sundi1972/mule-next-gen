@@ -29,6 +29,7 @@ import { outlook } from '../src/outlook.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { canFeed, installGain } from '../src/value.js';
+import { rulesOffInTest } from './rule-switches.js';
 
 const ME = 'ai0';
 
@@ -344,6 +345,8 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
 
 describe('a MULE led into development is never lost to the lead (FM-led-no-gain)', () => {
   it("FM-led-no-gain: a led Medicine MULE with nothing to feed it is installed on the seat's best idle plot, not lost at the pub", () => {
+    // The case is canFeed's block on a Medicine works, which S2's lever B lifts (rule-switches.ts).
+    rulesOffInTest('medicineDespiteInputs');
     // Review of 5 Nov: with no gain to be had (a factory it can't feed, or no plot it earns on), nothing was planned for
     // the led MULE. While it is led INSTALL outranks ANALYSE and FIT FILTER on every own plot and the corral offers no BUY,
     // so the seat lost its turn and the MULE ran off at the pub. It is paid for, and on the floor a MULE taken off a plot

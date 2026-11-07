@@ -18,6 +18,10 @@ import { PERSONAS } from '../src/personas.js';
 import { playGame, playGameAsync, type SeatSpec } from '../src/play.js';
 import { draftPlaybook, type PhaseFact } from '../src/playbook/index.js';
 import type { AiSeat, AiSeatOptions } from '../src/seat.js';
+import { rulesOff } from './rule-switches.js';
+
+// These cases pin adopted routes and money-makers for seats with no Energy plant, which Energy first overrides.
+rulesOff('energyFirst');
 
 /*
  * C4's development and auction draft points (RULE-6, RULE-7, AM-20, AM-22), with C6's and C7's hands under them. The

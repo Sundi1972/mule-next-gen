@@ -28,6 +28,7 @@ import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { cashReserve, installGain } from '../src/value.js';
 import { goodPlan, plotValue, sellWanted, tradeDecision, wholeNextMonth, type GoodPlan } from '../src/strategist.js';
+import { rulesOffInTest } from './rule-switches.js';
 
 /**
  * The resource-utility model at the table: built states played on through the engine with every seat's own hands,
@@ -231,7 +232,8 @@ describe('C8: a power plant is worth what its output saves', () => {
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
     // Food rated 4 (makes 6) against Energy rated 2 (makes 4): a rating of 3 no longer outweighs the mines' Energy at the
-    // store's band prices.
+    // store's band prices. C8's valuation alone: S1's Energy first would install the plant whatever it is worth.
+    rulesOffInTest('energyFirst');
     expect(develop({ energy: 2, food: 4 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
   });
 

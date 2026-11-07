@@ -38,6 +38,7 @@ import { draftPlaybook, type LeftOutPick } from '../src/playbook/draft.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { lookFirstPrices } from './look-first-prices.js';
+import { rulesOffInTest } from './rule-switches.js';
 
 // The HC-9 seam: the hand's in-tick draft calls throw, switched on per test; otherwise the real ones.
 const seam = vi.hoisted(() => ({ throwing: false }));
@@ -953,6 +954,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     });
 
     it("T-AC-7 AM-19 'scramble': racing the scramble skips the scouting ahead of its next MULE, and the MULE is installed", () => {
+      // Built for a seat weighing every install: Energy first would make its MULE a plant (rule-switches.ts).
+      rulesOffInTest('energyFirst');
       const { state, plots } = development(1);
       plots[0]!.owner = ME;
       const [a, a2] = farPlots(state, 2) as [number, number];
