@@ -386,6 +386,12 @@ describe('the validator holds every playbook to RULE-1', () => {
       // Claude's edit to the budget alone plays: the engine's route beside it is no fault of Claude's.
       const half = run('development', [], { state }).draft.development!.timeBudgetMs / 2;
       expect(one('development', '/development/timeBudgetMs', half, { state })).toMatchObject({ plays: half, why: null });
+      // With a plains plot beside it the MULE isn't lost: the draft takes its next pick, as the hands' own pick did.
+      const plain = state.tiles.findIndex((t) => t.terrain === 'plains' && t.owner === null);
+      state.tiles[plain]!.owner = 'ai2';
+      const both = run('development', [], { state, mind: mindOf(2, 'rookie') });
+      expect(both.draft.development!.route).toContainEqual({ act: 'install', plot: plain });
+      expect(both.rejected).toEqual([]);
     } finally {
       DEV_STEER.on = steering;
     }

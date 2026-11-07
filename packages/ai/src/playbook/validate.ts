@@ -534,6 +534,7 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     pb,
     // A profile with no level has no draft of its own, so it buys nothing (RULE-2's safe side).
     freshHold: (good) => (profile.mind.level ? (engineDraft(['auction', good]).auction?.[good]?.hold ?? 0) : 0),
+    // The switch alone: a harness that plays with `walking` false taps, and there a lake no shore reaches still installs (AM-36).
     floor: DEV_STEER.on ? floorConfig() : null,
   };
   /**
