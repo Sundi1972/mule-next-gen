@@ -1,6 +1,6 @@
 /**
  * TV-FIT with Claude seats (C6), at 1920×1080 and six seats, the fullest table. B-AC-19 at six seats with five Claude
- * seats in each status; and the first good's side pick with Claude seats waited for (RULE-6) and one whose wait ran out:
+ * seats in each status, and at five, the first to fold, with four offline or waiting; and the first good's side pick with Claude seats waited for (RULE-6) and one whose wait ran out:
  * each name and countdown shows whole in the picked list and the waiting box, nothing runs past the foot, and the scale
  * holds.
  * A local fit check, kept out of CI (lean CI; shell.ts runs B-AC-19 at six seats there). Run with
@@ -38,6 +38,15 @@ try {
       console.log(`✓ B-AC-19 (C6): ${await sixSeatsOnTheTv({ browser, base, server, claude })}`);
     } catch (err) {
       reds.push(`five Claude seats ${claude}: ${(err as Error).message}`);
+    }
+  }
+  // Five seats is the first that folds; on a quiet month the body stands at full size, so the longest folded words have
+  // the least room.
+  for (const claude of STATUSES.filter((s) => s === 'offline' || s === 'waiting')) {
+    try {
+      console.log(`✓ B-AC-19 (C6): ${await sixSeatsOnTheTv({ browser, base, server, claude, ais: 4, busy: false })}`);
+    } catch (err) {
+      reds.push(`four Claude seats ${claude}: ${(err as Error).message}`);
     }
   }
   try {

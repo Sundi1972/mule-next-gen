@@ -343,10 +343,11 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
 /**
  * B-AC-19 at six seats: one person and five AIs, the TV in planning with a busy month's news. The ready list stays on
  * the canvas, the market tiles whole, and the newest news line, the election result, shows whole beside them. With
- * `claude`, the five are Claude seats the game reports in that status (C6).
+ * `claude`, the AIs are Claude seats the game reports in that status (C6); `ais` sets how many, five by default; `busy`
+ * false leaves the month's news as the game has it, so the body can stand at full size.
  */
 export async function sixSeatsOnTheTv(
-  { browser, base, server, claude }: { browser: Browser; base: string; server: MuleServer; claude?: 'waiting' | 'connected' | 'thinking' | 'ready' | 'offline' },
+  { browser, base, server, claude, ais: count = 5, busy = true }: { browser: Browser; base: string; server: MuleServer; claude?: 'waiting' | 'connected' | 'thinking' | 'ready' | 'offline'; ais?: number; busy?: boolean },
   timeout = 5_000,
 ): Promise<string> {
   const phone = await (await browser.newContext(PHONE)).newPage();
@@ -357,7 +358,7 @@ export async function sixSeatsOnTheTv(
     await phone.getByRole('button', { name: 'Start a new game' }).click();
     await phone.getByText("You're at the table").waitFor({ timeout });
     const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= count; i++) {
       await phone.getByRole('button', { name: 'Add AI player' }).click();
       await phone.locator('[data-testid=seats] li').nth(i).waitFor({ timeout });
     }
@@ -387,13 +388,15 @@ export async function sixSeatsOnTheTv(
       Object.assign((room as unknown as { game: object }).game, { claudeStatus: () => claude });
       room.broadcast();
       // A Claude seat with nothing to report folds into the AI row from five seats; the others keep their rows.
-      if (claude === 'ready' || claude === 'connected') await board.locator('[data-testid=tv-ready-ais][data-count="5"]').waitFor({ timeout });
+      if (claude === 'ready' || claude === 'connected') await board.locator('[data-testid=tv-ready-ais][data-count="${count}"]').waitFor({ timeout });
       else await board.getByTestId(`tv-ready-list`).getByText(claude === 'waiting' ? 'WAITING FOR CLAUDE' : `CLAUDE · ${claude.toUpperCase()}`).first().waitFor({ timeout });
     }
-    busyNews(server.registry.get(code));
     const newest = board.getByTestId('tv-news').locator('li').first();
-    // The election's own line was already newest: wait for a line only busyNews adds, so the busy month is on the TV.
-    await board.getByTestId('tv-news').locator('li').filter({ hasText: 'listed plot 3·4' }).waitFor({ state: 'attached', timeout });
+    if (busy) {
+      busyNews(server.registry.get(code));
+      // The election's own line was already newest: wait for a line only busyNews adds, so the busy month is on the TV.
+      await board.getByTestId('tv-news').locator('li').filter({ hasText: 'listed plot 3·4' }).waitFor({ state: 'attached', timeout });
+    }
     await newest.filter({ hasText: 'is Governor' }).waitFor({ state: 'attached', timeout });
 
     // The column is checked twice: as it stands, then with the TV's chat ticker showing a line above it (C20).
@@ -419,12 +422,24 @@ export async function sixSeatsOnTheTv(
         const { shown, needs, text } = await name.evaluate((el) => ({ shown: el.clientWidth, needs: el.scrollWidth, text: el.textContent }));
         check(shown > 0 && needs <= shown + 1, `TV-FIT (six seats${when}): the ready list shows "${text}" whole, got ${shown} of ${needs} px`);
       }
+      // No row runs past the list's right edge: a folded Claude row's words wrap rather than push out of the column.
+      const past = await board.getByTestId('tv-ready-list').evaluate((list) => {
+        const edge = list.getBoundingClientRect().right;
+        return [...list.querySelectorAll(':scope > li, :scope > li *')]
+          // A line cut short with an ellipsis (the folded names) gives way by design.
+          .filter((el) => el.getBoundingClientRect().right > edge + 1 || (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow !== 'ellipsis'))
+          .map((el) => `${el.getAttribute('data-testid') ?? el.tagName.toLowerCase()} "${(el.textContent ?? '').slice(0, 40)}" to x ${el.getBoundingClientRect().right.toFixed(0)} of ${edge.toFixed(0)}`);
+      });
+      check(past.length === 0, `TV-FIT (${count + 1} seats${when}): the ready list stays inside its column, got ${past.slice(0, 3).join('; ')}`);
+      const widths = await board.locator('[data-testid^=tv-ready-claude-]:not([data-testid=tv-ready-claude-names])').evaluateAll((rows) =>
+        rows.map((li) => `${li.getAttribute('data-testid')} ${li.clientWidth} px, its words ${(li.lastElementChild as HTMLElement).offsetWidth} px`),
+      );
       // A folded Claude row names its seats when they fit, cut short when not.
       const folded = [];
       for (const names of await board.locator('[data-testid=tv-ready-claude-names]').all()) folded.push(await names.evaluate((el) => `"${el.textContent}" ${el.clientWidth} of ${el.scrollWidth} px`));
       // TV-FIT's floor holds at the fullest table (PM ruling 6 Nov).
       const scale = await theTvScaleHolds(tv, `six-seat planning${when}`);
-      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}${folded.length ? `, folded Claude names ${folded.join('; ')}` : ''}`;
+      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}${folded.length ? `, folded Claude names ${folded.join('; ')}` : ''}${widths.length ? ` (${widths.join('; ')})` : ''}`;
     };
     const quiet = await fits('');
     const room = server.registry.get(code) as unknown as { seats: { id: string }[]; chat: (from: string, text: string) => void };
@@ -432,7 +447,7 @@ export async function sixSeatsOnTheTv(
     await tv.getByText('Six of us at one table, then.').first().waitFor({ timeout });
     const talking = await fits(', with a chat line');
     const rows = await board.getByTestId('tv-ready-list').locator(':scope > li').count();
-    return `six seats${claude ? `, five Claude seats ${claude}` : ''}, ${rows} rows: ${quiet}, ${talking} with a chat line showing; the market whole, the election result whole in the news`;
+    return `${count + 1} seats${claude ? `, ${count} Claude seats ${claude}` : ''}, ${rows} rows: ${quiet}, ${talking} with a chat line showing; the market whole, the election result whole in the news`;
   } finally {
     await phone.context().close();
     await tv.context().close();
