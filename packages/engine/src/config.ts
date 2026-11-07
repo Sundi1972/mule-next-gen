@@ -319,9 +319,10 @@ export const START = {
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
    * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
-   * storeStockFor adds them.
+   * storeStockFor adds them. Medicine 40, up from 4: spike S2's lever B with STRATEGIST.medicineDespiteInputs (PM
+   * ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.
    */
-  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
   /**
@@ -1794,6 +1795,12 @@ export const STRATEGIST = {
    * 7 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
    */
   energyFirst: true as boolean,
+  /**
+   * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
+   * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
+   * START.storeStock.medicine 40 (PM ruling, 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=false`.
+   */
+  medicineDespiteInputs: true as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
     /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */

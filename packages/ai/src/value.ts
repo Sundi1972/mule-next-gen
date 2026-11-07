@@ -208,10 +208,12 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
  * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
  * production on a copy of what it sees, with the new factory in it and fed, makes (madeNext), each month alike: a farm
- * the factory's own Energy use turns off feeds it only that 20%, though no input is in stock yet.
+ * the factory's own Energy use turns off feeds it only that 20%, though no input is in stock yet. A Medicine works is
+ * always fed while STRATEGIST.medicineDespiteInputs is on.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
+  if (outfit === 'medicine' && STRATEGIST.medicineDespiteInputs) return true;
   const lasts = inputLasts(obs, me, outfit);
   // Stops at the first input it can't feed: each input's check may roll a production out.
   return inputRuns(outfit).find(([g, q]) => !lasts(g, q)) === undefined;
