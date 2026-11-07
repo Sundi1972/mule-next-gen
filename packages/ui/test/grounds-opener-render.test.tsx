@@ -29,7 +29,8 @@ const STADIUM_STANDS: GroundsChange = { id: 'stadium', name: 'Stadium', from: 'b
 const Scene = (props: Omit<ColonyGroundsProps, 'manifest'>) => <ColonyGrounds {...props} manifest={MANIFEST} />;
 const opener = (state: OpenerState) => renderToStaticMarkup(<GroundsOpener opener={state} colony={MONTH_12} month={12} Scene={Scene} />);
 
-const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+/** What a screen reads: the markup's words, with the apostrophe React's server render escapes. */
+const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
 const root = (html: string) => html.match(/<[a-z]+[^>]*data-testid="tv-grounds-opener"[^>]*>/)?.[0] ?? '';
 const caption = (html: string) => text(html.match(/<p[^>]*data-testid="opener-caption"[^>]*>[\s\S]*?<\/p>/)?.[0] ?? '');
 const viewBox = (html: string) => {

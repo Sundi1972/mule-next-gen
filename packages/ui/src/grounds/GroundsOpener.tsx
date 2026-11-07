@@ -12,6 +12,8 @@ import { useGroundsChange, type GroundsChange, type MonthEndView } from './useGr
 /** The opener while it is on screen: RULE-6's length, RULE-5's changes, and whether its clock runs yet. */
 export interface OpenerState extends Opener {
   changes: GroundsChange[];
+  /** False at the first month end this screen sees: there is no earlier one to say what is new against. */
+  baseline: boolean;
   /** False while the month end's event show still covers the screen. */
   playing: boolean;
 }
@@ -24,9 +26,9 @@ const CANVAS = { width: 1280, height: 720 };
  * no Ready and holds nothing: the phase moving on ends it. Call it where the TV stays mounted across phases.
  */
 export function useGroundsOpener(view: MonthEndView & { politics: unknown }, eventShowOn: boolean): OpenerState | null {
-  const changes = useGroundsChange(view);
+  const found = useGroundsChange(view);
   const reduced = useEventReducedMotion();
-  const opener = changes && openerOf({ changed: changes.length > 0, reduced, politics: view.politics != null && view.colony != null });
+  const opener = found && openerOf({ changed: found.changes.length > 0, reduced, politics: view.politics != null && view.colony != null });
   const playing = opener !== null && !eventShowOn;
   const [ended, setEnded] = useState<number | null>(null);
   const ms = opener?.ms;
@@ -35,8 +37,8 @@ export function useGroundsOpener(view: MonthEndView & { politics: unknown }, eve
     const timer = setTimeout(() => setEnded(view.month), ms);
     return () => clearTimeout(timer);
   }, [playing, ms, view.month]);
-  if (!opener || !changes || ended === view.month) return null;
-  return { ...opener, changes, playing };
+  if (!opener || !found || ended === view.month) return null;
+  return { ...opener, ...found, playing };
 }
 
 /** Seconds since `on` turned true, from the page's frames; 0 while off. */
@@ -66,7 +68,8 @@ function said({ name, from, to }: GroundsChange): string {
   return `${the} closes`;
 }
 
-function Caption({ changes }: { changes: GroundsChange[] }) {
+function Caption({ changes, baseline }: { changes: GroundsChange[]; baseline: boolean }) {
+  if (!baseline) return <>The colony grounds at the month's end.</>;
   if (changes.length === 0) return <>Nothing new on the grounds this month.</>;
   const lines = changes.map(said);
   const listed = lines.length === 1 ? lines[0] : `${lines.slice(0, -1).join(', ')} and ${lines.at(-1)}`;
@@ -110,7 +113,7 @@ export function GroundsOpener({ opener, colony, month, Scene }: { opener: Opener
         </header>
         <footer className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-10 pt-12 pb-6 text-xl">
           <p className="truncate" data-testid="opener-caption">
-            <Caption changes={opener.changes} />
+            <Caption changes={opener.changes} baseline={opener.baseline} />
           </p>
         </footer>
       </div>

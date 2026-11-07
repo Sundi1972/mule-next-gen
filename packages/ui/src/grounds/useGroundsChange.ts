@@ -14,6 +14,12 @@ export interface GroundsChange {
   place: GridPlace | null;
 }
 
+/**
+ * What RULE-5 finds at a month end this screen saw come: the projects whose stage moved since the last month end it saw,
+ * or, at the first it sees, no baseline to diff against (not a quiet month: nothing is known to have stayed).
+ */
+export type MonthEndChanges = { baseline: true; changes: GroundsChange[] } | { baseline: false; changes: [] };
+
 /** The part of a view RULE-5 reads. */
 export interface MonthEndView {
   phase: string;
@@ -27,8 +33,8 @@ export interface SeenViews {
   month: number;
   /** Each project's stage at the last month end this screen saw; null before it has seen one. */
   stages: Record<string, GroundsStage> | null;
-  /** At a month end this screen saw come: what changed since the one before, [] for its first; null otherwise. */
-  changes: GroundsChange[] | null;
+  /** At a month end this screen saw come, what RULE-5 found; null otherwise. */
+  changes: MonthEndChanges | null;
 }
 
 const MONTH_END = 'upkeep';
@@ -57,16 +63,16 @@ export function seeView(seen: SeenViews, view: MonthEndView): SeenViews {
     phase: view.phase,
     month: view.month,
     stages: stagesOf(view.colony),
-    changes: seen.stages ? changesSince(seen.stages, view.colony) : [],
+    changes: seen.stages ? { baseline: true, changes: changesSince(seen.stages, view.colony) } : { baseline: false, changes: [] },
   };
 }
 
 /**
- * RULE-5 on this screen: at a month end it saw come, the projects whose stage moved since the last month end it saw ([]
- * at its first); null in any other phase, or at a month end it joined. Call it where the screen stays mounted across
- * phases, or it forgets the month end before.
+ * RULE-5 on this screen: at a month end it saw come, what changed since the last month end it saw (no baseline at its
+ * first); null in any other phase, or at a month end it joined. Call it where the screen stays mounted across phases,
+ * or it forgets the month end before.
  */
-export function useGroundsChange(view: MonthEndView): GroundsChange[] | null {
+export function useGroundsChange(view: MonthEndView): MonthEndChanges | null {
   const [seen, setSeen] = useState(() => firstSeen(view));
   const next = seeView(seen, view);
   // Adjusted while rendering, so the month end's first frame already knows what changed.
