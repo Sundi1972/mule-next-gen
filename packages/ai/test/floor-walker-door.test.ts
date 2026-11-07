@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, buildFloor, createGame, doorOutside, HALL_DOORS, placeAt, reachOf, stepFloor, type DevFloor, type HallDoor } from '@mule/engine';
-import { backToDoor, doorTable, hallSeconds, leading, mapFactor } from '../src/floor-time.js';
+import { backToDoor, doorTable, hallSeconds, leading, mapFactor, secondsToPlace } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { FloorWalker } from '../src/hands/floor-walker.js';
 
@@ -21,14 +21,16 @@ describe('the floor walker enters by the door the plan priced (FM-walker-door, f
     let floor: DevFloor = { ...built, colonists: built.colonists.map((c) => (c.id === ME ? { ...c, space: 'map' as const, x: mouth.x, y: mouth.y, lead: { good: null, x: mouth.x, y: mouth.y } } : c)) };
     const me = () => floor.colonists.find((c) => c.id === ME)!;
 
-    // The premise: the right door offers ENTER where it stands, and the plan's price (floor-time secondsToPlace, the
-    // quickest door) goes through the left door.
-    expect(reachOf(floor, state, ME, cfg).kind, 'the right door offers ENTER').toBe('enter');
+    // The premise: the right door offers ENTER where it stands, and the plan's price (secondsToPlace) is the walk
+    // through the left door.
+    const reach = reachOf(floor, state, ME, cfg);
+    expect(reach.kind === 'enter' && reach.door, 'the right door offers ENTER').toBe('doorR');
     const c0 = me();
-    const price = (door: HallDoor) =>
+    const through = (door: HallDoor) =>
       backToDoor(state, cfg, doorTable(state, cfg).get(door)!, c0) / mapFactor(cfg, c0.pace, leading(c0), c0.bot, c0.bitten) + hallSeconds(state, cfg, cfg.hall.spots[door], 'food', c0.pace, leading(c0));
-    const priced = [...HALL_DOORS].sort((a, b) => price(a) - price(b))[0];
-    expect(priced, `priced ${HALL_DOORS.map((d) => `${d} ${price(d).toFixed(2)} s`).join(', ')}`).toBe('doorL');
+    const doors = HALL_DOORS.map((d) => `${d} ${through(d).toFixed(2)} s`).join(', ');
+    expect(secondsToPlace(state, cfg, c0, 'food'), `the plan's price; through ${doors}`).toBe(through('doorL'));
+    expect(through('doorL'), doors).toBeLessThan(through('doorR'));
 
     const walker = new FloorWalker(ME);
     let entered: string | null = null;
