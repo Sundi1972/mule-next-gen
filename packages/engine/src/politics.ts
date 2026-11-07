@@ -165,7 +165,7 @@ function refusal(why: Exclude<CanRun, true>, office: Office | null): string {
 function checkPromise(office: Office, promise: TaxPromise | undefined): TaxPromise | null {
   const { min, max } = POLITICS.tax;
   if (office === 'sheriff') {
-    if (promise) throw new RuleError('Sheriff candidates make no promise yet');
+    if (promise) throw new RuleError('Sheriff candidates make no promise');
     return null;
   }
   switch (promise?.kind) {
