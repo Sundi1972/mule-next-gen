@@ -152,12 +152,12 @@ describe('/mcp, stateless, the seat code on every call', () => {
     const url = await serve(codes);
     const a = mcpClient(url);
     const b = mcpClient(url);
-    /** One turn of a client's loop: wait, and answer the ask with this client's own plan letter and line. */
-    const play = async (client: typeof a, code: string, letter: string) => {
+    /** One turn of a client's loop: wait, and answer the ask with the first land plan, signed by this client. */
+    const play = async (client: typeof a, code: string, who: string) => {
       const ask = await client.call('wait_for_my_turn', { code });
       if (ask.kind !== 'ask') return ask;
-      const edits = ask.phase === 'land' ? [{ path: '/landGrant/ranked', to: letter, reason: `client ${letter}` }] : [];
-      return client.call('submit_plan', { code, ask_id: ask.ask_id, edits, line: `Plan ${letter}.` });
+      const edits = ask.phase === 'land' ? [{ path: '/landGrant/ranked', to: 'A', reason: `client ${who}` }] : [];
+      return client.call('submit_plan', { code, ask_id: ask.ask_id, edits, line: `Plan by ${who}.` });
     };
 
     const askB = await b.call('wait_for_my_turn', { code: codeB });
