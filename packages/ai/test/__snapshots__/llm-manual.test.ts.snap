@@ -201,7 +201,7 @@ Cost: free.
 ### sabotage
 In: planning. Args: target ({ kind: 'powerCut', tile } | { kind: 'rumour', good, dir: 'up' | 'down' } | null to withdraw).
 Does: Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.
-Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning (else: "Orders are given in planning"); a power cut names another player's plot (else: "Pick another player's plot"); that plot has a MULE making a good (else: "That plot makes nothing to cut"); a rumour names a good (else: "Pick a good"); you can pay the crew (else: "A crew costs <cost> cr; you have <money>").
+Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning (else: "Orders are given in planning"); a power cut names another player's plot (else: "Pick another player's plot"); that plot has a MULE making a good (else: "That plot makes nothing to cut"); a rumour names a good (else: "Pick a good"); a rumour moves its price up or down (else: "A rumour moves a price up or down"); you can pay the crew (else: "A crew costs <cost> cr; you have <money>").
 Cost: free.
 
 ### guard

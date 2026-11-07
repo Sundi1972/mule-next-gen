@@ -5,6 +5,7 @@
 import {
   analysisSeconds,
   DEVELOPMENT,
+  fineStepsWords,
   LOTS,
   GAME,
   MULE,
@@ -567,6 +568,7 @@ export const MOVES: MoveTable = {
       refused("a power cut names another player's plot", "Pick another player's plot"),
       refused('that plot has a MULE making a good', 'That plot makes nothing to cut'),
       refused('a rumour names a good', 'Pick a good'),
+      refused('a rumour moves its price up or down', 'A rumour moves a price up or down'),
       refused('you can pay the crew', 'A crew costs <cost> cr; you have <money>'),
     ],
     cost: null,
@@ -618,7 +620,7 @@ export const MOVES: MoveTable = {
       refused('the culprit is revealed', 'Only a revealed culprit is fined'),
       refused('the case is not yet fined', 'Already fined'),
       refused('the culprit is not you', "You can't fine yourself"),
-      refused('the amount is 50 to 300 in steps of 50', 'A fine is 50 to 300 cr, in steps of 50'),
+      refused(`the amount is ${POLITICS.sheriff.fine.steps[0]} to ${POLITICS.sheriff.fine.steps.at(-1)} in steps of ${POLITICS.sheriff.fine.steps[1]! - POLITICS.sheriff.fine.steps[0]!}`, fineStepsWords()),
     ],
     cost: null,
     args: [
