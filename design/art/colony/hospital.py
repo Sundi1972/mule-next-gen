@@ -9,11 +9,13 @@ import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import frame, kits, props  # noqa: E402
+from lib.props import ATL, CZ, LND, MTM, WDC, kit, site_props  # noqa: E402,F401
 from lib.core import ZT, accent, bx, cyl, flat, glass_mat, mat  # noqa: E402
 
 STAGES = ["site", "build1", "standing", "closed", "damaged"]
 W = 7.9
 FH = 3.05
+
 
 
 def ambulance(x, y):
@@ -60,6 +62,32 @@ def sunshades(z0, z1, wall_y, wall_x, white):
         bx(wall_x, wall_x + 0.4, MAIN_Y0, W / 2, z, z + 0.06, white, 0.005, "sunshade")
 
 
+# the main block (two floors, 7 m) stands at the back; a one-storey emergency wing fronts it, so the Hospital steps
+# down toward the camera and its ambulance bay, instead of reading as a plain cube
+MAIN_Y0, WING_H = -1.55, 3.2
+
+
+def cross_panel(x, y, facing, z, red, size=1.5, lit=True):
+    """A white square panel with a red cross on a face; facing 'y' = the south face, 'x' = the east face."""
+    panel = accent("cross_panel", (0.92, 0.93, 0.94), glow=1.2 if lit else 0, rough=0.35, emit=(1.0, 0.98, 0.95))
+    h, a, b_ = size / 2, size * 0.36, size * 0.11
+    if facing == "y":
+        bx(x - h, x + h, y - 0.08, y, z - h, z + h, panel, 0.01, "cross_panel")
+        for (u, v) in ((a, b_), (b_, a)):
+            bx(x - u, x + u, y - 0.11, y - 0.08, z - v, z + v, red, 0.003, "cross")
+    else:
+        bx(x, x + 0.08, y - h, y + h, z - h, z + h, panel, 0.01, "cross_panel")
+        for (u, v) in ((a, b_), (b_, a)):
+            bx(x + 0.08, x + 0.11, y - u, y + u, z - v, z + v, red, 0.003, "cross")
+
+
+def sunshades(z0, z1, wall_y, wall_x, white):
+    """Two white fins across the upper floor's glass on the south and east faces."""
+    for z in (z0 + (z1 - z0) * 0.38, z0 + (z1 - z0) * 0.78):
+        bx(-W / 2, W / 2, wall_y - 0.4, wall_y, z, z + 0.06, white, 0.005, "sunshade")
+        bx(wall_x, wall_x + 0.4, MAIN_Y0, W / 2, z, z + 0.06, white, 0.005, "sunshade")
+
+
 def dress_site():
     """Kit props on the site (KITS_DIR set: local looks only): a sand mound, mixer, pallets, a barrow, a generator."""
     z = "kb3d_constructionzone"
@@ -75,9 +103,7 @@ def build(stage):
     scaffold, crane. standing: main block, emergency wing, ambulance bay. closed: faded, dead glass, boarded, the bay
     fenced off. damaged: a bite out of the main block's near corner, rubble on the wing roof and the bay, an ember."""
     if stage == "site":
-        kits.site(0, 0, W, W, heaps=not props.on())
-        if props.on():
-            dress_site()
+        kits.site(0, 0, W, W, heaps=not props.on())  # with kits, the sand mound replaces our heaps (dress)
         return
     kits.slab()
     b1, closed, damaged = stage == "build1", stage == "closed", stage == "damaged"
@@ -157,5 +183,20 @@ def build(stage):
         kits.ember(3.0, MAIN_Y0 + 0.9, top - 1.6)
 
 
+def dress(stage):
+    """Kit dressing (KITS_DIR set): site gear; building materials along the front while it rises; shrubs along the
+    east face and a cypress at the back once it stands; sci-fi rubble on the broken corner when damaged."""
+    if stage == "site":
+        site_props()
+    elif stage == "build1":
+        kit([(CZ, "KB3D_CSZ_PropConcreteMixer_A", (-2.6, -4.7), 0.0), (CZ, "KB3D_CSZ_PropBrickPallet_B", (0.3, -4.7), 0.0),
+             (CZ, "KB3D_CSZ_PropCementBagPallet_A", (1.9, -4.75), 0.0), (CZ, "KB3D_CSZ_PropWheelbarrow_A", (3.6, -4.7), 1.2)])
+    elif stage in ("standing", "closed", "damaged"):
+        kit([(LND, "KB3D_LND_PropShrub_E" if k % 2 else "KB3D_LND_PropShrub_C", (4.75, y), k) for k, y in enumerate((-3.0, -1.0, 0.8))]
+            + [(ATL, "KB3D_ATL_VegCypressTree_A", (4.75, 4.75), 0.0)])
+        if stage == "damaged":
+            kit([(MTM, "KB3D_MTM_PropRubble_A", (3.3, -3.3), 0.785)])
+
+
 if __name__ == "__main__":
-    frame.run("hospital", STAGES, build)
+    frame.run("hospital", STAGES, build, dress=dress)

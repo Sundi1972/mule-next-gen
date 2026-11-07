@@ -13,8 +13,15 @@ REPO="$(cd "$HERE/../../.." && pwd)"
 BLENDER="${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}"
 SAMPLES="${SAMPLES:-256}"
 KINDS="${KINDS:-hall park hospital}"  # PR-1's kinds; observatory, stadium, spaceport join with their stages (PR-3)
-OUT="$HERE/out"
-PUB="$REPO/apps/web/public/art/colony"
+# SRC: which renders to ship (relative to this folder); PUB: where (relative to the repo root).
+#   kit-free, shipped:  publish.sh                                   (SRC=out, PUB=apps/web/public/art/colony)
+#   kit preview, local: SRC=out/kit PUB=design/art/colony/out/kit-pub publish.sh --no-render
+#   kit, shipped:       SRC=out/kit publish.sh   ONLY after the PM relays Heiko's licence answer (spec AM-5)
+SRC="${SRC:-out}"
+PUB="${PUB:-apps/web/public/art/colony}"
+case "$SRC" in /*) OUT="$SRC" ;; *) OUT="$HERE/$SRC" ;; esac
+case "$PUB" in /*) ;; *) PUB="$REPO/$PUB" ;; esac
+RENDER_OUT="$HERE/out"  # kind scripts write here, or to out/kit when KITS_DIR is set
 
 render=1
 if [ "${1:-}" = "--no-render" ]; then render=0; shift; fi
@@ -23,12 +30,14 @@ command -v cwebp >/dev/null || { echo "publish.sh: cwebp not found (brew install
 
 if [ "$render" = 1 ]; then
   for k in $todo; do
-    "$BLENDER" -b --python-exit-code 1 -P "$HERE/$k.py" -- "$OUT" "$SAMPLES" > "$OUT/$k.log" 2>&1 \
-      || { echo "publish.sh: $k failed, see $OUT/$k.log" >&2; exit 1; }
-    grep '^COLONY' "$OUT/$k.log"
+    mkdir -p "$RENDER_OUT"
+    "$BLENDER" -b --python-exit-code 1 -P "$HERE/$k.py" -- "$RENDER_OUT" "$SAMPLES" > "$RENDER_OUT/$k.log" 2>&1 \
+      || { echo "publish.sh: $k failed, see $RENDER_OUT/$k.log" >&2; exit 1; }
+    grep '^COLONY' "$RENDER_OUT/$k.log"
   done
 fi
 
+echo "publish.sh: $OUT -> $PUB"
 python3 -I - "$HERE" "$OUT" "$PUB" $KINDS <<'PY'
 import ast, json, os, shutil, subprocess, sys
 

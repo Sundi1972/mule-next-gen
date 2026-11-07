@@ -17,12 +17,14 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import frame, kits, props  # noqa: E402
+from lib.props import ATL, CZ, LND, MTM, WDC, kit, site_props  # noqa: E402,F401
 from lib.core import ZT, accent, box_uv, bx, cyl, flat, glass_mat, light, mat, mesh_obj  # noqa: E402
 
 STAGES = ["site", "build1", "build2", "standing", "closed", "damaged"]  # buildMonths 3: two build pictures
 FRAME = {"width": 3200, "height": 3500, "centre": [1600, 2800], "places": 2}
 PAD_R, PAD_H = 7.5, 0.8
 ROCKET = 36.0
+
 
 
 def cone(name, x, y, r0, r1, z0, h, m, seg=40):
@@ -99,26 +101,13 @@ def rocket(z0, white, black, orange, dark, full=True):
     return zf
 
 
-def dress_build1():
-    """Kit props on the build1 site (KITS_DIR set: local looks only): a 34 m portal crane, steel, rebar, a dumpster.
-    The crane is placed by its bounding box: turned 45°, its portal stands in the slab's right corner off the pad and
-    its jib reaches over the mount toward the camera's left, in profile."""
-    z = "kb3d_constructionzone"
-    props.place("kb3d_cityinthesky", "KB3D_CSK_PropCraneE_A", (0.2, 0.2), 0.785)
-    for (name, at, rot) in (("PropDumpster_B", (-8.6, -8.6), 0.785), ("PropMetalBeams_B", (8.6, -5.6), 0.0),
-                            ("PropRebar_E", (-10.4, 6.0), 0.0), ("PropConcreteMixer_A", (5.8, -9.9), 0.0),
-                            ("PropPowerGenerator_B", (9.2, -7.4), 1.57), ("PropBrickPallet_B", (-6.4, -10.0), 0.0),
-                            ("PropCementBagPallet_A", (-4.8, -10.2), 0.3), ("PropSandMound_B", (-9.0, -2.0), 0.0)):
-        props.place(z, "KB3D_CSZ_" + name, at, rot)
-
-
 def build(stage):
     """site: the shared site kit on one 2 x 2 slab. build1 (1/3): the pad and mount poured, the gantry's first 9 m,
     a crane. build2 (2/3): the gantry topped out, the first stage stacked on the mount. standing: the rocket on the
     pad. closed: no rocket, the gantry faded, fenced, dark. damaged: no rocket, the gantry's top toppled across the
     pad, the pad scorched, rubble and an ember."""
     if stage == "site":
-        kits.site(0, 0, 16.0, 16.0, n=2, cabin_at=(6.5, 10.3))
+        kits.site(0, 0, 16.0, 16.0, n=2, cabin_at=(6.5, 10.3), heaps=not props.on())  # with kits, the sand mound (dress)
         return
     b1, b2, closed, damaged = (stage == s for s in ("build1", "build2", "closed", "damaged"))
     lit = stage == "standing"
@@ -237,9 +226,7 @@ def build(stage):
             x, y = 7.0 + dx * 0.8, -8.5 + dy
             bx(x - sz / 2, x + sz / 2, y - sz / 2, y + sz / 2, ZT + dz, ZT + dz + sz * 0.9, crates[k % 3], 0.03, "crate")
     if b1 or b2:
-        if b1 and props.on():
-            dress_build1()
-        elif b1:
+        if b1:
             kits.crane(9.5, 9.5, 14.0, jib=11.0, counter=3.0)
         kits.work_light(-9.0, -9.0, (0, 0))
         kits.work_light(9.5, -6.0, (0, 0))
@@ -248,5 +235,24 @@ def build(stage):
         kits.fence_y(PAD_R + 1.0, -8.0, 4.0, 2.0)
 
 
+def dress(stage):
+    """Kit dressing (KITS_DIR set). Minerva's landing pads, control tower, storage and cargo modules, rover and cargo
+    ship are 13-134 m, far bigger than this place, so only its tanks, generator, crates and rubble come in; the
+    Construction Zone gear dresses the site and build stages. Our own tower crane stays."""
+    if stage == "site":
+        site_props(2)
+    elif stage in ("build1", "build2"):
+        kit([(CZ, "KB3D_CSZ_PropDumpster_B", (-8.6, -8.6), 0.785), (CZ, "KB3D_CSZ_PropMetalBeams_B", (8.6, -5.6), 0.0),
+             (CZ, "KB3D_CSZ_PropRebar_E", (-10.4, 6.0), 0.0), (CZ, "KB3D_CSZ_PropConcreteMixer_A", (5.8, -9.9), 0.0),
+             (CZ, "KB3D_CSZ_PropPowerGenerator_B", (9.2, -7.4), 1.57), (CZ, "KB3D_CSZ_PropBrickPallet_B", (-6.4, -10.0), 0.0),
+             (CZ, "KB3D_CSZ_PropCementBagPallet_A", (-4.8, -10.2), 0.3), (CZ, "KB3D_CSZ_PropSandMound_B", (-9.0, -2.0), 0.0)])
+    else:
+        kit([(MTM, "KB3D_MTM_PropTanks_A", (-9.6, -7.6), 0.0), (MTM, "KB3D_MTM_PropTanks_B", (-9.8, -2.2), 1.57),
+             (MTM, "KB3D_MTM_PropGenerator_A", (10.3, -6.6), 0.0)]
+            + [(MTM, "KB3D_MTM_PropCrate_A", (-6.6 + dx, -10.6 + dy), r) for (dx, dy, r) in ((0, 0, 0.1), (1.3, 0.1, 0.0), (0.6, 0.0, 1.6))])
+        if stage == "damaged":
+            kit([(MTM, "KB3D_MTM_PropRubble_A", (2.6, -3.2), 0.4), (MTM, "KB3D_MTM_PropRubble_A", (-2.8, -1.4), 2.2)])
+
+
 if __name__ == "__main__":
-    frame.run("spaceport", STAGES, build, fr=FRAME)
+    frame.run("spaceport", STAGES, build, fr=FRAME, dress=dress)

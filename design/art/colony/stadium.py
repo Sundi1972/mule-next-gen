@@ -13,7 +13,8 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import frame, kits  # noqa: E402
+from lib import frame, kits, props  # noqa: E402
+from lib.props import ATL, CZ, LND, MTM, WDC, kit, site_props  # noqa: E402,F401
 from lib.core import T, ZT, accent, box_uv, bx, cyl, flat, glass_mat, light, link, mat, math_, mesh_obj, mix, new_mat, node  # noqa: E402
 
 STAGES = ["site", "build1", "build2", "standing", "closed", "damaged"]  # buildMonths 3: two build pictures
@@ -25,6 +26,7 @@ PX, PY = 5.7, 4.5  # pitch
 BACK = math.radians(135)  # the main stand faces the camera from the north-west
 TIERS = 11
 MASTS = [(-10.6, -10.6), (10.6, 10.6), (-11.4, 5.0), (-5.0, 11.4)]  # west and east sides, two behind the main stand
+
 
 
 def top(t):
@@ -70,7 +72,7 @@ def build(stage):
     roof masts without the membrane, floodlight masts without heads. closed: faded, dark, fenced. damaged: a bite out
     of the near wall, a floodlight mast down, rubble and an ember."""
     if stage == "site":
-        kits.site(0, 0, 20.0, 18.0, n=2, cabin_at=(6.0, 10.3))
+        kits.site(0, 0, 20.0, 18.0, n=2, cabin_at=(6.0, 10.3), heaps=not props.on())  # with kits, the sand mound (dress)
         return
     b1, b2, closed, damaged = (stage == s for s in ("build1", "build2", "closed", "damaged"))
     building = b1 or b2
@@ -213,5 +215,22 @@ def build(stage):
         kits.ember(bx_c[0] - 1.4, bx_c[1] + 1.2, 2.4, r=0.4, energy=90)
 
 
+def dress(stage):
+    """Kit dressing (KITS_DIR set), only where the bowl leaves room (its corners): site gear; a dumpster, pallets and a
+    mixer while it rises; a tree behind the main stand and low planting at the front corner once it stands; rubble at
+    the break when damaged. No tall planting at the front: it would cross the bowl from this camera."""
+    if stage == "site":
+        site_props(2)
+    elif stage in ("build1", "build2"):
+        kit([(CZ, "KB3D_CSZ_PropDumpster_B", (9.3, -9.3), 0.785), (CZ, "KB3D_CSZ_PropBrickPallet_B", (7.4, -10.6), 0.0),
+             (CZ, "KB3D_CSZ_PropCementBagPallet_A", (5.8, -10.8), 0.2), (CZ, "KB3D_CSZ_PropConcreteMixer_A", (10.4, -6.6), 1.57),
+             (CZ, "KB3D_CSZ_PropPowerGenerator_B", (-9.8, -8.2), 0.785)])
+    else:
+        kit([(LND, "KB3D_LND_PropTree_B", (-10.0, 10.0), 0.6), (WDC, "KB3D_WDC_PropFoliage_A", (9.6, -9.6), 0.0),
+             (LND, "KB3D_LND_PropShrub_E", (7.6, -10.6), 0.3), (LND, "KB3D_LND_PropShrub_E", (10.6, -7.6), 1.3)])
+        if stage == "damaged":
+            kit([(MTM, "KB3D_MTM_PropRubble_A", (8.8, -9.2), 0.785), (MTM, "KB3D_MTM_PropRubble_A", (5.8, -9.8), 0.2)])
+
+
 if __name__ == "__main__":
-    frame.run("stadium", STAGES, build, fr=FRAME)
+    frame.run("stadium", STAGES, build, fr=FRAME, dress=dress)
