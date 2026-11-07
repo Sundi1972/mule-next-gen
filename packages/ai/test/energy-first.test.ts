@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, createGame, observe, STRATEGIST, type GameState, type Tile } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, createGame, MULE, mulePrice, observe, STRATEGIST, type GameState, type Tile } from '@mule/engine';
 import { draftMulePick } from '../src/playbook/draft.js';
 import { developDecision } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
@@ -72,6 +72,20 @@ describe('STRATEGIST.energyFirst: a seat with no Energy plant installs one first
     };
 
     expect(run(true)).toEqual(run(false));
+  });
+
+  it('on, but the seat can pay for a Food outfit and not an Energy one: nothing is ruled out for it', () => {
+    const run = (energyFirst: boolean) => {
+      STRATEGIST.energyFirst = energyFirst;
+      const state = game(false);
+      state.players.find((p) => p.id === 'ai0')!.money = mulePrice(state) + (MULE.outfitCost.food + MULE.outfitCost.energy) / 2;
+      return developDecision(observe(state, 'ai0'), mind, 0).all.map((c) => [c.key, c.veto]);
+    };
+    // The case: a Food install is open to it, and no Energy install is.
+    const on = run(true);
+    expect(on.some(([k, v]) => String(k).startsWith('install:food:') && !v)).toBe(true);
+    expect(on.some(([k, v]) => String(k).startsWith('install:energy:') && !v)).toBe(false);
+    expect(on).toEqual(run(false));
   });
 
   it("on, leading a fitted MULE none of its plots may take (a smelter under an emission cap the air is over): the pick is 'stop', never an empty shortlist", () => {
