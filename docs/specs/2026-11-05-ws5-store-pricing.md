@@ -640,6 +640,19 @@ because   Heiko likes the MULE price's extremes. A cap alone barely binds: at 15
 goal      C4's intent holds: the MULE price is bounded, (labour + Smithore at its ceiling) × 4 = 2,880 at most
 folded    §1 C4, §2 RULE-4, §3 and §6 B-AC-6 read with AM-8; docs/rulebook/store-and-prices.html#mule-price describes it
 
+AM-9 · 2026-11-07 · lead (WS5) · HC-4's cap went with the colonists' wages (milestone A's integration review)
+target    §0.2 HC-4; §8 AM-6 items 2, 6, 8 and 10
+said      AM-6 2: storeBuyAt and colonistAffordable are the AI's price functions; AM-6 6, 8 and 10: storeBuyAt carries
+          HC-4's cap, colonistBudget ÷ (1 + the band's over)², for Food and Water
+did       PR-2 (#570, colony-needs C2) removed colonistBudget, colonistAffordable and the cap, as HC-4's own AM-5 note
+          foresaw. storeBuyAt is now the band's buy line alone (economy.ts::storeBuyAt says so); the colonists' reserve
+          in storeForSale stays. AM-6 2, 6, 8 and 10 record PR-1 as it was built and no longer describe the code.
+because   colonists have no wages (Heiko, 6 Nov), so there is no budget to cap against; the 12× ceiling and the band
+          lines bound Food and Water instead
+goal      HC-4's lasting half holds: Food and Water stay colonists-first through storeForSale's reserve
+folded    §0.2 HC-4 and §8 AM-6 read with AM-9; pinned by needs T-AC-7 (upkeep.test.ts: no colonistBudget in the
+          engine) and price-hc3.test.ts (nothing in the AI prices by one)
+
 AM-10 · 2026-11-07 · lead (WS5) · N learns from the posted price, not the band (milestone A's review, minor (a); WS1 OK on the rule)
 target    §1 C1 (N's drift); §6 B-AC-8; §0 G-1's "then is forgotten"
 said      a trade's implied normal price = the trade ÷ the band's multiple (AM-6)
