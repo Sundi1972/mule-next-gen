@@ -128,6 +128,8 @@ Frame centre measured at exactly (800, 1000). Open:
 
 Ready now: cb717373's manifest declares park and hall.
 
+**Status: MERGED** (#546, bff3c7b8). Its first run caught the hall keyed `tier1` instead of `standing`; fixed in 4204d80c.
+
 - [ ] **Step 1:** Write `T-AC-2: every manifest picture exists` for the kinds the manifest declares. Then positive-control it: delete one file, watch it go red, restore.
 - [ ] **Step 2:** `pnpm --filter @mule/ui test -- grounds-manifest` → PASS. Commit: `test(T-AC-2): manifest pictures exist`.
 
@@ -145,6 +147,7 @@ Ready now: cb717373's manifest declares park and hall.
 
 **Status: Tasks 1.3 and 1.4 done** on `ws10-grounds-pr1`: 45cf42c6 → 5241a452 (fix round) → 72f9f93f (review fixes).
 `Review: APPROVE at 72f9f93f572d3bdd973102b1b710fa543236ee77`; @mule/ui 187/187, typecheck 0. PR #542 into `ws10-visual`.
+**MERGED** (#542, cd837426).
 
 Plan-drift corrections (as built):
 - The input is a structural subset of ColonyView with an optional `place {x,y,w,h}`, not `slot` (AM-3); `@mule/ui`
@@ -162,6 +165,10 @@ Plan-drift corrections (as built):
 - [ ] **Step 3:** Graft C2 from the scaffold. Keep the mock's painter's order, `extentOf` (by highest slot, RULE-4), chips and next place. Pictures sit at `ART_FRAME` positions (frame from the manifest). The fallback is the mock's `Building`/`Site`/`Scaffold` shapes. Run: both PASS. Commit: `feat(C2): ColonyGrounds draws the colony's pictures by slot (verifies B-AC-1, B-AC-4)`.
 
 ### Task 1.5: C7 — the TV month end mounts the grounds (named edit, WS4)
+
+**SUPERSEDED by AM-6 — moved to PR-5 (the opener).** The TV side panels (month end and planning) were built, then
+removed after WS4's TV-FIT measure (planning 0.662, month end 0.593, floor 0.7; reproduced 0.593 locally); removal
+fec2bab9 by PM ruling. `TableApp.tsx` carries no change from this task. Steps below are kept for history only.
 
 **Depends on:** 1.4; **waits for WS7's engine PR that puts `place` on ColonyProjectView** (C6, AM-3). **ACs:** B-AC-1 at the TV, T-AC-5 (TV).
 **Files:** modify `apps/web/src/table/TableApp.tsx::TvMonthEnd` (one mount line beside `BuildSite`); test `apps/web/test/colony-screens.test.ts` (extend; it already parses `build-site`).
@@ -217,12 +224,23 @@ Plan-drift corrections (as built):
 **Scaffold:** `Living.tsx` (smoke). **Files:** `packages/ui/src/grounds/LiveLayer.tsx`.
 - [ ] Test first at the rendered SVG: smoke drawn over a `damaged` place only; haze opacity rises as `gauges.environment` worsens, none at a clean colony; reduced motion → still. Then implement. Commit.
 
+**Tasks 2.1–2.2 MERGED** as PR #603 → 71555ddd (`Review: APPROVE` at 5599ad02). Task 2.2b is still open (after Heiko's session).
+
+**Live-layer rAF guard (found on #606's CI, 7 Nov):** `WalkingScene`'s walker clock threw `cancelAnimationFrame is not
+defined` on unmount where a test stubs only `requestAnimationFrame` (`apps/web/test/colony-strike-phone.test.ts:28`,
+3 of 12 red). Fix: the effect starts the clock only when both frame functions exist, else the walkers stand still.
+Built in worktree `ws10-mounts-raf` on top of #606; ships with #606.
+
 Built in 2.1–2.2 (ws10-grounds-pr2 @ b12f388c): RULE-2 glow on every stage by its factor (the hall counts as standing), RULE-3 walkers along the gaps between places, a paid strike counts as over (G-5 RULE-26), null mood → 0 walkers.
 
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
 **Files:** `apps/web/src/phone/hub/politics/Colony.tsx::ColonyWithFacts` (one line above `ColonyDeskCard`); test: extend `apps/web/test/politics-desks.test.ts`.
-- [ ] Implement C8 test-first: write `T-AC-5 (phone): colony-grounds is shown politics on, absent politics off`. Run: FAIL. Add the line. Run: PASS. Commit, and send the SHA to the PM for WS7's OK.
+- [x] Implement C8 test-first: write `T-AC-5 (phone): colony-grounds is shown politics on, absent politics off`. Run: FAIL. Add the line. Run: PASS. Commit, and send the SHA to the PM for WS7's OK.
+
+**Status: DONE on #606 (still OPEN)** — mount 62d6680f (WS7 OWNER OK), deep manifest loader b9567595, TV side-panel
+removal fec2bab9, stronger phone test 21045612 (`Review: APPROVE`), fixtures on the real `place` field 80810ed3
+(trunk #605 removed `plot`). CI at 80810ed3 red on the rAF throw above; the guard goes on #606 next.
 
 ### Task 2.4: B-AC-5 — ≤ 1 MB of art on a phone
 
@@ -241,6 +259,9 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 
 - [ ] For each kind, write `design/art/colony/<kind>.py` with `build(stage)` covering every RULE-1 stage (build2 for the 3-month kinds). Render, then look at every picture. Run `publish.sh`. Commit per kind.
 
+**Status:** Stadium and Spaceport (2×2) shipped; 65 pictures, 130 WebP, 2.98 MB in the manifest. `observatory.py` has
+all 5 stages (e22e9244) but is **not rendered or published** — it is rendered in the AM-7 run (Task 4.2).
+
 ### Task 3.1b: review nits for the large kinds (PR-1 review at 5241a452)
 
 - [ ] Allow the viewBox headroom for AM-1's tall frame, and place each chip above the picture's footprint height for 2×2 and tall kinds (Spaceport). Test: B-AC-1 with a 2×2 Spaceport at (0,0); the frame top is inside the viewBox and the chip is above the rocket.
@@ -251,7 +272,10 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 
 ### Task 3.3: Look round
 
-- [ ] Publish a page from `design/mocks/colony-grounds/look.html` showing all six kinds × stages at TV size. The PM asks Heiko. Record his verdict in the PR body.
+- [x] Publish a page from `design/mocks/colony-grounds/look.html` showing all six kinds × stages at TV size. The PM asks Heiko. Record his verdict in the PR body.
+
+**Status: DONE.** Catalogue ecee202a / 9b00add9 (Day / Dusk / lights on; Ours / With kit props). Heiko: "yes for each
+building". Rulebook 68bb0122.
 
 ### Task 3.4: kit-dressed twins, behind one flag (AM-5 addendum)
 
@@ -264,6 +288,10 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
   looked at.
 - [ ] Raw kit files never committed or published; only our WebP.
 
+**Status:** scripts e22e9244 (kit dressing on every kind, `publish.sh` SRC/PUB). The kit-pub preview holds 65 pictures,
+3.09 MB, looked at only at 32 spp. **The flag is NOT flipped**: superseded by AM-7 — the kit-dressed pictures ship from
+the Task 4.2 re-render, not from these slab pictures.
+
 ### PR-3 merge gate
 
 - [ ] T-AC-2 across the whole catalogue is green. Heiko's look round is recorded. No code changes (`git diff --stat -- packages apps/web/src` is empty).
@@ -275,6 +303,9 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 **Gate first:** the 13:30Z proof (plate + flush shadow-catcher Hospital and Park, side by side with look.html's render) —
 if it does not read the same, stop and re-plan with the PM. Every long render run has a progress check (pictures done /
 total) that the lead reads; a 15-min stall is reported to the PM.
+
+**Status (7 Nov):** proof in flight (park.py layer render started ~10:35Z, out to `design/art/colony/out/proof/`), due
+13:30Z; stall watcher armed on `design/art/colony/out`. Task 4.3 serialises after PR-5's `ColonyGrounds.tsx` commit.
 
 ### Task 4.1: C1 — the base plate
 
@@ -303,6 +334,10 @@ total) that the lead reads; a 15-min stall is reported to the PM.
 **Branch:** `ws10-grounds-pr5` off `ws10-visual` once PR-2 (#603) is in. **Scaffold:** `design/mocks/colony-grounds/tv-beat.html`
 (the full-screen canvas, header, caption) + `src/look/Living.tsx` (the lean-in). **Named edits:** `TableApp.tsx::TvGame`'s
 upkeep route and `components/Colony.tsx::useMonthEndDrift` (WS4's OK by SHA). WS4 measures TV-FIT ≥ 0.7, six seats.
+
+**Status (7 Nov):** dispatched; branch `ws10-grounds-pr5` (base e22e9244 + pr2 4809efaa + mounts 2c76e51a). Tasks
+5.1–5.4 pushed, red before green: 5.1 b7634d51→d927484e, 5.2 befc8a8f→6f3007dd, 5.3 068fca7c→d95cd2a7, 5.4 C7
+333c3c81→4670e715, C9 8037c71c→4900f399. WS4's named-edit OK pending (diff `2c76e51a..4900f399`). 5.5 next.
 
 ### Task 5.1: T-AC-7 — RULE-5
 

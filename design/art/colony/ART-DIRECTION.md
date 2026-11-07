@@ -72,10 +72,14 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
   texture noise: at TV size a place is ~300 px wide, so a window frame is 1 px. Readable at 400 px wide or it is cut.
 - Every building must be **recognisable by silhouette alone** at the phone's 200 px place width.
 
-## 6. The ground — the world map's painter
+## 6. The ground — a rendered base plate (spec AM-7; supersedes the world map's painter)
 
-- The grounds' land (around and between the places) is painted by `packages/ui/src/terrain` with a grounds palette:
-  paved plaza, lawn, gravel paths, the planet's terrain fading out at the edge. No black void, no flat brown.
+- The grounds' land is one **base plate** rendered in this same camera and sun: ground, grass and dirt, paths, kit
+  vegetation, the unbuilt places as graded ground, a vignette at the edge; day, dusk and glow. No black void, no flat
+  brown, no SVG ground or cone trees once a plate is in the manifest.
+- Buildings are rendered **flush** (no raised slab) over a Cycles **shadow-catcher** plane, so each layer carries its
+  own contact shadow onto the plate; shadows cast onto a neighbouring building are dropped.
+- The bar is look.html's whole-colony render, framed as tightly; the TV gets @1600 variants.
 - A free place reads as **"room to grow"**: rough graded ground with a few survey stakes — never empty paving.
 - No "next place" outline: the grounds cannot know it without computing WS7's rule (spec AM-4).
 
