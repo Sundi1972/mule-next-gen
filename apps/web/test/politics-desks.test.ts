@@ -864,14 +864,13 @@ describe('the Colony desk (C11, H-5, A-3)', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === '/art/colony/manifest.json' ? new Response(manifest) : new Response('', { status: 404 }))));
     await loadGroundsManifest();
     vi.unstubAllGlobals();
-    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'standing', cost: { credits: 900, goods: {} }, funded: { credits: 900, goods: {} }, buildMonths: 1, monthsLeft: null, plot: null, prestige: 2, upkeep: 30, repairCost: null, plaque: [] };
+    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'standing', cost: { credits: 900, goods: {} }, funded: { credits: 900, goods: {} }, buildMonths: 1, monthsLeft: null, place: { x: 1, y: 2, w: 1, h: 1 }, prestige: 2, upkeep: 30, repairCost: null, plaque: [] };
     const colony: ColonyView = {
       gauges: { wealth: 26_400, environment: 34, prestige: 2, happiness: 64, band: 'content' },
       lastGauges: null,
       fund: 840,
       ledger: null,
-      // As WS7's view will carry it: the Park's block on the grounds (AM-18).
-      projects: [Object.assign({}, park, { place: { x: 1, y: 2, w: 1, h: 1 } })],
+      projects: [park],
       catalogue: [],
       score: null,
     };
