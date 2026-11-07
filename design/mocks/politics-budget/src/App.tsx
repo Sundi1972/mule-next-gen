@@ -21,7 +21,8 @@ import { frameSlots, OpenDesk } from './slots';
 /** The key decisions, one line each. */
 const DECISIONS: [string, string][] = [
   ['P12', 'The budget sits in the Governor desk right under the tax, before the law picker: the tax fills the fund, the budget spends it.'],
-  ['P12', 'Each line says what it pays at today’s fund and where it goes (“432 cr toward the Observatory”, “54 cr to Kai, last on Worth”: §3’s worked example, 540 cr spare). At Welfare 0% it says who it would go to.'],
+  ['P12', 'Each line says what it pays at today’s fund (§3’s worked example, 540 cr spare): “54 cr to Kai, last on Worth”; at Welfare 0% who it would go to.'],
+  ['P12', 'Projects is a ceiling, not a payment (AM-7): “up to 432 cr · the Observatory still needs 350 cr and 2 Crystite”; Kept reads “54 cr, and what the buildings don’t take”, so at upkeep 82 more stays.'],
   ['P12', 'Welfare’s + takes from what is kept, then from Projects; Projects’ + takes only from what is kept; − always gives back to the fund. So no sum can pass 100.'],
   ['P12', 'Commissioning moves under the Projects line, the real Commission unchanged; the Colony desk no longer shows it.'],
   ['P12', 'A call freezes the tax only (S5-RULE-2 in RC): the tax row turns read-only with who called it; the budget stays live.'],
@@ -33,8 +34,8 @@ const DECISIONS: [string, string][] = [
   ['P13', 'The ready bar: “Cast my vote” until you cast, then “Waiting for the overrule vote”; in the reveal, “Continue” (AM-5).'],
   ['P14', 'The TV’s planning header gains the budget line under the promise line. The call’s banner heads the side column, above who the table waits for: in the header it shrank the body to 0.763 (TV-FIT), in the side the news gives way and it stays at 0.896.'],
   ['P14', 'The overrule panel is TvCouncil’s frame. Its reveal bar is all the table’s votes with the mark at “needed”, not the half-way mark the law’s bar uses: the rules differ.'],
-  ['P15', 'On the phone the colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 432. Out only.'],
-  ['P15', 'The TV shows the total only, at every seat count (PM ruling 7 Nov, on the measured 0.663 vs 0.701): “fund 154 cr · paid out 581” in the Wealth gauge’s note.'],
+  ['P15', 'On the phone the colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 350 (the Observatory’s need, under the 432 ceiling). Out only.'],
+  ['P15', 'The TV shows the total only, at every seat count (PM ruling 7 Nov, on the measured 0.663 vs 0.701): “fund 236 cr · paid out 499” in the Wealth gauge’s note.'],
 ];
 
 interface StateDef {

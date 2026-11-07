@@ -1,4 +1,6 @@
+import type { Good } from '@mule/engine';
 import type { BudgetView, MuleView, OverruleView } from '@mule/protocol';
+import { GOOD_NAME } from '@mule/ui';
 
 /*
  * GRAFT TARGET: apps/web/src/phone/hub/politics/words.ts. The words every P12–P15 screen shares, so the phone, the TV and
@@ -12,16 +14,39 @@ export const LINE_NAME: Record<LineId, string> = { projects: 'Projects', welfare
 /** "432 cr": a share's credits at today's fund (budgetCredits), as §3's worked example states them (AM-5). */
 export const about = (credits: number) => `${credits.toLocaleString('en')} cr`;
 
-/** Where a line's money goes, in a few words: "toward the Observatory", "to Kai, last on Worth". */
-export function lineGoes(line: LineId, view: Pick<MuleView, 'players' | 'colony'>, welfareTo: string | null, credits: number): string {
-  if (credits === 0) return line === 'welfare' ? 'nothing this month' : 'nothing to buildings';
-  if (line === 'welfare') {
-    const to = view.players.find((p) => p.id === welfareTo)?.name;
-    return to ? `to ${to}, last on Worth` : 'to whoever is last on Worth';
-  }
-  const open = (view.colony?.projects ?? []).filter((p) => p.stage === 'commissioned' || p.stage === 'building');
-  return open.length === 0 ? 'for the next building commissioned' : `toward the ${open.map((p) => p.name).join(', then the ')}`;
+/** "a, b and c". */
+const and = (parts: string[]) => (parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`);
+
+/** Each open building and what it still needs, in commission order, from the colony view's cost and funded (AM-7). */
+export function stillNeeds(view: Pick<MuleView, 'colony'>): string[] {
+  return (view.colony?.projects ?? [])
+    .filter((p) => p.stage === 'commissioned')
+    .map((p) => {
+      const credits = p.cost.credits - p.funded.credits;
+      const goods = (Object.entries(p.cost.goods) as [Good, number][]).map(([g, n]) => [g, n - (p.funded.goods[g] ?? 0)] as const).filter(([, n]) => n > 0);
+      const parts = [...(credits > 0 ? [about(credits)] : []), ...goods.map(([g, n]) => `${n} ${GOOD_NAME[g]}`)];
+      return parts.length ? `the ${p.name} still needs ${and(parts)}` : `the ${p.name} has all it needs`;
+    });
 }
+
+/**
+ * A line's words after its share, the same on every screen: "up to 432 cr · the Observatory still needs 350 cr and 2
+ * Crystite" (AM-7: the Projects share is a ceiling; each building takes only what it still needs), "54 cr to Kai, last
+ * on Worth".
+ */
+export function lineWords(line: LineId, view: Pick<MuleView, 'players' | 'colony'>, welfareTo: string | null, credits: number): string {
+  if (line === 'welfare') {
+    if (credits === 0) return 'nothing this month';
+    const to = view.players.find((p) => p.id === welfareTo)?.name;
+    return `${about(credits)} ${to ? `to ${to}, last on Worth` : 'to whoever is last on Worth'}`;
+  }
+  if (credits === 0) return 'nothing to buildings';
+  const needs = stillNeeds(view);
+  return `up to ${about(credits)} · ${needs.length ? needs.join(' · ') : 'no building is waiting'}`;
+}
+
+/** The kept line's words (AM-7): what the share keeps, and what the buildings don't take stays too. */
+export const keptWords = (credits: number) => (credits > 0 ? `${about(credits)}, and what the buildings don’t take` : 'what the buildings don’t take');
 
 /** "Welfare 0% → 10%" when a line moved this month; just "Welfare 10%" when it didn't. */
 export const shareChange = (start: number, share: number) => (start === share ? `${share}%` : `${start}% → ${share}%`);

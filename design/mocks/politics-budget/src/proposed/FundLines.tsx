@@ -16,14 +16,14 @@ import { fmt, toSlot } from '../../../../../apps/web/src/game/derive';
  *
  * The TV: the TV shows the total only, at every seat count (PM ruling 7 Nov, on the measured 0.663 vs 0.701): the full
  * line took the month end under TV-FIT's 0.7 floor, the total in the Wealth gauge's note costs nothing. FundPaidNote,
- * "fund 154 cr · paid out 581". GRAFT TARGET: apps/web/src/components/Colony.tsx, ColonyGauges, the Wealth gauge's `note`
+ * "fund 236 cr · paid out 499". GRAFT TARGET: apps/web/src/components/Colony.tsx, ColonyGauges, the Wealth gauge's `note`
  * at size 'tv' in the month end. The gauges in every other phase, and on the phone, keep "fund N cr".
  */
 
 /** What the fund paid out this month, in all: the ledger's out lines summed. */
 export const paidOut = (view: Pick<MuleView, 'colony'>) => Object.values(view.colony?.ledger?.out ?? {}).reduce((n, v) => n + (v ?? 0), 0);
 
-/** The TV month end's Wealth note: "fund 154 cr · paid out 581". */
+/** The TV month end's Wealth note: "fund 236 cr · paid out 499". */
 export function FundPaidNote({ view }: { view: MuleView }) {
   if (!view.colony?.ledger) return null;
   return (
@@ -36,7 +36,7 @@ export function FundPaidNote({ view }: { view: MuleView }) {
 const OUT_ORDER: FundLine[] = ['officePay', 'upkeep', 'repair', 'strikePay', 'welfare', 'project'];
 const OUT_NAME: Partial<Record<FundLine, string>> = { officePay: 'office pay', upkeep: 'upkeep', repair: 'repairs', strikePay: 'strike pay', welfare: 'Welfare', project: 'Buildings' };
 
-/** The phone's full line: "Paid out this month: office pay 80, upkeep 15, Welfare 54 → Kai, Buildings 432". */
+/** The phone's full line: "Paid out this month: office pay 80, upkeep 15, Welfare 54 → Kai, Buildings 350". */
 export function FundLines({ view }: { view: MuleView }) {
   const ledger = view.colony?.ledger;
   if (!ledger) return null;

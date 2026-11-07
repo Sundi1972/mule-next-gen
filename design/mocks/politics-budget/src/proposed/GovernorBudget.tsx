@@ -9,7 +9,7 @@ import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { COLONY } from '@mule/engine';
 import { creditsOf, type RcLine, type Shares } from '../fixture';
 import { DraftSeed } from '../seed';
-import { about, LINE_NAME, lineGoes } from './words';
+import { keptWords, LINE_NAME, lineWords } from './words';
 
 /*
  * P12 · the Governor's budget. GRAFT TARGET: apps/web/src/phone/hub/politics/Governor.tsx, right under SalesTax and
@@ -113,7 +113,7 @@ interface Editor {
   onChange(s: Shares): void;
 }
 
-/** "432 cr toward the Observatory", "54 cr to Kai, last on Worth": what a share pays, and where. At Welfare 0%, who it would go to (AM-5). */
+/** "up to 432 cr · the Observatory still needs 350 cr and 2 Crystite", "54 cr to Kai, last on Worth" (AM-7). At Welfare 0%, who it would go to (AM-5). */
 function Pays({ view, budget, id, share, className }: { view: MuleView; budget: BudgetView; id: RcLine; share: number; className?: string }) {
   const credits = creditsOf(id, share, view.politics!.fund);
   const to = view.players.find((p) => p.id === budget.welfareTo)?.name;
@@ -125,7 +125,7 @@ function Pays({ view, budget, id, share, className }: { view: MuleView; budget: 
     );
   return (
     <span className={cx('min-w-0 text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm', className)} data-testid={`budget-pays-${id}`}>
-      {credits === 0 ? lineGoes(id, view, budget.welfareTo, 0) : `${about(credits)} ${lineGoes(id, view, budget.welfareTo, credits)}`}
+      {lineWords(id, view, budget.welfareTo, credits)}
     </span>
   );
 }
@@ -180,7 +180,7 @@ function Steppers({ view, budget, draft, kept, onChange, line }: Editor & { line
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-1.5 border-t border-holo-faint pt-1" data-testid="budget-line-kept">
         <span className="flex min-w-0 flex-col">
           <span className="text-xs font-semibold @min-[1100px]/shell:text-base">Kept in the fund</span>
-          <span className="truncate text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm">{kept > 0 ? `${about(keptCredits(view, kept))} stays for later months` : 'nothing kept back this month'}</span>
+          <span className="text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm">{keptWords(keptCredits(view, kept))}</span>
         </span>
         {/* Under the steppers' value: right of it sit the + button and its gap, 10 + 1 spacing units. */}
         <span data-num className="mr-11 w-12 text-center font-mono text-lg font-bold leading-none text-ink-2 @min-[1100px]/shell:mr-12 @min-[1100px]/shell:w-16 @min-[1100px]/shell:text-2xl" data-testid="budget-share-kept">
@@ -285,9 +285,9 @@ function SplitBar({ view, budget, draft, kept, onChange }: Editor) {
                 )}
               </span>
               {p.id === 'kept' ? (
-                <span className="truncate text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm">{kept > 0 ? `${about(keptCredits(view, kept))} stays for later months` : 'nothing kept back this month'}</span>
+                <span className="text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm">{keptWords(keptCredits(view, kept))}</span>
               ) : (
-                <Pays view={view} budget={budget} id={p.id} share={p.share} className="truncate" />
+                <Pays view={view} budget={budget} id={p.id} share={p.share} />
               )}
             </span>
             <span data-num className="font-mono text-sm font-bold @min-[1100px]/shell:text-lg" data-testid={`budget-share-${p.id}`}>

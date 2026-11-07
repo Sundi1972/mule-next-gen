@@ -216,9 +216,9 @@ function colonyView(scene: Scene): ColonyView {
   const catalogue = (Object.keys(PRESTIGE) as PrestigeId[]).map((id) => {
     const p = PRESTIGE[id];
     const open = id === 'park' || id === 'observatory';
-    return { id, name: p.name, credits: id === 'observatory' ? OBSERVATORY.credits : p.credits, goods: p.goods, buildMonths: p.buildMonths, prestige: p.prestige, upkeep: p.upkeep, commissionable: !open, why: open ? 'Already commissioned' : null };
+    return { id, name: p.name, credits: p.credits, goods: p.goods, buildMonths: p.buildMonths, prestige: p.prestige, upkeep: p.upkeep, commissionable: !open, why: open ? 'Already commissioned' : null };
   });
-  const obs = { ...PRESTIGE.observatory, ...OBSERVATORY };
+  const obs = PRESTIGE.observatory;
   const monthEnd = scene.moment === 'monthEnd';
   return {
     gauges: { wealth: 18_400, environment: 31, prestige: 2, happiness: 58, band: 'content' },
@@ -232,7 +232,8 @@ function colonyView(scene: Scene): ColonyView {
       },
       {
         id: 'observatory', name: obs.name, stage: 'commissioned', cost: { credits: obs.credits, goods: obs.goods },
-        funded: { credits: monthEnd ? MONTH_END.out.project : 0, goods: obs.goods }, buildMonths: obs.buildMonths, monthsLeft: null,
+        // Nothing funded yet; at the month end its credits, not its Crystite: the store has none (AM-7's worked example).
+        funded: { credits: monthEnd ? MONTH_END.out.project : 0, goods: {} }, buildMonths: obs.buildMonths, monthsLeft: null,
         place: null, prestige: obs.prestige, upkeep: obs.upkeep, repairCost: null, plaque: [{ playerId: 'brix', value: 70 }],
       },
     ],
@@ -244,22 +245,29 @@ function colonyView(scene: Scene): ColonyView {
 }
 
 /**
- * The Observatory's credits as WS7 gives them (AM-5, via the PM: 700 cr, so all of Projects' 432 goes to it). Trunk's
- * config.ts PRESTIGE.observatory says 350 cr (feat/strategist and ws7-politics-rc alike): a fixture value until they agree.
+ * Month 5's upkeep (moment 5), run by S5-RULE-3 on §3's worked example (AM-5, AM-7), not written by hand: after the
+ * grant, office pay (80) and the Park's upkeep (15) the fund holds 640, so spare0 540. Welfare 10% pays 54 → Kai.
+ * Projects 80% is a ceiling of 432: the one open building, the Observatory (config: 350 cr and 2 Crystite, nothing
+ * funded), takes the 350 cr it still needs and no Crystite, since the store has none; the other 82 stay, with the 54
+ * kept. `start` is fixture only: no screen shows it.
  */
-export const OBSERVATORY = { credits: 700 } as const;
-
-/**
- * Month 5's upkeep (moment 5), on §3's worked example as the planning desk shows it (AM-5): after the grant, office pay
- * and the Park's upkeep the fund holds 640, so 540 spare (S5-RULE-3); Welfare 10% is 54 → Kai, Projects 80% is 432,
- * all of it to the Observatory ("Buildings 432"); 10% stays. `start` is fixture only: no screen shows it.
- */
-export const MONTH_END = {
-  start: FUND - 200 + 80 + 15,
-  in: { grant: 200 },
-  out: { officePay: 80, upkeep: 15, welfare: 54, project: 432 },
-  balance: FUND - 54 - 432,
-} as const;
+function upkeep() {
+  const officePay = 80;
+  const parkUpkeep = PRESTIGE.park.upkeep;
+  const afterObligations = FUND;
+  const welfare = creditsOf('welfare', SET.welfare, afterObligations);
+  const limit = creditsOf('projects', SET.projects, afterObligations);
+  // Step 3c: commission order, each building only what it still needs; goods only as the store can sell them (none).
+  const project = Math.min(limit, PRESTIGE.observatory.credits);
+  return {
+    start: afterObligations - 200 + officePay + parkUpkeep,
+    in: { grant: 200 },
+    out: { officePay, upkeep: parkUpkeep, welfare, project },
+    limit,
+    balance: afterObligations - welfare - project,
+  };
+}
+export const MONTH_END = upkeep();
 
 /** The news lines a call, a withdrawal and the result add (S5-C7), none naming a voter (§3.4). */
 function newsOf(scene: Scene): string[] {

@@ -1,7 +1,8 @@
+import { COLONY } from '@mule/engine';
 import { cx } from '@mule/ui';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { Who } from '../../../../../apps/web/src/phone/hub/politics/parts';
-import { about, LINE_NAME, lineGoes, shareChange } from './words';
+import { keptWords, LINE_NAME, lineWords, shareChange } from './words';
 
 /*
  * P13 · the budget as set, for every seat (moment 1). GRAFT TARGET: apps/web/src/phone/hub/politics/Council.tsx,
@@ -40,7 +41,7 @@ export function CouncilBudget() {
                 {shareChange(l.start, l.share)}
               </span>
               <span className="col-span-2 text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm" data-testid={`council-budget-pays-${l.line}`}>
-                {l.credits === 0 ? lineGoes(l.line, view, budget.welfareTo, 0) : `${about(l.credits)} ${lineGoes(l.line, view, budget.welfareTo, l.credits)}`}
+                {lineWords(l.line, view, budget.welfareTo, l.credits)}
               </span>
             </li>
           );
@@ -49,6 +50,9 @@ export function CouncilBudget() {
           <span className="text-xs text-ink-2 @min-[1100px]/shell:text-base">Kept in the fund</span>
           <span data-num className={cx('whitespace-nowrap font-mono text-xs font-bold @min-[1100px]/shell:text-base', keptStart === budget.kept ? 'text-ink-2' : 'text-holo')} data-testid="council-budget-share-kept">
             {shareChange(keptStart, budget.kept)}
+          </span>
+          <span className="col-span-2 text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm" data-testid="council-budget-kept-words">
+            {keptWords(Math.floor((budget.kept * Math.max(0, politics.fund - COLONY.reserve)) / 100))}
           </span>
         </li>
       </ul>
