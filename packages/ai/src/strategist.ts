@@ -485,7 +485,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
-const ENERGY_FIRST = 'no Energy plant of my own yet';
+export const ENERGY_FIRST = 'no Energy plant of my own yet';
 
 /** STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. */
 function energyFirst(cands: Candidate<DevAction>[]): void {

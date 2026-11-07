@@ -38,7 +38,7 @@ import { installable } from '../floor-time.js';
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
 import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
+import { analysesWanted, developDecision, ENERGY_FIRST, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, chainInputs, chainOf, chainOutlook, installGain, linkShare, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
@@ -371,8 +371,14 @@ function shoreless(obs: GameState, mind: Mind, list: Shortlist<DevAction>, floor
   if (!floor) return list;
   const dry = (a: DevAction): a is Extract<DevAction, { kind: 'install' }> => a.kind === 'install' && obs.tiles[a.index]!.terrain === 'lake' && !installable(obs, floor, mind.me, a.index);
   if (!list.all.some((c) => !c.veto && dry(c.action))) return list;
-  const all = list.all.map((c) => (!c.veto && dry(c.action) ? candidate(c.key, c.label, c.action, c.value, c.considerations, `lake: no shore reaches plot ${c.action.index}`) : c));
-  const left = all.some((c) => !c.veto) ? all : decided.all.filter((c) => c.action.kind === 'stop');
+  // Energy first holds only while an Energy install is allowed; with the floor's lakes out, none may be, so its
+  // vetoes come off first and the seat's other installs, and "Keep the cash", are judged as if it never fired.
+  type Cand = (typeof list.all)[number];
+  const plant = (c: Cand) => !c.veto && c.action.kind === 'install' && c.action.outfit === 'energy' && !dry(c.action);
+  const lift = (c: Cand) => (c.veto === ENERGY_FIRST ? candidate(c.key, c.label, c.action, c.value, c.considerations) : c);
+  const judged = list.all.some(plant) ? list.all : list.all.map(lift);
+  const all = judged.map((c) => (!c.veto && dry(c.action) ? candidate(c.key, c.label, c.action, c.value, c.considerations, `lake: no shore reaches plot ${c.action.index}`) : c));
+  const left = all.some((c) => !c.veto) ? all : decided.all.filter((c) => c.action.kind === 'stop').map(lift);
   return shortlist(left, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
