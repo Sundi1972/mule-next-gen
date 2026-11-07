@@ -12,6 +12,7 @@ import {
   monthNeeds,
   MS_PER_SECOND,
   MULE,
+  mulePrice,
   mulePriceFor,
   needsOf,
   observe,
@@ -348,17 +349,24 @@ function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): stri
 /**
  * Where MULEs come from, as upkeep builds them (upkeep.ts): the corral now and this month's price to the seat; the
  * store's Smithore, and what the next upkeep builds from it, filling the corral back to corralTarget at
- * MULE.smithorePerMule each, whether the corral sells out or sells none.
+ * MULE.smithorePerMule each, whether the corral sells out or sells none. Then what each MULE counts for in Worth:
+ * mulePrice, as scoreParts counts every outfitted plot.
  */
 function muleLine(obs: GameState, me: PlayerId): string {
-  const { mules } = obs.store;
+  const { mules, muleFactor } = obs.store;
   const smithore = obs.store.stock.smithore;
   const target = corralTarget(obs.players.length);
   const buildable = Math.floor(smithore / MULE.smithorePerMule);
+  const owned = obs.tiles.filter((t) => t.owner === me && t.outfit).length;
+  // literal-ok: the factor shown to two decimal places, display only
+  const factor = Math.round(muleFactor * 100) / 100;
   return (
     `MULEs: ${mules} in the corral, at ${mulePriceFor(obs, me)} cr each to you this month. ` +
     `The store holds ${smithore} Smithore; at the next upkeep it builds MULEs to fill the corral back to ${target}, ${MULE.smithorePerMule} Smithore each: ` +
-    `on its Smithore today, ${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none (the auction and a ship that takes Smithore can change that).`
+    `on its Smithore today, ${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none (the auction and a ship that takes Smithore can change that). ` +
+    `Each MULE you own (${owned} now) counts in your Worth at the store's MULE price, now ${mulePrice(obs)} cr: ` +
+    `(${MULE.labour} labour + ${MULE.smithorePerMule} Smithore × the posted Smithore price ${obs.store.posted.smithore}) × the store's factor ${factor}. ` +
+    "At the game's end each counts at that day's price, which rises and falls with Smithore's price."
   );
 }
 
