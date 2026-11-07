@@ -49,13 +49,12 @@ const TAG_LENGTH = 6; // literal-ok: an id tag is six characters, a format not a
 const MIN_PRICE = 1; // literal-ok: a posted price is at least one credit (S4-RULE-4), a floor of the unit and not a balance number
 const PER_SECURITY = 100; // literal-ok: Security is counted in hundreds of credits (S4-RULE-3), a unit and not a balance number
 
-/** 'sab-' plus six base-36 characters, drawn from a stream seeded by the game and the order's number only; a clash redraws (AM-1). */
-function newId(state: GameState, taken: readonly SabotageOrder[]): string {
-  const n = taken.length + 1;
-  for (let attempt = 0; ; attempt++) {
-    const rng = createRng(seedOf(state.seed, n, 'sab', ...(attempt === 0 ? [] : [String(attempt)])));
+/** 'sab-' plus six base-36 characters, drawn from a stream seeded by the game, the order's month and its orderer only; a clash with any id issued redraws from the same stream (AM-4). */
+function newId(state: GameState, issued: readonly SabotageOrder[], by: string): string {
+  const rng = createRng(seedOf(state.seed, state.month, by, 'sab'));
+  for (;;) {
     const tag = Array.from({ length: TAG_LENGTH }, () => rng.int(0, BASE_36 - 1).toString(BASE_36)).join('');
-    if (!taken.some((o) => o.id === `sab-${tag}`)) return `sab-${tag}`;
+    if (!issued.some((o) => o.id === `sab-${tag}`)) return `sab-${tag}`;
   }
 }
 
@@ -81,12 +80,16 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
     const tile = state.tiles[target.tile];
     if (!tile || tile.owner === null || tile.owner === playerId) throw new RuleError("Pick another player's plot");
     if (!(GOODS as readonly string[]).includes(tile.outfit ?? '')) throw new RuleError('That plot makes nothing to cut');
-  } else if (!(GOODS as readonly string[]).includes(target.good)) throw new RuleError('Pick a good');
+  } else {
+    if (!(GOODS as readonly string[]).includes(target.good)) throw new RuleError('Pick a good');
+    if (target.dir !== 'up' && target.dir !== 'down') throw new RuleError('A rumour moves a price up or down');
+  }
   const { cost } = orderTerms(state)[target.kind];
   const money = player(state, playerId).money;
   if (money < cost) throw new RuleError(`A crew costs ${cost} cr; you have ${money}`);
   const kept = state.politics!.sabotage.filter((o) => o !== old);
-  const order: SabotageOrder = { id: newId(state, kept), by: playerId, month: state.month, target: { ...target }, cost, outcome: 'pending', culpritPublic: false };
+  const known: SabotageTarget = target.kind === 'powerCut' ? { kind: 'powerCut', tile: target.tile } : { kind: 'rumour', good: target.good, dir: target.dir };
+  const order: SabotageOrder = { id: old?.id ?? newId(state, kept, playerId), by: playerId, month: state.month, target: known, cost, outcome: 'pending', culpritPublic: false };
   edit(state).sabotage = [...kept, order];
 }
 
