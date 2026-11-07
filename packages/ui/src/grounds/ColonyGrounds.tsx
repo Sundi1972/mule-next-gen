@@ -4,13 +4,13 @@ import { useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
 import { framedBox, topOf, type Framing } from './framing';
-import { Glow, WalkingScene } from './LiveLayer';
+import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
-import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState } from './pick';
+import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
 import { iso, poly, square, W } from './projection';
 
-export type { Frame, GroundsManifest, Light, PictureStage } from './pick';
+export type { Frame, GroundsManifest, Light, PictureStage, PlateEntry, PlateExtent, PlateFrame } from './pick';
 export type { Framing } from './framing';
 export { GroundsOpener, useGroundsOpener, type OpenerState } from './GroundsOpener';
 
@@ -106,14 +106,27 @@ function Callout({ n, p, c, r, words }: { n: number; p: GroundsProject; c: numbe
 
 const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonths: 1 };
 
+/** A plate placed so its hall pixel sits on the hall's centre, at the pictures' scale (`frame.place` px a place). */
+function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
+  const [x, y] = iso(0, 0);
+  const k = W / place;
+  return { x: x - frame.hall[0] * k, y: y - frame.hall[1] * k, width: frame.width * k, height: frame.height * k };
+}
+
 /**
- * The grounds as one SVG, back to front (painter's order): the land and plaza sized to the rings in use, the far edge's
- * trees, the hall and the places by col + row so nearer buildings cover farther ones (each with its glow at dusk), with
- * the colonists on the paths sorted in among them, the near edge, then the callouts.
+ * The grounds as one SVG, back to front (painter's order): the base plate for the rings in use (AM-7), or without one
+ * the SVG land and plaza and the far edge's trees; the hall and the places by col + row so nearer buildings cover
+ * farther ones (each with its glow at dusk), with the colonists on the paths sorted in among them; without a plate the
+ * near edge; then the callouts.
  */
 export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
+  const [failedPlates, setFailedPlates] = useState<ReadonlySet<string>>(() => new Set());
+  const entry = manifest?.plate?.[R <= 1 ? '3' : '5'];
+  const named = manifest && entry ? { href: hrefOf(entry[light], manifest, size), glow: entry.glow && hrefOf(entry.glow, manifest, size), box: plateBox(entry, manifest.frame) } : null;
+  // A plate that fails to load leaves the grounds as they are without one, never blank (HC-3).
+  const plate = named && !failedPlates.has(named.href) ? named : null;
   const inBack = (a: { col: number; row: number }, b: { col: number; row: number }) => a.col + a.row - (b.col + b.row);
   const scene = [{ n: 0, col: 0, row: 0, p: undefined as GroundsProject | undefined, block: undefined as GridPlace | undefined }, ...placed].sort(inBack);
   const mood = colony.gauges.happiness ?? 0;
@@ -125,9 +138,12 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   // Bare until something stands: each building standing plants three more along the edge.
   const edge = edgeDecoration(R + 0.85).slice(0, Math.min(4 * (2 * R + 2), standing * 3));
   const prop = (d: EdgeProp, k: string) => (d.kind === 'tree' ? <Tree key={k} c={d.col} r={d.row} /> : <Lamp key={k} c={d.col} r={d.row} on={mood >= 50} />);
+  const plateArea = plate && { x: plate.box.x, y: plate.box.y, w: plate.box.width, h: plate.box.height };
   const vb = framing
-    ? framedBox(framing, R, scene.map(({ p, col, row }) => topOf(p?.id ?? 'hall', col, row, manifest)))
-    : { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W };
+    ? framedBox(framing, R, scene.map(({ p, col, row }) => topOf(p?.id ?? 'hall', col, row, manifest)), plateArea)
+    : (plateArea ?? { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W });
+  // The plate's lamps light as a standing building's do (RULE-2).
+  const plateGlow = glowOpacity({ light, stage: 'standing', wealth: colony.gauges.wealth });
 
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
@@ -152,17 +168,26 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
       data-testid="colony-grounds"
       data-extent={R}
     >
-      <polygon points={poly(ground)} fill="var(--color-map-base)" stroke="var(--color-holo-line)" />
-      <polygon points={poly(ground)} fill="var(--color-t-desert)" />
-      <polygon points={poly(ground)} fill="var(--color-t-plains)" opacity={0.3 + paved * 0.7} />
-      <polygon points={poly(plaza)} fill="var(--color-t-desert)" stroke="var(--color-holo-line)" strokeWidth={1.2} />
-      <polygon points={poly(plaza)} fill="var(--color-t-store)" opacity={paved} data-testid="paving" />
-      {paved > 0 &&
-        Array.from({ length: 2 * R }, (_, k) => k - R + 0.5).flatMap((k) => [
-          <polyline key={`gc${k}`} points={poly([iso(k, -R - 0.55), iso(k, R + 0.55)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
-          <polyline key={`gr${k}`} points={poly([iso(-R - 0.55, k), iso(R + 0.55, k)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
-        ])}
-      {edge.filter((d) => d.col + d.row < 0).map((d, i) => prop(d, `b${i}`))}
+      {plate ? (
+        <>
+          <image href={plate.href} {...plate.box} data-testid="plate" onError={() => setFailedPlates((failed) => new Set(failed).add(plate.href))} />
+          {plate.glow && plateGlow > 0 && <Glow key={plate.glow} href={plate.glow} opacity={plateGlow} box={plate.box} testid="glow-plate" />}
+        </>
+      ) : (
+        <>
+          <polygon points={poly(ground)} fill="var(--color-map-base)" stroke="var(--color-holo-line)" />
+          <polygon points={poly(ground)} fill="var(--color-t-desert)" />
+          <polygon points={poly(ground)} fill="var(--color-t-plains)" opacity={0.3 + paved * 0.7} />
+          <polygon points={poly(plaza)} fill="var(--color-t-desert)" stroke="var(--color-holo-line)" strokeWidth={1.2} />
+          <polygon points={poly(plaza)} fill="var(--color-t-store)" opacity={paved} data-testid="paving" />
+          {paved > 0 &&
+            Array.from({ length: 2 * R }, (_, k) => k - R + 0.5).flatMap((k) => [
+              <polyline key={`gc${k}`} points={poly([iso(k, -R - 0.55), iso(k, R + 0.55)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
+              <polyline key={`gr${k}`} points={poly([iso(-R - 0.55, k), iso(R + 0.55, k)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
+            ])}
+          {edge.filter((d) => d.col + d.row < 0).map((d, i) => prop(d, `b${i}`))}
+        </>
+      )}
       <WalkingScene
         scene={scene.map(({ n, p, block, col: c, row: r }) => ({
           depth: c + r,
@@ -179,7 +204,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
       />
-      <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>
+      {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
       {chips &&
         placed.sort(inBack).map(({ n, p, col, row }) => (
           <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />

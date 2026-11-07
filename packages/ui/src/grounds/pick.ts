@@ -22,11 +22,28 @@ export interface Frame {
 /** A kind's pictures by stage; a kind taller than the shared frame carries its own (spec AM-1). */
 export type KindPictures = Partial<Record<PictureStage, ManifestEntry>> & { frame?: Frame };
 
-/** `apps/web/public/art/colony/manifest.json`. Picture paths are relative to the art folder. */
+/** A base plate's camera frame, at the pictures' scale: its size and the hall's centre pixel. */
+export interface PlateFrame {
+  width: number;
+  height: number;
+  hall: [number, number];
+}
+
+/** One base plate (spec AM-7): the ground, paths, planting and vignette under every building, in each light. */
+export interface PlateEntry extends ManifestEntry {
+  frame: PlateFrame;
+}
+
+/** RULE-4's extent as a plate key: "3" covers the hall's ring, "5" the whole grid. */
+export type PlateExtent = '3' | '5';
+
+/** `apps/web/public/art/colony/manifest.json`. Picture and plate paths are relative to the art folder. */
 export interface GroundsManifest {
   frame: Frame;
   pictures: Partial<Record<string, KindPictures>>;
   sizes: number[];
+  /** Without it the grounds draw their SVG ground. */
+  plate?: Record<PlateExtent, PlateEntry>;
 }
 
 /** A place's state, as the colony view carries it. */
