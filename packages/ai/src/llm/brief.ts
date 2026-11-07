@@ -549,6 +549,8 @@ export function landBrief(
   last: LastPhase = {},
   /** The month's draft development: shown and offered too, so one write a month edits both (PM ruling, 5 Nov, option C). */
   development: DevelopmentPlay | null = null,
+  /** The plot the development was drafted as granted (route fix, afterGrant): its steps on it read as "granted". */
+  granted: number | null = null,
 ): LandBrief {
   const obs = observe(state, mind.me);
   const me = obs.players.find((p) => p.id === mind.me)!;
@@ -590,7 +592,7 @@ export function landBrief(
     'Your draft land grant:',
     ...draftLines(obs, draft.landGrant),
     '',
-    ...(development ? ['Your draft development:', ...developmentLines(obs, development), ''] : []),
+    ...(development ? ['Your draft development:', ...developmentLines(obs, development, granted), ''] : []),
     'What you may change:',
     ...changeLines(),
     ...(development ? DEV_CHANGES : []),
@@ -615,28 +617,32 @@ const DEV_CHANGES = [
 /** The phase the brief edits: the slack before it is when it is asked (RULE-A2 rows 3-4). */
 export type EditPhase = 'development' | 'auction';
 
-const ACT_TEXT = (obs: GameState) => (s: DevelopmentPlay['route'][number]): string => {
+const ACT_TEXT = (obs: GameState, granted: number | null) => (s: DevelopmentPlay['route'][number]): string => {
+  // A step on the plot drafted as granted (route fix): the seat gains it in the land grant, so it reads as the route
+  // names it, "granted", with the plot it is if the ranking's first is still free. In brackets: the route is a list of
+  // steps between commas, so no comma in a step.
+  const plot = (p: number | undefined) =>
+    p !== undefined && p === granted ? `"${GRANTED}" (the plot you gain in the land grant: plot ${p} if you get your ranking's first)` : `plot ${p}`;
   switch (s.act) {
     case 'buyMule':
       return 'buy a MULE';
     case 'outfit':
       return s.outfit ? `outfit it for ${s.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[s.outfit]}` : 'outfit it';
     case 'install':
-      // In brackets: the route is a list of steps between commas.
-      return `install it on plot ${s.plot}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${LAKE_MARK})` : ''}`;
+      return `install it on ${plot(s.plot)}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${LAKE_MARK})` : ''}`;
     case 'analyse':
-      return `analyse plot ${s.plot}`;
+      return `analyse ${plot(s.plot)}`;
     case 'filter':
-      return `filter plot ${s.plot}`;
+      return `filter ${plot(s.plot)}`;
     case 'pub':
       return 'the pub';
   }
 };
 
-function developmentLines(obs: GameState, d: DevelopmentPlay | undefined): string[] {
+function developmentLines(obs: GameState, d: DevelopmentPlay | undefined, granted: number | null = null): string[] {
   if (!d) return ['No development play is drafted.'];
   return [
-    `Route: ${d.route.length === 0 ? 'none' : d.route.map(ACT_TEXT(obs)).join(', ')}.`,
+    `Route: ${d.route.length === 0 ? 'none' : d.route.map(ACT_TEXT(obs, granted)).join(', ')}.`,
     `Time budget: ${Math.round(d.timeBudgetMs / MS_PER_SECOND)} s of your development time.`,
     `If the corral is sold out: ${d.ifSoldOut}.`,
   ];
