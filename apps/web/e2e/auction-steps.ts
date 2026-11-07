@@ -803,17 +803,22 @@ async function readTheNeedStop(cast: { seller: Phone; empty: Phone; others: Phon
     check(stock === need && mine(a)?.units === need, `B-AC-B1: the server holds ${seller.name} at her need of ${need}, got ${stock} (board ${mine(a)?.units})`);
     check(!a.deals.some((d) => d.seller === id), `B-AC-B1: once held ${seller.name} sells nothing`);
     await Promise.all(screens.map((s) => untilKeeps(s, id, `KEEPS ${need}`, `B-AC-B1: ${seller.name}'s walker is marked KEEPS ${need}`)));
-    // B-AC-C1 while held: the stop's hint leaves the Buy/Sell switch whole above the footer on the base phone.
-    const size = seller.page.viewportSize();
-    const covered = (await seller.page.evaluate(SWITCH_COVERED)) as string[];
-    check(covered.length === 0, `B-AC-C1: held, ${seller.name} can reach both sides of the switch at ${size?.width}×${size?.height}: ${covered.join('; ')}`);
+    // B-AC-C1 while held: the stop's hint leaves the Buy/Sell switch whole above the footer, on the base phone and a taller one.
+    const size = seller.page.viewportSize()!;
+    for (const at of [size, PHONE_WIDE]) {
+      await seller.page.setViewportSize(at);
+      const { radios, covered } = (await seller.page.evaluate(SWITCH_COVERED)) as { radios: number; covered: string[] };
+      check(radios === 2, `B-AC-C1: held, ${seller.name}'s walk shows the Buy/Sell switch at ${at.width}×${at.height}, found ${radios} radios`);
+      check(covered.length === 0, `B-AC-C1: held, ${seller.name} can reach both sides of the switch at ${at.width}×${at.height}: ${covered.join('; ')}`);
+    }
+    await seller.page.setViewportSize(size);
     // On the base phone held sideways the hint keeps to its line, ▼ saying the rest; a taller phone has the row for both.
     const stopped = `Stopped at ${need} Food: what you must hold.`;
     const base = await readText(seller.page, 'held');
     check(base === stopped, `B-AC-B1: on the base phone ${seller.name}'s rail says she stopped, got "${base}"`);
     await seller.page.setViewportSize(PHONE_WIDE);
     const words = await readText(seller.page, 'held');
-    await seller.page.setViewportSize(PHONE.viewport);
+    await seller.page.setViewportSize(size);
     check(words === `${stopped} To sell more, hold ▼: you’d be short next month.`, `B-AC-B1: on a taller phone ${seller.name}'s rail says she stopped and how to sell on, got "${words}"`);
     const down = await readText(seller.page, 'hold-down');
     check(down === '▼ Hold: sell short', `B-AC-B1: ${seller.name}'s ▼ is the hold that sells short, got "${down}"`);
@@ -1380,12 +1385,13 @@ async function smallPhoneReads(p: Phone, stage: 'status' | 'walk'): Promise<void
 const LONGEST_AI = AI_NAMES.reduce((a, b) => (b.length > a.length ? b : a));
 
 /**
- * In the page: each of the walk's Buy/Sell radios that something else covers, or that lies off screen, read at its
- * centre and 8 px in from each corner (inside its rounded corners): what a thumb finds there must be the radio itself.
+ * In the page: how many Buy/Sell radios the walk shows, and each that something else covers or that lies off screen,
+ * read at its centre and 8 px in from each corner (inside its rounded corners): what a thumb finds there must be the radio.
  */
 const SWITCH_COVERED = `(() => {
   const out = [];
-  for (const el of document.querySelectorAll('[data-phase=auction] [role=radio]')) {
+  const radios = document.querySelectorAll('[data-phase=auction] [role=radio]');
+  for (const el of radios) {
     const r = el.getBoundingClientRect();
     const points = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 8, r.top + 8], [r.right - 8, r.top + 8], [r.left + 8, r.bottom - 8], [r.right - 8, r.bottom - 8]];
     for (const [x, y] of points) {
@@ -1395,7 +1401,7 @@ const SWITCH_COVERED = `(() => {
       break;
     }
   }
-  return out;
+  return { radios: radios.length, covered: out };
 })()`;
 
 /** In the page: writes `name` over every other player's name in the status table and the board's names strip, keeping what was there. */
