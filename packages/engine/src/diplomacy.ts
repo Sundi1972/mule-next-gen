@@ -84,7 +84,11 @@ function ballotClosed(state: GameState, card: DealCard): boolean {
   const politics = state.politics!;
   if (state.month !== card.until) return state.month > card.until;
   if (card.terms.kind === 'vote' && 'office' in card.terms) return !electionOpen(politics);
-  return politics.council?.stage !== 'ballot';
+  if (politics.council) return politics.council.stage !== 'ballot';
+  // No council yet: a proposal from an earlier month still gets its ballot once this month's election is over.
+  const pending = politics.proposal;
+  const waiting = !!pending && pending.month < state.month && !!politics.election && politics.election.stage !== 'over';
+  return !waiting;
 }
 
 function sameBallot(a: DealCard, b: DealCard): boolean {
