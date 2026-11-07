@@ -1,11 +1,11 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
+import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeBuyPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock } from './types.js';
-import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
+import { houseLineAt, stepBoard, stepWalker, takeSide, topBid, tradePossible, type WalkMarket } from './walk.js';
 
 /**
  * The goods auction, played live as in the original M.U.L.E. Goods come up
@@ -45,6 +45,21 @@ function live(state: GameState): LiveAuction {
 export function storeSellLine(state: GameState): number | null {
   const a = state.auction;
   return a?.good && storeForSale(state, a.good) > 0 ? a.storeSell : null;
+}
+
+/**
+ * The store's selling line as every screen shows it. While the store sells, its price. Once it is sold out, the highest
+ * bid a buyer can pay, flagged `bid`, or its old selling price while no bid is above it; the store sells nothing there.
+ * null when it is sold out and soldOutBidding is off: no line, as before.
+ */
+export function shownSellLine(state: GameState): { price: number; bid: boolean } | null {
+  const a = state.auction;
+  if (!a?.good) return null;
+  const selling = storeSellLine(state);
+  if (selling !== null) return { price: selling, bid: false };
+  if (!WALK.soldOutBidding) return null;
+  const top = topBid(a, goodsMarket(state));
+  return top !== null && top > a.zones.sellersBottom ? { price: top, bid: true } : { price: a.zones.sellersBottom, bid: false };
 }
 
 /** The store's buying line, while it still wants the good. The store never runs out of money. */
@@ -90,6 +105,7 @@ export function goodsMarket(state: GameState): WalkMarket {
       { id: STORE_ID, price: () => storeBuyLine(state) },
     ],
     floor: () => storeBuyLine(state),
+    zones: a.zones,
     first: (id) => players.get(id)?.species === 'quibbit',
     seat: (id) => seats.get(id) ?? 0,
     trade(buyer, seller, price) {
@@ -134,6 +150,7 @@ export function startAuction(state: GameState, goods: readonly Good[] = WALK.ord
     storeBuy: 0,
     storeSell: 0,
     storeBudget: 0,
+    zones: { buyersTop: 0, sellersBottom: 0, lo: 0, hi: 0 },
     lo: 0,
     hi: 0,
     speed: WALK.minSpeed,
@@ -223,7 +240,7 @@ function skipBefore(state: GameState, good: Good, storeBuy: number, storeBudget:
 /** How a good would come up now: its store lines, budget and board, or why it is skipped. Reads the state only. */
 function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyDemand>) {
   const posted = colonyPrice(state, good);
-  const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
+  const usualBuy = storeBuyPrice(posted);
   // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
   const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
   const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
@@ -266,6 +283,8 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       storeBuy,
       storeSell,
       storeBudget: budget,
+      // The ship's line stays out of the buyers' zone: its price falls with each unit, and sellers follow it down to here.
+      zones: { buyersTop: storeBuy, sellersBottom: storeSell, lo, hi },
       lo,
       hi,
       speed: Math.max(WALK.minSpeed, (hi - lo) / WALK.crossSeconds),

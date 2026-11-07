@@ -4,6 +4,7 @@ import {
   BRAIN,
   corralTarget,
   emptyStock,
+  energyUseOf,
   GOODS,
   isFactory,
   monthNeeds,
@@ -24,12 +25,13 @@ import {
   type PlayerId,
   type ProductionLine,
   type Species,
+  type Stock,
   type Strategy,
 } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
-import { ownSupply, type Mind } from '../value.js';
+import type { Mind } from '../value.js';
 import { seatBounds } from './manual.js';
 import { optionLine, tableTalkBlock } from './prompt.js';
 import type { LandDraft } from '../playbook/index.js';
@@ -261,18 +263,31 @@ function plotOutputLines(obs: GameState, me: PlayerId): string[] {
 
 /**
  * Food and Energy in units: what the seat holds and its own plots made at the last production (a plant's output net of
- * its own use, as value.ts ownSupply counts it), against what the engine says it burns (monthNeeds): its household's
+ * its own use, each plant charged min(made, use) as runProduction charges it: lastSupply), against what the engine says it burns (monthNeeds): its household's
  * Food at upkeep, its plots' and works' Energy at production. What the plots make counts where it comes before the
  * burn: Energy always (plants run first in production); Food only before production (the land brief, at upkeep), since
  * after it (the auction brief) this month's Food is in what the seat holds, and upkeep eats next.
  */
+/**
+ * What the seat's own plots supplied of a good at the last production: for Energy, what its plants made less what they
+ * paid for their own use, each charged min(made, use) from its line, as runProduction charges it (outlook.ts produce).
+ */
+function lastSupply(obs: GameState, me: PlayerId, made: Stock, good: 'food' | 'energy'): number {
+  if (good !== 'energy') return made[good];
+  const lines = obs.history.at(-1)?.lines ?? [];
+  const paid = lines
+    .filter((l) => l.good === 'energy' && obs.tiles[l.tile]?.owner === me)
+    .reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(obs, obs.tiles[l.tile]!)), 0);
+  return Math.max(0, made.energy - paid);
+}
+
 function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): string {
   const p = obs.players.find((q) => q.id === me)!;
   const made = obs.history.at(-1)?.produced[me] ?? emptyStock();
   const need = monthNeeds(obs, me);
   const verdict = (held: number, makes: number, needs: number) => (held + makes >= needs ? 'covered' : `short by ${needs - held - makes}`);
-  const food = ownSupply(obs, me, made, 'food');
-  const energy = ownSupply(obs, me, made, 'energy');
+  const food = lastSupply(obs, me, made, 'food');
+  const energy = lastSupply(obs, me, made, 'energy');
   const foodText = afterProduction
     ? `Food — you hold ${p.stock.food}, the ${food} your plots made at the last production included, against ${need.food} your household eats a month: ${verdict(p.stock.food, 0, need.food)}`
     : `Food — you hold ${p.stock.food} and your plots made ${food} at the last production, against ${need.food} your household eats a month: ${verdict(p.stock.food, food, need.food)}`;

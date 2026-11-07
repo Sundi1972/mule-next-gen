@@ -126,6 +126,8 @@ export function WalkBoard({
   onDir,
   size = 'phone',
   wrapCreature,
+  zones = null,
+  soldOutAt = null,
   className,
 }: {
   lo: number;
@@ -148,6 +150,13 @@ export function WalkBoard({
   size?: 'phone' | 'tv';
   /** Wraps each walker's creature, such as in a chat bubble's anchor. */
   wrapCreature?: CreatureWrap;
+  /**
+   * The rest zones, where nobody trades: sellers wait above the store's selling line (or `sellersBottom` while none is
+   * drawn), buyers below `buyersTop`, the buying line as it stood when the good came up. Drawn as hatched bands.
+   */
+  zones?: { buyersTop: number; sellersBottom: number } | null;
+  /** The store is sold out and its selling line stands here: the highest bid when `bid`, else its old price. */
+  soldOutAt?: { price: number; bid: boolean } | null;
   className?: string;
 }) {
   const tv = size === 'tv';
@@ -179,18 +188,45 @@ export function WalkBoard({
 
   const lines = [
     { key: 'sells', price: storeSells, who: 'STORE', what: 'SELLS', note: storeStock === undefined ? '' : ` · ${storeStock} LEFT`, tone: 'border-rise text-rise' },
+    // Sold out, the selling line follows the highest bid, so a seller sees what a walk down would fetch.
+    soldOutAt?.bid
+      ? { key: 'follows', price: soldOutAt.price, who: 'SOLD OUT', what: 'HIGHEST BID', note: ' ↑', tone: 'border-rise/70 text-rise' }
+      : { key: 'follows', price: soldOutAt?.price ?? null, who: 'STORE', what: 'SOLD OUT', note: '', tone: 'border-rise/70 text-rise' },
     { key: 'buys', price: storeBuys, who: 'STORE', what: 'BUYS', note: '', tone: 'border-fall text-fall' },
     { key: 'ship', price: shipPays, who: 'SHIP', what: 'PAYS', note: '', tone: 'border-warn text-warn' },
     ...extra.map((l) => ({ key: `line-${l.id}`, price: l.price, who: l.label, what: '', note: '', tone: 'border-holo text-holo' })),
   ].filter((l): l is typeof l & { price: number } => l.price !== null);
   const LABEL_GAP = 2;
   const labelText = (l: (typeof lines)[number]) => (l.what ? `${l.what} ${l.price}${l.note}` : String(l.price));
+  const labelSize = lines.map((l) => (labelLines(l.who, type.perLine) + labelLines(labelText(l), type.perLine)) * type.lineBox);
   const labelAt = spreadLabels(
-    lines.map((l) => ({ at: px(l.price), size: (labelLines(l.who, type.perLine) + labelLines(labelText(l), type.perLine)) * type.lineBox })),
+    lines.map((l, i) => ({ at: px(l.price), size: labelSize[i]! })),
     LABEL_GAP,
   );
+  /** Each line label's box in px down the board: centred on labelAt, as tall as its two rows. */
+  const labelBox = labelAt.map((at, i) => ({ top: at - labelSize[i]! / 2, bottom: at + labelSize[i]! / 2 }));
   // The lines' labels sit in a gutter on the right, clear of the creatures.
   const gutter = tv ? 104 : 56;
+  /** Where the sellers' zone ends: the store's selling line, or while it is sold out its line, else S. */
+  const sellersEdge = (z: { sellersBottom: number }) => storeSells ?? soldOutAt?.price ?? z.sellersBottom;
+  /**
+   * The sellers' band's words, longest first: a ship paying inside the zone still buys there, the short form fitting a
+   * phone's gutter (WS6). A band too thin for the first form takes the next that fits (RestBand).
+   */
+  const sellersWords = (z: { sellersBottom: number }) =>
+    shipPays !== null && shipPays > sellersEdge(z)
+      ? [...(tv ? ['SELLERS WAIT · ONLY THE SHIP BUYS'] : []), 'SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT']
+      : ['SELLERS WAIT · NO TRADE', 'SELLERS WAIT'];
+  /**
+   * The room for a band's words, in px: from the side they sit on (the band's top for sellers, its bottom for buyers) to
+   * the nearest line label reaching into the band, which is drawn over them, or else the band's far edge; less the inset.
+   */
+  const wordsRoom = (from: number, to: number, side: 'top' | 'bottom') => {
+    const [top, bottom] = [(from / 100) * room, (to / 100) * room];
+    const inside = labelBox.filter((b) => b.top < bottom && b.bottom > top);
+    const clear = side === 'top' ? Math.min(bottom, ...inside.map((b) => b.top)) - top : bottom - Math.max(top, ...inside.map((b) => b.bottom));
+    return clear - BAND_INSET;
+  };
 
   const cols = walkers.length;
   const colOf = new Map(walkers.map((w, i) => [w.id, i]));
@@ -258,7 +294,14 @@ export function WalkBoard({
         </div>
 
         <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
-          {storeStock === 0 && storeSells === null && (
+          {/* The rest zones. Nobody trades in them; their edge is where trading begins, drawn solid. */}
+          {zones && (
+            <RestBand from={0} to={pct(sellersEdge(zones))} edge="bottom" tone="seller" words={fitWords(sellersWords(zones), wordsRoom(0, pct(sellersEdge(zones)), 'top'), type)} tv={tv} gutter={gutter} />
+          )}
+          {zones && (
+            <RestBand from={pct(zones.buyersTop)} to={100} edge="top" tone="buyer" words={fitWords(['BUYERS WAIT · NO TRADE', 'BUYERS WAIT'], wordsRoom(pct(zones.buyersTop), 100, 'bottom'), type)} tv={tv} gutter={gutter} />
+          )}
+          {storeStock === 0 && storeSells === null && soldOutAt === null && (
             <span
               data-num
               data-testid="store-sold-out"
@@ -405,6 +448,51 @@ function useHeight(ref: RefObject<HTMLElement | null>, fallback: number): number
     return () => watch.disconnect();
   }, [ref]);
   return height;
+}
+
+/** How far a rest band's words sit in from its edge (top-0.5 / bottom-0.5), in px. */
+const BAND_INSET = 2;
+
+/**
+ * The first of `forms` whose gutter lines fit in `height` px, by the board's own label lines (BOARD_TYPE, labelLines),
+ * so a band's words stay clear of the line labels and its edge; null when none fits.
+ */
+function fitWords(forms: string[], height: number, type: { lineBox: number; perLine: number }): string | null {
+  const lines = (form: string) => form.split(' · ').reduce((n, part) => n + labelLines(part, type.perLine), 0);
+  return forms.find((form) => lines(form) * type.lineBox <= height) ?? null;
+}
+
+/** A rest zone, hatched in its side's colour, with a solid edge where trading begins; its words sit in the gutter. */
+function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; to: number; edge: 'top' | 'bottom'; tone: 'seller' | 'buyer'; words: string | null; tv: boolean; gutter: number }) {
+  const colour = tone === 'seller' ? 'var(--color-rise)' : 'var(--color-fall)';
+  return (
+    <div
+      aria-hidden
+      className={cx('pointer-events-none absolute left-0 transition-[top,height] duration-100 ease-linear', edge === 'bottom' ? 'border-b-2' : 'border-t-2', tone === 'seller' ? 'border-rise' : 'border-fall')}
+      style={{
+        top: `${from}%`,
+        height: `${Math.max(0, to - from)}%`,
+        right: gutter,
+        background: `repeating-linear-gradient(135deg, color-mix(in oklab, ${colour} 13%, transparent) 0 6px, transparent 6px 14px)`,
+      }}
+      data-testid={`rest-${tone}`}
+    >
+      {/* In the gutter with the store's labels, at the band's far end: never under a creature. */}
+      <span
+        className={cx(
+          'absolute flex flex-col items-end px-1 text-right font-mono font-bold leading-tight opacity-80',
+          edge === 'bottom' ? 'top-0.5' : 'bottom-0.5',
+          tv ? 'text-sm' : 'text-[10px]',
+          tone === 'seller' ? 'text-rise' : 'text-fall',
+        )}
+        style={{ left: '100%', width: gutter }}
+      >
+        {words?.split(' · ').map((w) => (
+          <span key={w}>{w}</span>
+        ))}
+      </span>
+    </div>
+  );
 }
 
 /** One of the two moving lines, across the players' columns. */

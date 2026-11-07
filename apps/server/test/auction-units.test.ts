@@ -59,10 +59,13 @@ const NEW_FIELD = 'a new board field: check it against HC-2';
 
 /** Every field the board's auction carries is one of these, so no other good's stock can ride along. */
 function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
-  expect(keysOf(auction), NEW_FIELD).toEqual(
+  expect(keysOf(auction).filter((k) => k !== 'storeSellsBid'), NEW_FIELD).toEqual(
     // A-6: shipQuote is the ship's prices for the good up, no stock.
-    ['deals', 'good', 'hi', 'lo', 'next', 'receipt', 'seconds', 'shipPays', 'shipQuote', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'tally', 'total', 'units', 'upNext', 'walkers'],
+    // RULE-6: zones are four prices, no stock; RULE-7: storeSellsBid is a flag, present only while the line is a bid.
+    ['deals', 'good', 'hi', 'lo', 'next', 'receipt', 'seconds', 'shipPays', 'shipQuote', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'tally', 'total', 'units', 'upNext', 'walkers', 'zones'],
   );
+  expect(keysOf(auction.zones!), NEW_FIELD).toEqual(['buyersTop', 'hi', 'lo', 'sellersBottom']);
+  if ('storeSellsBid' in auction) expect(auction.storeSellsBid, NEW_FIELD).toBe(true);
   // A-5: a seat's receipt and month's total ride only on its own view, never the board's.
   expect(auction.receipt, NEW_FIELD).toBeNull();
   expect(auction.tally, NEW_FIELD).toBeNull();
@@ -151,7 +154,8 @@ describe("the board's store count", () => {
     state.store.stock.food = reserve - 1;
     const view = food.viewFor(null);
     expect(view.auction!.storeForSale, "Food inside the colonists' reserve is not for sale").toBe(0);
-    expect(view.auction!.storeSells, 'so the store has no selling line').toBeNull();
+    expect(view.auction!.storeSells, 'so its line is its old price, where it sells nothing').toBe(view.auction!.zones!.sellersBottom);
+    expect('storeSellsBid' in view.auction!, 'and no bid is above it').toBe(false);
     expect(view.market.find((r) => r.good === 'food')!.storeStock, "the market still shows the store's real stock").toBe(reserve - 1);
   });
 });

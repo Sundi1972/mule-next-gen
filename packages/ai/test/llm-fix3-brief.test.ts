@@ -175,9 +175,13 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     state.tiles[plots[1]!]!.outfit = 'energy';
     const p0 = state.players.find((p) => p.id === 'p0')!;
     p0.stock.food = 0;
-    const text = land(state);
-    expect(text).not.toContain('my Food and Energy are covered');
-    expect(text).toContain('I own a Food plot and an Energy plot');
+    // A level that looks ahead counts units (strategist.ts landDecision), so holding no Food it is never "covered".
+    expect(land(state)).not.toContain('my Food and Energy are covered');
+    // A level without a look-ahead still counts plots; the brief says so instead of "covered".
+    const rookie: Mind = { ...mind, levelId: 'rookie', level: AI_LEVELS.rookie };
+    const rookieText = landBrief(state, rookie, PERSONAS.trader, draft, []).text;
+    expect(rookieText).not.toContain('my Food and Energy are covered');
+    expect(rookieText).toContain('I own a Food plot and an Energy plot');
     state.tiles[plots[1]!]!.outfit = 'smithore';
     state.tiles[plots[0]!]!.outfit = 'smithore';
     expect(land(state)).not.toContain('I still buy my Food and Energy');

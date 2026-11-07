@@ -118,6 +118,6 @@ describe("C33: the colony's plot is nobody's to buy, survey or claim on the phon
     const plot = html.slice(html.indexOf('data-testid="map-plot-1-1"'), html.indexOf('data-testid="map-plot-2-1"'));
     expect(plot).toContain('data-testid="plot-object-1-1"');
     expect(plot).not.toContain('--color-g-food');
-    expect(html).toContain('aria-label="Plains, Stadium, building: 1 of 3 months, Food 3 of 4"');
+    expect(html).toContain('aria-label="Plains, Stadium, building: 1 of 3 months, Food 3 of 3"');
   });
 });
