@@ -224,3 +224,40 @@ describe('TV-DEALS (PM rulings 5 and 6 Nov): every running deal stays in sight o
     expect(list).not.toMatch(/flex-wrap|overflow-hidden/);
   });
 });
+
+/**
+ * RULE-4 on the TV (WS3's ask; WS6's mock design/mocks/auction-rules, TvSale): a seller the engine stopped at what they
+ * must hold is said on the TV's side, "Lena keeps 5 Food", not only marked KEEPS on the board. The mock draws one; at a
+ * full table several can be held at once, so the newest keeps the mock's card and the others are marks in one box of
+ * a fixed height, whatever their number (PM ruling (A), 6 Nov), and the side stays over the fit floor.
+ */
+describe('B-AC-B1 (TV, WS4): the TV says who keeps what they must hold', () => {
+  const held = (w: ReturnType<typeof walker>) => ({ ...w, held: true as const });
+  const alloy = alloyWalk.walkers!;
+
+  it('B-AC-B1: a held seller is said on the TV in a card: who keeps how much of the good, and why', () => {
+    const html = tvScreen(tvView({ ...alloyWalk, walkers: [alloy[0]!, alloy[1]!, held(walker('s3', 'seller', 81, 4)), alloy[3]!] }));
+    const card = inside(html, 'tv-held-s3');
+    expect(textOf(card)).toBe('The Big Spender keeps 4 Alloy what they must hold');
+    // The mark is the name's picture: hidden from a reader, who hears the name once, in the words.
+    expect(card).toMatch(/<span aria-hidden="true"[^>]*><span role="img"[^>]*aria-label="The Big Spender"/);
+  });
+
+  it('B-AC-B1: with several held, the newest is in the card and the others are their marks in one box that says so', () => {
+    const html = tvScreen(tvView({ ...alloyWalk, walkers: [held(walker('s1', 'seller', 81, 1)), held(walker('s2', 'seller', 81, 2)), held(walker('s3', 'seller', 81, 4)), alloy[3]!] }));
+    expect(textOf(inside(html, 'tv-held-s1'))).toBe('Heiko keeps 1 Alloy what they must hold');
+    const others = inside(html, 'tv-held-others');
+    expect(textOf(others)).toBe('keep what they must hold too');
+    expect([...others.matchAll(/role="img"[^>]*aria-label="([^"]+)"/g)].map((m) => m[1]), 'a mark for each other held seller').toEqual(['The Accountant', 'The Big Spender']);
+    expect(html).not.toMatch(/data-testid="tv-held-s[23]"/);
+    // WS6's copy: the verb agrees with how many marks stand before it.
+    const one = tvScreen(tvView({ ...alloyWalk, walkers: [held(walker('s1', 'seller', 81, 1)), held(walker('s2', 'seller', 81, 2)), alloy[2]!, alloy[3]!] }));
+    expect(textOf(inside(one, 'tv-held-others'))).toBe('keeps what they must hold too');
+  });
+
+  it('B-AC-B1 (negative): nobody held, a held flag kept through a switch to Buy, or the status stage: nothing said', () => {
+    expect(tvScreen(tvView(alloyWalk))).not.toMatch(/data-testid="tv-held-/);
+    expect(tvScreen(tvView({ ...alloyWalk, walkers: [alloy[0]!, alloy[1]!, held(walker('s3', 'buyer', 66, 4)), alloy[3]!] }))).not.toMatch(/data-testid="tv-held-/);
+    expect(tvScreen(tvView({ ...alloyWalk, stage: 'status', walkers: [alloy[0]!, alloy[1]!, held(walker('s3', 'seller', 81, 4)), alloy[3]!] }))).not.toMatch(/data-testid="tv-held-/);
+  });
+});
