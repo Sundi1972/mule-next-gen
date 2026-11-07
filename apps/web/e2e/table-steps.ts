@@ -337,10 +337,10 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
       const undo: (() => void)[] = [];
       try {
         check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
-        const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
         const index = (t: { x: number; y: number }) => t.y * state.width + t.x;
         const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
-        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store' && !sited.has(index(t));
+        // No colony building stands on a map plot (G-5 C48): every plot but the store's is open.
+        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store';
         const known = [...me.analysed];
         undo.push(() => me.analysed.splice(0, me.analysed.length, ...known));
         const analyse = (t: { x: number; y: number }) => {
