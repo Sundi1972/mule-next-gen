@@ -473,3 +473,73 @@ describe('S4-B-AC-3: a revealed case is fined; an unfined one pays when the next
     expect(refused(() => fineCulprit(state, 'ossa', hidden.id, 150))).toBe('Only a revealed culprit is fined');
   });
 });
+
+describe('S4-B-AC-6 (engine): the crew is paid at the month end', () => {
+  sabotage(true);
+  const cost = POLITICS.sabotage.orders.powerCut.cost;
+
+  /** Month 2's planning, Lena orders a cut on Brix's Food plot (guarded, so the outcome never depends on a draw); the control is the same month with no order. */
+  function twoMonths(): { ordered: GameState; control: GameState; food: number } {
+    const { state: control, food } = sheriffed();
+    control.month = 2;
+    for (const p of control.players) p.money = 1_000;
+    setGuards(control, 'ossa', [food]);
+    const ordered = structuredClone(control);
+    orderSabotage(ordered, 'lena', { kind: 'powerCut', tile: food });
+    return { ordered, control, food };
+  }
+
+  it('S4-B-AC-6: Lena\'s money does not move when she orders in planning, nor in any phase before upkeep; at upkeep it falls by the crew cost', () => {
+    const { ordered, control } = twoMonths();
+    expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena'));
+    while (ordered.phase !== 'upkeep') {
+      advancePhase(ordered);
+      advancePhase(control);
+      if (ordered.phase !== 'upkeep') expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena'));
+    }
+    expect(ordered.phase).toBe('upkeep');
+    expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena') - cost);
+    for (const id of ['brix', 'ossa', 'kai']) expect(moneyOf(ordered, id)).toBe(moneyOf(control, id));
+  });
+
+  it('S4-RULE-9: a player with less than the cost pays what they have, to nobody; the rest is waived', () => {
+    const { ordered, control } = twoMonths();
+    while (ordered.phase !== 'auction') {
+      advancePhase(ordered);
+      advancePhase(control);
+    }
+    const short = cost - 30;
+    ordered.players.find((p) => p.id === 'lena')!.money = short;
+    control.players.find((p) => p.id === 'lena')!.money = short;
+    advancePhase(ordered);
+    advancePhase(control);
+    expect(ordered.phase).toBe('upkeep');
+    expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena') - short);
+    expect(moneyOf(ordered, 'lena')).toBeGreaterThanOrEqual(0);
+  });
+
+  it('S4-RULE-9: an order that went void (the plot lost its MULE) costs nothing', () => {
+    const { ordered, control, food } = twoMonths();
+    ordered.tiles[food]!.outfit = null;
+    control.tiles[food]!.outfit = null;
+    while (ordered.phase !== 'upkeep') {
+      advancePhase(ordered);
+      advancePhase(control);
+    }
+    expect(ordered.politics!.sabotage).toEqual([]);
+    expect(moneyOf(ordered, 'lena')).toBe(moneyOf(control, 'lena'));
+  });
+
+  it('S4-RULE-9: a crew is charged once: the next month\'s upkeep takes nothing for last month\'s order', () => {
+    const { ordered, control } = twoMonths();
+    while (!(ordered.phase === 'upkeep' && ordered.month === 3)) {
+      advancePhase(ordered);
+      advancePhase(control);
+    }
+    const diff = moneyOf(control, 'lena') - moneyOf(ordered, 'lena');
+    expect(diff).toBeGreaterThanOrEqual(cost);
+    // Last month's fine aside (the case was caught), month 3 held no second crew charge.
+    const fine = ordered.politics!.sabotage[0]!.fine;
+    expect(diff).toBe(cost + (fine?.paid ?? 0));
+  });
+});
