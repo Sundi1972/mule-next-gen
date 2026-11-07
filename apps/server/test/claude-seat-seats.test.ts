@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { seatClaude, waitForSeat } from '../src/claude-seat/seats.js';
+import { claudeSeatAt, seatClaude, waitForSeat, wrapsClaudeSeat } from '../src/claude-seat/seats.js';
 import { ClaudeSeatWriter } from '../src/claude-seat/writer.js';
 
 beforeEach(() => vi.useFakeTimers());
@@ -34,5 +34,19 @@ describe("a Claude seat's wait before Start", () => {
     expect(done).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(await held).toBeNull();
+  });
+});
+
+describe("a Claude seat's writer behind the recorder's wrapper", () => {
+  it('B-AC-3: seatClaude records the ClaudeSeatWriter behind a wrapper wrapsClaudeSeat named; an unnamed wrapper records nothing', () => {
+    const game = {};
+    const writer = new ClaudeSeatWriter({ id: 's2', persona: 'trader' });
+    const write = writer.write.bind(writer);
+
+    seatClaude(game, 's2', 'Claudia', wrapsClaudeSeat({ write }, writer));
+    seatClaude(game, 's3', 'Claude B', { write });
+
+    expect(claudeSeatAt(game, 's2')).toEqual({ name: 'Claudia', writer });
+    expect(claudeSeatAt(game, 's3')).toBeNull();
   });
 });
