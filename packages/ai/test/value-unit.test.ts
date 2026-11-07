@@ -286,7 +286,7 @@ describe('RULE-4: what an unneeded unit is worth', () => {
     const mind = mindOf();
     const target = wholeNextMonth(obs, 'ai0', 'food');
     // Past the target every unit the farm makes is surplus: the next one adds what it sells for.
-    const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
+    const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, water: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
 
     expect(unitValues(obs, o, 'food', mind).keep[target], 'the first unit past the target').toBeCloseTo(31.28, 6);
     expect(farmMaking(target + 1) - farmMaking(target)).toBeCloseTo(31.28, 6);
