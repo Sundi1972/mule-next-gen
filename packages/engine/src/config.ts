@@ -1792,9 +1792,11 @@ export const STRATEGIST = {
   /**
    * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
    * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
-   * START.storeStock.medicine 40 (PM ruling, 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=false`.
+   * START.storeStock.medicine 40 (PM ruling, 8 Nov). OFF until health is on: without sick colonists it only diverts
+   * seats from their Energy plant (seed 1's Energy gate 9.6% -> 15.8%); PR-13 switches it on with health (PM ruling,
+   * 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=true`.
    */
-  medicineDespiteInputs: true as boolean,
+  medicineDespiteInputs: false as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
     /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
