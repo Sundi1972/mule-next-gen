@@ -1,5 +1,14 @@
-/** Deal cards between players (slice 3): the only writer of Politics.deals, always through politics.ts's editPolitics. */
-import type { DealCard, DealOffer, GameState } from './types.js';
+/**
+ * Deal cards between players (slice 3): a pact, or a promise of one's own vote, offered and answered in planning.
+ * The only writer of Politics.deals, always through politics.ts's editPolitics. A card moves no money, stock, tiles
+ * or MULEs; what it earns or costs is reputation, settled elsewhere. See slice 3 spec S3-RULE-1, S3-RULE-2.
+ */
+import { POLITICS } from './config.js';
+import { RuleError } from './errors.js';
+import { player } from './game.js';
+import { editPolitics, nextElectionMonth } from './politics.js';
+import { createRng, seedOf } from './rng.js';
+import type { DealCard, DealOffer, GameState, Office, Politics } from './types.js';
 
 /** The one visibility rule: a card's two parties see it, and everyone sees a broken one. The TV has no seat, so it is a non-party. */
 export function partyTo(viewerId: string, card: DealCard): boolean {
@@ -11,18 +20,139 @@ export function dealsOf(state: GameState, playerId: string): readonly DealCard[]
   return (state.politics?.deals ?? []).filter((d) => d.from === playerId || d.to === playerId).reverse();
 }
 
-export function offerDeal(_state: GameState, _from: string, _offer: DealOffer): string {
-  throw new Error('NotImplemented: offerDeal');
+const BASE_36 = 36;
+const TAG_LENGTH = 6;
+
+/** 'deal-' plus six base-36 characters, drawn from a stream seeded by the game and the card's number only; a clash redraws. */
+function newId(state: GameState, taken: readonly DealCard[]): string {
+  const n = taken.length + 1;
+  for (let attempt = 0; ; attempt++) {
+    const rng = createRng(seedOf(state.seed, n, 'deal', String(attempt)));
+    const tag = Array.from({ length: TAG_LENGTH }, () => rng.int(0, BASE_36 - 1).toString(BASE_36)).join('');
+    if (!taken.some((d) => d.id === `deal-${tag}`)) return `deal-${tag}`;
+  }
 }
 
-export function withdrawDeal(_state: GameState, _from: string, _id: string): void {
-  throw new Error('NotImplemented: withdrawDeal');
+function nameOf(state: GameState, id: string): string {
+  return player(state, id).name;
 }
 
-export function answerDeal(_state: GameState, _to: string, _id: string, _accept: boolean): void {
-  throw new Error('NotImplemented: answerDeal');
+function title(office: Office): string {
+  return office[0]!.toUpperCase() + office.slice(1);
 }
 
-export function dealUntil(_state: GameState, _from: string, _offer: DealOffer): number {
-  throw new Error('NotImplemented: dealUntil');
+function pactWords(): string {
+  const months = POLITICS.deals.pactMonths;
+  return `A pact runs ${months.slice(0, -1).join(', ')} or ${months.at(-1)} months`;
+}
+
+/** The election is open to promises while it is in announce or ballot. */
+function electionOpen(politics: Politics): boolean {
+  const stage = politics.election?.stage;
+  return stage === 'announce' || stage === 'ballot';
+}
+
+/** Who is running for an office: the ballot's own list once it is open, else the declared field. */
+function candidatesFor(politics: Politics, office: Office): readonly string[] {
+  return politics.election?.stage === 'ballot' ? politics.election.candidates[office] : politics.candidates[office];
+}
+
+/**
+ * The last month a card binds, fixed at offer (S3-RULE-1): a pact's length capped at the game's end; an office vote's
+ * next ballot; a law vote's next law ballot. A RuleError, never an until, where no ballot is left.
+ */
+export function dealUntil(state: GameState, _from: string, offer: DealOffer): number {
+  const politics = state.politics;
+  if (!politics) throw new RuleError('This game plays without deals');
+  const { terms } = offer;
+  if (terms.kind === 'pact') return Math.min(state.maxMonths, state.month + (offer.months ?? 0) - 1);
+  if ('office' in terms) {
+    if (electionOpen(politics)) return state.month;
+    const next = nextElectionMonth(state);
+    if (next === null) throw new RuleError('No election is left this game');
+    return next;
+  }
+  if (politics.council?.stage === 'ballot') return state.month;
+  const pending = politics.proposal;
+  if (!pending) throw new RuleError('No law is up for a vote');
+  // A proposal from an earlier month comes to its ballot this month, once the election (if any) is over.
+  return pending.month < state.month ? state.month : state.month + 1;
+}
+
+/** Whether the ballot a vote card binds has closed (or will never be held) in the month the answer comes. */
+function ballotClosed(state: GameState, card: DealCard): boolean {
+  const politics = state.politics!;
+  if (state.month !== card.until) return state.month > card.until;
+  if (card.terms.kind === 'vote' && 'office' in card.terms) return !electionOpen(politics);
+  return politics.council?.stage !== 'ballot';
+}
+
+function sameBallot(a: DealCard, b: DealCard): boolean {
+  if (a.terms.kind !== 'vote' || b.terms.kind !== 'vote' || a.until !== b.until) return false;
+  if ('office' in a.terms) return 'office' in b.terms && a.terms.office === b.terms.office;
+  return !('office' in b.terms);
+}
+
+function sameChoice(a: DealCard['terms'], b: DealCard['terms']): boolean {
+  if (a.kind !== 'vote' || b.kind !== 'vote') return false;
+  if ('office' in a) return 'office' in b && a.candidate === b.candidate;
+  return !('office' in b) && a.yes === b.yes;
+}
+
+/** Offers a card to another player in planning; the new card's id. S3-RULE-2 offer rows 1-14, in order. */
+export function offerDeal(state: GameState, from: string, offer: DealOffer): string {
+  const politics = state.politics;
+  if (!politics) throw new RuleError('This game plays without deals');
+  if (state.phase !== 'planning') throw new RuleError('Cards are offered in planning');
+  const { to, terms } = offer;
+  if (to === from || !state.players.some((p) => p.id === to)) throw new RuleError('Pick another player');
+  const open = politics.deals.filter((d) => d.from === from && d.status === 'offered');
+  if (open.length >= POLITICS.deals.maxOpenOffers) throw new RuleError(`You have ${open.length} cards waiting for an answer`);
+  if (open.some((d) => d.to === to)) throw new RuleError(`${nameOf(state, to)} has not answered your last card`);
+  if (terms.kind === 'pact') {
+    if (offer.months === undefined || !POLITICS.deals.pactMonths.includes(offer.months)) throw new RuleError(pactWords());
+    const between = politics.deals.some((d) => d.terms.kind === 'pact' && (d.status === 'offered' || d.status === 'active') && [d.from, d.to].sort().join() === [from, to].sort().join());
+    if (between) throw new RuleError(`You already have a pact with ${nameOf(state, to)}`);
+  } else if ('office' in terms) {
+    if (!POLITICS.offices.includes(terms.office)) throw new RuleError(`The ${title(terms.office)} is not elected yet`);
+  }
+  const until = dealUntil(state, from, offer);
+  if (terms.kind === 'vote' && 'office' in terms) {
+    if (terms.candidate === from) throw new RuleError('Promise your vote to someone else');
+    if (!candidatesFor(politics, terms.office).includes(terms.candidate)) {
+      throw new RuleError(`${nameOf(state, terms.candidate)} is not running for ${title(terms.office)}`);
+    }
+  }
+  const draft: DealCard = { id: '', from, to, terms, offered: state.month, until, status: 'offered', brokenBy: null, settled: null };
+  if (terms.kind === 'vote' && politics.deals.some((d) => d.from === from && (d.status === 'offered' || d.status === 'active') && sameBallot(d, draft) && !sameChoice(d.terms, terms))) {
+    throw new RuleError('You already promised your vote on this ballot');
+  }
+  const id = newId(state, politics.deals);
+  editPolitics(state).deals.push({ ...draft, id });
+  return id;
+}
+
+/** The proposer takes back a card not yet answered. */
+export function withdrawDeal(state: GameState, from: string, id: string): void {
+  if (!state.politics) throw new RuleError('This game plays without deals');
+  const found = state.politics.deals.some((d) => d.id === id && d.from === from && d.status === 'offered');
+  if (!found) throw new RuleError('That card is no longer open');
+  const card = editPolitics(state).deals.find((d) => d.id === id)!;
+  Object.assign(card, { status: 'withdrawn', settled: state.month });
+}
+
+/** The receiver accepts or declines a card offered to them. S3-RULE-2 answer rows 1-6. */
+export function answerDeal(state: GameState, to: string, id: string, accept: boolean): void {
+  const politics = state.politics;
+  if (!politics || state.phase !== 'planning') throw new RuleError('Cards are answered in planning');
+  const open = politics.deals.find((d) => d.id === id && d.to === to && d.status === 'offered');
+  if (!open) throw new RuleError('That card is no longer open');
+  let status: DealCard['status'] = 'active';
+  if (!accept) status = 'declined';
+  else if (open.terms.kind === 'vote' && ballotClosed(state, open)) status = 'expired';
+  else if (open.terms.kind === 'pact' && politics.deals.some((d) => d.terms.kind === 'pact' && d.status === 'active' && [d.from, d.to].sort().join() === [open.from, open.to].sort().join())) {
+    throw new RuleError(`You already have a pact with ${nameOf(state, open.from)}`);
+  }
+  const card = editPolitics(state).deals.find((d) => d.id === id)!;
+  Object.assign(card, { status, settled: status === 'active' ? null : state.month });
 }
