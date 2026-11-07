@@ -28,6 +28,7 @@ import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { cashReserve, installGain } from '../src/value.js';
 import { goodPlan, plotValue, sellWanted, tradeDecision, wholeNextMonth, type GoodPlan } from '../src/strategist.js';
+import { rulesOffInTest } from './rule-switches.js';
 
 /**
  * The resource-utility model at the table: built states played on through the engine with every seat's own hands,
@@ -136,7 +137,8 @@ const POSTED = { smithore: 100, energy: 30, food: 30 };
 describe('RULE-5: one cash shadow price across the month’s auctions', () => {
   it('T-AC-2: with money for its Energy and not its Food too, Food’s budget is under one unit and the Energy auction buys every needed unit', () => {
     // Rookie: no look-ahead, so every belief is the posted price the row sets.
-    const base: Seat = { level: 'rookie', plots: MINES, posted: POSTED, money: 0 };
+    // Water in hand for the mines' own use (AM-18), so Energy and Food are the only calls on the cash.
+    const base: Seat = { level: 'rookie', plots: MINES, posted: POSTED, money: 0, stock: { water: 30 } };
     const probe = table(base);
     const energy = wholeNextMonth(observe(probe, ME), ME, 'energy');
     // The Energy it needs at the store's ask, and less than one Food unit more.
@@ -231,7 +233,8 @@ describe('C8: a power plant is worth what its output saves', () => {
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
     // Food rated 4 (makes 6) against Energy rated 2 (makes 4): a rating of 3 no longer outweighs the mines' Energy at the
-    // store's band prices.
+    // store's band prices. C8's valuation alone: S1's Energy first would install the plant whatever it is worth.
+    rulesOffInTest('energyFirst');
     expect(develop({ energy: 2, food: 4 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
   });
 
@@ -350,8 +353,8 @@ describe('G-2: a surplus when cheap', () => {
    * The PLANTS seat with 1,200 cr and none of `good`, at a 5% sales tax, `good` posted at `posted`; the store holds the
    * colonists' month and 30 more, so next month's posted price climbs. Plays the auction of `good` alone.
    */
-  function auctionOf(good: Good, posted: number) {
-    const seat: Seat = { plots: PLANTS, posted: { [good]: posted }, stock: { water: 20, energy: 20, [good]: 0 }, money: 1200 };
+  function auctionOf(good: Good, posted: number, plots: Plot[] = PLANTS) {
+    const seat: Seat = { plots, posted: { [good]: posted }, stock: { water: 20, energy: 20, [good]: 0 }, money: 1200 };
     const state = table(seat);
     state.treasury.salesTax = 0.05;
     state.store.stock[good] = shelf(state, 30);
@@ -406,9 +409,10 @@ describe('G-2: a surplus when cheap', () => {
   });
 
   it('B-AC-3 negative: a good that spoils fully gets no surplus, though its belief beats the ask before spoilage', () => {
-    // Water: a seat with no farm needs none, so every unit it would hold is surplus.
+    // Water: a seat whose plots drink none (green belts; every other plot drinks, AM-18) needs none, so every unit it
+    // would hold is surplus.
     GOOD_CONFIG.water.spoilage = 1;
-    const water = auctionOf('water', 6);
+    const water = auctionOf('water', 6, PLANTS.map((p) => ({ ...p, outfit: 'greenBelt' as const })));
     expect(water.need, 'the premise: it needs no Water').toBe(0);
     expect(storeBuyAt(water.view, 'water', water.belief, { exact: true }) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
 

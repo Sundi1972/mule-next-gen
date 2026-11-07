@@ -18,6 +18,10 @@ import { PERSONAS } from '../src/personas.js';
 import { playGame, playGameAsync, type SeatSpec } from '../src/play.js';
 import { draftPlaybook, type PhaseFact } from '../src/playbook/index.js';
 import type { AiSeat, AiSeatOptions } from '../src/seat.js';
+import { analyseInTest, rulesOff } from './rule-switches.js';
+
+// These cases pin adopted routes and money-makers for seats with no Energy plant, which Energy first overrides.
+rulesOff('energyFirst');
 
 /*
  * C4's development and auction draft points (RULE-6, RULE-7, AM-20, AM-22), with C6's and C7's hands under them. The
@@ -673,8 +677,13 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
       // well and a plant, an unanalysed volcanic plot and an unanalysed river plot, and a month's staples in stock. Its
       // own route analyses the volcanic plot before its MULE, and its own play replaces that MULE on the analysed ground.
       // The same route, adopted at the same tick, plays as it stands.
+      // The built case needs its own route to analyse the volcanic plot: since AM-18 the seat wants fewer analyses, so the
+      // band is widened (its runner-up use now trails far behind), and the idle river plot, now the closer call, is known.
+      analyseInTest(10);
       const edit = (state: GameState) => {
         landed(1, ['plains:food', 'river:water', 'plains:energy', 'volcanic', 'river'], [], false)(state);
+        const river = state.tiles.findIndex((t) => t.owner === ME && t.terrain === 'river' && !t.outfit);
+        state.players.find((p) => p.id === ME)!.analysed.push(river);
         stocked(1)(state);
         // Energy's shelf is full when the month's prices are posted: C6 counts the MULEs the land brings, and it still posts normal.
         state.store.stock.energy = 200;

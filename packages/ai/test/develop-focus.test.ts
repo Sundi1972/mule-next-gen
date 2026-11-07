@@ -3,6 +3,10 @@ import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, observe, stableJson, 
 import { developDecision, type DevAction } from '../src/strategist.js';
 import type { Candidate } from '../src/utility.js';
 import type { Mind } from '../src/value.js';
+import { rulesOff } from './rule-switches.js';
+
+// Focus ranks the installs Energy first would rule out.
+rulesOff('energyFirst');
 
 const mind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
 
@@ -15,6 +19,8 @@ function development(): GameState {
   me.money = 5_000;
   me.stock.food = 20;
   me.stock.energy = 20;
+  // Watered too: every plot drinks (AM-18).
+  me.stock.water = 20;
   return state;
 }
 
@@ -32,7 +38,12 @@ describe('development focus', () => {
     expect(rankOf(today.all, focus)).toBeGreaterThan(0);
 
     const leaning = developDecision(obs, mind, 0, undefined, focus);
-    expect(rankOf(leaning.all, focus)).toBeLessThan(rankOf(today.all, focus));
+    // On this map AM-18's Water use leaves the focus good further behind than a lean closes, so it ranks no lower and
+    // closes on the top pick.
+    const best = (l: typeof today, good: Outfit | null) => Math.max(...l.all.filter((c) => !c.veto && outfitOf(c) === good).map((c) => c.utility));
+    const gap = (l: typeof today) => best(l, top) - best(l, focus);
+    expect(rankOf(leaning.all, focus)).toBeLessThanOrEqual(rankOf(today.all, focus));
+    expect(gap(leaning)).toBeLessThan(gap(today));
 
     // A lean, not a rule: what a hard rule rules out stays ruled out.
     const vetoes = (l: typeof today) => l.all.filter((c) => c.veto).map((c) => [c.key, c.veto]);

@@ -143,6 +143,7 @@ describe('the sim reports the surplus when cheap (C6, UBER-AC-2)', () => {
     let ids: string[] = [];
     let food: { ask: number; reference: number; need: number[]; held?: number[] } | null = null;
     let auctions = 0;
+    let crewed = false;
     playGame(1, simSeats(4, 'trader', 1), {
       politics: true,
       maxMonths: 3,
@@ -166,6 +167,12 @@ describe('the sim reports the surplus when cheap (C6, UBER-AC-2)', () => {
       },
       onPhase: (s: GameState) => {
         hooks.phase(s);
+        // Since AM-18 and Energy first the seats open alike, all needing the same Food: four mines more for one seat
+        // give it a bigger crew, so a sample filed for the wrong seat shows.
+        if (!crewed && s.phase === 'development') {
+          crewed = true;
+          for (const t of s.tiles.filter((x) => !x.owner && x.terrain === 'mountains').slice(0, 4)) Object.assign(t, { owner: ids[1], outfit: 'smithore' });
+        }
         if (s.phase !== 'auction') return;
         if (food) {
           auctions++;

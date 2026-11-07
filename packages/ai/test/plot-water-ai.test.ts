@@ -4,9 +4,10 @@ import { canFeed, keptUnits, unfedInputs, wholeNextMonth } from '../src/value.js
 
 /**
  * AM-18 for the AI: canFeed counts every plot's Water, as the engine takes it at production, so it predicts the turn-off
- * the engine makes. ai0 owns a farm (5 Food), a well and an idle plot for a new Medicine lab, holding only its drink in
- * Water. Its plots use 2 (farm) + 1 (well) + 1 (the lab's recipe) a month; with a well making 4, the stock runs dry by
- * the second month and the farm goes off.
+ * the engine makes. ai0 owns a farm (5 Food), a well and an idle plot for a new Alloy works, holding only its drink in
+ * Water and Smithore for the works. Its plots use 2 (farm) + 1 (well) + 1 (the works' recipe) a month; with a well
+ * making 4, the stock runs dry by the second month and the farm goes off. (An Alloy works, not a Medicine works: canFeed
+ * lets a Medicine works through whatever its inputs, STRATEGIST.medicineDespiteInputs.)
  */
 
 const ME = 'ai0';
@@ -30,18 +31,18 @@ function colony(well: number): GameState {
     me.analysed.push(x);
   }
   me.money = 5000;
-  Object.assign(me.stock, { food: 10, energy: 30, water: 0 });
-  // Only the drink, counted with the lab's crew in: the plots' Water must come from the well.
-  state.tiles[4]!.outfit = 'medicine';
+  Object.assign(me.stock, { food: 10, energy: 30, smithore: 20, water: 0 });
+  // Only the drink, counted with the works' crew in: the plots' Water must come from the well.
+  state.tiles[4]!.outfit = 'alloy';
   me.stock.water = needsOf(state, ME).water;
   state.tiles[4]!.outfit = null;
   return state;
 }
 
-/** The engine's answer: the lab installed, two productions with the month end between; the farm's second line. */
+/** The engine's answer: the works installed, two productions with the month end between; the farm's second line. */
 function farmInMonthTwo(well: number): string[] {
   const state = colony(well);
-  state.tiles[4]!.outfit = 'medicine';
+  state.tiles[4]!.outfit = 'alloy';
   runProduction(state);
   runUpkeep(state);
   const second = runProduction(state);
@@ -49,20 +50,20 @@ function farmInMonthTwo(well: number): string[] {
 }
 
 describe('AM-18: canFeed predicts the Water turn-off the engine makes', () => {
-  it("a well making 4 can't water the farm, the well and the lab: the engine turns the farm off, and canFeed says no for Water", () => {
+  it("a well making 4 can't water the farm, the well and the works: the engine turns the farm off, and canFeed says no for Water", () => {
     expect(farmInMonthTwo(4), 'the engine, month 2').toContain('noWater');
 
     const obs = observe(colony(4), ME);
-    expect(canFeed(obs, ME, 'medicine')).toBe(false);
-    expect(unfedInputs(obs, ME, 'medicine')).toEqual(['water']);
+    expect(canFeed(obs, ME, 'alloy')).toBe(false);
+    expect(unfedInputs(obs, ME, 'alloy')).toEqual(['water']);
   });
 
   it('a well making 8 waters all three: the engine turns nothing off, and canFeed says yes', () => {
     expect(farmInMonthTwo(8), 'the engine, month 2').not.toContain('noWater');
 
     const obs = observe(colony(8), ME);
-    expect(canFeed(obs, ME, 'medicine')).toBe(true);
-    expect(unfedInputs(obs, ME, 'medicine')).toEqual([]);
+    expect(canFeed(obs, ME, 'alloy')).toBe(true);
+    expect(unfedInputs(obs, ME, 'alloy')).toEqual([]);
   });
 });
 
