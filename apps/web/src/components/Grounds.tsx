@@ -8,9 +8,10 @@ const listeners = new Set<() => void>();
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const isNumber = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+const isSize = (x: unknown): x is number => isNumber(x) && x > 0;
 
 function isFrame(f: unknown): boolean {
-  return isObject(f) && isNumber(f.width) && isNumber(f.height) && isNumber(f.place) && Array.isArray(f.centre) && f.centre.length === 2 && f.centre.every(isNumber);
+  return isObject(f) && isSize(f.width) && isSize(f.height) && isSize(f.place) && Array.isArray(f.centre) && f.centre.length === 2 && f.centre.every(isNumber);
 }
 
 function isEntry(e: unknown): boolean {
@@ -18,7 +19,7 @@ function isEntry(e: unknown): boolean {
 }
 
 function isPlateFrame(f: unknown): boolean {
-  return isObject(f) && isNumber(f.width) && isNumber(f.height) && Array.isArray(f.hall) && f.hall.length === 2 && f.hall.every(isNumber);
+  return isObject(f) && isSize(f.width) && isSize(f.height) && Array.isArray(f.hall) && f.hall.length === 2 && f.hall.every(isNumber);
 }
 
 /** Both extents' plates and nothing else, each with its pictures and its frame. */
