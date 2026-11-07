@@ -6,7 +6,7 @@
 import { COLONY, GAME, HAPPINESS, POLITICS, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
-import { budgetCredits, budgetShares, taxAsPlanningEnds, votesOpen } from './politics.js';
+import { budgetCredits, taxAsPlanningEnds, votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { createRng } from './rng.js';
 import { score, scoreParts } from './game.js';
@@ -496,11 +496,11 @@ const WELFARE_SALT = 97; // literal-ok: rng salt, reshuffle replays only
 
 /**
  * Who Welfare would go to now: the non-Governor with strictly the lowest Worth; a tie is drawn on a stream from the
- * game, the month and Welfare's salt, so no election draw moves. Nobody while the Welfare share is 0. See S5-RULE-4.
+ * game, the month and Welfare's salt, so no election draw moves. Named at a 0% share too; the payment is what the share sets (AM-8). Nobody with politics off. See S5-RULE-4.
  */
 export function welfareRecipient(state: GameState): string | null {
   const politics = state.politics;
-  if (!politics || budgetShares(state).welfare === 0) return null;
+  if (!politics) return null;
   const worths = state.players.filter((p) => p.id !== politics.governor).map((p) => ({ id: p.id, worth: score(state, p.id) }));
   if (worths.length === 0) return null;
   const lowest = Math.min(...worths.map((w) => w.worth));
