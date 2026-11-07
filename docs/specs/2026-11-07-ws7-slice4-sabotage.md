@@ -1257,6 +1257,25 @@ did       D-S4-1 → B (investigateOdds 0.5), D-S4-2 → A (no lobby switch in R
 goal      S4-1, S4-2 — unchanged
 ```
 
+```
+AM-4 · 2026-11-08 · WS7 (build: S4-PR-1's logic review of S4-C1, findings I1 and I2) · an order's id names
+                    only its own month and orderer
+
+target    AM-1's id formula (S4-RULE-2's unknown line, §3 SabotageOrder.id); S4-B-AC-1's "Caught!"; S4-RULE-2's
+          rumour direction
+said      'sab-<tag>' from createRng over a hash of (state.seed, n, 'sab'), n counted over the shared order list
+did       the tag comes from a hash of (state.seed, order month, orderer, 'sab'). A player holds at most one
+          order a month, so the pair is unique; a replacement keeps its order's id; a clash with any id ever
+          issued redraws from the same stream. Investigation draws still key on n, which only the engine holds
+          (AM-1). Also settled here: S4-B-AC-1's "Caught!" is the screens' headline for any caught order
+          (S4-C17); the engine's guarded-catch line stays S4-RULE-4's "Caught at a guarded plot: the power stays
+          on." A rumour's direction other than up or down is refused: "A rumour moves a price up or down".
+because   n counted over everyone's orders told an orderer, by replacing her own order, whether someone else had
+          ordered in between (the leak AM-1 closed for sequential ids); and an id freed by a void order was issued
+          again to a later order, so a private void notice and a later public event could carry one id
+goal      S4-1, S4-2 — unchanged; HC-4 now holds for the id too
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: sabotage state
