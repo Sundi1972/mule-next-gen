@@ -18,11 +18,13 @@ import {
 const SEATS = ['lena', 'brix', 'ossa'];
 
 /** Sabotage is built off (AM-2): every test here switches it on and puts the config's value back after. */
+let savedOn: boolean;
 beforeEach(() => {
+  savedOn = POLITICS.sabotage.on;
   POLITICS.sabotage.on = true;
 });
 afterEach(() => {
-  POLITICS.sabotage.on = false;
+  POLITICS.sabotage.on = savedOn;
 });
 
 /** Month 2, no election, rumour orders placed by `by`; the prices are posted as the auction posts them. */
@@ -95,6 +97,7 @@ describe('market rumours', () => {
     const water = add.store.posted.water;
     applyRumours(add);
     expect(add.store.posted.water).toBe(shifted(water, 2 * shift));
+    expect(add.politics!.rumoured).toEqual([{ good: 'water', from: water }]);
     endRumours(add);
     expect(add.store.posted.water).toBe(water);
   });
@@ -133,6 +136,17 @@ describe('market rumours', () => {
     low.store.posted.food = 1;
     applyRumours(low);
     expect(low.store.posted.food).toBe(1);
+    // Three down rumours take the multiplier to 1 - 3 x shift; at a price of 1 the rounding reaches 0 and only the floor holds it.
+    const three = month(5, [
+      { by: 'lena', good: 'food', dir: 'down' },
+      { by: 'brix', good: 'food', dir: 'down' },
+      { by: 'ossa', good: 'food', dir: 'down' },
+    ]);
+    worked(three);
+    three.store.posted.food = 1;
+    expect(Math.round(1 * (1 - 3 * POLITICS.sabotage.orders.rumour.shift))).toBeLessThanOrEqual(0);
+    applyRumours(three);
+    expect(three.store.posted.food).toBe(1);
   });
 
   it('S4-T-AC-6: only this month\'s worked rumours shift: the same order of an earlier month does nothing', () => {
@@ -174,6 +188,8 @@ describe('market rumours', () => {
     for (const state of [control, rumoured]) while (state.phase !== 'auction') advancePhase(state);
     const base = control.store.posted.food;
     expect(rumoured.politics!.sabotage[0]).toMatchObject({ outcome: 'done', worked: true });
+    const rumourEvent = rumoured.monthEvents.find((e) => e.key === 'marketRumour')!;
+    expect(rumourEvent.line).toBe(`A rumour: Food opens ${Math.round(POLITICS.sabotage.orders.rumour.shift * 100)}% higher at the auction.`);
     expect(rumoured.store.posted.food).toBe(shifted(base, POLITICS.sabotage.orders.rumour.shift));
     expect(rumoured.politics!.rumoured).toEqual([{ good: 'food', from: base }]);
     // Food comes up first: its store lines are built from the shifted price.

@@ -21,6 +21,7 @@ import {
   createGame,
   createRng,
   GOODS,
+  goodWords,
   guardsMax,
   investigate,
   orderSabotage,
@@ -31,6 +32,7 @@ import {
   sabotagePossible,
   sabotageEvents,
   seedOf,
+  START,
   storeEvent,
   type EventKey,
   type GameState,
@@ -91,6 +93,7 @@ describe('sabotage orders', () => {
       { row: 'row 4: the orderer\'s own plot', target: cutOn('own'), message: () => "Pick another player's plot" },
       { row: 'row 5: a plot with no MULE', target: cutOn('bare'), message: () => 'That plot makes nothing to cut' },
       { row: 'row 5: a green belt', target: cutOn('belt'), message: () => 'That plot makes nothing to cut' },
+      { row: 'AM-4: a rumour whose direction is neither up nor down', target: () => ({ kind: 'rumour', good: 'food', dir: 'sideways' as never }), message: () => 'A rumour moves a price up or down' },
       { row: 'row 6: a rumour on something that is no good', target: () => ({ kind: 'rumour', good: 'gold' as never, dir: 'up' }), message: () => 'Pick a good' },
       {
         row: 'row 7: money under the cost',
@@ -210,6 +213,65 @@ describe('sabotage orders', () => {
       expect(place(7)).toEqual(first);
       expect(new Set(first).size).toBe(first.length);
       expect(place(8)).not.toEqual(first);
+    });
+
+    it('S4-T-AC-1: AM-4 a replacement keeps its id, and the id is the same whether or not another player ordered first (no leak)', () => {
+      const lenaId = (brixOrders: boolean, replace: boolean) => {
+        const state = newGame();
+        const { food } = plots(state);
+        if (brixOrders) orderSabotage(state, 'brix', { kind: 'rumour', good: 'water', dir: 'up' });
+        orderSabotage(state, 'lena', { kind: 'rumour', good: 'food', dir: 'up' });
+        if (replace) orderSabotage(state, 'lena', { kind: 'powerCut', tile: food });
+        return state.politics!.sabotage.find((o) => o.by === 'lena')!.id;
+      };
+      const alone = lenaId(false, false);
+      expect(lenaId(true, false)).toBe(alone);
+      expect(lenaId(true, true)).toBe(alone);
+      // Lena orders, Brix orders, Lena replaces: her id has not moved.
+      const state = newGame();
+      orderSabotage(state, 'lena', { kind: 'rumour', good: 'food', dir: 'up' });
+      const first = state.politics!.sabotage[0]!.id;
+      orderSabotage(state, 'brix', { kind: 'rumour', good: 'water', dir: 'up' });
+      orderSabotage(state, 'lena', { kind: 'rumour', good: 'energy', dir: 'down' });
+      expect(state.politics!.sabotage.find((o) => o.by === 'lena')!.id).toBe(first);
+    });
+
+    it('S4-T-AC-1: AM-4 an order that went void in one month and a later order of another player never share an id', () => {
+      const state = newGame();
+      const { food } = plots(state);
+      state.month = 2;
+      state.players[0]!.money = 1_000;
+      orderSabotage(state, 'lena', { kind: 'powerCut', tile: food });
+      const voidId = state.politics!.sabotage[0]!.id;
+      state.tiles[food]!.owner = null;
+      resolveSabotage(state);
+      expect(state.politics!.sabotage).toEqual([]);
+      state.month = 3;
+      orderSabotage(state, 'brix', { kind: 'rumour', good: 'food', dir: 'up' });
+      expect(state.politics!.sabotage[0]!.id).not.toBe(voidId);
+      // And over a longer game: every (month, orderer) pair has its own id.
+      const ids = new Set<string>();
+      for (let month = 1; month <= 12; month++) {
+        const game = newGame();
+        game.month = month;
+        for (const by of SEATS) orderSabotage(game, by, { kind: 'rumour', good: 'food', dir: 'up' });
+        for (const o of game.politics!.sabotage) ids.add(o.id);
+      }
+      expect(ids.size).toBe(12 * SEATS.length);
+    });
+
+    it('S4-T-AC-1: AM-4 a replay on the same seed gives the same ids, month by month', () => {
+      const run = () => {
+        const state = newGame({ seed: 21 });
+        const out: string[] = [];
+        for (let month = 1; month <= 3; month++) {
+          state.month = month;
+          for (const by of SEATS) orderSabotage(state, by, { kind: 'rumour', good: 'food', dir: 'up' });
+        }
+        for (const o of state.politics!.sabotage) out.push(o.id);
+        return out;
+      };
+      expect(run()).toEqual(run());
     });
 
     it('S4-T-AC-1: an order of a later month files beside the old ones, which stay for the game', () => {
@@ -439,6 +501,9 @@ describe('sabotage resolution', () => {
       filed = filed.concat(sabotageEvents(state));
     }
     expect(filed.length).toBeGreaterThan(0);
+    // Both kinds are among the seeds, so the loop below checks a rumour's event too.
+    expect(filed.some((e) => e.key === 'marketRumour')).toBe(true);
+    expect(filed.some((e) => e.key === 'powerCut')).toBe(true);
     for (const event of filed) {
       expect(event.kind).toBe('sabotage');
       expect(event.title.startsWith('Sabotage')).toBe(true);
@@ -490,6 +555,7 @@ describe('a sabotage month through advancePhase', () => {
     expect(cut).toBeDefined();
     expect(cut.plots).toEqual([]);
     expect(cut.sabotage).toMatchObject({ culprit: 'lena', worked: false, guarded: true });
+    expect(cut.line).toBe('Caught at a guarded plot: the power stays on.');
     expect(guarded.state.monthEvents.some((e) => e.key === 'powerCut')).toBe(true);
     expect(guarded.state.politics!.sabotage[0]).toMatchObject({ outcome: 'caught', culpritPublic: true });
   });
@@ -502,7 +568,35 @@ describe('a sabotage month through advancePhase', () => {
     const cut = events.find((e) => e.key === 'powerCut')!;
     expect(cut.sabotage).toMatchObject({ culprit: null, worked: true, guarded: false });
     expect(cut.plots.map((q) => q.index)).toEqual([p.food]);
+    const good = goodWords(state.tiles[p.food]!.outfit as never);
+    expect(cut.line).toBe(`Someone cut the power to a ${good[0]!.toUpperCase() + good.slice(1)} plot: it makes nothing this month.`);
     expect(JSON.stringify(events)).not.toContain('lena');
+  });
+
+  it('S4-T-AC-3: S4-RULE-3 row 5 (caught, not worked, not guarded) files an event with the line "Caught! The saboteur is named." and the culprit', () => {
+    const seed = seedFor({ works: false, seen: true }, cutBrix);
+    const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+    const { events } = throughProduction(state);
+    const cut = events.find((e) => e.key === 'powerCut')!;
+    expect(cut.line).toBe('Caught! The saboteur is named.');
+    expect(cut.sabotage).toMatchObject({ culprit: 'lena', worked: false, guarded: false });
+    expect(cut.plots).toEqual([]);
+  });
+
+  it('S4-T-AC-3: the month\'s sabotage events come in seat order, not in the order the orders were placed', () => {
+    // Two guarded cuts are both caught whatever the draws: Ossa places first, Lena second.
+    const state = newGame({ seed: 9 });
+    state.month = 2;
+    state.politics = { ...state.politics!, governor: 'lena', election: null };
+    const p = plots(state);
+    Object.assign(state.tiles[p.none]!, { owner: 'brix', outfit: 'smithore' });
+    for (const by of ['ossa', 'lena']) state.players.find((x) => x.id === by)!.money = 1_000;
+    orderSabotage(state, 'ossa', { kind: 'powerCut', tile: p.food });
+    orderSabotage(state, 'lena', { kind: 'powerCut', tile: p.none });
+    state.politics!.guards = [p.food, p.none];
+    const { events } = throughProduction(state);
+    const cuts = events.filter((e) => e.key === 'powerCut');
+    expect(cuts.map((e) => e.sabotage!.culprit)).toEqual(['lena', 'ossa']);
   });
 
   it('S4-B-AC-2 (engine), negative: a failed, unseen order files no event and changes no output', () => {
@@ -534,7 +628,7 @@ describe('the one reveal', () => {
     const { state } = monthOfSabotage(4, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
     resolveSabotage(state);
     const order = state.politics!.sabotage[0]!;
-    const before = 50;
+    const before = START.reputation;
     expect(state.players[0]!.reputation).toBe(before + caughtMove());
     expect(hooks.calls).toHaveLength(1);
     expect(hooks.calls[0]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
@@ -551,7 +645,7 @@ describe('the one reveal', () => {
       resolveSabotage(state);
       expect(hooks.calls).toHaveLength(1);
       expect(hooks.calls[0]!.args.slice(1, 4)).toEqual(['lena', 'brix', state.month]);
-      expect(hooks.calls[0]!.reputation).toBe(50 + caughtMove());
+      expect(hooks.calls[0]!.reputation).toBe(START.reputation + caughtMove());
     }
   });
 
@@ -623,7 +717,7 @@ describe('the one reveal', () => {
         solved = true;
         expect(hooks.calls).toHaveLength(1);
         expect(hooks.calls[0]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
-        expect(hooks.calls[0]!.reputation).toBe(50 + caughtMove());
+        expect(hooks.calls[0]!.reputation).toBe(START.reputation + caughtMove());
       }
     }
     expect(solved).toBe(true);
