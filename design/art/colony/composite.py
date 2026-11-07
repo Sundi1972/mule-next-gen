@@ -7,7 +7,7 @@ Run: blender -b -P composite.py -- <src> <look-dir> <plate> <out-dir> <tag> kind
   reads  <src>/<plate>-{day,dusk,glow}.png and <plate>.json, <src>/<kind>/<stage>-{day,dusk,glow}.png and frame.json,
          <look-dir>/colony_{day,dusk}.png (look.html's colony stills, decoded)
   writes <out-dir>/<plate>-<tag>-{day,dusk}.png (full res) and <plate>-<tag>-1280-{day,dusk}.png (ours at
-         1280 x 720 | look.html at 1280 x 720)"""
+         1280 x 720 | look.html at 1280 x 720); with STILLS=1 also -1920-* and ours alone (-<W>-<light>-ours.png)"""
 import json
 import math
 import os
@@ -122,8 +122,12 @@ for li in ("day", "dusk"):
         print(f"COLONY {li}: {kind}/{stage} at ({gx}, {gy}), centre px ({cx:.1f}, {cy:.1f})", flush=True)
     save(canvas, os.path.join(OUT, f"{PLATE}-{TAG}-{li}.png"))
     ring = load(os.path.join(RING, f"colony_{li}.png"))
-    small = flatten(shrink(canvas, canvas.shape[1] / 1280))[:720]
-    rs = flatten(shrink(ring, ring.shape[1] / 1280))[:720]
-    gap = np.ones((720, 16, 4), np.float32)
-    gap[..., :3] = 0.5
-    save(np.concatenate([small, gap, rs], 1), os.path.join(OUT, f"{PLATE}-{TAG}-1280-{li}.png"))
+    for W in (1280, 1920) if os.environ.get("STILLS") else (1280,):  # STILLS=1: the TV stills, alone and beside look
+        H = W * 9 // 16
+        small = flatten(shrink(canvas, canvas.shape[1] / W))[:H]
+        rs = flatten(shrink(ring, ring.shape[1] / W))[:H]
+        gap = np.ones((H, 16, 4), np.float32)
+        gap[..., :3] = 0.5
+        save(np.concatenate([small, gap, rs], 1), os.path.join(OUT, f"{PLATE}-{TAG}-{W}-{li}.png"))
+        if os.environ.get("STILLS"):
+            save(small, os.path.join(OUT, f"{PLATE}-{TAG}-{W}-{li}-ours.png"))

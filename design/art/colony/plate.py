@@ -186,12 +186,15 @@ for c in range(N):
 # overlay in the compositor, a follow-up.
 lines = [-G + SL * k for k in range(1, N)]
 LAMP = float(os.environ.get("COLONY_PLATE_LAMP", "110"))  # W per lamp; env for calibration runs only
+# a head-less pool at each inner crossing. Lower than a lamp: inside the 5 x 5 every place has four round it, and at
+# 110 W a free place's grass at dusk measured 1.18 of look.html's (measure.py)
+POOL = float(os.environ.get("COLONY_PLATE_POOL", "70"))
 for t in lines:
     for (x, y) in ((t, -E + 1.25), (E - 1.25, t), (t, E - 1.25), (-E + 1.25, t)):
         kits.lamp(x, y, z0=APRON_TOP, energy=LAMP)
 for x in lines:
     for y in lines:
-        core.light("POINT", (x, y, 3.0 - 0.16), LAMP, (1.0, 0.66, 0.36), 0.13)
+        core.light("POINT", (x, y, 3.0 - 0.16), POOL, (1.0, 0.66, 0.36), 0.13)
 
 n, size = 200, 300.0
 tv, tf = [], []
