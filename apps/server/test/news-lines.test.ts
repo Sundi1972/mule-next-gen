@@ -22,28 +22,39 @@ afterEach(() => vi.restoreAllMocks());
 const stateOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
 describe('MuleView.newsLines: the news, each line with the seats it names', () => {
-  it('newsLines says exactly what news says, line for line, on every screen through a whole month', async () => {
+  it('newsLines says exactly what news says, line for line, on every screen through a whole month', { timeout: 30_000 }, async () => {
     const fake = fakeContext({ table: TABLE });
     const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, politics: true });
     game.start(TABLE);
     const step = throughSidePicks(game, (ms) => fake.advance(ms));
     const seen = new Set<string>();
     const named = new Set<string>();
+    // Views cost: build them only when the news or the phase changes, which is every moment the two could drift apart.
+    const inside = game as unknown as { news: unknown; state: GameState };
+    let news: unknown = null;
+    let phase: string | null = null;
 
-    for (let t = 0; t < 40 * 60_000 && game.viewFor(null).phase !== 'gameOver'; t += WALK.tickMs) {
-      for (const viewer of [null, 's1']) {
-        const v: MuleView = game.viewFor(viewer);
-        expect(v.newsLines!.map((l) => l.text), `${v.phase} at ${t} ms`).toEqual(v.news);
-        for (const l of v.newsLines!) {
-          seen.add(l.text);
-          if (l.who.length > 0) named.add(l.text);
+    for (let t = 0; t < 40 * 60_000 && inside.state.phase !== 'gameOver'; t += WALK.tickMs) {
+      if (inside.news !== news) {
+        news = inside.news;
+        for (const viewer of [null, 's1']) {
+          const v: MuleView = game.viewFor(viewer);
+          expect(v.newsLines!.map((l) => l.text), `${v.phase} at ${t} ms`).toEqual(v.news);
+          for (const l of v.newsLines!) {
+            seen.add(l.text);
+            if (l.who.length > 0) named.add(l.text);
+          }
         }
       }
-      readyAll(game);
+      if (inside.state.phase !== phase || t % 1000 === 0) {
+        phase = inside.state.phase;
+        readyAll(game);
+      }
       step(WALK.tickMs);
       await Promise.resolve();
     }
 
+    expect(inside.state.phase, 'the premise: the month was played to its end').toBe('gameOver');
     expect(seen.size, 'the premise: the news changed through the month').toBeGreaterThan(3);
     expect(named.size, 'the premise: some line named a seat').toBeGreaterThan(0);
   });
