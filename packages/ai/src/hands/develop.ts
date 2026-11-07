@@ -2,6 +2,7 @@ import {
   AI_HANDS,
   analysisSeconds,
   doorOutside,
+  floorConfig,
   HALL_DOORS,
   reachOf,
   speedOf,
@@ -132,6 +133,20 @@ function rivalMayGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorC
 /** Whether Reach offers this seat a press below GRAB where it stands: what a GRAB pressed now becomes if the glint is gone. */
 function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorConfig, secondsLeft: number): boolean {
   return reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, me, cfg, { secondsLeft }).enabled;
+}
+
+/**
+ * Whether lake plot `plot` can never get a MULE on the floor: no spot on its shore offers its install (installable,
+ * the walk the hands price by). Judged for its owner; a plot nobody holds, as if each seat held it in turn.
+ */
+export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig()): boolean {
+  const tile = state.tiles[plot]!;
+  if (tile.terrain !== 'lake') return false;
+  if (tile.owner !== null) return !installable(state, cfg, tile.owner, plot);
+  return state.players.every((p) => {
+    const held = { ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: p.id } : t)) };
+    return !installable(held, cfg, p.id, plot);
+  });
 }
 
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
