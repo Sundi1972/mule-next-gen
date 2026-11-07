@@ -238,3 +238,39 @@ describe('/mcp, stateless, the seat code on every call', () => {
     expect(logged.filter((line) => line.includes(codeA) || line.includes(takenBack))).toEqual([]);
   });
 });
+
+describe('a late Claude seat', () => {
+  /** A one-month game of `table` on its own clock, recording every playbook that takes effect. */
+  function gameOf(table: (SeatInfo & { kind?: SeatKind })[]) {
+    const fake = fakeContext({ table });
+    const notes: PlaybookNote[] = [];
+    const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, recordPlaybook: (note) => notes.push(note) });
+    return { game, fake, notes };
+  }
+  const inLandGrant = (game: MuleGame) => () => game.viewFor(null).phase === 'landGrant';
+
+  it('B-AC-4: a Claude seat whose client never answers plays its built-in plan; the land grant starts on time', async () => {
+    const builtinTable = TABLE.map(({ kind: _kind, ...seat }) => seat);
+    const builtin = gameOf(builtinTable);
+    builtin.game.start(builtinTable);
+    await playUntil(builtin.game, builtin.fake, inLandGrant(builtin.game));
+    const codes = new SeatCodeBook();
+    const client = mcpClient(await serve(codes));
+    const { game, fake, notes } = gameOf(TABLE);
+    const code = codes.issue(game, 's2');
+    game.start(TABLE);
+    const ask = await client.call('wait_for_my_turn', { code });
+    expect(ask).toMatchObject({ kind: 'ask', phase: 'land' });
+
+    await playUntil(game, fake, inLandGrant(game));
+
+    expect(fake.ctx.now()).toBe(builtin.fake.ctx.now());
+    expect(notes.filter((n) => n.seat === 's2' && n.phase === 'landGrant').map((n) => n.playbook.by)).toEqual(['engine']);
+    expect(await client.call('submit_plan', { code, ask_id: ask.ask_id, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'late' }], line: 'Late.' })).toMatchObject({ kind: 'too_late' });
+
+    await playUntil(game, fake);
+    expect(game.viewFor(null).phase).toBe('gameOver');
+    expect(notes.some((n) => n.seat === 's2' && n.playbook.by === 'llm')).toBe(false);
+    expect((game as unknown as { away: Set<string> }).away.has('s2')).toBe(false);
+  });
+});
