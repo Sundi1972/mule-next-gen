@@ -328,10 +328,7 @@ function grantWithFarms(smithore: number, normal?: number): GameState {
 }
 
 describe('land plans by worth', () => {
-  // Reopened by AM-18 (PR-5): every plot's Water cost moves this map's plan worths (the farm plan, ~1,450, is no longer a
-  // quarter of the mines at any Smithore price here), and the utility shortlist now offers a plan under half the best's
-  // worth (1,133 of 2,493 at Smithore 400). Skipped, not rebased, so the land shortlist gets its owner's look.
-  it.skip('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
+  it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
     // Smithore at 400: a mountain mine is worth about 3,100, the best farm about 750.
     const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
     const best = Math.max(...rich.all.map((c) => c.value));
