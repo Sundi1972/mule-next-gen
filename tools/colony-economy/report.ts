@@ -53,6 +53,7 @@ interface GameRecord {
   seed: number;
   months: number;
   colonistsEnd: number;
+  refEnd: Record<Good, number>;
   prices: Record<Good, number>[];
   /** Every price the store posted, month 1's included: history's prices miss the last month's. */
   postings: Record<Good, number>[];
@@ -217,6 +218,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
     seed,
     months: state.history.length,
     colonistsEnd: state.colonists,
+    refEnd: { ...state.store.refPrice },
     prices: state.history.map((h) => ({ ...h.prices })),
     postings: [{ ...state.history[0]!.prices }, ...postings],
     shortages: state.history.map((h) => [...h.shortages]),
@@ -348,6 +350,10 @@ const METRICS: Metric[] = [
   ...(['food', 'water', 'medicine'] as Good[]).map((g): Metric => ({ name: `colonists short of ${label(g)} (months)`, value: (gs) => String(sum(gs.map((x) => x.shortages.filter((m) => m.includes(g)).length))) })),
   { name: "colonists short of Food or Water (months, the sim's figure)", value: (gs) => String(sum(gs.map((x) => x.colonistsHungryMonths))) },
   { name: 'hungry seat-months', value: (gs) => String(sum(gs.map((x) => x.hungrySeatMonths))) },
+  ...(['food', 'water', 'energy'] as Good[]).map((g): Metric => ({
+    name: `normal price N of ${label(g)} at the game's end, median / max (configured ${GOOD_CONFIG[g].refPrice})`,
+    value: (gs) => { const v = gs.map((x) => x.refEnd[g]); return `${fmt(quantile(v, 0.5))} / ${Math.max(...v)}`; },
+  })),
   { name: 'colonists at the end (mean)', value: (gs) => fmt(sum(gs.map((x) => x.colonistsEnd)) / gs.length, 1) },
   { name: 'farm-months switched off for Energy', value: (gs) => share(sum(gs.map((x) => x.farmMonthsOffForEnergy)), sum(gs.map((x) => x.farmMonths))) },
   { name: 'plot-months switched off for Energy (all plots)', value: (gs) => String(sum(gs.map((x) => x.plotMonthsOffForEnergy))) },
