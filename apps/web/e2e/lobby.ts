@@ -410,7 +410,8 @@ async function aClaudeSeatInTheLobby(): Promise<void> {
   await heiko.getByTestId('sheet-kind-claude').click();
   const seatCode = (await heiko.getByTestId('sheet-setup-code-text').textContent({ timeout: SHOWN_MS }))?.trim() ?? '';
   check(/^[A-Z2-9]{4}-\d{2}$/.test(seatCode), `${id}: the host's sheet shows the seat code, got "${seatCode}"`);
-  check(room.seatForCode(seatCode)?.seatId === ai.id, `${id}: the code on the host's phone is the one the room holds for ${ai.name}`);
+  const held = server.registry.seatForCode(seatCode);
+  check(held?.state === 'live' && held.seatId === ai.id, `${id}: the code on the host's phone is the one the server holds for ${ai.name}, got ${JSON.stringify(held && held.state)}`);
   check(await shows(heiko.getByTestId('sheet-setup-invite-copy')), `${id}: the host's sheet has Copy invite`);
   check((await heiko.getByTestId('sheet-setup-invite-text').textContent())?.includes(`Play MULE seat ${seatCode}.`) ?? false, `${id}: the invite carries the code`);
   check((await heiko.getByTestId('sheet-chip').textContent())?.trim() === 'WAITING FOR CLAUDE', `${id}: the host's sheet says the seat waits for Claude`);

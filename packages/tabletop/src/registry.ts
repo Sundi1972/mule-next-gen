@@ -1,4 +1,4 @@
-import { cryptoRandom, Room, seatCode, type RoomOptions } from './room.js';
+import { cryptoRandom, Room, seatCode, type RoomOptions, type SeatCodeAnswer } from './room.js';
 
 /** No vowels (so codes never spell words) and no letters that are easy to mix up. */
 const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -15,11 +15,23 @@ export class RoomRegistry<Intent, View> {
     private readonly seatRandom: () => number = cryptoRandom,
   ) {}
 
-  /** A seat code no live room holds (spec §3: unique among live codes), so a code always finds one seat. */
+  /**
+   * What a seat code names, across every live room: the Claude seat's MCP module asks this on every call (spec §9: the
+   * Room is the one store of codes). A code is held by at most one room, live or dead, so the first answer is the answer.
+   */
+  seatForCode(code: string): SeatCodeAnswer {
+    for (const { room } of this.rooms.values()) {
+      const answer = room.seatForCode(code);
+      if (answer) return answer;
+    }
+    return null;
+  }
+
+  /** A seat code no live room holds or has taken back (spec §3: unique among live codes), so a code names one seat. */
   private newSeatCode(): string {
     for (let i = 0; i < 100; i++) {
       const code = seatCode(this.seatRandom);
-      if (![...this.rooms.values()].some(({ room }) => room.seatForCode(code))) return code;
+      if (this.seatForCode(code) === null) return code;
     }
     throw new Error('No free seat code after 100 draws');
   }

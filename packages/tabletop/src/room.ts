@@ -30,7 +30,17 @@ export interface SeatInfo {
   color: number;
   /** Absent means not chosen: the game applies its own default. */
   pick?: string;
+  /** A computer seat the host set: claude seats play their built-in plan until a Claude chat calls (C1). */
+  kind?: SeatKind;
 }
+
+/**
+ * What a seat code names, as the Claude seat's MCP module reads it (its CodeAnswer, spec C1/C2): a live code's seat and
+ * the game hosting it, the object the game's start recorded its seats under; a code killed by take-back or a kick says
+ * so (it must not count as a wrong code); a code no seat ever held is null. Game over is the MCP side's to answer, from
+ * the game's own state, before it asks.
+ */
+export type SeatCodeAnswer = { state: 'live'; table: object; seatId: string } | { state: 'taken_back' } | null;
 
 /** What a room offers the game it hosts. */
 export interface GameContext {
@@ -84,6 +94,11 @@ export interface Game<Intent, GameView> {
   /** The seat's screen was replaced by another device; drop any input the old screen was holding. Not a disconnect. */
   seatMoved?(seatId: string): void;
   dispose?(): void;
+  /**
+   * The game itself, when the room hosts a wrapper of it (the server's recorder): what a Claude seat's code names as its
+   * table, the object the game's start keyed its seats under. Absent: the hosted game is the game.
+   */
+  readonly table?: object;
 }
 
 export interface RoomOptions<Intent, GameView> {
@@ -169,6 +184,8 @@ export class Room<Intent, View> {
   /** Once disposed, the room is done with its game: no callback runs, none is scheduled, and no leave reaches it. */
   private disposed = false;
   private nextSeat = 1;
+  /** Seat codes taken back or kicked: they answer "taken back" for the room's life and are never issued again. */
+  private readonly deadCodes = new Set<string>();
   private chatId = 0;
   private broadcastQueued = false;
 
@@ -279,7 +296,7 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) })));
+        this.game.start(this.seats.map(({ id, name, isAi, color, pick, kind }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}), ...(kind !== undefined ? { kind } : {}) })));
         this.broadcast();
         return;
       case 'kick':
@@ -330,10 +347,12 @@ export class Room<Intent, View> {
    * The live claude seat that holds `code` in this room, or null: how the Claude seat's MCP module finds a seat, on
    * every call (spec §9: never a second store of codes). Case-insensitive and trimmed, as players type and paste codes.
    */
-  seatForCode(code: string): { seatId: string; kind: 'claude' } | null {
+  seatForCode(code: string): SeatCodeAnswer {
     const typed = code.trim().toUpperCase();
-    const seat = typed ? this.seats.find((s) => s.kind === 'claude' && s.seatCode === typed) : undefined;
-    return seat ? { seatId: seat.id, kind: 'claude' } : null;
+    if (!typed) return null;
+    const seat = this.seats.find((s) => s.kind === 'claude' && s.seatCode === typed);
+    if (seat) return { state: 'live', table: this.game.table ?? this.game, seatId: seat.id };
+    return this.deadCodes.has(typed) ? { state: 'taken_back' } : null;
   }
 
   /** RULE-1: the host, in the lobby, sets a computer seat's kind; claude issues it a code, builtin kills the code at once. */
@@ -345,15 +364,16 @@ export class Room<Intent, View> {
     if (!seat.isAi) throw new TableError('Only a computer seat can be played by Claude');
     if (kind !== 'claude' && kind !== 'builtin') throw new TableError('No such kind of seat');
     if ((seat.kind ?? 'builtin') === kind) return;
+    if (seat.seatCode) this.deadCodes.add(seat.seatCode);
     seat.kind = kind;
     seat.seatCode = kind === 'claude' ? this.freshSeatCode() : null;
   }
 
-  /** A code no seat in this room holds: the registry's generator already avoids every other live room's. */
+  /** A code this room never issued, live or dead: the registry's generator already avoids every other room's. */
   private freshSeatCode(): string {
     for (let i = 0; i < 100; i++) {
       const code = this.opts.newSeatCode().trim().toUpperCase();
-      if (!this.seatForCode(code)) return code;
+      if (this.seatForCode(code) === null) return code;
     }
     throw new Error('No free seat code after 100 draws');
   }
@@ -476,6 +496,7 @@ export class Room<Intent, View> {
     if (!seat) throw new TableError('No such seat');
     if (target === this.hostId) throw new TableError('Close the table instead');
     this.seats.splice(this.seats.indexOf(seat), 1);
+    if (seat.seatCode) this.deadCodes.add(seat.seatCode);
     seat.conn?.send({ t: 'removed', reason: 'kicked' });
   }
 

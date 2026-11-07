@@ -1,7 +1,11 @@
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { expect, it } from 'vitest';
 import WebSocket from 'ws';
+import { MuleGame } from '../src/mule-game.js';
 import { createMuleServer } from '../src/server.js';
 
 type Envelope = ServerEnvelope<MuleView>;
@@ -54,5 +58,33 @@ it('C1 (Task 1.2): setSeatKind crosses the socket to the Room; a malformed one i
     for (const s of sockets) s.terminate();
     running.registry.disposeAll(); // stops any game's phase timers
     await running.close();
+  }
+});
+
+it('C1 (WS2 contract): with the game recorded, as the real server runs, a code names the MuleGame itself, not the recorder', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mule-seat-kind-'));
+  const running = createMuleServer({ seed: () => 7, recordDir: dir });
+  const sockets: WebSocket[] = [];
+  try {
+    await new Promise<void>((r) => running.server.listen(0, '127.0.0.1', r));
+    const { port } = running.server.address() as AddressInfo;
+    const { code } = (await (await fetch(`http://127.0.0.1:${port}/rooms`, { method: 'POST' })).json()) as { code: string };
+    const heiko = await phone(`ws://127.0.0.1:${port}/ws`);
+    sockets.push(heiko.socket);
+    heiko.send({ t: 'join', code, name: 'Heiko' });
+    await heiko.next((m) => m.t === 'welcome');
+    heiko.send({ t: 'addAi' });
+    const added = (await heiko.next((m) => m.t === 'view' && m.view.seats.some((s) => s.isAi))) as Extract<Envelope, { t: 'view' }>;
+    const ai = added.view.seats.find((s) => s.isAi)!.id;
+    heiko.send({ t: 'setSeatKind', seatId: ai, kind: 'claude' });
+    const set = (await heiko.next((m) => m.t === 'view' && m.view.seats.some((s) => s.id === ai && s.seatCode))) as Extract<Envelope, { t: 'view' }>;
+    const answer = running.registry.seatForCode(set.view.seats.find((s) => s.id === ai)!.seatCode!);
+    expect(answer).toMatchObject({ state: 'live', seatId: ai });
+    expect(answer?.state === 'live' && answer.table, 'the MuleGame that start keys its seats under').toBeInstanceOf(MuleGame);
+  } finally {
+    for (const s of sockets) s.terminate();
+    running.registry.disposeAll();
+    await running.close();
+    rmSync(dir, { recursive: true, force: true });
   }
 });

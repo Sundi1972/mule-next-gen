@@ -30,9 +30,10 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 let tokens = 0;
 const SEAT_CODE = /^[A-Z2-9]{4}-\d{2}$/;
 
-/** Heiko (host) and Mia on phones, a TV, and one AI seat, Brix, in the lobby. */
+/** Heiko (host) and Mia on phones, a TV, and one AI seat, Brix, in the lobby; `hosted` is the game the room made. */
 async function lobby(options: { newSeatCode?: () => string } = {}) {
-  const room = new Room<unknown, View>({ code: 'KRTX', createGame: game, aiNames: ['Brix', 'Juno'], newToken: () => `t${++tokens}`, ...options });
+  let hosted: object | null = null;
+  const room = new Room<unknown, View>({ code: 'KRTX', createGame: () => (hosted = game()) as Game<unknown, View>, aiNames: ['Brix', 'Juno'], newToken: () => `t${++tokens}`, ...options });
   const heiko = new Screen();
   const mia = new Screen();
   const tv = new Screen();
@@ -46,7 +47,7 @@ async function lobby(options: { newSeatCode?: () => string } = {}) {
     room.receive(who, who.from, { t: 'setSeatKind', seatId, kind });
     await flush();
   };
-  return { room, heiko, mia, tv, brix, set };
+  return { room, heiko, mia, tv, brix, set, hosted: hosted! as object };
 }
 
 describe('C1: a computer seat is Built-in or Claude, and only the host holds its code', () => {
@@ -65,15 +66,21 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
   });
 
   it('C1: the code finds its seat in this room, typed in any case; a code nobody holds finds none', async () => {
-    const { room, heiko, brix, set } = await lobby();
+    const { room, heiko, brix, set, hosted } = await lobby();
     await set(heiko, 'claude');
     const code = heiko.view().seats.find((s) => s.id === brix)!.seatCode!;
-    expect(room.seatForCode(code)).toEqual({ seatId: brix, kind: 'claude' });
-    expect(room.seatForCode(` ${code.toLowerCase()} `)).toEqual({ seatId: brix, kind: 'claude' });
-    expect(room.seatForCode('ZZZZ-00')).toBeNull();
+    // The table is the game the room hosts: the object the game's start recorded its Claude seats under (WS2's lookup).
+    const live = room.seatForCode(code);
+    expect(live).toMatchObject({ state: 'live', seatId: brix });
+    // The game instance itself, never the Room: WS2's PR-1b keys each Claude seat's writer by it, and a Room would
+    // match nothing and answer "call again" for ever.
+    expect(live?.state === 'live' && live.table, 'the table is the hosted game itself').toBe(hosted);
+    expect(live?.state === 'live' && live.table).not.toBe(room);
+    expect(room.seatForCode(` ${code.toLowerCase()} `)).toMatchObject({ state: 'live', seatId: brix });
+    expect(room.seatForCode('ZZZZ-00'), 'a code no seat ever held').toBeNull();
   });
 
-  it('RULE-1 row 3: back to Built-in, the code dies at once: no view shows it and it finds no seat', async () => {
+  it('RULE-1 row 3: back to Built-in, the code dies at once: no view shows it, and it answers "taken back", never a seat', async () => {
     const { room, heiko, brix, set } = await lobby();
     await set(heiko, 'claude');
     const code = heiko.view().seats.find((s) => s.id === brix)!.seatCode!;
@@ -82,7 +89,14 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     expect(seat.kind).toBe('builtin');
     expect(seat.seatCode).toBeUndefined();
     expect(seat.claude).toBeUndefined();
-    expect(room.seatForCode(code)).toBeNull();
+    // Remembered as taken back, so the MCP side says so and doesn't count it as a wrong code (PM ruling (b)).
+    expect(room.seatForCode(code)).toEqual({ state: 'taken_back' });
+    // Back to Claude, the seat gets a new code; the old one stays taken back.
+    await set(heiko, 'claude');
+    const again = heiko.view().seats.find((s) => s.id === brix)!.seatCode!;
+    expect(again).not.toBe(code);
+    expect(room.seatForCode(code)).toEqual({ state: 'taken_back' });
+    expect(room.seatForCode(again)).toMatchObject({ state: 'live', seatId: brix });
   });
 
   it('RULE-1 row 4: setting the kind a seat already has changes nothing, so a Claude seat keeps its code', async () => {
@@ -91,6 +105,21 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     const code = heiko.view().seats.find((s) => s.id === brix)!.seatCode;
     await set(heiko, 'claude');
     expect(heiko.view().seats.find((s) => s.id === brix)!.seatCode).toBe(code);
+  });
+
+  it('C1: a room hosting a wrapper of its game (a recorder) names the game itself as the table, never the wrapper', async () => {
+    const inner = game();
+    const wrapper: Game<unknown, View> = { start: (s) => inner.start(s), handle: (a, b) => inner.handle(a, b), viewFor: (s) => inner.viewFor(s), table: inner };
+    const room = new Room<unknown, View>({ code: 'KRTX', createGame: () => wrapper, aiNames: ['Brix'], newToken: () => `t${++tokens}` });
+    const heiko = new Screen();
+    room.receive(heiko, heiko.from, { t: 'join', code: 'KRTX', name: 'Heiko' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    await flush();
+    const brix = heiko.view().seats.find((s) => s.isAi)!.id;
+    room.receive(heiko, heiko.from, { t: 'setSeatKind', seatId: brix, kind: 'claude' });
+    await flush();
+    const answer = room.seatForCode(heiko.view().seats.find((s) => s.id === brix)!.seatCode!);
+    expect(answer?.state === 'live' && answer.table).toBe(inner);
   });
 
   it('C1: two Claude seats get two codes', async () => {
@@ -104,8 +133,8 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     expect(new Set(codes).size).toBe(2);
   });
 
-  it('C1: a code already live in the room is never issued twice', async () => {
-    const issued = ['AAAA-11', 'AAAA-11', 'BBBB-22'];
+  it('C1: a code the room holds, live or taken back, is never issued again', async () => {
+    const issued = ['AAAA-11', 'AAAA-11', 'BBBB-22', 'AAAA-11', 'BBBB-22', 'CCCC-33'];
     const { room, heiko, brix, set } = await lobby({ newSeatCode: () => issued.shift()! });
     room.receive(heiko, heiko.from, { t: 'addAi' });
     await flush();
@@ -113,6 +142,10 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     await set(heiko, 'claude');
     await set(heiko, 'claude', juno);
     expect(heiko.view().seats.filter((s) => s.kind === 'claude').map((s) => s.seatCode).sort()).toEqual(['AAAA-11', 'BBBB-22']);
+    // Brix taken back and made Claude's again: AAAA-11 (taken back) and BBBB-22 (Juno's) are skipped.
+    await set(heiko, 'builtin');
+    await set(heiko, 'claude');
+    expect(heiko.view().seats.find((s) => s.id === brix)!.seatCode).toBe('CCCC-33');
   });
 
   it('C1: the registry issues a code no other live room holds', async () => {
@@ -121,6 +154,7 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     const random = () => draws.shift() ?? 0.9;
     const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix'] }, random, Date.now, random);
     const codes: string[] = [];
+    const rooms: { room: Room<unknown, View>; ai: string }[] = [];
     for (let i = 0; i < 2; i++) {
       const room = registry.create();
       const host = new Screen();
@@ -131,7 +165,15 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
       room.receive(host, host.from, { t: 'setSeatKind', seatId: ai, kind: 'claude' });
       await flush();
       codes.push(host.view().seats.find((s) => s.id === ai)!.seatCode!);
+      rooms.push({ room, ai });
     }
+    // The registry answers for every room: each code finds its own room's game and seat (PM ruling (a)).
+    for (const [i, { room, ai }] of rooms.entries()) {
+      const answer = registry.seatForCode(codes[i]!.toLowerCase());
+      expect(answer).toMatchObject({ state: 'live', seatId: ai });
+      expect(answer && answer.state === 'live' && answer.table).toBe((room.seatForCode(codes[i]!) as { table: object }).table);
+    }
+    expect(registry.seatForCode('ZZZZ-99')).toBeNull();
     expect(codes[0]).toBe('AAAA-00');
     expect(codes[1]).toMatch(SEAT_CODE);
     expect(codes[1], 'the second room redraws rather than issue a live code').not.toBe('AAAA-00');
@@ -156,17 +198,17 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     expect(heiko.view().seats.find((s) => s.id === brix)!.kind).toBeUndefined();
   });
 
-  it('C1 (negative): a kicked Claude seat takes its code with it', async () => {
+  it('C1 (negative): a kicked Claude seat takes its code with it: the code answers "taken back"', async () => {
     const { room, heiko, brix, set } = await lobby();
     await set(heiko, 'claude');
     const code = heiko.view().seats.find((s) => s.id === brix)!.seatCode!;
     room.receive(heiko, heiko.from, { t: 'kick', seatId: brix });
     await flush();
-    expect(room.seatForCode(code)).toBeNull();
+    expect(room.seatForCode(code)).toEqual({ state: 'taken_back' });
   });
 
-  it('C1: a Claude seat starts the game as a computer seat, so it plays its built-in plan until Claude calls', async () => {
-    const started: { id: string; isAi: boolean }[][] = [];
+  it('C1: a Claude seat starts the game as a computer seat with its kind, so the game knows it (PM ruling (c)) and plays its built-in plan until Claude calls', async () => {
+    const started: { id: string; name: string; isAi: boolean; kind?: string }[][] = [];
     const room = new Room<unknown, View>({ code: 'KRTX', createGame: () => ({ ...game(), start: (seats) => started.push(seats) }), aiNames: ['Brix'], newToken: () => `t${++tokens}` });
     const heiko = new Screen();
     room.receive(heiko, heiko.from, { t: 'join', code: 'KRTX', name: 'Heiko' });
@@ -176,6 +218,7 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     room.receive(heiko, heiko.from, { t: 'setSeatKind', seatId: brix, kind: 'claude' });
     room.receive(heiko, heiko.from, { t: 'start' });
     await flush();
-    expect(started[0]!.find((s) => s.id === brix)).toMatchObject({ isAi: true });
+    expect(started[0]!.find((s) => s.id === brix)).toMatchObject({ isAi: true, kind: 'claude' });
+    expect(started[0]!.find((s) => s.name === 'Heiko')).not.toHaveProperty('kind');
   });
 });
