@@ -533,7 +533,7 @@ export function TvSale({ live }: { live: LiveSale }) {
                 {held ? 'Lena keeps 5 Food' : short ? 'Lena sells short' : 'Lena sells to the store'}
               </span>
               <span data-num className={cx('font-mono text-xl', short ? 'text-warn' : 'text-ink-2')}>
-                {held ? 'what she must hold' : short ? `×${sale.short} past what she must hold · short ${sale.short}` : `×${sale.sold} at ${FOOD.storeBuys} cr`}
+                {held ? 'what they must hold' : short ? `×${sale.short} past what they must hold · short ${sale.short}` : `×${sale.sold} at ${FOOD.storeBuys} cr`}
               </span>
               <Chevrons speed={sale.speed} on={sale.trading} />
             </div>
