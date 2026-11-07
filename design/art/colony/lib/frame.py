@@ -77,6 +77,8 @@ def setup(samples, pct=100, fr=None):
     scene.cycles.samples = samples
     scene.cycles.use_adaptive_sampling = True
     scene.cycles.use_denoising = True
+    if os.environ.get("COLONY_DENOISE_GPU") == "1" and hasattr(scene.cycles, "denoising_use_gpu"):
+        scene.cycles.denoising_use_gpu = True  # OIDN on Metal: the CPU one hung twice on spaceport/closed-dusk (7 Nov)
     scene.cycles.max_bounces = 8
     scene.cycles.transparent_max_bounces = 64  # stacked leaf cards need many, or a canopy turns black
     scene.cycles.caustics_reflective = False
