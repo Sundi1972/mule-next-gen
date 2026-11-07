@@ -34,7 +34,10 @@ function withBudget(state: GameState, s: Record<BudgetLine, number>): void {
 }
 
 function advanceTo(state: GameState, phase: GameState['phase']): void {
-  while (state.phase !== phase) advancePhase(state);
+  for (let steps = 0; state.phase !== phase && state.phase !== 'gameOver'; steps++) {
+    if (steps > 20) throw new Error(`stuck in ${state.phase} on the way to ${phase}`);
+    advancePhase(state);
+  }
 }
 
 function money(state: GameState, id: string): number {
