@@ -24,7 +24,7 @@ import { GOODS, type GameState, type Stock, type Tile } from './types.js';
  * - the seed, the land grant's coming order and the unannounced ship's
  *   wishlist, which would let a reader see the future;
  * - other players' rows in the history (what they had and made);
- * - other players' election ballots, in every stage: the reveal shows totals only.
+ * - other players' election and law ballots, in every stage: the reveal shows totals only.
  */
 export function observe(state: GameState, playerId: string): GameState {
   const me = state.players.find((p) => p.id === playerId);
@@ -74,6 +74,11 @@ export function observe(state: GameState, playerId: string): GameState {
   if (election) {
     const own = election.ballots[playerId];
     election.ballots = own ? { [playerId]: own } : {};
+  }
+  const council = sim.politics?.council;
+  if (council) {
+    const own = council.ballots[playerId];
+    council.ballots = own === undefined ? {} : { [playerId]: own };
   }
   sim.history = sim.history.map((h) => ({
     ...h,
