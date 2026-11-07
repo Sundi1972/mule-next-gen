@@ -942,8 +942,8 @@ export const POLITICS = {
     runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
     /** Chance it runs for Sheriff when it does not run for Governor. */
     runSheriff: { trader: 0.3, cautious: 0.4, aggressive: 0.3, saboteur: 0.7 } satisfies Record<AiPersonaId, number>,
-    /** The sales tax in whole percent a persona steers toward as Governor. */
-    taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
+    /** The sales tax in whole percent a persona steers toward as Governor: 10 for every persona (pace set C, Heiko, 6 Nov). */
+    taxTarget: { trader: 10, cautious: 10, aggressive: 10, saboteur: 10 } satisfies Record<AiPersonaId, number>,
     /** Whole percent a Governor adds when the colony fund is low. */
     taxFundBump: 2,
     /** The fund is low under this many months of the elected offices' pay. */
@@ -961,8 +961,13 @@ export const POLITICS = {
     },
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
-      /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
+      /** Whether an AI Governor of each persona commissions a prestige object once the fund holds `commissionShare` of its credits. */
       commissions: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
+      /**
+       * The share of an object's credits the fund must hold before an AI Governor commissions it: 0.1 (pace set C,
+       * Heiko, 6 Nov). The fund then pays it off month by month, and donations help.
+       */
+      commissionShare: 0.1,
       /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
       paysStrike: ({ trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10). */
@@ -985,14 +990,16 @@ export const POLITICS = {
 /**
  * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
  * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
- * their reference prices; upkeep and repair are in credits.
+ * their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every
+ * old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and
+ * repairCost are unchanged.
  */
 export const PRESTIGE = {
-  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, prestige: 2, upkeep: 30, repairCost: 150 },
-  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, prestige: 3, upkeep: 45, repairCost: 225 },
-  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, prestige: 3, upkeep: 50, repairCost: 250 },
-  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, prestige: 4, upkeep: 70, repairCost: 350 },
-  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, prestige: 5, upkeep: 100, repairCost: 500 },
+  park: { name: 'Park', credits: 210, goods: { alloy: 1 }, buildMonths: 1, prestige: 2, upkeep: 15, repairCost: 150 },
+  hospital: { name: 'Hospital', credits: 340, goods: { electronics: 1 }, buildMonths: 2, prestige: 3, upkeep: 23, repairCost: 225 },
+  observatory: { name: 'Observatory', credits: 350, goods: { crystite: 2 }, buildMonths: 2, prestige: 3, upkeep: 25, repairCost: 250 },
+  stadium: { name: 'Stadium', credits: 500, goods: { alloy: 1, electronics: 1 }, buildMonths: 3, prestige: 4, upkeep: 35, repairCost: 350 },
+  spaceport: { name: 'Spaceport upgrade', credits: 690, goods: { alloy: 1, electronics: 1 }, buildMonths: 3, prestige: 5, upkeep: 50, repairCost: 500 },
 } satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; prestige: number; upkeep: number; repairCost: number }>;
 
 /**
@@ -1031,14 +1038,14 @@ export const HAPPINESS = {
 
 /** The colony fund's own rules. Placeholders until the colony's sim tuning. */
 export const COLONY = {
-  /** Projects commissioned or building at the same time. */
-  maxOpen: 1,
+  /** Projects commissioned or building at the same time: 3 (pace set C, Heiko, 6 Nov). */
+  maxOpen: 3,
   /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
   reserve: 100,
   /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
   fundBuysGoods: true,
-  /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
-  grant: { perMonth: 150 },
+  /** The Federation's grant into the fund at each upkeep, in credits: 250 a month (pace set C, Heiko, 6 Nov); flat until a scaling rule is tuned. */
+  grant: { perMonth: 250 },
   /**
    * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).

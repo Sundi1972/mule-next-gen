@@ -254,7 +254,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
     mount(game(colonyOf([])));
     tap('commission-open');
     tap('cat-park');
-    expect(text('commission-confirm-line')).toBe('Commission the Park: 420 cr and 2 Alloy, from the fund and donations');
+    expect(text('commission-confirm-line')).toBe(`Commission the Park: ${PRESTIGE.park.credits} cr and ${PRESTIGE.park.goods.alloy} Alloy, from the fund and donations`);
     tap('commission-go');
     expect(sent).toEqual([{ type: 'commission', id: 'park' }]);
     expect(has('commission-news'), 'no news before the server has the project').toBe(false);
@@ -273,29 +273,33 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
 });
 
 describe('C35: anyone donates through the chips (B-AC-35-2)', () => {
-  /** The park collecting: 100 of 420 cr in, no alloy yet, Lena 70 cr on its plaque. */
+  /** The park collecting: 100 of its credits in, no alloy yet, Lena 70 cr on its plaque. */
   const park = () => project('park', 'commissioned', { funded: { credits: 100, goods: {} }, plaque: [{ playerId: 's1', value: 70 }] });
+  /** The park's credits still missing, and its alloy. */
+  const rest = PRESTIGE.park.credits - 100;
+  const alloy = PRESTIGE.park.goods.alloy;
 
   it('B-AC-35-2: a phone that is not the Governor sees Donate on a collecting project, and its chips', () => {
     mount(game(colonyOf([park()]), { governor: 's2', held: { alloy: 1 } }));
     tap('donate-park');
     expect(has('donate-chips')).toBe(true);
-    expect(text('donate-missing')).toBe('needs 320 cr · 2 Alloy');
+    expect(text('donate-missing')).toBe(`needs ${rest} cr · ${alloy} Alloy`);
   });
 
   it('B-AC-35-2: "the rest" is the missing credits when the donor has more', () => {
     mount(game(colonyOf([park()]), { money: 1000 }));
     tap('donate-park');
-    expect(text('chip-cr-rest')).toBe('the rest (320)');
+    expect(text('chip-cr-rest')).toBe(`the rest (${rest})`);
   });
 
   it('B-AC-35-2: "the rest" is all the donor has when that is less than what is missing', () => {
-    mount(game(colonyOf([park()]), { money: 200 }));
+    const money = rest - 10;
+    mount(game(colonyOf([park()]), { money }));
     tap('donate-park');
-    expect(text('chip-cr-rest')).toContain('(200)');
+    expect(text('chip-cr-rest')).toContain(`(${money})`);
     tap('chip-cr-rest');
     tap('donate-give');
-    expect(sent).toEqual([{ type: 'donate', id: 'park', credits: 200 }]);
+    expect(sent).toEqual([{ type: 'donate', id: 'park', credits: money }]);
   });
 
   it('B-AC-35-2: a good chip shows only for a good the project is missing and the donor holds', () => {
@@ -336,14 +340,14 @@ describe('C35: anyone donates through the chips (B-AC-35-2)', () => {
     tap('chip-other');
     expect(has('donate-steppers')).toBe(true);
     for (let i = 0; i < 100 && !off('step-cr-up'); i++) tap('step-cr-up');
-    expect(text('step-cr-value')).toBe('320 cr');
+    expect(text('step-cr-value')).toBe(`${rest} cr`);
     tap('step-alloy-up');
-    expect(off('step-alloy-up'), 'Lena holds 1 alloy of the 2 missing').toBe(true);
+    expect(off('step-alloy-up'), `Lena holds 1 alloy of the ${alloy} missing`).toBe(true);
     expect(text('step-alloy-value')).toBe('1');
-    // 70 + 320 + 1 × 120.
-    expect(text('donate-preview')).toContain('70 → 510 cr');
+    // 70 + the rest + 1 × 120.
+    expect(text('donate-preview')).toContain(`70 → ${70 + rest + 120} cr`);
     tap('donate-give');
-    expect(sent).toEqual([{ type: 'donate', id: 'park', credits: 320, goods: { alloy: 1 } }]);
+    expect(sent).toEqual([{ type: 'donate', id: 'park', credits: rest, goods: { alloy: 1 } }]);
   });
 
   it('B-AC-35-2: Give is off with nothing picked', () => {

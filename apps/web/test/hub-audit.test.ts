@@ -201,9 +201,9 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(strip.match(/✓/g)).toHaveLength(3);
   });
 
-  it('H-3: "Only you" with the eye-slash marks the geo drone, in This month and on the map tools; no lock is left on the screen', () => {
+  it('H-3: "Only you" with the eye-slash marks the geo drone, in This month and on the map tools, and My plots; no lock is left on the screen', () => {
     const html = hub(month4());
-    for (const id of ['agenda-drone', 'tool-drone']) {
+    for (const id of ['agenda-drone', 'tool-drone', 'tool-plots']) {
       expect(textOf(html, id), id).toContain('Only you');
       expect(element(html, id), `${id}: the eye-slash's strike`).toContain('d="M2 2l20 20"');
     }

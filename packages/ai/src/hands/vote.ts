@@ -16,6 +16,7 @@ import {
   type Council,
   type Election,
   type GameState,
+  type Good,
   type LawId,
   type LawProposal,
   type Office,
@@ -41,6 +42,21 @@ export function nextTax(current: number, target: number, fund: number, bounds: {
   const officesPay = POLITICS.offices.reduce((sum, office) => sum + POLITICS.pay[office], 0);
   const fundLow = month > 1 && fund < fundMonths * officesPay;
   return Math.max(bounds.low, Math.min(bounds.high, current + step + (fundLow ? taxFundBump : 0)));
+}
+
+/**
+ * Whether every good an object needs is within the colony's reach, as the seat sees it (PM ruling, 6 Nov): the players'
+ * stock, the store's stock and the units the players made last month together cover the object's need of that good.
+ * The seat reads observe(): other players' stock is what the market panel implies, and only its own row of last
+ * month's production shows.
+ */
+export function goodsInReach(obs: GameState, id: PrestigeId): boolean {
+  const lastMonth = obs.history.at(-1)?.produced ?? {};
+  return (Object.entries(PRESTIGE[id].goods) as [Good, number][]).every(([good, need]) => {
+    const held = obs.players.reduce((sum, p) => sum + p.stock[good], 0);
+    const made = Object.values(lastMonth).reduce((sum, row) => sum + row[good], 0);
+    return held + obs.store.stock[good] + made >= need;
+  });
 }
 
 /**
@@ -243,12 +259,14 @@ export class VoteHand {
 
   /**
    * G-5 C25 (AM-10): the AI Governor pays the strike, mends what is damaged, the most prestige first, then commissions
-   * the most prestige the fund still covers. It builds on the colony's own grounds once funded (C48).
+   * an object whose goods are within reach (goodsInReach) and whose credits the fund holds
+   * POLITICS.ai.colony.commissionShare of (pace set C), the most prestige among those. It builds on the colony's own
+   * grounds once funded (C48). None in reach, it commissions nothing.
    */
   private colonyActs(obs: GameState, act: Act): void {
     const colony = obs.colony;
     if (!colony) return;
-    const { commissions, paysStrike, repairs } = POLITICS.ai.colony;
+    const { commissions, commissionShare, paysStrike, repairs } = POLITICS.ai.colony;
     const strike = colony.strike;
     let fund = obs.treasury.money;
     if (strike && strike.month === obs.month && !strike.paid && paysStrike[this.persona] && fund >= strike.cost && act({ type: 'payStrike' })) fund -= strike.cost;
@@ -258,7 +276,7 @@ export class VoteHand {
     }
     if (!commissions[this.persona]) return;
     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
-      .filter((id) => PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
+      .filter((id) => PRESTIGE[id].credits * commissionShare <= fund && goodsInReach(obs, id) && commissionRefusal(obs, id) === null)
       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
     const pick = choices[0];
     if (pick) act({ type: 'commission', id: pick });
