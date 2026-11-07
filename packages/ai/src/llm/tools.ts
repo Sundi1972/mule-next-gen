@@ -117,7 +117,8 @@ const MULE_STEPS = 3; // literal-ok: buyMule, outfit, install
  * The MULEs of `route` the hands would refuse at development's start `at`, each named on its install step with
  * routeVeto's reason. Each is judged on the state as its turn comes: the MULEs before it bought, fitted and installed
  * by the engine's own moves. On the floor every development walks (C6), so a lake plot no shore reaches is refused,
- * as in play; the walk's clock is not known here, so a walk too long for it is not.
+ * as in play; the walk's clock is not known here, so a walk too long for it is not. A refused MULE is judged as
+ * dropped: the pick the hands would queue in its place is not played, so a later MULE's cash floor may differ.
  */
 function handsRefuse(at: GameState, mind: Mind, route: DevelopmentPlay['route']): NonNullable<Playbook['rejected']> {
   const refused: NonNullable<Playbook['rejected']> = [];

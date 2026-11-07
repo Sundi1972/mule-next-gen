@@ -3,6 +3,7 @@ import {
   allPrices,
   BRAIN,
   corralTarget,
+  DEV_STEER,
   crewOf,
   emptyStock,
   energyUseOf,
@@ -200,7 +201,10 @@ const GOOD_FIELDS: readonly { field: keyof GoodPlay; to: object }[] = [
 
 /** A lake plot no MULE can be walked to (unreachablePlot): the brief marks it wherever the seat might claim or install on it. */
 const LAKE_MARK = 'lake: no MULE can be installed';
-const unreachable = (obs: GameState, plot: number) => unreachablePlot(obs, plot);
+/** The same lake with a MULE already on it (its shore was the seat's once): only another MULE is barred. */
+const FITTED_LAKE_MARK = 'lake: no other MULE can be installed';
+// With steering off a tap installs on any lake, so only the floor has unreachable lakes (as whatIf judges them).
+const unreachable = (obs: GameState, plot: number) => DEV_STEER.on && unreachablePlot(obs, plot);
 
 /** A ranked plot and its value, marked when no MULE can be installed on it: "plot N lake: no MULE can be installed (V cr)". */
 const plotText = (obs: GameState) => (r: { plot: number; value: number }) =>
@@ -225,7 +229,7 @@ function ownership(obs: GameState, me: string): string[] {
     const status = (t: { i: number; outfit: Outfit | null }) => {
       const mark = p.id === me && unreachable(obs, t.i) ? LAKE_MARK : null;
       if (!t.outfit) return mark ?? 'idle';
-      return mark ? `${outfitName(t.outfit)}, ${mark}` : outfitName(t.outfit);
+      return mark ? `${outfitName(t.outfit)}, ${FITTED_LAKE_MARK}` : outfitName(t.outfit);
     };
     const named = capped(plots, BRAIN.brief.plotsPerPlayer, (t) => `plot ${t.i} ${status(t)}`);
     return `${who}: ${plural(plots.length, 'plot')} — ${named}`;
