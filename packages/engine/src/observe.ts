@@ -1,7 +1,7 @@
 import { colonySupply, cover, monthlyDemand } from './economy.js';
 import { expectedGround, tileIndex } from './map.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type GameState, type Stock, type Tile } from './types.js';
+import { GOODS, type GameState, type Politics, type Stock, type Tile } from './types.js';
 
 /**
  * What one seat may know, shaped like a GameState so the engine's own
@@ -26,7 +26,11 @@ import { GOODS, type GameState, type Stock, type Tile } from './types.js';
  * - the seed, the land grant's coming order and the unannounced ship's
  *   wishlist, which would let a reader see the future;
  * - other players' rows in the history (what they had and made);
- * - other players' election and law ballots, in every stage: the reveal shows totals only.
+ * - other players' election, law and overrule ballots, in every stage: the reveal shows totals only. The law
+ *   ballot's proposer shows as voting yes, the public opening, whatever they vote now;
+ * - deal cards the seat is not party to, unless broken;
+ * - other players' sabotage orders until done or caught, then their cost, and their culprit unless public;
+ * - the guarded tiles, unless the seat is Sheriff.
  */
 export function observe(state: GameState, playerId: string): GameState {
   const me = state.players.find((p) => p.id === playerId);
@@ -87,7 +91,27 @@ export function observe(state: GameState, playerId: string): GameState {
     before: { [playerId]: h.before[playerId] ?? emptyStock() },
     produced: { [playerId]: h.produced[playerId] ?? emptyStock() },
   }));
+  if (sim.politics) hidePolitics(sim.politics, playerId);
   return sim;
+}
+
+/** Hides slices 3-5's secrets, and gives the law ballot its public opening yes, on observe's own copy. */
+function hidePolitics(politics: Politics, me: string): void {
+  politics.deals = politics.deals.filter((d) => d.from === me || d.to === me || d.status === 'broken');
+  politics.sabotage = politics.sabotage.flatMap((o) => {
+    if (o.by === me) return [o];
+    if (o.outcome !== 'done' && o.outcome !== 'caught') return [];
+    return [{ ...o, by: o.culpritPublic ? o.by : null, cost: 0 }];
+  });
+  if (politics.sheriff !== me) politics.guards = [];
+  const overrule = politics.overrule;
+  if (overrule) {
+    const own = overrule.ballots[me];
+    overrule.ballots = own === undefined ? {} : { [me]: own };
+  }
+  const council = politics.council;
+  // The ballot opens with the proposer's yes, a public rule; their current vote may have changed and stays secret.
+  if (council) council.ballots = { [council.proposer]: true, ...council.ballots };
 }
 
 /** Whether this seat knows a tile's real ground. */
