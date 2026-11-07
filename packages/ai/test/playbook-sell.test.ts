@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, LOTS, monthNeeds, observe, stableJson, STRATEGIST, storePaysFor, type GameState, type Outfit } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, LOTS, monthNeeds, observe, postPrices, stableJson, STRATEGIST, storePaysFor, type GameState, type Outfit } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { draftPlaybook, validatePlaybook } from '../src/playbook/index.js';
 import { AiSeat } from '../src/seat.js';
@@ -31,6 +31,9 @@ function holding(money: number, plots: [number, Outfit | null][]): GameState {
   // Species picked as the cases were built: the default turns with the seed (FM-species-by-chair), and ai0 is no Mollox,
   // whose +1 on a working mine would give the dud Smithore MULE a worth.
   const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true, species: BUILT_SPECIES[i] })) });
+  // Energy's shelf is full when the opening prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+  state.store.stock.energy = 200;
+  postPrices(state);
   for (const [index, outfit] of plots) Object.assign(state.tiles[index]!, { owner: 'ai0', outfit });
   const p = state.players[0]!;
   p.money = money;

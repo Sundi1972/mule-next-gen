@@ -434,8 +434,9 @@ function standingAt(me: string, at: FloorPoint): DevFloor {
  */
 function atWork(state: GameState, me: string, press: ShorePress): GameState {
   const ready = (p: Player): Player => {
-    const mule = press === 'install' && !(p.carriedMule && p.carriedMule !== 'empty');
-    return { ...p, doneDeveloping: false, ...(mule && { carriedMule: 'food' as const, muleBolted: false }) };
+    const fitted = p.carriedMule && p.carriedMule !== 'empty' ? p.carriedMule : 'food';
+    // Caught again, a bolted MULE installs from the same spots: a bolt is no reason a shore can't reach the plot.
+    return { ...p, doneDeveloping: false, ...(press === 'install' && { carriedMule: fitted, muleBolted: false }) };
   };
   return { ...state, phase: 'development', players: state.players.map((p) => (p.id === me ? ready(p) : p)) };
 }

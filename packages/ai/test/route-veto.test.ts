@@ -55,6 +55,15 @@ describe('unreachablePlot: a lake plot no shore reaches can never get a MULE', (
     expect(unreachablePlot(state, tileIndex(state.width, 10, 0))).toBe(true);
     expect(unreachablePlot(state, tileIndex(state.width, 10, 1))).toBe(false);
   });
+
+  it("a lake plot nobody holds, judged for a seat: whose only shore is that seat's own land (seed 4, plot 25), unreachable for it and reachable for another", () => {
+    const state = development(4);
+    const plot = tileIndex(state.width, 10, 1);
+    own(state, 9, 2);
+    expect(state.tiles[plot]!.owner).toBeNull();
+    expect(unreachablePlot(state, plot, simFloorConfig(), ME), 'for ai0').toBe(true);
+    expect(unreachablePlot(state, plot, simFloorConfig(), 'ai1'), 'for ai1').toBe(false);
+  });
 });
 
 /** ai0's floor walk from where it stands at the start of development, with `left` seconds on the clock. */
@@ -95,6 +104,13 @@ describe("routeVeto: why the hands refuse a route MULE before it is bought, or n
     const state = development(4);
     const plot = own(state, 10, 0);
     expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBe(`lake: no shore reaches plot ${plot}`);
+  });
+
+  it("on the floor, a lake plot a shore reaches (seed 4, plot 24) is played while the MULE the seat leads, fitted, has bolted", () => {
+    const state = development(4);
+    const plot = own(state, 9, 1);
+    Object.assign(state.players.find((p) => p.id === ME)!, { carriedMule: 'water', muleBolted: true });
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
   });
 
   it('where the game taps, the same lake plot is played: a tap installs on any lake', () => {
@@ -161,7 +177,7 @@ describe('routeVeto on an own plot that has a MULE: a different outfit is a swap
     expect(routeVeto(state, floored(state), { plot: idle!, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
   });
 
-  it("a swap while the seat leads a MULE fitted for another outfit is stale: the hand can't fit a led MULE again", () => {
+  it("a swap while the seat leads a MULE fitted for another outfit is stale: the hand never fits a led MULE again", () => {
     const state = development(4);
     const plot = ownPlains(state);
     state.tiles[plot]!.outfit = 'food';

@@ -57,7 +57,8 @@ function standing(state: GameState, id: PrestigeId): void {
 describe('prestige objects: commissioned, funded, built, kept up', () => {
   it('B-AC-21: Lena commissions the hospital; the fund pays and buys its goods at upkeep, it builds, then stands, counts its prestige and pays upkeep each month after', () => {
     const row = PRESTIGE.hospital;
-    const state = governedGame(1_200);
+    // Enough over the credits and the reserve to buy the Electronics at the store's selling price.
+    const state = governedGame(2_000);
     state.store.stock.electronics = 5;
     commission(state, 'lena', 'hospital');
     expect(project(state, 'hospital').stage).toBe('commissioned');

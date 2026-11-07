@@ -139,6 +139,12 @@ export function selectionGlow(plot: number, density: 'phone' | 'tv'): number | n
   return plot * GLOW.out + GLOW.phone.spread <= room ? null : room - GLOW.phone.spread;
 }
 
+/**
+ * From this phone plot width, in px, the store's STORE sign is drawn (WS6 ruling on SA-1372, #636): under it the sign
+ * (about 33 px of 10 px mono) would reach a side neighbour's dots. The store plot keeps its look and its label.
+ */
+export const STORE_SIGN_PLOT = 24;
+
 /** How far inside the map's right or bottom edge an edge plot's special badge sits, in px, where it can't hang out. */
 const BADGE_EDGE = 2;
 
@@ -340,7 +346,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   ))}
                 </span>
               )}
-              {t.terrain === 'store' && (
+              {/* Hidden on a phone plot under STORE_SIGN_PLOT, where it would cover its neighbours' dots (WS6, SA-1372). */}
+              {t.terrain === 'store' && (tv || plot >= STORE_SIGN_PLOT) && (
                 <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-0.5 text-[10px] tracking-tight')} data-testid="map-store">
                   STORE
                 </span>
@@ -389,7 +396,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   {t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
                 </span>
               )}
-              {t.special && !strip && (
+              {/* Under 16 px a MULE's plot draws no badge: the MULE wins, as the strip drops the badge first (WS6, SA-1372). */}
+              {t.special && !strip && !(small && t.good) && (
                 // Above the plot's chips and its right and lower neighbours', under the owners' marks (z-[4]), and never in the way of a
                 // tap: the tap goes to the plot beneath.
                 <span aria-hidden className={cx('pointer-events-none absolute inset-0 z-[3]', fade)} data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
