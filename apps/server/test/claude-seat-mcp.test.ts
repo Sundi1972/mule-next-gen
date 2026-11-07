@@ -1,7 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BRAIN } from '@mule/engine';
+import { BRAIN, GOODS } from '@mule/engine';
+import { replySchema } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, SeatInfo } from '@tabletop/core';
 import { SeatCodeBook } from '../src/claude-seat/lookup.js';
@@ -230,6 +231,19 @@ describe('/mcp, stateless, the seat code on every call', () => {
       accepted: [],
       refused: strategyEdits.map((e) => ({ edit: e.path, why: 'path_not_offered' })),
     });
+  });
+
+  it("T-AC-1: submit_plan's schema is closed and its strategy is the API writer's own", async () => {
+    const client = mcpClient(await serve(new SeatCodeBook()));
+    const listed = await client.rpc('tools/list', {});
+    const submit = (listed.body!.result!.tools! as unknown as { name: string; inputSchema: { properties: Record<string, Record<string, unknown>> } }[]).find((t) => t.name === 'submit_plan')!;
+    const { strategy, edits } = submit.inputSchema.properties;
+    const writers = replySchema(true).properties.strategy!;
+
+    expect(strategy).toMatchObject({ additionalProperties: false, required: writers.required });
+    expect((strategy!.properties as Record<string, unknown>).kind).toEqual(writers.properties.kind);
+    expect((strategy!.properties as Record<string, unknown>).moneyMaker).toEqual({ anyOf: [{ type: 'string', enum: [...GOODS] }, { type: 'null' }] });
+    expect(edits!.items).toMatchObject({ additionalProperties: false, required: ['path', 'to', 'reason'] });
   });
 
   it('T-AC-1: an unusable plan is not an answer: its cause is named, the ask stays open, and a correct resend plays', async () => {
