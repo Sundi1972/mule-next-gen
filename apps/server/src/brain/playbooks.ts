@@ -30,6 +30,7 @@ import type { Spoken } from './chat.js';
 import { WRITE_CALLS } from './client.js';
 import { timeSlicer } from './slice.js';
 import type { BrainService, PlaybookWriter } from './index.js';
+import type { SeatKind } from '../claude-seat/seats.js';
 
 export type { PlaybookSource };
 
@@ -37,6 +38,8 @@ export interface PlaybooksOptions {
   brain: BrainService;
   source: PlaybookSource | null;
   seats: readonly AiSeat[];
+  /** Each seat's kind; a seat not in it plays builtin. */
+  kinds?: ReadonlyMap<PlayerId, SeatKind>;
   /** Hears each playbook that takes effect for a Smart seat. */
   record?: (note: PlaybookNote) => void;
   /**
@@ -124,7 +127,8 @@ export class Playbooks {
   constructor(private readonly options: PlaybooksOptions) {
     if (!options.source) return;
     for (const seat of options.seats) {
-      const writer = options.brain.writerFor({ id: seat.id, persona: seat.options.persona, level: seat.options.level });
+      const kind = options.kinds?.get(seat.id);
+      const writer = options.brain.writerFor({ id: seat.id, persona: seat.options.persona, level: seat.options.level, ...(kind ? { kind } : {}) });
       if (writer) this.writers.set(seat.id, writer);
     }
   }

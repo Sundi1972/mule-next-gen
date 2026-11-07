@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainSeat } from '../src/brain/index.js';
@@ -26,7 +26,9 @@ const TABLE: (SeatInfo & { kind?: SeatKind })[] = [
 beforeEach(() => {
   sdkModule.built = [];
   sdkModule.create = null;
+  vi.useFakeTimers();
 });
+afterEach(() => vi.useRealTimers());
 
 describe('a Claude seat in the brain', () => {
   it('T-AC-3: keyless writerFor(claude seat) is a ClaudeSeatWriter; deciderFor null', () => {

@@ -5,12 +5,16 @@ import { chatter, type Spoken } from './chat.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createToolLoop, Stopped, WRITE_CALLS, WRITE_FALLBACK_MODEL, type HaikuReply, type HaikuSdk, type RoundGate, type ThinkingCall, type ToolBox, type WriteKind } from './client.js';
 import { recordingSdk, type TranscriptEntry } from './transcript.js';
 import { createLedger, NO_USAGE, type LedgerKind, type ModelId, type Outcome, type Usage } from './ledger.js';
+import type { SeatKind } from '../claude-seat/seats.js';
+import { ClaudeSeatWriter } from '../claude-seat/writer.js';
 
 /** The seat a decider is built for: its id, persona and level. */
 export interface BrainSeat {
   id: string;
   persona: AiPersonaId;
   level: AiLevelId;
+  /** Unset plays builtin. A claude seat's plans come from a Claude chat, with or without a key, and it has no decider. */
+  kind?: SeatKind;
 }
 
 /** What the game sees of the brain: its read contract with MuleGame. */
@@ -123,6 +127,23 @@ const CLASSIC: MeteredBrain = {
   authRefused: () => false,
 };
 
+/** A game's claude seats' writers, one per seat: no model call and no ledger line (HC-1). finish closes them. */
+function claudeSeatWriters(now: (() => number) | undefined) {
+  const writers = new Map<string, ClaudeSeatWriter>();
+  return {
+    writerFor(seat: BrainSeat): ClaudeSeatWriter {
+      const writer = writers.get(seat.id) ?? new ClaudeSeatWriter(seat, now ? { now } : {});
+      writers.set(seat.id, writer);
+      return writer;
+    },
+    finish() {
+      for (const writer of writers.values()) writer.close();
+    },
+  };
+}
+
+const isClaude = (seat: BrainSeat) => seat.kind === 'claude';
+
 /** The key's environment variable: the only place in production source its name is written. */
 export const API_KEY_ENV = 'ANTHROPIC_API_KEY';
 
@@ -141,8 +162,9 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   if (!(gameBudgetUsd > 0 && gameBudgetUsd <= budgetCap)) {
     throw new RangeError(`gameBudgetUsd must be above 0 and at most ${budgetCap}`);
   }
+  const claude = claudeSeatWriters(options.now);
   const apiKey = apiKeyFrom(options.env ?? process.env);
-  if (!apiKey) return CLASSIC;
+  if (!apiKey) return { ...CLASSIC, writerFor: (seat) => (isClaude(seat) ? claude.writerFor(seat) : null), finish: claude.finish };
 
   const { gameId } = options;
   const made = (options.sdkFactory ?? createAnthropicSdk)(apiKey);
@@ -318,11 +340,12 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   }
 
   return {
-    deciderFor,
-    writerFor,
+    deciderFor: (seat) => (isClaude(seat) ? null : deciderFor(seat)),
+    writerFor: (seat) => (isClaude(seat) ? claude.writerFor(seat) : writerFor(seat)),
     // Every AI seat of a Smart brain gets a decider, so its routine top picks stay quiet.
     chatter: (seat, say) => chatter(seat.id, say, 'smart'),
     finish() {
+      claude.finish();
       countedAtFinish ??= counted();
       finished = true;
       if (asked) ledger.finish(gameId);
