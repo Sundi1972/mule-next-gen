@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AI_HANDS, BRAIN, WALK, type Good } from '@mule/engine';
+import { AI_HANDS, BRAIN, WALK, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function startedGame(table = TABLE, phaseScale = 1) {
+function startedGame(table = TABLE, phaseScale = 1, maxMonths = 1) {
   const fake = fakeContext({ table });
-  const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, phaseScale });
+  const game = new MuleGame(fake.ctx, 10, { maxMonths, phaseScale });
   game.start(table);
   return { game, fake };
 }
@@ -167,8 +167,9 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
 
     const until = pick.opened + WAIT_MS;
     const before = pick.waits.filter((w) => w.age < 20_000);
-    const after = pick.waits.filter((w) => w.age > 20_000 + WALK.tickMs);
-    expect(before.length).toBeGreaterThan(0);
+    // The plan is taken in the first tick after it comes: from then on the seat is off the list.
+    const after = pick.waits.filter((w) => w.age >= 20_000 + WALK.tickMs);
+    expect(before.length, 'the premise: the side pick is seen before the plan comes').toBeGreaterThan(0);
     for (const w of before) expect(w.waiting).toEqual([{ seatId: CLAUDE, until }]);
     expect(after.length, 'the premise: the side pick is seen after the plan is taken').toBeGreaterThan(0);
     for (const w of after) expect(w.waiting, 'its plan taken, it is waited for no longer and is not built-in').toBeNull();
@@ -218,6 +219,37 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
 
     expect(writer.openAsk()).toBeNull();
     expect(await writer.submit(asked.id, { edits: [], line: 'Late.' })).toEqual({ kind: 'too_late' });
+  });
+
+  it('B-AC-5 (view): a side pick’s list never reaches a later month, even when the auction ends in the tick its first side pick does', async () => {
+    const { game, fake } = startedGame(TABLE, 1, 2);
+    const good = await toFirstSidePick(game, fake);
+    const until = fake.ctx.now() + WAIT_MS;
+    const internals = game as unknown as { requireState(): GameState; holdMs(state: GameState): number };
+    // Nobody can trade and no good is left: the side pick's end ends the whole auction in the same step.
+    const nothingToTrade = () => {
+      const a = internals.requireState().auction!;
+      a.queue = [];
+      for (const w of a.walkers) w.side = 'pass';
+      game.handle('s1', { type: 'ready' });
+    };
+    const pick = await runSidePick(game, fake, good, { [WAIT_MS + 1_000]: nothingToTrade }, true);
+    expect(pick.waits.at(-1)?.waiting, 'the premise: the seat was built-in when the side pick ended').toEqual([{ seatId: CLAUDE, until, builtin: true }]);
+    expect(view(game).phase, 'the premise: the auction ended with that side pick').not.toBe('auction');
+    // Next month's auction holds for its events show, so its first side pick is on screen before its wait opens.
+    vi.spyOn(internals, 'holdMs').mockImplementation((state: GameState) => (state.phase === 'auction' ? 10_000 : 0));
+
+    const seen: (Waiting | null)[] = [];
+    for (let t = 0; t < 30 * 60_000 && view(game).phase !== 'gameOver' && seen.length < 300; t += WALK.tickMs) {
+      const v = view(game);
+      if (v.phase === 'auction') seen.push(v.auction?.waitingForClaude ?? null);
+      if (v.phase === 'planning' || v.phase === 'upkeep') game.handle('s1', { type: 'ready' });
+      fake.advance(WALK.tickMs);
+      await Promise.resolve();
+    }
+
+    expect(seen.length, 'the premise: next month’s auction is seen').toBeGreaterThan(0);
+    for (const w of seen) expect(w?.some((e) => e.until === until) ?? false, 'last month’s entry on this month’s board').toBe(false);
   });
 
   it('C7 pin: with no Claude seat, the first good’s side pick ends as soon as everyone is Done, as today', async () => {
