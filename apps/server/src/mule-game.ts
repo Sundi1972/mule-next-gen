@@ -184,6 +184,18 @@ function publicNotices(notices: readonly Notice[]): Notice[] {
   return notices.filter((n) => !('parties' in n) || n.parties === undefined);
 }
 
+/**
+ * The news as a view sends it: the texts, and the same lines with their seats, built from one list so the two never
+ * drift (F-11). An entry written into the list from outside as a bare string, or without its seats, names no seat:
+ * a view never throws on the news (FM-news-who).
+ */
+function newsOf(entries: readonly (NewsLine | string)[]): { news: string[]; newsLines: NewsLine[] } {
+  const lines = entries.map((entry) =>
+    typeof entry === 'string' ? { text: entry, who: [] } : { text: String(entry.text), who: Array.isArray(entry.who) ? [...entry.who] : [] },
+  );
+  return { news: lines.map((l) => l.text), newsLines: lines };
+}
+
 /** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
 export function gameOverNews(seats: readonly { id: string; name: string; score: number }[]): NewsLine {
   const best = Math.max(...seats.map((s) => s.score));
@@ -1765,8 +1777,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         wants: shipAnnounced(state) ? { ...state.ship.hold } : null,
       },
       treasury: { money: state.treasury.money, salesTax: state.treasury.salesTax },
-      news: this.news.map((l) => l.text),
-      newsLines: this.news.map((l) => ({ text: l.text, who: [...l.who] })),
+      ...newsOf(this.news),
       scores:
         state.phase === 'gameOver'
           ? this.seats.map((s) => {
