@@ -12,12 +12,15 @@ import { Scaled } from '../../../../../apps/web/src/components/Scaled';
  *                         the window as the TV scales its 1280 × 720 canvas, so a 1920 × 1080 shot is the TV's own
  *   ?view=phone           ColonyGrounds size="phone" 390 px wide, as the phone's Colony desk mounts it
  *   ?light=day|dusk       for each view
+ *   ?wealth=<n>           the colony's wealth, which sets how bright the lights are (RULE-2; full at 4000); default 2000
  *
  * The colony is a month-12 game placed on WS7's 5 × 5 grounds (RULE-32b: x right, y down, the hall at (2,2)).
  */
 const STADIUM = { x: 3, y: 2, w: 2, h: 2 };
+const params = new URLSearchParams(location.search);
+const wealthParam = Number(params.get('wealth'));
 export const COLONY: GroundsColony = {
-  gauges: { happiness: 72, wealth: 2_000 },
+  gauges: { happiness: 72, wealth: params.has('wealth') && Number.isFinite(wealthParam) && wealthParam >= 0 ? wealthParam : 2_000 },
   projects: [
     { id: 'park', name: 'Park', stage: 'standing', monthsLeft: null, buildMonths: 1, place: { x: 1, y: 2, w: 1, h: 1 } },
     { id: 'hospital', name: 'Hospital', stage: 'standing', monthsLeft: null, buildMonths: 2, place: { x: 2, y: 3, w: 1, h: 1 } },
@@ -36,7 +39,6 @@ const STILL: OpenerState = {
   changes: [{ id: 'stadium', name: 'Stadium', from: 'building', to: 'standing', place: STADIUM }],
 };
 
-const params = new URLSearchParams(location.search);
 const view = params.get('view') ?? 'beat';
 const lightParam = params.get('light');
 
