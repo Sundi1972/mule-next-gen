@@ -33,7 +33,7 @@ function colony(): GameState {
   return state;
 }
 
-const QUIET: MoodInputs = { short: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0 };
+const QUIET: MoodInputs = { short: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
 
 describe('C23: the colony\'s happiness (RULE-20)', () => {
   it('T-AC-31: each input moves the target its own way with the others fixed; a month\'s step never exceeds maxStep and h stays 0..100', () => {
@@ -45,6 +45,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
       broken: rng.chance(0.5) ? 1 : 0,
       prestige: rng.int(0, 25),
       gap: rng.int(0, 20_000),
+      welfare: 0,
     });
     // Worse with more of it: shortages, air, tax, a broken promise, the gap. Better with more prestige.
     const worse: (keyof MoodInputs)[] = ['short', 'air', 'tax', 'broken', 'gap'];
@@ -105,7 +106,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
     state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
-    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500 });
+    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500, welfare: 0 });
   });
 
   it("T-AC-31: a real upkeep feeds the mood that upkeep's shortages, not the report's empty list from production", () => {

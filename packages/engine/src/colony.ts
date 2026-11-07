@@ -387,6 +387,8 @@ export interface MoodInputs {
   prestige: number;
   /** Credits between the richest and poorest player, by cash and land. */
   gap: number;
+  /** Credits of Welfare paid this upkeep (S5-RULE-5). */
+  welfare: number;
 }
 
 /** The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done. */
@@ -399,6 +401,7 @@ export function moodInputs(state: GameState, shortages: readonly Good[]): MoodIn
     broken: brokeNow ? 1 : 0,
     prestige: colonyPrestige(state),
     gap: wealthGap(state),
+    welfare: state.colony?.welfare?.month === state.month ? state.colony.welfare.paid : 0,
   };
 }
 
@@ -411,7 +414,8 @@ export function moodTarget(i: MoodInputs): number {
     w.air * Math.max(0, i.air - w.airFree) -
     w.tax * Math.max(0, i.tax - w.taxFree) -
     w.broken * i.broken +
-    w.prestige * Math.min(i.prestige, w.prestigeCap) -
+    w.prestige * Math.min(i.prestige, w.prestigeCap) +
+    w.welfare * Math.min(i.welfare / w.welfareUnit, w.welfareCap) -
     w.gap * Math.min(i.gap / w.gapUnit, w.gapCap);
   return clampMood(target);
 }
