@@ -28,6 +28,9 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   repair: true,
   propose: true,
   voteLaw: true,
+  setBudget: true,
+  callOverrule: true,
+  voteOverrule: true,
 };
 
 /** The text under one `## ` heading, up to the next. */
