@@ -5,6 +5,7 @@ import {
   createGame,
   createRng,
   DEV_STEER,
+  floorConfig,
   GAME,
   GOOD_CONFIG,
   list,
@@ -29,6 +30,7 @@ import {
   type Phase,
   type Playbook,
 } from '@mule/engine';
+import { unreachablePlot } from '../src/hands/develop.js';
 import { applyAction, playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { validatorFor, type PlanEdit } from '../src/playbook/validate.js';
@@ -348,6 +350,8 @@ describe('the validator holds every playbook to RULE-1', () => {
     try {
       // On the floor a colonist walks to a lake's shore to install, so a lake with none can never get the MULE.
       DEV_STEER.on = true;
+      // The hands' own judgement of the same plots, which the gate must agree with.
+      expect([unreachablePlot(state, ringed, floorConfig()), unreachablePlot(state, shored, floorConfig())]).toEqual([true, false]);
       expect(route('water', ringed)).toMatchObject({ plays: draftRoute, why: `route: lake: no shore reaches plot ${ringed}, step 2` });
       expect(route('water', shored)).toMatchObject({ plays: mule('water', shored), why: null });
       // The game taps where it doesn't steer, and a tap installs on any lake.

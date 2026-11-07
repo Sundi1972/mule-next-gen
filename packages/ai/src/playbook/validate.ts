@@ -25,7 +25,7 @@ import {
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
-import { unreachablePlot } from '../hands/develop.js';
+import { installable } from '../floor-time.js';
 import { goodPlan, outfitName, shortfallHold } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import type { Mind } from '../value.js';
@@ -146,7 +146,7 @@ function notes(v: unknown, max: number, maxName: string): Verdict {
 /**
  * RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. An
  * install the hands could never play is refused here too, so the draft's route plays instead of a dropped MULE: a lake
- * no shore reaches on the floor (unreachablePlot), and a plot whose MULE already carries the outfit (no swap; routeVeto).
+ * no shore reaches on the floor (as hands/develop.ts::unreachablePlot judges it), and a plot whose MULE already carries the outfit (no swap; routeVeto).
  */
 function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
   if (!Array.isArray(route)) return ['not a list of steps', 0];
@@ -174,7 +174,8 @@ function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
         if (install.act !== 'install') return ['buyMule not followed by outfit and install', installAt];
         if (!isMine(ctx, install.plot)) return [isPlot(ctx, install.plot) ? 'not your plot' : 'no such plot', installAt];
         const plot = install.plot as number;
-        if (ctx.floor && unreachablePlot(ctx.state, plot, ctx.floor)) return [`lake: no shore reaches plot ${plot}`, installAt];
+        // hands/develop.ts::unreachablePlot for an own plot, read here through floor-time: the hands' module reaches brain.ts (INV-2).
+        if (ctx.floor && ctx.state.tiles[plot]!.terrain === 'lake' && !installable(ctx.state, ctx.floor, ctx.seat, plot)) return [`lake: no shore reaches plot ${plot}`, installAt];
         if (ctx.state.tiles[plot]!.outfit === outfit.outfit) return [`plot ${plot} already has a ${outfitName(outfit.outfit as Outfit)}`, installAt];
         i = installAt;
         break;
