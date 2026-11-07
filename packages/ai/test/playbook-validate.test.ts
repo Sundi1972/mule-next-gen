@@ -366,6 +366,31 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(route('smithore', plain!)).toMatchObject({ plays: mule('smithore', plain!), why: null });
   });
 
+  it('T-AC-3: INV-1 holds on the floor for a seat whose only plot is a lake no shore reaches: the engine draft does not route there, and an unrelated edit plays', () => {
+    // Seed 4's month-1 development, ai2 holding only the lake ringed by lake at (10, 0).
+    const state = createGame({ seed: 4, players });
+    while (state.phase !== 'development') advancePhase(state);
+    for (const t of state.tiles) if (t.owner === 'ai2') t.owner = null;
+    const ringed = tileIndex(state.width, 10, 0);
+    state.tiles[ringed]!.owner = 'ai2';
+    const steering = DEV_STEER.on;
+    try {
+      DEV_STEER.on = true;
+      expect(unreachablePlot(state, ringed, floorConfig())).toBe(true);
+      for (const level of ['rookie', 'trader', 'tycoon'] as const) {
+        const r = run('development', [], { state, mind: mindOf(2, level) });
+        expect(r.draft.development!.route, level).not.toContainEqual({ act: 'install', plot: ringed });
+        expect(r.rejected, level).toEqual([]);
+        expect(r.playbook, level).toEqual(r.draft);
+      }
+      // Claude's edit to the budget alone plays: the engine's route beside it is no fault of Claude's.
+      const half = run('development', [], { state }).draft.development!.timeBudgetMs / 2;
+      expect(one('development', '/development/timeBudgetMs', half, { state })).toMatchObject({ plays: half, why: null });
+    } finally {
+      DEV_STEER.on = steering;
+    }
+  });
+
   it('T-AC-1: RULE-1 P11-P17 and step 5, the auction rows', () => {
     // Month 1's auction at Food's status screen, ai2 holding a farm and Food to sell.
     const state = fedSeller();
