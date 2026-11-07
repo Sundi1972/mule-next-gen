@@ -267,7 +267,6 @@ const COVERAGE = {
   voteLaw: { move: 'voteLaw' },
   donate: { move: 'donate' },
   repair: { move: 'repair' },
-  setSiteBid: { move: 'setSiteBid' },
   continue: { excluded: 'host only' },
   steer: { excluded: FLOOR_INPUT },
   act: { excluded: FLOOR_INPUT },

@@ -12,7 +12,6 @@ import {
   electionDone,
   payStrike,
   repair,
-  setSiteBid,
   POLITICS,
   proposeLaw,
   RuleError,
@@ -81,9 +80,6 @@ function engineAct(state: GameState, id: string, refused: AiAction[], sent: AiAc
           break;
         case 'repair':
           repair(state, id, action.id);
-          break;
-        case 'setSiteBid':
-          setSiteBid(state, id, action.id, action.maxBid);
           break;
         case 'propose':
           proposeLaw(state, id, action.proposal);
