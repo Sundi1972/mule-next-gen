@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
   createGame,
+  expectedOutput,
   GOOD_CONFIG,
+  monthlyDemand,
   monthNeeds,
   needsOf,
   observe,
@@ -136,6 +138,15 @@ function halvedFor(state: GameState, id: string, why: 'noEnergy' | 'noWater'): n
 const paid = (trades: Trade[], id: string) => trades.filter((t) => t.buyer === id).reduce((n, t) => n + t.price * t.quantity, 0);
 const units = (trades: Trade[], id: string) => trades.filter((t) => t.buyer === id).reduce((n, t) => n + t.quantity, 0);
 const sold = (trades: Trade[], id: string) => trades.filter((t) => t.seller === id);
+/** Gives `id` `count` Food farms on free plains rated +3, 5 a month each; what it holds is left as it is. */
+function farmsFor(state: GameState, id: string, count: number): void {
+  const free = state.tiles.filter((x) => x.terrain === 'plains' && !x.owner).slice(0, count);
+  for (const t of free) {
+    Object.assign(t, { owner: id, outfit: 'food', traits: [], pollution: 0, ground: { ...t.ground, food: 3 } });
+    delete t.special;
+  }
+}
+
 const ROWS = SEATS.map((s, k) => [`ai${k}`, `${s.persona}/${s.level}`]);
 const RIVAL = (id: string) => (id === 'ai0' ? 'ai1' : 'ai0');
 
@@ -276,13 +287,18 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
     keepsNeed('food', id!, 3, { shelf: 0, coSeller: 20, storeBuys: 3, rival: false });
   });
 
-  /** A seat holding the screen's need and 2 more, under what keeps it whole, beside a short rival; the store sells `shelf`. */
-  const shortBesideRival = (id: string, shelf: number) => {
+  /**
+   * A seat holding the screen's need and 2 more, under what keeps it whole, beside a short rival; the store sells `shelf`.
+   * `fedColony`: the rival's farms make more Food next month than the colony eats, so next month's Food is not forecast
+   * short; the rival still holds none today.
+   */
+  const shortBesideRival = (id: string, shelf: number, { fedColony = false } = {}) => {
     const state = auctionOf(
       'food',
       (s) => {
         shortOf('food', id, MONEY, (t) => monthNeeds(t, id).food + 2)(s);
         shortOf('food', RIVAL(id), MONEY)(s);
+        if (fedColony) farmsFor(s, RIVAL(id), 4);
       },
       shelf,
     );
@@ -310,7 +326,11 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
   });
 
   it('B-AC-food-short: the trader short of what keeps it whole, with no Food in the store, sells above the screen need to a short rival', () => {
-    const { state } = shortBesideRival('ai0', 0);
+    // Next month is not forecast severe: the colony makes more Food than it eats. The units it sells lie inside what
+    // keeps it whole next month (it holds the screen need + 2); it sells them because, with no severe forecast, their
+    // keep value falls under the bid, not because they are surplus beyond next month.
+    const { state } = shortBesideRival('ai0', 0, { fedColony: true });
+    expect(expectedOutput(state, 'food'), 'the premise: the colony makes more Food than it eats').toBeGreaterThanOrEqual(monthlyDemand(state).food);
 
     const trades = play(state);
 

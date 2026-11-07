@@ -28,7 +28,7 @@ import { AiSeat } from '../src/seat.js';
  * toward its own price limit, and a seller resting above that line walks down onto the highest bid once that bid is at
  * or over its reservation price. Month 1's Food auction with the store holding none to sell and buying none (so its
  * shelf never refills mid-walk), played through the engine: ai0 (the trader) holds a surplus of Food, ai1 holds none and
- * has money. Each seat's limit is set through its own draft's walkAway, the playbook's bound on today's limit.
+ * has money, and the other two seats hold neither. Each seat's limit is set through its own draft's walkAway, the playbook's bound on today's limit.
  */
 
 const SEATS: { persona: AiPersonaId; level: AiLevelId }[] = [
@@ -45,18 +45,24 @@ const seatsFor = () => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI 
 /** Upkeep eats the household's Food, half of the rest spoils, and next development is hungry under the household's Food. */
 const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
 
-/** The Food status screen with the store sold out: ai0 holds 10 over what keeps it whole, ai1 none and 3,000 cr. */
+/**
+ * The Food status screen with the store sold out: ai0 holds 40 over what keeps it whole, ai1 none and 3,000 cr. A surplus
+ * that large values ai0's next unit under every bid the board allows, so the play's walkAway is the floor that binds.
+ */
 function soldOutFood(): GameState {
   const state = createGame({ seed: SEED, players: SEATS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
   while (state.phase !== 'auction') advancePhase(state);
   state.store.stock.food = 0;
   for (const p of state.players) p.stock.food = Math.max(monthNeeds(state, p.id).food, wholeFood(state, p.id));
   const seller = state.players.find((p) => p.id === SELLER)!;
-  seller.stock.food = wholeFood(state, SELLER) + 10;
+  seller.stock.food = wholeFood(state, SELLER) + 40;
   seller.money = 3_000;
   const buyer = state.players.find((p) => p.id === BUYER)!;
   buyer.stock.food = 0;
   buyer.money = 3_000;
+  // The two other seats can neither sell nor buy, so only ai0 and ai1 trade: with a bid well over the store's old line an
+  // AI holding just its need may hold down and sell short into it (RULE-4), which would take ai0's sale.
+  for (const p of state.players.filter((q) => q.id !== SELLER && q.id !== BUYER)) Object.assign(p, { money: 0, stock: { ...p.stock, food: 0 } });
   startAuction(state, ['food']);
   return state;
 }

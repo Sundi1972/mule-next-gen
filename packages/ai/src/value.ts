@@ -23,14 +23,15 @@ import {
   pace,
   playerEventChance,
   POLLUTION,
-  PRICE,
   PROCESSED_GOODS,
   rawOutput,
   RECIPES,
   SPECIES_PERK,
   STRATEGIST,
+  storeBuyAt,
   storeForSale,
   storeQuotes,
+  storeSellAt,
   storeSellLine,
   tileIndex,
   UPKEEP,
@@ -452,7 +453,7 @@ function neededReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): 
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
     const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(o, g) : 0));
-    cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
+    cost += short * Math.min(storeSellAt(obs, g, obs.store.posted[g], { exact: true }), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
 }
@@ -644,7 +645,7 @@ function unitCarry(obs: GameState, o: Outlook, good: Good, mind: Mind): { sell: 
 /** RULE-4's sell side: what the store pays for a unit at the posted `price`, after the sales tax and `months` of spoilage. */
 function carrySell(obs: GameState, good: Good, mind: Mind, price: number, months: number): number {
   const keepRate = 1 - (mind.level.fullScoring ? GOOD_CONFIG[good].spoilage : 0);
-  return afterTax(obs, price * (1 - PRICE.storeSpread)) * keepRate ** months;
+  return afterTax(obs, storeBuyAt(obs, good, price, { exact: true })) * keepRate ** months;
 }
 
 // --- The resource-utility model, switched on by AI_VALUE.unit ------------------
@@ -805,7 +806,7 @@ function waterDamage(obs: GameState, o: Outlook, me: string): number {
 function replaceCost(obs: GameState, o: Outlook, good: Good): number {
   if (storeForSale(obs, good) <= 0) return 0;
   const today = (obs.auction?.good === good ? storeSellLine(obs) : storeQuotes(obs, good).sell) ?? 0;
-  return Math.max(today, belief(obs, o, good) * (1 + PRICE.storeSpread) * AI_VALUE.shortFloorMarkup);
+  return Math.max(today, storeSellAt(obs, good, belief(obs, o, good), { exact: true }) * AI_VALUE.shortFloorMarkup);
 }
 
 /**
@@ -912,7 +913,7 @@ export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], val
 function monthPlan(obs: GameState, mind: Mind, o?: Outlook, except?: Good): CashPlan {
   const look = o ?? outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const goods = WALK.order.filter((g) => g !== except);
-  return cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => belief(obs, look, g) * (1 + PRICE.storeSpread));
+  return cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => storeSellAt(obs, g, belief(obs, look, g), { exact: true }));
 }
 
 /** The cash the month's needed units take at the belief's prices, as far as the money goes: the model's reserve off the auction. */

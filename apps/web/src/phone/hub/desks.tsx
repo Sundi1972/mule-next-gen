@@ -147,7 +147,7 @@ export function MarketStrip() {
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-xs font-semibold @min-[1100px]/shell:text-sm">{GOOD_NAME[r.good]}</span>
               <span data-num className="font-mono text-sm font-bold @min-[1100px]/shell:text-lg">
-                {r.storeSells ?? '—'} <span className="text-[10px] font-normal text-ink-3">cr</span>
+                {r.storeSells === null ? '—' : <>{r.storeSells} <span className="text-[10px] font-normal text-ink-3">cr</span></>}
               </span>
             </span>
             <span className={cx('ml-auto font-mono text-[10px] @min-[1100px]/shell:text-xs', r.storeStock === 0 ? 'text-alert' : 'text-ink-3')}>{r.storeStock === 0 ? 'SOLD OUT' : `${r.storeStock} left`}</span>

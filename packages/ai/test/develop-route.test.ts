@@ -37,6 +37,7 @@ import { planMind } from '../src/playbook/plan.js';
 import { draftPlaybook, type LeftOutPick } from '../src/playbook/draft.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
+import { lookFirstPrices } from './look-first-prices.js';
 
 // The HC-9 seam: the hand's in-tick draft calls throw, switched on per test; otherwise the real ones.
 const seam = vi.hoisted(() => ({ throwing: false }));
@@ -895,6 +896,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       (ground) => {
         // A Food MULE led in, on plains the seat's own pick would give Water: the floor cannot fit it again.
         const { state, plots } = wonMuleLot(2, 'food');
+        lookFirstPrices(state);
         // Known ground: the draft's pick plays; unknown: the route analyses first, and the hand picks the MULE again.
         if (ground === 'known') me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
         const { seat, hand } = seatAndHand();
