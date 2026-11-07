@@ -4,6 +4,7 @@ import {
   HALL_DOORS,
   IDLE_INPUT,
   inStore,
+  justSwappedOff,
   MS_PER_SECOND,
   pathTo,
   placeAt,
@@ -101,7 +102,8 @@ function took(state: GameState, me: string, action: AiAction): boolean {
     case 'outfit':
       return p.carriedMule === action.outfit;
     case 'install':
-      return p.carriedMule === null && tileAt(state.tiles, state.width, action.x, action.y)?.outfit !== null;
+      // A swap leaves the old MULE on the lead (AM-35).
+      return (p.carriedMule === null || justSwappedOff(p, action.x, action.y)) && tileAt(state.tiles, state.width, action.x, action.y)?.outfit !== null;
     case 'analyse':
       return p.analysed.includes(tileIndex(state.width, action.x, action.y));
     case 'filter':
