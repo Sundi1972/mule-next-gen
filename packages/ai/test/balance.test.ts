@@ -329,8 +329,9 @@ function grantWithFarms(smithore: number, normal?: number): GameState {
 
 describe('land plans by worth', () => {
   it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
-    // Smithore at 400: a mountain mine is worth about 3,100, the best farm about 750.
-    const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
+    // Smithore at 800: a mountain mine is worth about 4,600, the farm plan about 1,300. (At 400 under AM-18 the mine,
+    // paying its Water, is worth 2,493 and the farm plan 1,452: no plan is a quarter of the best, nothing to leave out.)
+    const rich = landDecision(observe(grantWithFarms(800), 'ai0'), traderMind);
     const best = Math.max(...rich.all.map((c) => c.value));
     expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
     for (const option of rich.options) expect(option.value).toBeGreaterThan(best / 2);
