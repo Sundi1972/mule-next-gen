@@ -138,11 +138,49 @@ export interface MapWalk {
 /**
  * The walk from a point on the map to plot `index`, as the hand walks pathTo's quickest walk: from each tile straight
  * for the next one's middle, cutting the corners, until it steps onto the plot, where Reach offers it. A lake plot it
- * works from the shore: on the tile before it, towards it until within DEV_STEER.shoreReachTiles of its edge. Not
- * pathTo's seconds, which count every tile crossed whole: the plot's own, where the walk ends at its edge, and none of
- * the one it starts on.
+ * works from the shore (AM-18), from a side or a corner, whichever walk is quicker: Reach offers it from all eight
+ * neighbours, and pathTo walks four ways, so a lake whose only shore is a corner has no side walk at all. Not pathTo's
+ * seconds, which count every tile crossed whole: the plot's own, where the walk ends at its edge, and none of the one
+ * it starts on.
  */
 export function mapWalk(state: GameState, cfg: FloorConfig, from: FloorPoint, index: number): MapWalk {
+  const side = sideWalk(state, cfg, from, index);
+  const goal = state.tiles[index]!;
+  if (goal.terrain !== 'lake' || cfg.steer.lakeMode !== 'shore') return side;
+  return CORNERS.map(([dx, dy]) => cornerWalk(state, cfg, from, goal, dx, dy)).reduce((a, b) => (b.seconds < a.seconds ? b : a), side);
+}
+
+const CORNERS = [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
+
+/**
+ * The walk to a lake plot from its corner neighbour at (dx, dy): onto that tile, then straight for the stand
+ * shoreStands puts there until the lake's corner is within DEV_STEER.shoreReachTiles. Infinity if the corner is closed.
+ */
+function cornerWalk(state: GameState, cfg: FloorConfig, from: FloorPoint, lake: FloorPoint, dx: number, dy: number): MapWalk {
+  const t = tileAt(state.tiles, state.width, lake.x + dx, lake.y + dy);
+  if (!t || terrainShare(t.terrain, cfg) <= 0) return { seconds: Infinity, end: from };
+  const onto = sideWalk(state, cfg, from, tileIndex(state.width, t.x, t.y));
+  if (!Number.isFinite(onto.seconds)) return onto;
+  const a = onto.end;
+  const middleOf = tileMiddle(t.x, t.y);
+  const spot = { x: middleOf.x - dx * cfg.steer.botShoreTiles, y: middleOf.y - dy * cfg.steer.botShoreTiles };
+  // The lake's corner the two tiles share: Reach's gap from this tile to the lake is the distance to it.
+  const vertex = { x: Math.max(lake.x, t.x), y: Math.max(lake.y, t.y) };
+  const d = { x: spot.x - a.x, y: spot.y - a.y };
+  const w = { x: a.x - vertex.x, y: a.y - vertex.y };
+  // The first share f of the way to the spot where |w + f d| is the reach: the smaller root of the quadratic.
+  const [dd, wd, ww, r] = [d.x * d.x + d.y * d.y, w.x * d.x + w.y * d.y, w.x * w.x + w.y * w.y, cfg.steer.shoreReachTiles];
+  const disc = wd * wd - dd * (ww - r * r);
+  const f = ww <= r * r ? 0 : disc < 0 || dd === 0 ? 1 : Math.min(1, Math.max(0, (-wd - Math.sqrt(disc)) / dd));
+  const end = { x: a.x + f * d.x, y: a.y + f * d.y };
+  return { seconds: onto.seconds + Math.hypot(end.x - a.x, end.y - a.y) * tileSeconds(state, cfg, spot), end };
+}
+
+/**
+ * The walk to plot `index` along pathTo's four-way path. A plot nobody may stand on (a lake) it works from the tile
+ * before it: towards it until within DEV_STEER.shoreReachTiles of its edge.
+ */
+function sideWalk(state: GameState, cfg: FloorConfig, from: FloorPoint, index: number): MapWalk {
   const goal = state.tiles[index]!;
   const path = pathTo(state, from, tileMiddle(goal.x, goal.y), cfg);
   if (!path) return { seconds: Infinity, end: from };
