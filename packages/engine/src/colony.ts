@@ -6,7 +6,7 @@
 import { COLONY, GAME, HAPPINESS, POLITICS, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
-import { budgetShares, votesOpen } from './politics.js';
+import { budgetCredits, budgetShares, votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { createRng } from './rng.js';
 import { score, scoreParts } from './game.js';
@@ -242,16 +242,15 @@ export function runColony(state: GameState, shortages: readonly Good[]): void {
     p.monthsLeft = p.monthsLeft! - 1;
     if (p.monthsLeft === 0) Object.assign(p, { stage: 'standing', monthsLeft: null });
   }
-  // The Governor's budget (S5-RULE-3): the spare is fixed once, here, and each line takes its share of it. The shares
+  // The Governor's budget (S5-RULE-3): budgetCredits fixes the spare once, here, and each line takes its share of it. The shares
   // add up to at most 100 and each payment is floored, so the lines together never take more than the spare.
-  const spare0 = spare(state);
-  const shares = budgetShares(state);
-  payWelfare(state, colony, Math.min(Math.floor((shares.welfare * spare0) / PERCENT), POLITICS.budget.welfare.maxCredits));
+  const credits = budgetCredits(state);
+  payWelfare(state, colony, credits.welfare);
   // Every project still being paid for, in the order it was commissioned, out of what the Projects share leaves: one paid
   // in credits but waiting for its goods takes no credits, so it never starves the ones behind it. fund() keeps the
   // reserve across all of them, and starts every one that has all its credits and goods; no building waits for land
   // (C48) (RULE-21 row 4).
-  let limit = Math.floor((shares.projects * spare0) / PERCENT);
+  let limit = credits.projects;
   for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) limit -= fund(state, colony, p, limit);
   colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)

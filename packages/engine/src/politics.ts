@@ -755,12 +755,14 @@ export function budgetCredits(state: GameState): Record<BudgetLine, number> {
 }
 
 /** The Governor sets the budget: a whole-percent share per offered line, at most 100 in all. See S5-RULE-2. */
-export function setBudget(state: GameState, playerId: string, shares: Record<BudgetLine, number>): void {
+export function setBudget(state: GameState, playerId: string, given: Record<BudgetLine, number>): void {
   const { id } = player(state, playerId);
   const politics = state.politics;
   if (!politics) throw new RuleError("This game plays without the colony's council");
   if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Set the budget once the votes are over');
   if (politics.governor !== id) throw new RuleError('Only the Governor sets the budget');
+  // Only the three lines are read: a line the phone left out is 0, a key it added is dropped.
+  const shares: Record<BudgetLine, number> = { projects: given.projects ?? 0, welfare: given.welfare ?? 0, security: given.security ?? 0 };
   const offered = budgetLines(state);
   const lines = Object.keys(shares) as BudgetLine[];
   for (const line of lines) {
@@ -776,7 +778,7 @@ export function setBudget(state: GameState, playerId: string, shares: Record<Bud
   }
   const total = lines.reduce((sum, line) => sum + shares[line], 0);
   if (total > PERCENT) throw new RuleError(`The shares add up to ${total}%: at most ${PERCENT}%`);
-  edit(state).budget = { month: state.month, setBy: id, shares: { ...shares } };
+  edit(state).budget = { month: state.month, setBy: id, shares };
 }
 
 /** Per target: true, or why the player may not call an overrule now. See S5-RULE-6. */
