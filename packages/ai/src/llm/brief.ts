@@ -3,16 +3,21 @@ import {
   allPrices,
   BRAIN,
   corralTarget,
+  crewOf,
   emptyStock,
   energyUseOf,
   EVENTS,
+  GOOD_CONFIG,
   GOODS,
   isFactory,
   monthNeeds,
   MS_PER_SECOND,
   MULE,
+  mulePrice,
   mulePriceFor,
+  needsOf,
   observe,
+  PERCENT,
   scoreParts,
   SPECIES_PERK,
   type DevelopmentPlay,
@@ -25,14 +30,17 @@ import {
   type Playbook,
   type PlayerId,
   type ProductionLine,
+  type RawGood,
   type Species,
   type Stock,
   type Strategy,
+  UPKEEP,
 } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
 import type { Mind } from '../value.js';
+import { endMonth } from '../outlook.js';
 import { seatBounds } from './manual.js';
 import { optionLine, tableTalkBlock } from './prompt.js';
 import type { LandDraft } from '../playbook/index.js';
@@ -77,6 +85,14 @@ export interface LastPhase {
   feedback?: Feedback | null;
   /** Every seat's Worth when this seat's last plan was asked, and that plan's month; absent before its first. */
   worthBefore?: WorthAt | null;
+  /** The strategy the seat's newest adopted land write set; absent until one sets it. */
+  ownStrategy?: OwnStrategy | null;
+}
+
+/** A strategy the seat set itself, and the month of the land write that set it. */
+export interface OwnStrategy {
+  month: number;
+  strategy: Strategy;
 }
 
 /** Every seat's Worth at one moment, by seat, and the month of the plan asked then. */
@@ -299,25 +315,105 @@ function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): strin
   );
 }
 
+const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
+
+/** What upkeep leaves of `held` Water for the next production, as runUpkeep plays it: the drink, spoilage rounded down, the depot cap. */
+const waterAfterUpkeep = (held: number, drink: number) =>
+  Math.min(UPKEEP.depotCapacity, Math.floor(Math.max(0, held - drink) * (1 - GOOD_CONFIG.water.spoilage)));
+
+/** The least Water the seat may end the auction with, upkeep drinking `drink`, and still hold `check` at the next production; null when the depot cannot keep `check`. */
+function waterToKeep(drink: number, check: number): number | null {
+  if (check > UPKEEP.depotCapacity) return null;
+  let held = check;
+  while (waterAfterUpkeep(held, drink) < check) held++;
+  return held;
+}
+
 /**
- * Where MULEs come from, as upkeep builds them (upkeep.ts): the corral now and this month's price to the seat; the
- * store's Smithore, and what the next upkeep builds from it, filling the corral back to corralTarget at
- * MULE.smithorePerMule each, whether the corral sells out or sells none.
+ * Water in units, against the check production makes before any plot runs (production.ts runProduction's `dry`): an
+ * owner holding less than needsOf's water has its irrigated plots make UPKEEP.shortOutputShare. The check reads the crew
+ * after development, so each MULE installed before it, a first Food plot's included, can raise the need: the line gives
+ * the crew that may still be added before it does. Asked before the next production (the land brief), what the seat
+ * holds is what that check reads, and no goods auction comes between. Asked after it (the auction brief), upkeep drinks
+ * and spoils first, so the seat must end the auction holding more.
  */
-function muleLine(obs: GameState, me: PlayerId): string {
-  const { mules } = obs.store;
-  const smithore = obs.store.stock.smithore;
-  const target = corralTarget(obs.players.length);
-  const buildable = Math.floor(smithore / MULE.smithorePerMule);
+function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): string {
+  const held = obs.players.find((q) => q.id === me)!.stock.water;
+  const crew = crewOf(obs, me);
+  const drink = needsOf(obs, me).water;
+  // needsOf's Water for `more` crew than today: one more per UPKEEP.crewPerWater crew.
+  const needWith = (more: number) => drink + Math.ceil((crew + more) / UPKEEP.crewPerWater) - Math.ceil(crew / UPKEEP.crewPerWater);
+  const farms = obs.tiles.filter((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? '')).length;
+  const kind = UPKEEP.irrigated.map((g: RawGood) => GOOD_NAME[g]).join(' or ');
+  // With no farm yet, the check that matters is the one a first farm faces, its MULE's crew added.
+  const base = farms === 0 ? UPKEEP.crew.raw : 0;
+  const need = needWith(base);
+  const room = (limit: number) => {
+    let more = 0;
+    while (needWith(base + more + 1) <= limit) more++;
+    return more;
+  };
+  const plots = farms === 1 ? `your ${kind} plot` : `your ${farms} ${kind} plots`;
+  const share = pct(UPKEEP.shortOutputShare);
+  const cut = farms === 0 ? `it makes ${share} of its output` : `${plots} ${farms === 1 ? 'makes' : 'make'} ${share} of ${farms === 1 ? 'its' : 'their'} output`;
+  const crewRule = `a raw MULE adds ${UPKEEP.crew.raw} crew, a works ${UPKEEP.crew.factory}`;
+  const beyond = farms === 0 ? ' beyond its MULE' : '';
+  const withIts = farms === 0 ? ' with its MULE' : '';
+  const head = `Water in units: you hold ${held}`;
+  const noFarm = `${head} and own no ${kind} plot yet.`;
+  if (afterProduction && obs.month >= endMonth(obs)) return `${head}; your household and crew drink ${drink} at upkeep, and this is the last month: no production checks Water again.`;
+  if (!afterProduction) {
+    const more = room(held);
+    const verdict =
+      held < need
+        ? `short by ${need - held}, so ${cut} at that production, and no Water can be bought before it`
+        : `covered for ${more} more crew${beyond} (${crewRule}); one more makes the need ${needWith(base + more + 1)}, and then ${cut} at that production, with no Water to buy before it`;
+    return farms === 0
+      ? `${noFarm} A ${kind} plot you install this month is checked at this month's production, against the ${need} your household and crew drink with its MULE: ${verdict}.`
+      : `${head}, against the ${need} the next production checks you hold (what your household and ${crew} crew drink a month): ${verdict}.`;
+  }
+  const subject = farms === 0 ? `a ${kind} plot you install next month` : `${plots}`;
+  const keep = waterToKeep(drink, need);
+  if (keep === null) {
+    return `${head}; your household and crew drink ${drink} at upkeep, and the depot keeps at most ${UPKEEP.depotCapacity} Water after it, less than the ${need} the next production checks, so no holding keeps ${subject} whole next month.`;
+  }
+  const verdict = held >= keep ? 'covered' : `short by ${keep - held}, or ${cut} next month`;
+  const grow = room(need) + 1;
+  const next = needWith(base + grow);
+  const keepNext = waterToKeep(drink, next);
+  const grown = `If next month's MULEs add ${grow} crew or more${beyond} (${crewRule}), production checks ${next}: ${keepNext === null ? `more than the depot keeps after upkeep, ${UPKEEP.depotCapacity}, so no holding covers that` : `hold ${keepNext}`}.`;
   return (
-    `MULEs: ${mules} in the corral, at ${mulePriceFor(obs, me)} cr each to you this month. ` +
-    `The store holds ${smithore} Smithore; at the next upkeep it builds MULEs to fill the corral back to ${target}, ${MULE.smithorePerMule} Smithore each: ` +
-    `on its Smithore today, ${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none (the auction and a ship that takes Smithore can change that).`
+    `${farms === 0 ? `${noFarm} To keep ${subject} whole` : `${head}. To keep ${subject} whole next month`}, end this auction holding ${keep}: upkeep drinks ${drink}, ` +
+    `${pct(GOOD_CONFIG.water.spoilage)} of the rest spoils, rounded down, and the next production checks you still hold ${need}${withIts}: ${verdict}. ${grown}`
   );
 }
 
-/** What the seat's plots made, and its Food and Energy in units: the land and auction briefs' (B fix 3). */
-const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), ''];
+/**
+ * Where MULEs come from, as upkeep builds them (upkeep.ts): the corral now and this month's price to the seat; the
+ * store's Smithore, and what the next upkeep builds from it, filling the corral back to corralTarget at
+ * MULE.smithorePerMule each, whether the corral sells out or sells none. Then what each MULE counts for in Worth:
+ * mulePrice, as scoreParts counts every outfitted plot.
+ */
+function muleLine(obs: GameState, me: PlayerId): string {
+  const { mules, muleFactor } = obs.store;
+  const smithore = obs.store.stock.smithore;
+  const target = corralTarget(obs.players.length);
+  const buildable = Math.floor(smithore / MULE.smithorePerMule);
+  const owned = obs.tiles.filter((t) => t.owner === me && t.outfit).length;
+  // literal-ok: the factor shown to two decimal places, display only
+  const factor = Math.round(muleFactor * 100) / 100;
+  return (
+    `MULEs: ${mules} in the corral, at ${mulePriceFor(obs, me)} cr each to you this month. ` +
+    `The store holds ${smithore} Smithore; at the next upkeep it builds MULEs to fill the corral back to ${target}, ${MULE.smithorePerMule} Smithore each: ` +
+    `on its Smithore today, ${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none (the auction and a ship that takes Smithore can change that). ` +
+    `Each MULE you own (${owned} now) counts in your Worth at the store's MULE price, now ${mulePrice(obs)} cr: ` +
+    `(${MULE.labour} labour + ${MULE.smithorePerMule} Smithore × the posted Smithore price ${obs.store.posted.smithore}) × the store's factor ${factor}. ` +
+    "At the game's end each counts at that day's price, which rises and falls with Smithore's price."
+  );
+}
+
+/** What the seat's plots made, and its Food, Energy and Water in units: the land and auction briefs'. */
+const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), waterLine(obs, me, afterProduction), ''];
 
 /**
  * The land plans' "Feeds me" reason, for a level without a look-ahead, counts plots, not units (strategist.ts
@@ -331,7 +427,7 @@ const FEEDS_ME: readonly [string, string][] = [
 const plotsCounted = (mind: Mind, line: string) =>
   mind.level.lookAhead ? line : FEEDS_ME.reduce((l, [said, counted]) => l.replace(said, counted), line);
 
-const valueText = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
+const valueText = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(Math.round(v)) : JSON.stringify(v));
 
 /**
  * What happened in the seat's last phase: each planned item against what it got, then each rival's public claims and
@@ -363,9 +459,22 @@ function refusalLines(feedback: Feedback | null | undefined): string[] {
   return parts.length > 0 ? [`Last time: ${parts.join('; ')}.`, ''] : [];
 }
 
+const strategyText = (s: Strategy) => `${s.kind}, moneyMaker ${goodText(s.moneyMaker)}`;
+
 /** The strategy's fields that play reads: no monopolyTarget or cashFloor (WS9 ruling, 6 Nov). */
 function strategyLine(s: Strategy): string {
-  return `Your strategy: ${s.kind}, moneyMaker ${goodText(s.moneyMaker)}. "${s.reason}"`;
+  return `Your strategy: ${strategyText(s)}. "${s.reason}"`;
+}
+
+/**
+ * The seat's own strategy, quoted back, in place of the draft's, whose reason is the persona's line; and, when the
+ * draft plays another kind or money-maker, what plays if the seat leaves its strategy out.
+ */
+function ownStrategyLines(drafted: Strategy, own: OwnStrategy | null | undefined): string[] {
+  if (!own) return [strategyLine(drafted)];
+  const lines = [`Your strategy as you set it in month ${own.month}: ${strategyText(own.strategy)}. "${own.strategy.reason}"`];
+  if (strategyText(drafted) !== strategyText(own.strategy)) lines.push(`This month's draft plays ${strategyText(drafted)}, unless you set your strategy again.`);
+  return lines;
 }
 
 /** The draft land grant as play reads it: its ranking only (WS9 ruling, 6 Nov). */
@@ -425,7 +534,7 @@ export function landBrief(
     muleLine(obs, mind.me),
     shipLine(obs),
     '',
-    strategyLine(draft.strategy),
+    ...ownStrategyLines(draft.strategy, last.ownStrategy),
     '',
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
