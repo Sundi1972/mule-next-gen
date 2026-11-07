@@ -26,6 +26,7 @@ import {
   type LawProposal,
   type SabotageOrder,
 } from '../src/index.js';
+import { createRng, seedOf } from '../src/rng.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const BAN: LawProposal = { kind: 'enact', law: 'sabotageBan', setting: POLITICS.laws.sabotageBan.settings[0]! };
@@ -271,6 +272,21 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
     }
   });
 
+  it('S4-T-AC-5: S4-RULE-7 row 6 (AM-1): the draw is createRng(seedOf(seed, position, "investigate", salt)).chance(odds), position 1-based, so two positions can differ', () => {
+    let differ = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const a = twoIncidents(seed);
+      const b = twoIncidents(seed);
+      const first = investigate(a.state, 'ossa', a.first.id).culpritPublic;
+      const second = investigate(b.state, 'ossa', b.second.id).culpritPublic;
+      const draw = (n: number) => createRng(seedOf(seed, n, 'investigate', String(POLITICS.sabotage.streamSalt))).chance(POLITICS.sheriff.investigateOdds);
+      expect(first).toBe(draw(1));
+      expect(second).toBe(draw(2));
+      if (first !== second) differ++;
+    }
+    expect(differ).toBeGreaterThan(0);
+  });
+
   it('S4-T-AC-5: S4-RULE-7 row 6: the odds are POLITICS.sheriff.investigateOdds: at 1 every investigation solves, at 0 none does', () => {
     const saved = POLITICS.sheriff.investigateOdds;
     try {
@@ -353,12 +369,14 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
   it('S4-T-AC-5: S4-RULE-8: a short culprit pays what they have, the victim\'s share is of what was paid, and the rest is waived', () => {
     const { state } = sheriffed();
     const order = addCase(state, { culpritPublic: true, victim: 'brix' });
-    state.players.find((p) => p.id === 'lena')!.money = 80;
+    state.players.find((p) => p.id === 'lena')!.money = 81;
     const brix = moneyOf(state, 'brix');
     fineCulprit(state, 'ossa', order.id, 300);
     expect(moneyOf(state, 'lena')).toBe(0);
-    expect(moneyOf(state, 'brix')).toBe(brix + Math.round(80 * POLITICS.sheriff.victimShare));
-    expect(orderOf(state, order.id).fine).toMatchObject({ base: 300, due: 300, paid: 80 });
+    // An odd payment: the victim's half is rounded (40.5 -> 41), not floored.
+    expect(Math.round(81 * POLITICS.sheriff.victimShare)).toBe(41);
+    expect(moneyOf(state, 'brix')).toBe(brix + 41);
+    expect(orderOf(state, order.id).fine).toMatchObject({ base: 300, due: 300, paid: 81, toVictim: 41 });
   });
 
   it('S4-T-AC-5: S4-RULE-8: a rumour has no victim, so the whole fine stays in the fund', () => {
@@ -406,7 +424,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     expect(state.players.map((p) => p.money)).toEqual(money);
   });
 
-  it('S4-T-AC-5: S4-RULE-8 standard: at the last upkeep an open case pays the standard fine, once (red until S4-1.8)', () => {
+  it('S4-T-AC-5: S4-RULE-8 standard: at the last upkeep an open case pays the standard fine, once', () => {
     const { state } = sheriffed();
     state.maxMonths = 4;
     state.phase = 'auction';
@@ -415,6 +433,18 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
     advancePhase(state);
     expect(state.phase).toBe('gameOver');
     expect(orderOf(state, order.id).fine).toMatchObject({ paid: standard, by: 'standard' });
+  });
+
+  it('S4-T-AC-5: S4-RULE-8 standard: at the last upkeep the crew is paid first, and the fine takes only what is left', () => {
+    const { state } = sheriffed();
+    state.maxMonths = 4;
+    state.phase = 'auction';
+    const crew = POLITICS.sabotage.orders.rumour.cost;
+    state.players.find((p) => p.id === 'lena')!.money = crew + 50;
+    const order = addCase(state, { month: 4, culpritPublic: true, victim: null });
+    advancePhase(state);
+    expect(state.phase).toBe('gameOver');
+    expect(orderOf(state, order.id).fine).toMatchObject({ due: standard, paid: 50 });
   });
 });
 
@@ -460,12 +490,12 @@ describe('S4-B-AC-3: a revealed case is fined; an unfined one pays when the next
     advancePhase(control);
     expect(state.phase).not.toBe('planning');
     expect(moneyOf(state, 'lena')).toBe(moneyOf(control, 'lena') - standard);
-    expect(moneyOf(state, 'brix')).toBe(moneyOf(control, 'brix') + standard / 2);
+    expect(moneyOf(state, 'brix')).toBe(moneyOf(control, 'brix') + Math.round(standard * POLITICS.sheriff.victimShare));
     expect(moneyOf(state, 'lena')).toBeLessThanOrEqual(lena - standard);
     expect(moneyOf(state, 'brix')).toBeGreaterThanOrEqual(brix);
     while (state.phase !== 'upkeep') advancePhase(state);
     expect(state.history.at(-1)!.ledger!.in.fine).toBe(standard);
-    expect(state.history.at(-1)!.ledger!.out.restitution).toBe(standard / 2);
+    expect(state.history.at(-1)!.ledger!.out.restitution).toBe(Math.round(standard * POLITICS.sheriff.victimShare));
     expect(state.politics!.sabotage.find((o) => o.id === order.id)!.fine).toMatchObject({ by: 'standard', paid: standard });
   });
 
@@ -520,6 +550,21 @@ describe('S4-B-AC-6 (engine): the crew is paid at the month end', () => {
     expect(moneyOf(ordered, 'lena')).toBeGreaterThanOrEqual(0);
   });
 
+  it('S4-B-AC-6: S4-RULE-9: a player short for both a law tax and a crew pays the law tax first; the crew gets what is left', () => {
+    const { ordered } = twoMonths();
+    while (ordered.phase !== 'auction') advancePhase(ordered);
+    const plot = ordered.tiles.find((t) => t.terrain !== 'store' && t.owner === null)!;
+    plot.owner = 'lena';
+    const tax = 30;
+    const own = ordered.tiles.filter((t) => t.owner === 'lena').length;
+    ordered.politics = { ...ordered.politics!, laws: { landTax: { setting: tax / own, since: 1 } } };
+    ordered.players.find((p) => p.id === 'lena')!.money = cost + 10;
+    advancePhase(ordered);
+    expect(ordered.phase).toBe('upkeep');
+    // The tax is collected whole (30, in treasury.paid); the crew's cost is then short and takes what is left.
+    expect(ordered.treasury.paid.lena).toBe(tax);
+  });
+
   it('S4-B-AC-6: S4-RULE-9: an order that went void (the plot lost its MULE) costs nothing', () => {
     const { ordered, control, food } = twoMonths();
     ordered.tiles[food]!.outfit = null;
@@ -562,6 +607,16 @@ describe('S4-B-AC-8 / S4-T-AC-12: the sabotage ban', () => {
     expect(state.politics!.laws.sabotageBan?.setting).toBe(setting);
     expect(state.phase).toBe('planning');
     return state;
+  }
+  /** The Sheriff solves the case (the odds at 1), so it is revealed by the real route, under whatever ban is in force now; the odds come back after. */
+  function revealed(state: GameState, id: string): void {
+    const saved = POLITICS.sheriff.investigateOdds;
+    POLITICS.sheriff.investigateOdds = 1;
+    try {
+      investigate(state, 'ossa', id);
+    } finally {
+      POLITICS.sheriff.investigateOdds = saved;
+    }
   }
   const reputationOf = (state: GameState, id: string) => state.players.find((p) => p.id === id)!.reputation;
 
@@ -608,8 +663,10 @@ describe('S4-B-AC-8 / S4-T-AC-12: the sabotage ban', () => {
 
   it('S4-B-AC-8: the standard fine at planning\'s end reads the ban that planning\'s votes have just put in force', () => {
     const { state } = sheriffed();
-    addCase(state, { culpritPublic: true, victim: null });
+    const incident = addCase(state, { victim: null });
     state.players.find((p) => p.id === 'lena')!.money = 1_000;
+    revealed(state, incident.id);
+    expect(orderOf(state, incident.id).culpritPublic).toBe(true);
     proposeLaw(state, 'lena', { kind: 'enact', law: 'sabotageBan', setting: 3 });
     state.month++;
     openPlanning(state);
@@ -622,8 +679,10 @@ describe('S4-B-AC-8 / S4-T-AC-12: the sabotage ban', () => {
 
   it('S4-B-AC-8: the multiplier is never stored on a case; repealing the ban puts the next fine back to x1', () => {
     const state = banned(2);
-    const first = addCase(state, { culpritPublic: true });
-    expect(JSON.stringify(first)).not.toContain('multiplier');
+    const first = addCase(state);
+    revealed(state, first.id); // revealed under x2
+    expect(orderOf(state, first.id).culpritPublic).toBe(true);
+    expect(JSON.stringify(orderOf(state, first.id))).not.toContain('ultiplier');
     state.politics = { ...state.politics!, laws: {} };
     state.players.find((p) => p.id === 'lena')!.money = 1_000;
     fineCulprit(state, 'ossa', first.id, 100);
@@ -642,6 +701,15 @@ describe('S4-B-AC-8 / S4-T-AC-12: the sabotage ban', () => {
       expect(impact.brix!.cost).toBe(0);
     }
     expect(lawImpact(state, { kind: 'enact', law: 'sabotageBan', setting: 2 }).lena!.cost).toBe(75);
+  });
+
+  it('S4-T-AC-12: in month 1, before any month is played and with no incident, the preview is 0 for everyone, never NaN', () => {
+    const { state } = sheriffed();
+    state.month = 1;
+    for (const setting of POLITICS.laws.sabotageBan.settings) {
+      const impact = lawImpact(state, { kind: 'enact', law: 'sabotageBan', setting });
+      for (const id of SEATS) expect(impact[id]!.cost).toBe(0);
+    }
   });
 
   it('S4-T-AC-12 negative: an unrevealed incident adds nothing; a repeal shows the same figure as a saving', () => {

@@ -718,7 +718,7 @@ describe('the one reveal', () => {
   });
 
   // Was red until Task S4-1.7 built investigate: the order a Sheriff solves months later still carries its own month to pactBreach.
-  it('S4-T-AC-4 (investigation leg, red until S4-1.7): an investigation months later still calls pactBreach with the order\'s month', () => {
+  it('S4-T-AC-4 (investigation leg): an investigation months later still calls pactBreach with the order\'s month', () => {
     let solved = false;
     for (let seed = 1; seed <= 60 && !solved; seed++) {
       hooks.calls.length = 0;

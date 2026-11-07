@@ -93,7 +93,7 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   edit(state).sabotage = [...kept, order];
 }
 
-/** The refusal for a Sheriff's act now, or null when the player may act; `verb` fills the words of rows 2 and 3 (S4-RULE-6 rows 1-3). */
+/** The refusal for a Sheriff's act now, or null when the player may act; `words` fills the words of rows 2 and 3 (S4-RULE-6 rows 1-3). */
 function refusal(state: GameState, playerId: string, words: { votes: string; sheriff: string }): RuleError | null {
   const can = sheriffCanAct(state, playerId);
   if (can === true) return null;
