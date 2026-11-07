@@ -9,6 +9,7 @@ import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
+import { newSabotageMonth } from './sabotage.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
 import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Overrule, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
@@ -69,6 +70,7 @@ export function openPlanning(state: GameState): void {
   p.council = null;
   p.overrule = null;
   if (!p.election) openCouncil(state, p);
+  newSabotageMonth(state);
 }
 
 /** The next election month after this one, or null if the game ends first. See WS7 spec RULE-1. */

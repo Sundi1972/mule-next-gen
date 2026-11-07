@@ -1,5 +1,9 @@
+import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
-import type { GameState, MonthEvent, SabotageOrder, SabotageTarget } from './types.js';
+import { player } from './game.js';
+import { securitySpend } from './politics.js';
+import { createRng, seedOf } from './rng.js';
+import { GOODS, type GameState, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
 
 /**
  * Sabotage (slice 4): orders, guards, investigations, fines and rumours. This file is the contract freeze (S4-C20):
@@ -14,7 +18,6 @@ const NOT_BUILT = 'Sabotage is not built yet';
 export type OrderTerms = Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
 
 /** The state's own politics to write to: a copy on every write, since a what-if made from it may still hold the old one. */
-// Unused until the rules land (S4-1.2+); the one-line structuredClone colony.ts's edit() starts from.
 function edit(state: GameState): NonNullable<GameState['politics']> {
   const politics = structuredClone(state.politics!);
   state.politics = politics;
@@ -26,9 +29,49 @@ export function captureOdds(_state: GameState, _order: SabotageOrder): number {
   return 0;
 }
 
-/** Place, replace or (with null) withdraw the player's order for this month. */
-export function orderSabotage(_state: GameState, _playerId: string, _target: SabotageTarget | null): void {
-  throw new RuleError(NOT_BUILT);
+const BASE_36 = 36; // literal-ok: the radix of an id tag, a definition
+const TAG_LENGTH = 6; // literal-ok: an id tag is six characters, a format not a balance number
+const PER_SECURITY = 100; // literal-ok: Security is counted in hundreds of credits (S4-RULE-3), a unit and not a balance number
+
+/** 'sab-' plus six base-36 characters, drawn from a stream seeded by the game and the order's number only; a clash redraws (AM-1). */
+function newId(state: GameState, taken: readonly SabotageOrder[]): string {
+  const n = taken.length + 1;
+  for (let attempt = 0; ; attempt++) {
+    const rng = createRng(seedOf(state.seed, n, 'sab', ...(attempt === 0 ? [] : [String(attempt)])));
+    const tag = Array.from({ length: TAG_LENGTH }, () => rng.int(0, BASE_36 - 1).toString(BASE_36)).join('');
+    if (!taken.some((o) => o.id === `sab-${tag}`)) return `sab-${tag}`;
+  }
+}
+
+/** The player's order for this month, still pending: the one an order replaces or a withdrawal removes. */
+function standing(state: GameState, playerId: string): SabotageOrder | undefined {
+  return state.politics?.sabotage.find((o) => o.by === playerId && o.month === state.month && o.outcome === 'pending');
+}
+
+/** Place, replace or (with null) withdraw the player's order for this month (S4-RULE-2). */
+export function orderSabotage(state: GameState, playerId: string, target: SabotageTarget | null): void {
+  const can = canOrder(state, playerId);
+  if (can === 'off') throw new RuleError('This game plays without sabotage');
+  if (can === 'notPlanning') throw new RuleError('Orders are given in planning');
+  const old = standing(state, playerId);
+  if (target === null) {
+    if (old) {
+      const kept = state.politics!.sabotage.filter((o) => o !== old);
+      edit(state).sabotage = kept;
+    }
+    return;
+  }
+  if (target.kind === 'powerCut') {
+    const tile = state.tiles[target.tile];
+    if (!tile || tile.owner === null || tile.owner === playerId) throw new RuleError("Pick another player's plot");
+    if (!(GOODS as readonly string[]).includes(tile.outfit ?? '')) throw new RuleError('That plot makes nothing to cut');
+  } else if (!(GOODS as readonly string[]).includes(target.good)) throw new RuleError('Pick a good');
+  const { cost } = orderTerms(state)[target.kind];
+  const money = player(state, playerId).money;
+  if (money < cost) throw new RuleError(`A crew costs ${cost} cr; you have ${money}`);
+  const kept = state.politics!.sabotage.filter((o) => o !== old);
+  const order: SabotageOrder = { id: newId(state, kept), by: playerId, month: state.month, target: { ...target }, cost, outcome: 'pending', culpritPublic: false };
+  edit(state).sabotage = [...kept, order];
 }
 
 /** The Sheriff's guarded plots for this month: the whole list. */
@@ -66,17 +109,25 @@ export function settleSabotage(_state: GameState): void {}
 /** Levy the standard fine on cases left unfined, when planning ends and at the last upkeep. */
 export function closeCases(_state: GameState): void {}
 
-/** Reset the month's guards and investigations at the start of planning. */
-export function newSabotageMonth(_state: GameState): void {}
+/** Reset the month's guards at the start of planning; investigations are read off their month, so they reset themselves. */
+export function newSabotageMonth(state: GameState): void {
+  if (state.politics && state.politics.guards.length > 0) edit(state).guards = [];
+}
 
 /** What each kind of order costs, and its chance of working and of being seen, now. */
-export function orderTerms(_state: GameState): OrderTerms {
-  return { powerCut: { cost: 0, success: 0, detect: 0 }, rumour: { cost: 0, success: 0, detect: 0 } };
+export function orderTerms(state: GameState): OrderTerms {
+  const extra = Math.floor(securitySpend(state) / PER_SECURITY) * POLITICS.sheriff.securityDetect;
+  const terms = (kind: SabotageTarget['kind']) => {
+    const { cost, success, detect } = POLITICS.sabotage.orders[kind];
+    return { cost, success, detect: Math.min(1, detect + extra) };
+  };
+  return { powerCut: terms('powerCut'), rumour: terms('rumour') };
 }
 
 /** Whether the player may order now, or why not. */
-export function canOrder(_state: GameState, _playerId: string): true | 'off' | 'notPlanning' {
-  return 'off';
+export function canOrder(state: GameState, _playerId: string): true | 'off' | 'notPlanning' {
+  if (!state.politics || !POLITICS.sabotage.on) return 'off';
+  return state.phase === 'planning' ? true : 'notPlanning';
 }
 
 /** How many plots the Sheriff may guard this month. */
