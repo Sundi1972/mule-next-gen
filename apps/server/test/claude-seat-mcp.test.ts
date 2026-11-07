@@ -136,12 +136,15 @@ describe('/mcp, stateless, the seat code on every call', () => {
     const mule = createMuleServer();
     servers.push(mule.server);
     await new Promise<void>((done) => mule.server.listen(0, '127.0.0.1', done));
-    const client = mcpClient(`http://127.0.0.1:${(mule.server.address() as AddressInfo).port}/mcp`);
+    const url = `http://127.0.0.1:${(mule.server.address() as AddressInfo).port}/mcp`;
+    const client = mcpClient(url);
 
     const listed = await client.rpc('tools/list', {});
     expect(listed.body!.result!.tools!.map((t) => t.name).sort()).toEqual(['join', 'submit_plan', 'wait_for_my_turn']);
     expect(await client.call('wait_for_my_turn', { code: 'K7QM-42' })).toMatchObject({ kind: 'no_such_seat' });
     expect(listed.headers.get('mcp-session-id')).toBeNull();
+    // No session means no GET stream to open: refused, never the web client's page.
+    expect((await fetch(url)).status).toBe(405);
     await mule.close();
     servers.pop();
   });

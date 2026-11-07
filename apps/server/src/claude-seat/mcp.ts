@@ -161,7 +161,7 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
   return {
     async handle(req, res) {
       if (req.method !== 'POST') {
-        res.writeHead(405, { allow: 'POST', 'content-type': 'application/json' }).end(rpcError(ErrorCode.ConnectionClosed, 'Only POST: this server keeps no session'));
+        res.writeHead(405, { allow: 'POST', 'content-type': 'application/json' }).end(rpcError(ErrorCode.InvalidRequest, 'Only POST: this server keeps no session'));
         return;
       }
       const body = await readBody(req, BRAIN.claudeSeat.maxRequestBytes);
