@@ -1276,6 +1276,24 @@ because   n counted over everyone's orders told an orderer, by replacing her own
 goal      S4-1, S4-2 — unchanged; HC-4 now holds for the id too
 ```
 
+```
+AM-5 · 2026-11-08 · WS7 (build: S4-PR-1, S4-C5 and S4-C7's implementer questions; AM-4's review) · terms the rules
+                    left open
+
+target    S4-RULE-10's preview, S4-RULE-6 row 5, S4-RULE-7's draw, AM-4's clash line
+said      monthsPlayed undefined; "distinct plots" without saying what is stored; the investigation's salt unnamed;
+          AM-4: "a clash with any id ever issued"
+did       monthsPlayed = max(1, month − 1): laws are voted in planning, when month − 1 months have been played
+          (the example's 75 cr holds). The guards are stored as distinct tiles; a tile posted twice counts once.
+          The investigation draws from seedOf(seed, n, 'investigate', POLITICS.sabotage.streamSalt), apart from
+          the order stream. A 'caught' reputation reason is dated the month the culprit was revealed (the
+          investigation's month, else the order's). AM-4's clash redraw checks the ids of the orders still in
+          politics.sabotage: a (month, orderer) pair is unique, so another clash would need a hash collision
+          (about 1 in 2 billion).
+because   each was a choice the build had to make; recorded so the server, the hands and the screens read the same
+goal      S4-1, S4-2 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: sabotage state
