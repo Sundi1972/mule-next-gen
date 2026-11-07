@@ -919,7 +919,7 @@ because   both were approved and unbuilt; together a farm would draw Water twice
           (6 Nov), since AM-18's amounts differ by plot
 goal      G-1 unchanged; one rule per good, read once
 folded    §1 C10, C11, C14 and §2 RULE-10, RULE-12 read with AM-3; docs/rulebook/production.html#plot-consumption and
-          #crew-short describe it. WS1 builds AM-18 in PR-5's supply pass (S1 due 8 Nov 08:00Z)
+          #crew-shortfall describe it. WS1 builds AM-18 in PR-5's supply pass (S1 due 8 Nov 08:00Z)
 ```
 
 ## §9 · Ownership Boundaries
