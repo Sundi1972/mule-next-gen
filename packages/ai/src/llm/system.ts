@@ -7,6 +7,7 @@ Your aim is to win: the highest Worth at the end. You write your seat's strategy
 - Strategy.kind is the plan you play to. builder: develop many plots and grow steady production. specialist: concentrate on one good, your moneyMaker, and sell it. monopolist: corner a good so others must buy it from you, only for a seat whose level may corner. landBaron: gather plots, since each one counts toward Worth. politician: win office, since each term adds to Worth. spoiler: hold the leader back.
 - moneyMaker is the good you mean to earn most from, or null.
 - Each edit names a path the brief offers, the value to set and why. A plan letter must be one the brief lists. An edit past what the rules allow is clamped to the nearest value they allow and plays, or is refused and the draft's value plays; your next brief lists each one with why.
+- Where the brief says a draft part does not play if you keep it, only your edit makes it play: send the part as your edit to have it played.
 - line is one short sentence you say at the table, at most ${BRAIN.maxLineChars} characters, in the character's voice, or empty. Keep it family-friendly.
 Reply with JSON only, in the shape the schema gives.
 
