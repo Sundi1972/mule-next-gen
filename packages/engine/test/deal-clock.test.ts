@@ -12,6 +12,7 @@ import {
   runFor,
   stepElection,
   withdrawDeal,
+  POLITICS,
   type DealCard,
   type DealOffer,
   type GameState,
@@ -26,6 +27,7 @@ function newGame(maxMonths = 12, politics?: boolean): GameState {
 }
 
 const cardOf = (state: GameState, id: string): DealCard => state.politics!.deals.find((d) => d.id === id)!;
+const repOf = (state: GameState, id: string): number => state.players.find((p) => p.id === id)!.reputation;
 
 /** Offers a card and has its receiver accept it. */
 function deal(state: GameState, from: string, offer: DealOffer): string {
@@ -97,12 +99,14 @@ describe('S3-T-AC-2: through advancePhase, the ballots are judged before the swe
     stepElection(state, 0);
     expect(state.politics!.election!.stage, 'the premise: the ballot is open').toBe('ballot');
     castVote(state, 'lena', 'governor', pick);
+    const before = repOf(state, 'lena');
 
     // The host's Continue: planning ends with the ballot still open.
     advancePhase(state);
 
     expect(state.phase).not.toBe('planning');
     expect(cardOf(state, id)).toMatchObject({ status, settled: 1 });
+    if (status === 'broken') expect(repOf(state, 'lena'), 'the breaker pays').toBe(before + POLITICS.reputation.moves.voteBroken);
   });
 
   it.each([
@@ -118,11 +122,13 @@ describe('S3-T-AC-2: through advancePhase, the ballots are judged before the swe
     openPlanning(state);
     expect(state.politics!.council!.stage, 'the premise: the law ballot is open').toBe('ballot');
     castLawVote(state, 'brix', yes);
+    const before = repOf(state, 'brix');
 
     advancePhase(state);
 
     expect(state.phase).not.toBe('planning');
     expect(cardOf(state, id)).toMatchObject({ status, settled: 3 });
+    if (status === 'broken') expect(repOf(state, 'brix'), 'the breaker pays').toBe(before + POLITICS.reputation.moves.voteBroken);
   });
 });
 

@@ -141,11 +141,11 @@ describe('dealNews: the wording of a break, per kind of card', () => {
     [{ kind: 'vote', law: true, yes: true } as const, 'Heiko broke a promise to Lena: a yes on the law. Reputation −10.', ['s1', 's2']],
     [{ kind: 'vote', law: true, yes: false } as const, 'Heiko broke a promise to Lena: a no on the law. Reputation −10.', ['s1', 's2']],
     [{ kind: 'pact' } as const, 'Heiko broke a pact with Lena. Reputation −20.', ['s1', 's2']],
-  ])('S3-B-AC-2: the news of a broken %j reads %j, naming %j', (terms, text, who) => {
+  ])('S3-B-AC-2, S3-B-AC-4: the news of a broken %j reads %j, naming %j', (terms, text, who) => {
     expect(news(card(terms))).toEqual([{ text, who }]);
   });
 
-  it('S3-B-AC-2: a pact broken by its receiver names the proposer as the other party', () => {
+  it('S3-B-AC-4: a pact broken by its receiver names the proposer as the other party', () => {
     expect(news(card({ kind: 'pact' }, 's1', 's2', 's2'))).toEqual([{ text: 'Lena broke a pact with Heiko. Reputation −20.', who: ['s2', 's1'] }]);
   });
 
@@ -275,7 +275,7 @@ describe('S3-RULE-11: a card the clock settles is noticed in that same step, sta
     for (const h of HUMANS.slice(before)) game.handle(h, { type: 'ready' });
 
     expect(state.phase, 'the premise: the development closed').not.toBe('development');
-    expect(cardNotices(notices, id).at(-1)!.event, 'the premise: the record noticed it').toBe('kept');
+    expect(cardNotices(notices, id).at(-1), 'noticed in the phase it settled in').toMatchObject({ event: 'kept', phase: 'development' });
     const facts = askPhase.mock.calls.filter(([, phase]) => phase === 'auction').at(-1)![2];
     expect(facts.filter((f) => 'parties' in f && f.parties !== undefined), 'no private notice').toEqual([]);
   });

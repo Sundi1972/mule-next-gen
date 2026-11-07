@@ -23,7 +23,8 @@ afterEach(() => vi.restoreAllMocks());
 const stateOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
 describe('MuleView.newsLines: the news, each line with the seats it names', () => {
-  it('INV-F11-1: newsLines says exactly what news says, line for line, on every screen through a whole month', { timeout: 30_000 }, async () => {
+  // trace-allow: the PM's F-11 ruling (7 Nov), newsLines texts always equal news; no spec AC covers it
+  it('newsLines says exactly what news says, line for line, on every screen through a whole month', { timeout: 30_000 }, async () => {
     const fake = fakeContext({ table: TABLE });
     const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, politics: true });
     game.start(TABLE);
@@ -61,7 +62,7 @@ describe('MuleView.newsLines: the news, each line with the seats it names', () =
     expect(named.size, 'the premise: some line named a seat').toBeGreaterThan(0);
   });
 
-  it('S3-B-AC-2: a broken pact’s line names the breaker, then the other party (F-11)', () => {
+  it('S3-B-AC-4: a broken pact’s line names the breaker, then the other party (F-11)', () => {
     const fake = fakeContext({ table: TABLE });
     const game = new MuleGame(fake.ctx, 10, { politics: true });
     game.start(TABLE);
@@ -76,7 +77,8 @@ describe('MuleView.newsLines: the news, each line with the seats it names', () =
     expect(game.viewFor(null).newsLines![0]).toEqual({ text: 'Lena broke a pact with Heiko. Reputation −20.', who: ['s2', 's1'] });
   });
 
-  it('INV-F11-2: a line naming nobody names no seat', () => {
+  // trace-allow: the PM's F-11 ruling (7 Nov), who lists only the seats a line names; no spec AC covers it
+  it('a line naming nobody names no seat', () => {
     const fake = fakeContext({ table: TABLE });
     const game = new MuleGame(fake.ctx, 10, { politics: true });
     game.start(TABLE);
