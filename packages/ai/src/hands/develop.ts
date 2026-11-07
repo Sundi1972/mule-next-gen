@@ -139,16 +139,15 @@ function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: Floo
 
 /**
  * Whether lake plot `plot` can never get a MULE on the floor: no spot on its shore offers its install (installable,
- * the walk the hands price by). Judged for its owner; a plot nobody holds, as if each seat held it in turn.
+ * the walk the hands price by). Judged as if seat `me` held it; without `me`, for its owner, and a plot nobody holds
+ * as if each seat held it in turn. A seat's own land is no shore for its own install.
  */
-export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig()): boolean {
+export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig(), me?: string): boolean {
   const tile = state.tiles[plot]!;
   if (tile.terrain !== 'lake') return false;
-  if (tile.owner !== null) return !installable(state, cfg, tile.owner, plot);
-  return state.players.every((p) => {
-    const held = { ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: p.id } : t)) };
-    return !installable(held, cfg, p.id, plot);
-  });
+  const unreachableFor = (seat: string) => !installable({ ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: seat } : t)) }, cfg, seat, plot);
+  const seat = me ?? tile.owner;
+  return seat !== null ? unreachableFor(seat) : state.players.every((p) => unreachableFor(p.id));
 }
 
 /** One route MULE: the plot it is installed on and the outfit it is fitted with. */
@@ -178,7 +177,7 @@ export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: 
   // The MULE installed is the one the seat leads if fitted already, so a swap needs it fitted for the route's outfit.
   const swaps = outfit !== null && tile.outfit !== outfit && (led === null || led === 'empty' || led === outfit) && !justSwappedOff(me, tile.x, tile.y);
   if (tile.owner !== mind.me || (tile.outfit !== null && !swaps)) return `stale: plot ${plot}`;
-  if (floor && unreachablePlot(state, plot, floor)) return `lake: no shore reaches plot ${plot}`;
+  if (floor && unreachablePlot(state, plot, floor, mind.me)) return `lake: no shore reaches plot ${plot}`;
   // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
   const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
   if (cashFloor !== null && outfit !== null) {
