@@ -41,7 +41,7 @@ const drawnAt = (vb: { w: number; h: number }) => Math.min(1280 / vb.w, 720 / vb
 
 describe('B-AC-6: the month-end opener on the TV, full-screen at dusk', () => {
   it('B-AC-6: a month the Stadium came to stand shows "New this month: the Stadium stands", leaning in on it, at dusk, no chips', () => {
-    const html = opener({ kind: 'full', ms: 6_000, changes: [STADIUM_STANDS], playing: true });
+    const html = opener({ kind: 'full', ms: 6_000, changes: [STADIUM_STANDS], baseline: true, playing: true });
     expect(root(html)).toContain('data-opener="full"');
     expect(root(html)).toContain('data-leaning="stadium"');
     expect(text(html)).toContain('End of month 12');
@@ -52,7 +52,7 @@ describe('B-AC-6: the month-end opener on the TV, full-screen at dusk', () => {
   });
 
   it('B-AC-6: full-screen, the built area fills the 16:9 canvas larger than the grounds’ own framing', () => {
-    const html = opener({ kind: 'full', ms: 6_000, changes: [STADIUM_STANDS], playing: false });
+    const html = opener({ kind: 'full', ms: 6_000, changes: [STADIUM_STANDS], baseline: true, playing: false });
     const framed = viewBox(html);
     expect(framed.w / framed.h).toBeCloseTo(1280 / 720, 3);
     const own = viewBox(renderToStaticMarkup(<Scene colony={MONTH_12} size="tv" />));
@@ -73,15 +73,22 @@ describe('B-AC-6: the month-end opener on the TV, full-screen at dusk', () => {
   });
 
   it('T-AC-8: a quiet month shows the still: the grounds at dusk, no lean-in, its caption says nothing changed', () => {
-    const html = opener({ kind: 'still', ms: 3_000, changes: [], playing: true });
+    const html = opener({ kind: 'still', ms: 3_000, changes: [], baseline: true, playing: true });
     expect(root(html)).toContain('data-opener="still"');
     expect(root(html)).not.toContain('data-leaning');
     expect(caption(html)).toBe('Nothing new on the grounds this month.');
     expect(html).toContain('data-testid="colony-grounds"');
   });
 
+  it('T-AC-7: the first month end a screen sees has no month end to diff: a neutral caption, not "nothing new", and no lean-in', () => {
+    const html = opener({ kind: 'still', ms: 3_000, changes: [], baseline: false, playing: true });
+    expect(root(html)).toContain('data-opener="still"');
+    expect(root(html)).not.toContain('data-leaning');
+    expect(caption(html)).toBe("The colony grounds at the month's end.");
+  });
+
   it('T-AC-8: with reduced motion a changed month is the still: it names the change and does not lean in', () => {
-    const html = opener({ kind: 'still', ms: 3_000, changes: [STADIUM_STANDS, { id: 'hospital', name: 'Hospital', from: 'standing', to: 'closed', place: null }], playing: true });
+    const html = opener({ kind: 'still', ms: 3_000, changes: [STADIUM_STANDS, { id: 'hospital', name: 'Hospital', from: 'standing', to: 'closed', place: null }], baseline: true, playing: true });
     expect(root(html)).toContain('data-opener="still"');
     expect(root(html)).not.toContain('data-leaning');
     expect(caption(html)).toBe('New this month: the Stadium stands and the Hospital closes.');

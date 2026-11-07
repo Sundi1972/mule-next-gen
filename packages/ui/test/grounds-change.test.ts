@@ -11,15 +11,19 @@ const view = (phase: string, month: number, projects: GroundsProject[]): MonthEn
 const planning = (month: number, ...projects: GroundsProject[]) => view('planning', month, projects);
 const monthEnd = (month: number, ...projects: GroundsProject[]) => view('upkeep', month, projects);
 
-/** The views one screen sees, in order; what RULE-5 finds at the last one, as [id, from, to]. */
-function seen(views: MonthEndView[]): [string, Stage | null, Stage][] | null {
+type Found = [string, Stage | null, Stage][] | 'no baseline' | null;
+
+/** The views one screen sees, in order; what RULE-5 finds at the last one, as [id, from, to], or that it had no month end to diff. */
+function seen(views: MonthEndView[]): Found {
   let memory = firstSeen(views[0]!);
   for (const v of views.slice(1)) memory = seeView(memory, v);
-  return memory.changes?.map((c) => [c.id, c.from, c.to]) ?? null;
+  const found = memory.changes;
+  if (found === null) return null;
+  return found.baseline ? found.changes.map((c) => [c.id, c.from, c.to]) : 'no baseline';
 }
 
 describe('T-AC-7: RULE-5, what leans in at the month end', () => {
-  it.each<[string, MonthEndView[], [string, Stage | null, Stage][] | null]>([
+  it.each<[string, MonthEndView[], Found]>([
     [
       'a stage change between two month ends leans in on that place',
       [planning(1, park('building')), monthEnd(1, park('building')), planning(2, park('building')), monthEnd(2, park('standing'))],
@@ -31,7 +35,8 @@ describe('T-AC-7: RULE-5, what leans in at the month end', () => {
       [['hospital', null, 'building']],
     ],
     ['a month whose stages all stay leans in on none', [monthEnd(1, park('standing')), planning(2, park('standing')), monthEnd(2, park('standing'))], []],
-    ['a first view leans in on none: the first month end this screen sees, though the Park just stood', [planning(1, park('building')), monthEnd(1, park('standing'))], []],
+    ['no baseline: the first month end this screen sees, though the Park just stood, is not a quiet month', [planning(1, park('building')), monthEnd(1, park('standing'))], 'no baseline'],
+    ['no baseline: a screen that opened in planning has none at its first month end, whatever it sees', [planning(4, park('standing')), monthEnd(4, park('standing'), hospital('building'))], 'no baseline'],
     ['a first view leans in on none: a reload into the month end plays nothing', [monthEnd(2, park('standing'))], null],
     [
       'the same month end sent again (someone readies) keeps what it found',
