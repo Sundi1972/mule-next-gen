@@ -469,10 +469,11 @@ export interface AuctionView {
   /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
   receipt: GoodReceipt | null;
   /**
-   * At the first good's side pick, the kept Claude seats still waited for, each with the server time (epoch ms) its
-   * wait ends (RULE-6). A seat leaves the list once its plan is taken; absent when nobody is waited for.
+   * At the first good's side pick, the kept Claude seats waited for, each with the server time (epoch ms) its wait ends
+   * (RULE-6). A seat leaves the list once its plan is taken. Once its wait runs out WS3 sets `builtin`: it plays its
+   * built-in plan and is waited for no more, and the entry stays until the side pick ends. Absent when the list is empty.
    */
-  waitingForClaude?: { seatId: string; until: number }[];
+  waitingForClaude?: { seatId: string; until: number; builtin?: true }[];
   /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
   tally: number | null;
 }

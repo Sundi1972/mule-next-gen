@@ -1,7 +1,8 @@
 /**
  * TV-FIT with Claude seats (C6), at 1920×1080 and six seats, the fullest table. B-AC-19 at six seats with five Claude
- * seats in each status; and the first good's side pick with Claude seats waited for (RULE-6): each waited seat's name
- * and countdown show whole in the picked list and the waiting box, nothing runs past the foot, and the scale holds.
+ * seats in each status; and the first good's side pick with Claude seats waited for (RULE-6) and one whose wait ran out:
+ * each name and countdown shows whole in the picked list and the waiting box, nothing runs past the foot, and the scale
+ * holds.
  * Run with `pnpm --filter @mule/web exec tsx e2e/claude-seat-tv.ts` after `vite build`.
  */
 import type { MuleView } from '@mule/protocol';
@@ -98,18 +99,27 @@ async function sidePickWithClaudeWaited(timeout = 5_000): Promise<string> {
         }
       await phone.waitForTimeout(200);
     }
-    const waited = [...seats.filter((s) => s.isAi)].sort((a, b) => b.name.length - a.name.length).slice(0, 2);
+    const longest = [...seats.filter((s) => s.isAi)].sort((a, b) => b.name.length - a.name.length);
+    const waited = longest.slice(0, 2);
+    // A third whose 45 s ran out: it reads READY and plays its built-in plan (PM ruling; WS3 sets builtin).
+    const ranOut = longest[2]!;
     return await held(quick.server, code, async () => {
       const until = Date.now() + WAIT_MS;
       const viewFor = game.viewFor.bind(game);
       game.viewFor = (seat) => {
         const view = viewFor(seat);
-        return view.auction ? { ...view, auction: { ...view.auction, waitingForClaude: waited.map((s) => ({ seatId: s.id, until })) } } : view;
+        const entries = [...waited.map((s) => ({ seatId: s.id, until })), { seatId: ranOut.id, until: Date.now(), builtin: true as const }];
+        return view.auction ? { ...view, auction: { ...view.auction, waitingForClaude: entries } } : view;
       };
       Object.assign(game, { claudeStatus: () => 'thinking' });
       room.broadcast();
       const box = tv.getByTestId('tv-waiting');
       for (const s of waited) await box.getByTestId(`waiting-${s.id}`).waitFor({ timeout });
+      const row = tv.getByTestId(`tv-picked-${ranOut.id}`);
+      await row.getByText('plays its built-in plan').waitFor({ timeout });
+      const word = (await row.innerText()).replace(/\s+/g, ' ').trim();
+      check(word === `${ranOut.name} CLAUDE · READY plays its built-in plan`, `${ranOut.name}, its wait run out, reads READY and plays its built-in plan, got "${word}"`);
+      await shownWhole(tv, 'six-seat side pick, a Claude seat run out', [`[data-testid=tv-picked-${ranOut.id}]`]);
       return measure(tv, waited);
     });
   } finally {

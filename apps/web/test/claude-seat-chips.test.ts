@@ -86,9 +86,12 @@ const tableOf = (game: MuleView, claude: Status | Partial<Record<string, Status>
 const SERVER_NOW = 1_000_000;
 
 /** Juno, or each seat named, waited for at the side pick, its wait ending that many seconds from now. */
-const waitedFor = (view: MuleView, seconds: number | Record<string, number>): MuleView => {
+const waitedFor = (view: MuleView, seconds: number | Record<string, number>, builtin: readonly string[] = []): MuleView => {
   const left = typeof seconds === 'number' ? { [JUNO]: seconds } : seconds;
-  return { ...view, auction: { ...view.auction!, waitingForClaude: Object.entries(left).map(([seatId, s]) => ({ seatId, until: SERVER_NOW + s * 1000 })) } };
+  return {
+    ...view,
+    auction: { ...view.auction!, waitingForClaude: Object.entries(left).map(([seatId, s]) => ({ seatId, until: SERVER_NOW + s * 1000, ...(builtin.includes(seatId) ? { builtin: true as const } : {}) })) },
+  };
 };
 
 /** Text with tags dropped, as a reader sees it. */
@@ -269,5 +272,31 @@ describe('the Claude line shows where a Claude seat can be waited for or not: pl
       const html = onPhone({ ...view, politics } as unknown as MuleView, 'thinking', () => createElement(ReadyBar));
       expect(html, JSON.stringify(politics)).not.toContain('data-testid="claude-line"');
     }
+  });
+});
+
+describe("PM ruling: a waited Claude seat whose 45 s ran out (WS3 sets builtin) reads READY and plays its built-in plan", () => {
+  /** The side pick with Juno's wait run out, its entry still in the list. */
+  const ranOut = (seat: string | null) => waitedFor(aGame({ toSidePick: true }).viewFor(seat), 0, [JUNO]);
+
+  it('the TV: Juno reads CLAUDE · READY, dimmed, with the note and no countdown; the waiting box no longer names it', () => {
+    const html = onTv(ranOut(null), 'thinking');
+    expect(part(html, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · READY plays its built-in plan');
+    expect(html).toMatch(new RegExp(`<li class="[^"]*opacity-60[^"]*" data-testid="tv-picked-${JUNO}"`));
+    expect(part(html, 'waiting-to-pick')).toBe('Waiting for Kai to pick');
+  });
+
+  it("the host's phone: Juno's own line reads CLAUDE · READY with the note and no countdown; only Kai is waited for", () => {
+    const html = onPhone(ranOut('s1'), 'thinking', () => createElement(Auction));
+    expect(part(html, 'claude-line')).toBe('Juno CLAUDE · READY plays its built-in plan');
+    expect(part(html, 'waiting-to-pick')).toBe('Waiting for Kai to pick');
+    expect(part(html, 'move-on')).toBe('Move on for Kai');
+  });
+
+  it('it counts as picked, on the TV and the phone, and is waited for no more', () => {
+    const view = ranOut('s1');
+    expect(stillPicking(view, () => true).map((s) => s.name)).toEqual(['Kai']);
+    expect(part(onTv(ranOut(null), 'thinking'), 'ready-count')).toBe('3 / 4 PICKED');
+    expect(part(onPhone(view, 'thinking', () => createElement(Auction)), 'ready-count')).toBe('3 / 4 PICKED');
   });
 });
