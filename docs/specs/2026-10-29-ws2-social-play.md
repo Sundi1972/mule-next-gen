@@ -6,6 +6,12 @@ Approach B, budget option (1) (Sonnet for the monthly social reasoning and for w
 Supersedes spec B v1 (`docs/specs/2026-10-29-ws2-table-talk.md` on `ws2-spec-b-talk` @ e7a491a), whose approval
 Heiko withdrew. Builds after spec A's PR-1 (`docs/specs/2026-10-28-ws2-strategy-playbook.md`).
 
+**AM-B5 (7 Nov) · the RC slice.** For the first release candidate (18 Nov) this spec ships G-B1 and G-B2 through C1-C5,
+C7, C8, C9, plus the vote seam C12 (Heiko, 7 Nov: replies that can change a vote stay in the RC) and the Claude Code
+seat's social part C13 (PM ruling, 7 Nov; separable). G-B3 to G-B5, C6 beyond the vote seam, C10 and C11 come after the
+RC (Heiko, 7 Nov, SEAMS:2420). Deal behaviour is an RC non-goal (PM ruling A, 7 Nov). New constraint HC-B7 (the "· AI"
+mark, Heiko, 7 Nov). Details and the drift since 29 Oct: §8 AM-B5.
+
 ## What you'll see at the table `[review-only]`
 
 - Each AI thinks once a month, as part of its strategy, about every other player, AIs included: where it stands with
@@ -42,6 +48,9 @@ and works on the ones that matter to its strategy.** `[handoff]`
   player, where it stands with them and why (a past act or message), and at least once a game acts on a change it
   noticed (a message, a deal, a vote). The replay shows the same reasoning. Heiko answers "did the AIs remember how
   you treated them?" yes.
+- *In the RC (AM-B5):* all of UBER-AC-B1 except "a deal" among the acts it may take on a change (deals are after the
+  RC); "a vote" counts through C12. The game is played with Smart seats, and once C13 lands also with a Claude Code
+  seat.
 
 **G-B2 (B) · Each AI tries to be liked: it decides how to win each player's goodwill and does it, in character.**
 `[handoff]`
@@ -52,9 +61,11 @@ and works on the ones that matter to its strategy.** `[handoff]`
 - **UBER-AC-B2:** in the same game, each AI's recorded reasoning names a goodwill aim for at least two players and the
   act that serves it, and sends at least 3 unprompted messages a game that are not about its own move; never past the
   caps; a muted AI sends that player nothing. Heiko answers "did at least one AI make you want to help it?" yes.
+- *In the RC (AM-B5):* all of UBER-AC-B2. A muted AI's card offers stop by WS7's S3-C11 once C9's mute exists; the
+  AI's own card offers are keyless in the RC (DealPort null).
 
 **G-B3 (C) · Each AI influences other players to help its strategy: it knows what it needs from whom, asks, offers
-and persuades.** `[handoff]`
+and persuades.** `[handoff]` *After the RC (AM-B5).*
 - **Today** `[review-only]`: no AI asks anything of anyone; spec A's strategy names stances ('ally' | 'neutral' |
   'rival' | 'target', `packages/engine/src/playbook.ts::Strategy`) but nothing turns a stance into a request.
   verified_by: read.
@@ -64,7 +75,8 @@ and persuades.** `[handoff]`
   with it off: the social side finishes higher on average worth across the games; every request an AI made is in its
   recorded reasoning beside the strategy item it serves.
 
-**G-B4 (D) · Each AI gathers allies for the policy it wants: tax and the offices' choices.** `[handoff]`
+**G-B4 (D) · Each AI gathers allies for the policy it wants: tax and the offices' choices.** `[handoff]` *After the RC
+(AM-B5), except the vote seam C12, which ships in the RC.*
 - **Today** `[review-only]`: an AI votes and, as Governor, sets the tax from its own numbers alone
   (`packages/ai/src/hands/vote.ts::VoteHand`); it never asks anyone to vote with it. Candidates' tax promises exist
   (`packages/engine/src/types.ts::TaxPromise`, WS7 RULE-10). verified_by: read.
@@ -73,7 +85,7 @@ and persuades.** `[handoff]`
   back the candidate whose promise serves it, with a reason; the record shows each AI's vote, and its recorded
   reasoning says why it voted that way, including any deal it was offered.
 
-**G-B5 (E) · Each AI campaigns for Governor or Sheriff when office serves it.** `[handoff]`
+**G-B5 (E) · Each AI campaigns for Governor or Sheriff when office serves it.** `[handoff]` *After the RC (AM-B5).*
 - **Today** `[review-only]`: an AI runs by a keyless rule (`VoteHand`, `packages/engine/src/politics.ts::canRun`); it
   never campaigns. Only the Governor is elected until WS7's slice 4 (`POLITICS.offices`). verified_by: read.
 - **Value** `[review-only]`: elections are contests between personalities, not dice.
@@ -128,6 +140,10 @@ HC-B5  Only public information and what was said TO the AI reach its prompts: ne
                                                                                  source: spec A HC-3, HC-6 · fatal
 HC-B6  Messages carry nothing of value and no card; a card moves only through WS7's card intent (WS7 HC-3).
                                                                                  source: WS7 spec · fatal
+HC-B7  Every computer seat's chat bubble, whisper and deal card carries a quiet "· AI" mark, the same mark the Talk
+       desk list already shows (apps/web/src/phone/parts.tsx:168), on every phone and on the TV. WS6 styles it and
+       builds the phone side, WS4 the TV side; WS2's lines carry nothing new (the view already knows the seat is AI).
+                                                                    source: Heiko, 7 Nov (AM-B5) · fatal
 ```
 
 ## §1 · Solution Design `[handoff]`
@@ -218,6 +234,11 @@ senior       junior would: change the room so `say` calls `heard` (every lane's 
 mechanism    in_place + one named edit
 pin          brain-table.test.ts's heard cases; a whisper between two humans still never reaches the game
 depends_on   C4
+AM-B5        today, re-read 7 Nov: `MuleGame.heard` routes by `to` but hands the seat `{ from, text }` only
+             (apps/server/src/mule-game.ts::MuleGame.heard; packages/ai/src/decider.ts::TableTalk), so an AI cannot
+             tell a whisper to it from a table line. tomorrow adds: MUST hand the seat whether the line was a whisper
+             to it (TableTalk gains `to?: 'me'`, WS2's type; heard passes it, one more WS3 named edit in the same place
+             as C5's), so C1 quotes whispers apart and C7 knows what it answers. In the RC.
 
 C6 · ADDED · a politics play: run, promise, vote and tax from the recorded reasoning (G-B4, G-B5)
 today        an AI runs, votes and sets the tax by the keyless VoteHand from observe() (packages/ai/src/hands/
@@ -235,6 +256,8 @@ senior       junior would: let the reply cast the vote directly · senior does: 
              plays at its stage, so it is recorded, clamped, replayed, and a phase never waits for a model
 mechanism    sprout (the section) + in_place (VoteHand reads it)
 depends_on   C3; WS1 validatePlan clamps for /politics (contract); WS7's OK on VoteHand
+AM-B5        after the RC, except its votes part, which C12 ships in the RC as the minimal vote seam. Running, the
+             promise, campaigning and the Governor's tax target stay here.
 
 C7 · ADDED · whisper replies: an answer inside the phase, words only
 today        none: a whisper to an AI is quoted in its next decision only (packages/ai/src/brain.ts::hear)
@@ -256,6 +279,11 @@ senior       junior would: let the reply also make deals · senior does: words o
              checked by RULE-B3 so a reply never starves a strategy call
 mechanism    sprout + in_place (talkerFor)
 depends_on   spec A PR-1 (the client and AM-A14's model pick); C2
+AM-B5        in the RC, words-only replies and recorded replies both: WS3's `heard` step is on trunk
+             (packages/engine/src/record.ts::RecordStep 'heard' {from, to}; apps/server/src/record.ts::Recorder.wrap,
+             apps/server/src/replay.ts replays it with ''). A recorded reply's edits may include C12's vote edits, so a
+             whisper can change the AI's vote (Heiko, 7 Nov). Spec A's PR-1 has landed (brief.ts, writer.ts on
+             ws2-brain), so its depends_on is met.
 
 C8 · MODIFIED · the recorder and the replay pass the talker through (WS3's files, named edits)
 today        WS3's recorder wraps deciderFor (apps/server/src/record.ts::Recorder, feat/strategist 5eb6b27) and, on
@@ -278,6 +306,8 @@ ux           ws6-ux @ 29b792c2, mute.html (approved by Heiko 29 Oct): the seat i
 reuse        the room's generic intent path records every intent; mute is one more MuleIntent
 mechanism    in_place + named edits
 depends_on   WS6's control on the mock (ux)
+AM-B5        in the RC. WS7's slice 3 refuses an AI seat's card offer to a player who muted it once this mute exists
+             (WS7 slice-3 spec S3-C11), so C9 needs no card code of its own.
 
 C10 · ADDED · courting with WS7's cards (G-B2, G-B3)
 today        no deal cards exist yet (WS7 slice 3 unbuilt; no card, pact or deal type in packages/engine/src,
@@ -289,6 +319,11 @@ seam         packages/engine/src/playbook.ts::PlanningPlay (WS1's, additive) and
 reuse        WS7's AI answer rule; the planning play's existing `list` pattern
 mechanism    sprout
 depends_on   WS7 slice 3 (data, not stubbable for its AC); WS6's card screens
+AM-B5        after the RC. WS7 froze the port it will use (DealPort { answerFor(card), offersFor(month) }, null → the
+             keyless rule; WS7 slice-3 spec, "WS2's port"); in the RC every AI seat answers and offers cards by WS7's
+             keyless DealHand (S3-RULE-9), and keeps or breaks a promised vote by S3-RULE-10 (WS7 slice 3, being built
+             for the RC; packages/ai/src/hands/deal.ts and engine diplomacy.ts are not on trunk at 7ecddae5). WS6's mock draft:
+             docs/specs/2026-11-08-ws2-claude-deal-behaviour-draft.md.
 
 C11 · MODIFIED · the trial measures social play
 today        the trial reports per-kind calls, budget and outcome (apps/server/src/brain/trial.ts,
@@ -299,6 +334,52 @@ tomorrow     MUST report per game: messages per AI (unprompted, replies, campaig
 seam         apps/server/src/brain/trial.ts and trial-report.ts
 mechanism    in_place
 depends_on   C1-C7
+AM-B5        after the RC (the proof).
+
+C12 · ADDED · the vote seam: Claude's recorded vote reaches the ballot (AM-B5, RC part of C6)
+today        an AI seat votes in the election and on the council's law by WS7's keyless VoteHand, constructed with
+             (mind, rng) only (packages/ai/src/hands/vote.ts::VoteHand, its private `choose` and `lawVote`; wired in
+             apps/server/src/mule-game.ts::MuleGame.start, `voteHands`); playbook v1 has no politics field
+             (packages/engine/src/playbook.ts::Playbook)   verified_by: read
+tomorrow     MUST let a Smart or Claude Code seat's recorded reasoning set its vote: the writer's monthly reply (C3) and
+             a recorded whisper reply (C7) may edit `/politics/votes/<office>` and `/politics/law`; at each ballot
+             VoteHand asks the seat's VotePort (§3) first and, on null, plays its keyless rule exactly as today; WS7's
+             keep-or-break of a promised vote (S3-RULE-10) then runs with the port's choice as "own".
+logic        → §2 RULE-B6 · evaluated at each ballot VoteHand casts · inputs bind from the seat's playbook in effect ·
+             writes nothing but the vote intent VoteHand already sends
+seam         packages/ai/src/hands/vote.ts::VoteHand (WS7: an optional third constructor argument, read in `choose`'s
+             caller `vote` and in `lawVote`); packages/engine/src/playbook.ts::Playbook (WS1: the optional field);
+             apps/server/src/mule-game.ts::MuleGame.start (WS3: passes the port where `voteHands` are built)
+senior       junior would: let the reply cast the vote intent itself, or add a second vote path beside VoteHand ·
+             senior does: one port in DealPort's style, so the vote stays where WS7's timing, ballot checks and
+             keep/break already are; a recorded value replays, a phase never waits for a model, null is today's game
+mechanism    extract_interface (the port) + in_place (VoteHand reads it)
+call sites   VoteHand.vote (election ballot, per contested office) and VoteHand.lawVote (council ballot); the slice-3
+             ownVote(obs, mind, ballot) WS7 is extracting reads the same port, so DealHand's keyless offer of its own
+             vote promises what the seat will cast (WS7's call)
+pin          null port → VoteHand's intents and draws identical to today (the election and council streams never
+             move, slice 2a HC-41); ws7's vote tests unchanged
+depends_on   C3 (the writer may edit the field); WS1's clamps (contract, stubbable); WS7's port (contract, stubbable)
+atomicity    the Playbook field and validatePlan's clamps ship together (WS1); the VoteHand argument with its null pin
+             (WS7)
+
+C13 · ADDED · the Claude Code seat plays the social core too (AM-B5; separable: may move after the RC alone)
+today        a Claude Code seat (a player's own Claude Code over MCP) answers the same land and phase asks a Smart seat's
+             writer gets, through three tools: join, wait_for_my_turn, submit_plan (apps/server/src/claude-seat/mcp.ts;
+             ClaudeSeatWriter, apps/server/src/claude-seat/writer.ts); a whisper to it is only quoted in its next ask
+             verified_by: read
+tomorrow     MUST give the Claude Code seat C1's social section in its asks (it reads the same brief, so this comes with
+             C1), MUST let its reply carry C3's messages and C12's vote edits, and MUST offer ONE more tool,
+             `answer_whisper(code, whisper_id, text, edits?)`, with wait_for_my_turn returning an open whisper as
+             `{ kind: 'whisper', whisper_id, from, text, ms_left }` within the seat's hold (BRAIN.claudeSeat.holdMs,
+             45 s); the answer passes RULE-B3's caps and RULE-B2's fact guard like a Smart seat's, and its edits open as
+             a recorded reply on the heard step (C7, HC-B3).
+seam         apps/server/src/claude-seat/mcp.ts (the tool list), writer.ts (the open whisper beside the open ask)
+senior       junior would: a second chat channel for the Claude Code seat · senior does: the same heard step, caps and
+             guard as C7, one tool, and the seat code on every call as the other tools
+mechanism    sprout (the tool) + in_place (the ask carries the section)
+depends_on   C1, C3, C7, C12
+atomicity    none: if it threatens the RC date it moves after the RC on its own (PM ruling, 7 Nov)
 ```
 
 ## §2 · The Logic `[handoff]`
@@ -370,6 +451,27 @@ example  5 Smart seats, a fake model billing at S-B1's measured option-(1) price
          below $1.00; Sonnet early, Haiku late; no call refused for lack of a reply that a phase waited on (none waits).
 ```
 
+```
+RULE-B6 · Which vote an AI casts (C12, AM-B5)                        shape: decision table, per ballot VoteHand casts
+inputs   port: the seat has a VotePort (Smart or Claude Code seat; Classic → none) · said: the port's answer for this
+         ballot: a candidate on it / yes / no, or null · promise: the seat holds an active vote card on this ballot
+         (WS7 slice 3; keyless in the RC)
+first match wins
+  1  port absent or said = null                     own = VoteHand's keyless choice, as today (existing, pinned)
+  2  said names someone not on the ballot           own = the keyless choice; ledger 'vote_clamped'
+  3  otherwise                                      own = said
+then     WS7's S3-RULE-10 runs with this own: no promise → vote own; a promise → keep or break by its rows
+unknown  null means "Claude has recorded no vote for this ballot", not "abstain": the keyless rule votes. A vote
+         recorded for an earlier ballot never carries over (the port answers per ballot, from the playbook in effect).
+timing   the port is read when VoteHand casts (after its seeded pause, POLITICS.ai.actMs); a recorded reply whose edit
+         takes effect after the seat cast changes nothing for that ballot (the ballot is cast once)
+never    the port's answer comes from chat text (HC-B3): it is a value of the recorded playbook, set by the monthly
+         reply or by a recorded reply opened on a heard step
+examples → §6: Claude recorded "governor: Kai", Kai on the ballot → votes Kai · recorded "Brix", Brix withdrew →
+         keyless · no record → keyless, identical draws · a whisper "vote for me" answered before the ballot with a
+         recorded edit → that vote · answered after the seat cast → no change
+```
+
 ## §3 · Contracts & Data Models `[handoff]`
 - **Writer reply** (MODIFIED, WS2, C3): `{ reply: RecordedWrite; refused; messages: Message[] }`;
   `Message = { to: PlayerId | 'table'; purpose: string; text: string; facts: Fact[] }`;
@@ -391,6 +493,20 @@ example  5 Smart seats, a fake model billing at S-B1's measured option-(1) price
   line reaching an AI seat opens a step carrying `{ from, to }`, never the words; the replay calls
   `game.heard(from, '', to)`. RULE-5 restated: the record holds who spoke to whom, never what.
 - **WS7's cards and reputation** (consumed, slice 3); **WS6's mute control and card screens** (consumed).
+- **`VotePort`** (ADDED, AM-B5, C12; WS7's type in `packages/ai/src/hands/vote.ts`, in the style of WS7's frozen
+  DealPort; non-breaking: VoteHand's constructor gains an optional third argument):
+  `interface VotePort { electionVote(office: Office, candidates: readonly PlayerId[]): PlayerId | null;
+  lawVote(proposal: LawProposal): boolean | null }`; null → the keyless rule (RULE-B6). WS2 supplies it
+  (`votePortFor(seat)`, ADDED, new file `packages/ai/src/social/votes.ts`) from the seat's playbook in effect.
+- **`Playbook.politics?`** (MODIFIED by AM-B5: the RC carries only its votes; ADDED, additive, WS1's types):
+  `{ votes?: Partial<Record<Office, PlayerId>>; law?: boolean }` in the RC; C6 adds `run` and `taxTarget` after the RC.
+  Edits `/politics/votes/<office>` and `/politics/law`, clamped by WS1's validator (`packages/ai/src/playbook/
+  validate.ts::validatorFor`): an office or a candidate that does not exist → refused. Playbook stays `v: 1`.
+- **`TableTalk.to?: 'me'`** (ADDED, AM-B5, C5; WS2's type in `packages/ai/src/decider.ts`): set when the line was a
+  whisper to this seat.
+- **Claude Code seat tool `answer_whisper`** (ADDED, AM-B5, C13): `{ code, whisper_id, text, edits? }` →
+  `{ kind: 'accepted' | 'unusable' | 'too_late' | ... }` as submit_plan's results; wait_for_my_turn's result gains
+  `{ kind: 'whisper', whisper_id, from, text, ms_left }`. The seat code is checked on every call (claude-seat RULE-2).
 
 ## §4 · Failure & Ops `[handoff]`
 | Question | Answer |
@@ -423,6 +539,10 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 | T-AC-B5 (HC-B5) | No prompt carries another seat's goods or unanalysed ground, or a whisper between two other players. | prompt text | a planted rival stock → red | C1 C2 C7 |
 | T-AC-B6 (B-AC-B3) | RULE-B4 rows 1-5; validatePlan clamps an illegal politics edit. | VoteHand's intents; the clamped playbook | no politics play → keyless rule, unchanged | C6 |
 | T-AC-B7 (B-AC-B1) | C2 memory is a pure function: the same notices give an equal memory (stableJson); a replay rebuilds it. | memory values | — | C2 |
+| B-AC-B8 (G-B2, Heiko 7 Nov; AM-B5) | Given an election month, a human whispers a Smart AI "vote for me, I'll keep taxes low" before the ballot / When the AI's recorded reply sets its Governor vote to that human / Then the AI's ballot names that human, and the replay with every heard text blanked casts the same vote. | the election's ballots (server); WS3's replay | no recorded vote → the keyless choice, draws unchanged; a reply after the AI cast → its vote unchanged | C7 C12 |
+| B-AC-B9 (HC-B7) | Given a table with a human and a computer seat / When the computer seat posts a table line and whispers the human / Then both show the "· AI" mark on the human's phone and the table line shows it on the TV; a human's line never does. | the phone and TV (browser, front to back) | a human's whisper → no mark | WS6, WS4 (C4 sends the lines) |
+| T-AC-B9 (B-AC-B8) | RULE-B6 rows 1-3 with its examples; a null port gives VoteHand's intents and draws byte-identical to today's on a seeded game. | VoteHand's intents; the election and council streams | a port naming a withdrawn candidate → keyless + 'vote_clamped' | C12 |
+| T-AC-B10 (B-AC-B6, C13) | A Claude Code seat whispered by a human gets the whisper from wait_for_my_turn, answers with answer_whisper inside its hold, and the answer reaches the human in the same phase through RULE-B3's caps and RULE-B2's guard; a wrong code is refused (claude-seat RULE-2). | delivered chat; the MCP results | a third whisper in the phase → no whisper result; a false declared price → dropped | C13 C7 |
 
 ## §7 · Risks & Spikes `[review-only]`
 - **R-B1 (accepted, pinned):** a false claim in prose with no number and no declared fact ("the store is out of
@@ -459,6 +579,62 @@ Code-only; no existing state to reach. The mute starts unset for every player.
   room-delivered `heard` step; an AI's line forwarded by C5 is never a heard step and opens no recorded call (its words
   are unrecorded, so a replay could not re-open it). AI 2 still reads AI 1's message at its next monthly call
   (B-AC-B5). C7 and T-AC-B8's negative case carry it. Goals unchanged.
+- **AM-B5 · 7 Nov · lead, on Heiko's RC split and the PM's rulings: the RC slice.**
+  ```
+  target    the spec's scope for the first release candidate (18 Nov); §0 G-B3..G-B5 and UBER-AC-B1/B2; §0.2; §1 C5,
+            C6, C7, C9, C10, C11 (notes) and new C12, C13; §2 RULE-B6; §3; §6 B-AC-B8, B-AC-B9, T-AC-B9, T-AC-B10; §9
+  said      six PRs B-1..B-6 to build all five goals; deals through C10; votes only through C6's politics play
+  did       RC = G-B1 and G-B2 through C1-C5, C7 (words-only and recorded replies), C8, C9, plus C12 (the vote seam)
+            and C13 (the Claude Code seat; separable). After the RC: G-B3, G-B4 (but C12), G-B5, C6 beyond its votes,
+            C10, C11. Deal behaviour is an RC non-goal: in the RC every AI seat answers, offers, keeps and breaks
+            cards by WS7's keyless rules (DealPort null). New HC-B7: the "· AI" mark.
+  because   Heiko, 7 Nov (SEAMS:2420): "Claude social core: reasoning, whisper replies, vote replies if seam allows,
+            mute; after RC: full budget, Claude deal cards + politics from reasoning + social proof". Heiko, 7 Nov
+            (via the PM): keep "replies that can change a vote" in the RC (+~2 lane-days) and put a quiet "· AI" mark
+            on every computer seat's bubble, whisper and card. PM ruling, 7 Nov: the social core for both seats.
+            PM ruling A, 7 Nov: deal behaviour after the RC.
+  goal      G-B1, G-B2 met in the RC; G-B3..G-B5 unchanged, delivered after it. No goal added or changed.
+  folded    status line; §0 G-B3..G-B5 marked after the RC; UBER-AC-B1/B2 RC notes; §0.2 HC-B7; §1 AM-B5 notes on
+            C5, C6, C7, C9, C10, C11; C12, C13 added; §2 RULE-B6; §3 VotePort, Playbook.politics (RC subset),
+            TableTalk.to, answer_whisper; §6 four ACs; §9 note; plan PR table marked RC / after RC.
+  ```
+  **The vote seam (C12) and who builds it.** The smallest shape that keeps HC-B3: Claude's vote is a recorded playbook
+  value (`politics.votes`, `politics.law`), and VoteHand asks a port for it at the ballot, in WS7's DealPort style, null
+  meaning the keyless rule. Lane split (the PM takes it to WS7 and WS1 for OKs):
+  - **WS1** (about 0.5 day): `Playbook.politics?` with `votes?` and `law?` (packages/engine/src/playbook.ts, additive,
+    playbook v1 rule) and their clamps in the validator (packages/ai/src/playbook/validate.ts::validatorFor). No new
+    values.
+  - **WS7** (about 0.5 day): `VotePort` in packages/ai/src/hands/vote.ts; VoteHand's optional third constructor
+    argument, read in `vote` (election, per contested office) and `lawVote` before the keyless rule; the slice-3
+    `ownVote` reads it too (WS7's call); the null-port pin (T-AC-B9).
+  - **WS3** (about 0.25 day): mule-game.ts named edits: pass the seat's port where `voteHands` are built
+    (MuleGame.start), and `to` into the TableTalk heard hands an AI seat (C5's edit).
+  - **WS2** (about 1 day): the brief's ballot lines (C1: candidates, promises, the open law, its own promised votes via
+    WS7's promisedVotes once slice 3 lands: not on trunk at 7ecddae5, through observe); the writer's `/politics/...` edits (C3); `votePortFor(seat)` from the
+    playbook in effect; a recorded whisper reply may carry the vote edits (C7); RULE-B6's tests; for C13, the same
+    through answer_whisper.
+  - About 2.25 lane-days in all, against Heiko's ~2 (unproven estimate). Out: running, promises, campaigning and the
+    Governor's tax target (C6, after the RC); asking for a vote on a card (WS7 slice 3 non-goal).
+
+  **Drift since 29 Oct, re-read 7 Nov at ws2-brain 67edd812:**
+  - Ruling a′ (5 Nov): a plan's line is said as its phase starts, through the seat's chat
+    (apps/server/src/mule-game.ts::MuleGame.start, Playbooks' `speak`; apps/server/src/brain/chat.ts::chatter). G-B2's
+    "Today" still holds: lines are about its own move, public, at most 3 a month; it never whispers.
+  - WS3's `heard` step is on trunk (packages/engine/src/record.ts 'heard' {from, to}; apps/server/src/replay.ts
+    replays it with ''), so C7's recorded replies (B-2b) are unblocked.
+  - `MuleGame.heard` drops `to` from what the AI seat gets: an AI cannot tell a whisper from a table line (C5's note).
+  - WS7's slice 3 froze DealPort (consumed after the RC), S3-C11 refuses an AI offer to a player who muted it once C9
+    exists, deal notices carry `parties` and WS2's memory skips other pairs' cards (HC-B5), and the brief's deal fields
+    come through observe (WS7 slice-3 spec, "WS2's port").
+  - **Finding, not a WS2 goal: the family filter is not wired.** The room's `moderate` defaults to the identity
+    (packages/tabletop/src/room.ts, `moderate: options.moderate ?? ((text) => text)`) and the server passes none; AI
+    lines go through the same `moderate` (`say` follows a player's "trim, cap, moderation and whisper rules"). The
+    concept (docs/design/00-concept.md:265, "a filter that can be switched to family-friendly") and
+    docs/design/06-ai-players.md:127 ("All AI chat passes the family filter") assume one. Owner proposal: WS3 passes a
+    filter into the room from apps/server/src/server.ts (WS4's room already takes it); every AI line then passes it
+    with no WS2 change. For the PM.
+  - The rulebook's "Claude's own lines at the table" still said "Being built" and pointed at PR #384 waiting; fixed in
+    the same PR as this amendment.
 
 ## §9 · Ownership Boundaries `[handoff]`
 - **Sole owner of AI social reasoning, its memory and its messages: WS2**: `packages/ai/src/social/`, the social parts
@@ -470,3 +646,5 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 - **Not WS2's:** the playbook types and validatePlan (WS1; C3's and C6's edits are a contract WS1 agrees); VoteHand,
   cards, keep/break and reputation (WS7); the record and replay (WS3; C8 is named edits); mule-game.ts and the
   protocol (WS3, named edits in C5 and C9); the mute control and card screens (WS6).
+- *AM-B5:* `VotePort` is WS7's type and VoteHand reads it (WS7); WS2 only supplies it (`votePortFor`). The "· AI" mark
+  is WS6's (phone) and WS4's (TV). The Claude Code seat's tools stay WS2's (`apps/server/src/claude-seat/`).
