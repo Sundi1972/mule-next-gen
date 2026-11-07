@@ -129,6 +129,10 @@
 <li><strong>The selection ring is drawn inside the plot you selected</strong>, on plots under 24 px. It may cover that plot's own dots, which the rail beside the map shows in full (Look, My plots), but never a neighbour's.</li>
 </ul>
 <p>A plot without dots keeps every mark as before, except a flag: under 16 px it is the same small sign there too, its word in the plot's label and the rail.</p>
+<ul>
+<li><strong>The store's sign</strong> is not drawn on plots under 24 px: it is wider than its plot and would cover its neighbours' dots. The store keeps its own look on the map, and its label names it.</li>
+<li><strong>A plot with a MULE</strong> keeps the MULE's icon whole: under 16 px a special's badge is not drawn on it (Look and the plot's label still name the special). A flag still takes the icon's place while it shows, as it does the dots'.</li>
+</ul>
 <div class="box why"><h4>Why it is like this</h4><p>No mark may hide a rating (PM, 7 Nov). A bigger map on the small phone was turned down: the roadmap, needs and agenda above it are what planning is for, and a full-height map is still too narrow for 16 px plots on the biggest map. Hiding the tab or the gem outright was turned down too: they answer whose plot it is and where the Crystite is. WS6 ruling on Jira SA-1372, 7 Nov.</p></div>
 <p class="code-ref">In the code: <code>packages/ui/src/components/HoloMap.tsx::smallStrip, RING_INSIDE_PLOT, FlagGlyph</code> · checked by <code>apps/web/e2e/table-steps.ts::theMarksStayClearOfTheDots</code> at 667 × 375 ((f) no mark meets a chip, (g) marks at 3 px or more, (h) a flag in the chip's place) and <code>apps/web/test/holo-map.test.ts</code></p>
 <p class="owner">In the game, WS4 (HoloMap), 7 Nov · the rule: the UX team (WS6) · Spec: <code>docs/specs/2026-11-05-ws6-plot-info.md</code> §8, 7 Nov.</p>
