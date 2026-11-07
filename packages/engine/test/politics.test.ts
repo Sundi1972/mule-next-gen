@@ -1241,6 +1241,11 @@ describe('S4-C6: the Sheriff office, set on in the test (the default stays Gover
     expect(sheriff, 'a Sheriff who is not the new Governor').not.toBeNull();
     expect(sheriff).not.toBe(governor);
 
+    // Nobody runs and one player is strictly the richest: they are Governor, and the Sheriff is the next richest, never them.
+    const rich = newGame();
+    setMoney(rich, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
+    expect(everyoneDone(rich)).toMatchObject({ governor: { winner: 'lena' }, sheriff: { winner: 'ossa', how: 'appointed' } });
+
     for (const seed of [1, 2, 3, 4, 5]) {
       const quiet = newGame({ seed });
       setMoney(quiet, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
