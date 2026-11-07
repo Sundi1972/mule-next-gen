@@ -270,6 +270,26 @@ describe('the planning hub, tapped (UX audit)', () => {
     expect(byTestid('map-plot-3-0').getAttribute('data-selected')).toBeNull();
   });
 
+  it("C8: Look shows a known plot's dots right after its land and owner, above its special and its MULE line", () => {
+    mount({ ...VIEW, tiles: TILES.map((t) => (t.x === 0 ? { ...t, owner: 's1', outfit: 'food', special: { kind: 'oasis' }, ground: GROUND } : t)) });
+    tap('tool-look');
+    tap('map-plot-0-0');
+    const look = text('look-plot') ?? '';
+    const dots = text('ground') ?? '';
+    expect(look.indexOf('YOURS')).toBeLessThan(look.indexOf(dots));
+    expect(order('ground')).toBeLessThan(order('special-line'));
+    expect(look.indexOf(dots)).toBeLessThan(look.indexOf('A MULE here makes Food.'));
+    expect(findTestid('terrain-hint'), 'a known plot gives no hint').toBeUndefined();
+  });
+
+  it("C8: a plot you haven't analysed keeps its land's hint last, after its special", () => {
+    mount({ ...VIEW, tiles: TILES.map((t) => (t.x === 0 ? { ...t, special: { kind: 'oasis' } } : t)) });
+    tap('tool-look');
+    tap('map-plot-0-0');
+    expect(findTestid('ground')).toBeUndefined();
+    expect(order('special-line')).toBeLessThan(order('terrain-hint'));
+  });
+
   it('H-4: a tap on "2nd of 2" opens the standings, and Close shuts them', () => {
     mount(VIEW);
     expect(findTestid('standings-sheet')).toBeUndefined();

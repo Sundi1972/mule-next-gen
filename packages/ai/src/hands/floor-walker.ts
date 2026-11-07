@@ -285,8 +285,12 @@ export class FloorWalker {
   private toPlace(view: FloorView, c: FloorColonist, place: HallPlace, reach: Reach): StepRun {
     const { hall } = view.cfg;
     if (c.space === 'map') {
-      if (reach.kind === 'enter') return this.going({ x: 0, y: 0, act: true });
-      return this.toDoor(view, c, place);
+      // In by the door the walk is priced through (secondsToPlace's quickest), not the first that offers ENTER: from
+      // the far door's mouth the way round can be the quicker (FM-walker-door).
+      const door = this.doorTo(view, c, place);
+      if (!door) return { kind: 'failed', why: 'no open walk to the store' };
+      if (reach.kind === 'enter' && reach.door === door) return this.going({ x: 0, y: 0, act: true });
+      return this.toDoor(view, c, door);
     }
     const at = placeAt(c, hall);
     if (at === place) {
@@ -304,19 +308,24 @@ export class FloorWalker {
     return this.toward(view, c, there);
   }
 
-  /** On the map: to just outside the store door that makes the walk to `place` quickest. */
-  private toDoor(view: FloorView, c: FloorColonist, place: HallPlace): StepRun {
+  /** On the map: the store door that makes the walk to `place` quickest; null when no door has an open walk. */
+  private doorTo(view: FloorView, c: FloorColonist, place: HallPlace): HallDoor | null {
     const { state, cfg } = view;
     let best: { door: HallDoor; s: number } | null = null;
     for (const [door, map] of doorTable(state, cfg)) {
       const s = backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, leading(c));
       if (!best || s < best.s) best = { door, s };
     }
-    if (!best || !Number.isFinite(best.s)) return { kind: 'failed', why: 'no open walk to the store' };
+    return best && Number.isFinite(best.s) ? best.door : null;
+  }
+
+  /** On the map: to just outside `door`. */
+  private toDoor(view: FloorView, c: FloorColonist, door: HallDoor): StepRun {
+    const { state, cfg } = view;
     // A body's width further out than the door's mouth: arriving there from above or below never grazes the store's
     // wall, and the door is still in reach.
-    const mouth = doorOutside(state, best.door, cfg);
-    const out = best.door === 'doorL' ? -cfg.steer.bodyTiles : cfg.steer.bodyTiles;
+    const mouth = doorOutside(state, door, cfg);
+    const out = door === 'doorL' ? -cfg.steer.bodyTiles : cfg.steer.bodyTiles;
     const to = { x: mouth.x + out, y: mouth.y };
     // Against the store's top or bottom wall (a straight line to the door grazed its corner): along the wall to the
     // door's side first, rather than sliding along it at the stick's sideways share.

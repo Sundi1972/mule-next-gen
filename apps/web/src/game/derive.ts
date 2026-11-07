@@ -40,9 +40,13 @@ export function seatSpecies(view: Pick<MuleView, 'players'>): Record<Slot, Speci
 
 type SeatView = TableView<unknown>['seats'][number];
 
-/** In the lobby, what a seat will play as: its pick, or until it picks, its seat's default. */
+/**
+ * In the lobby, what a seat will play as: its pick, or until it picks, the default the server says it will be dealt
+ * (turned by the seed, #497). A server that sends none leaves the seat's position in DEFAULT_SPECIES.
+ */
 export function lobbySeatSpecies(seat: SeatView, index: number): Species {
-  return SPECIES.find((sp) => sp === seat.pick) ?? DEFAULT_SPECIES[index % DEFAULT_SPECIES.length]!;
+  const known = (s: string | undefined) => SPECIES.find((sp) => sp === s);
+  return known(seat.pick) ?? known(seat.defaultPick) ?? DEFAULT_SPECIES[index % DEFAULT_SPECIES.length]!;
 }
 
 /** The view's tiles as the map draws them. */

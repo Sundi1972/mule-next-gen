@@ -197,7 +197,24 @@ function bothOffices(): void {
   });
 }
 
+/**
+ * Tax targets that differ by persona, so a case can reach RULE-6's hold, lower, cap and bump: the targets these cases
+ * were written for. Pace set C (Heiko, 6 Nov) ships 10 for every persona; each test of the calling block runs with
+ * these instead, and the config's targets come back after it.
+ */
+function personaTargets(): void {
+  let saved: typeof POLITICS.ai.taxTarget;
+  beforeEach(() => {
+    saved = { ...POLITICS.ai.taxTarget };
+    Object.assign(POLITICS.ai.taxTarget, { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 });
+  });
+  afterEach(() => {
+    Object.assign(POLITICS.ai.taxTarget, saved);
+  });
+}
+
 describe('VoteHand on a Classic table', () => {
+  personaTargets();
   bothOffices();
 
   it('T-AC-6, T-AC-63: on an AI-only table every Classic seat acts and presses Done in announce and the ballot within its longest pause, with no API key, so the election ends with no clock', () => {
@@ -286,6 +303,7 @@ function announce(state: GameState, mind: Mind, rng: Rng): AiAction[] {
 }
 
 describe('RULE-8: who runs', () => {
+  personaTargets();
   bothOffices();
 
   const { runGovernor, runSheriff } = POLITICS.ai;
@@ -342,6 +360,7 @@ describe('RULE-8: who runs', () => {
 });
 
 describe('RULE-63: a seat declares ahead of the election', () => {
+  personaTargets();
   bothOffices();
 
   /** Plays on, nobody acting, to the planning phase of `month`; ai0 is the richest, so the appointed Governor. */
@@ -435,6 +454,7 @@ describe('T-AC-68 (ai): Cast is Done, and every seat casts', () => {
 });
 
 describe("RULE-8, RULE-10: an AI Governor candidate's promise (C12)", () => {
+  personaTargets();
   bothOffices();
 
   // RULE-10's AI row: persona target T against the tax at the last call C. Month 1 opens at 5%.

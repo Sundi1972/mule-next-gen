@@ -85,7 +85,7 @@
 <thead><tr><th>Money in</th><th>How much</th></tr></thead>
 <tbody>
 <tr><td>Sales tax</td><td>On every sale a player makes, at the rate the Governor sets (it starts at <span class="num">5</span>%). The seller pays it out of the sale.</td></tr>
-<tr><td>The Federation's grant</td><td><span class="num">150</span> cr every month end. Flat for now; a rule that scales it is part of the final tuning.</td></tr>
+<tr><td>The Federation's grant</td><td><span class="num">250</span> cr every month end (Decided by Heiko on 6 Nov, pace set C; it was <span class="num">150</span>). Flat for now; a rule that scales it is part of the final tuning.</td></tr>
 <tr><td>Law taxes</td><td>Export tax, land tax and pollution tax, when those laws are in force (see <a href="#council">The council</a>).</td></tr>
 <tr><td>Donations</td><td>What players give toward a building (see <a href="#donations">Donations</a>).</td></tr>
 <tr><td>The Federation tax event</td><td>When it fires, <span class="num">10</span>% of each player's cash.</td></tr>
@@ -105,7 +105,7 @@
 <h3 id="fund-month-end">The month end, in order</h3>
 <ol>
 <li>The land tax, then the pollution tax, from each player in seat order.</li>
-<li>The Federation's grant of <span class="num">150</span> cr.</li>
+<li>The Federation's grant of <span class="num">250</span> cr (Decided by Heiko on 6 Nov).</li>
 <li>The Governor's pay.</li>
 <li>The colony's buildings: upkeep is paid, buildings under construction tick on, and the building being funded gets money (see <a href="#commissioning">Commissioning</a>).</li>
 <li>The mood moves toward its target, and the gauges' month-end snapshot is taken.</li>
@@ -123,14 +123,14 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Building</th><th class="n">Credits</th><th>Goods</th><th class="n">Build months</th><th class="n">Prestige</th><th class="n">Upkeep a month</th><th class="n">Repair</th></tr></thead>
 <tbody>
-<tr><td>Park</td><td class="n">420</td><td>2 Alloy</td><td class="n">1</td><td class="n">2</td><td class="n">30</td><td class="n">150</td></tr>
-<tr><td>Hospital</td><td class="n">680</td><td>1 Electronics</td><td class="n">2</td><td class="n">3</td><td class="n">45</td><td class="n">225</td></tr>
-<tr><td>Observatory</td><td class="n">700</td><td>3 Crystite</td><td class="n">2</td><td class="n">3</td><td class="n">50</td><td class="n">250</td></tr>
-<tr><td>Stadium</td><td class="n">1,000</td><td>2 Alloy, 1 Electronics</td><td class="n">3</td><td class="n">4</td><td class="n">70</td><td class="n">350</td></tr>
-<tr><td>Spaceport upgrade</td><td class="n">1,380</td><td>2 Alloy, 2 Electronics</td><td class="n">3</td><td class="n">5</td><td class="n">100</td><td class="n">500</td></tr>
+<tr><td>Park</td><td class="n">210</td><td>1 Alloy</td><td class="n">1</td><td class="n">2</td><td class="n">15</td><td class="n">150</td></tr>
+<tr><td>Hospital</td><td class="n">340</td><td>1 Electronics</td><td class="n">2</td><td class="n">3</td><td class="n">23</td><td class="n">225</td></tr>
+<tr><td>Observatory</td><td class="n">350</td><td>2 Crystite</td><td class="n">2</td><td class="n">3</td><td class="n">25</td><td class="n">250</td></tr>
+<tr><td>Stadium</td><td class="n">500</td><td>1 Alloy, 1 Electronics</td><td class="n">3</td><td class="n">4</td><td class="n">35</td><td class="n">350</td></tr>
+<tr><td>Spaceport upgrade</td><td class="n">690</td><td>1 Alloy, 1 Electronics</td><td class="n">3</td><td class="n">5</td><td class="n">50</td><td class="n">500</td></tr>
 </tbody>
 </table></div>
-<p>At the goods' reference prices (Alloy <span class="num">90</span>, Electronics <span class="num">220</span>, Crystite <span class="num">100</span>) the full costs are <span class="num">600</span>, <span class="num">900</span>, <span class="num">1,000</span>, <span class="num">1,400</span> and <span class="num">2,000</span> cr; about 30% of each is goods.</p>
+<p>At the goods' reference prices (Alloy <span class="num">90</span>, Electronics <span class="num">220</span>, Crystite <span class="num">100</span>) the full costs are <span class="num">300</span>, <span class="num">560</span>, <span class="num">550</span>, <span class="num">810</span> and <span class="num">1,000</span> cr; about a third of each is goods.</p>
 
 <h3 id="object-perks">What each one does besides prestige</h3>
 <p>The phone shows each building's perk. The perks belong to the social events and only work once those are in the game.</p>
@@ -157,22 +157,22 @@
 </tbody>
 </table></div>
 <p>Nobody ever spends prestige. The only way it falls is a building that closes or is damaged, and it counts again once reopened or repaired.</p>
-<div class="box why"><h4>Why it is like this</h4><p>Heiko, G-5 card, 4 Nov: "6. zero" (nobody spends prestige; a closed or damaged building counts 0 until it works again). The table's starting rows are WS1's affordability study; upkeep is about 5% of the credit cost a month and a repair about 25%. All are placeholders until the final tuning.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, G-5 card, 4 Nov: "6. zero" (nobody spends prestige; a closed or damaged building counts 0 until it works again). The table's starting rows are WS1's affordability study. Decided by Heiko on 6 Nov (pace set C): every building's credits, goods and upkeep are halved, goods and upkeep rounded up (at least 1 of a good a building needs), so the colony builds within a game. Build months and repair costs are unchanged, so a repair now costs about 70% of the credits. All are placeholders until the final tuning.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/config.ts::PRESTIGE</code> · <code>colony.ts::colonyPrestige</code> · <code>::runColony</code> · <code>apps/web/src/game/colony.ts::PERK</code> · G-5 RULE-21</p>
 <p class="owner">Kept current by: WS7.</p>
 
 <!-- ============================================================ -->
 <h2 id="commissioning">Commissioning, funding and building <span class="pill built">In the game</span></h2>
-<p>Only the Governor commissions, in planning, once any vote that month is over. The colony works on one building at a time: while one is being paid for or built, the Governor cannot start another. Each building can be built once per game, and there is no cancel. The phone's catalogue dims a building the Governor cannot start and says why, in the engine's words, for example "The colony is already building the Hospital".</p>
-<p>From the next month end on, the fund pays toward the commissioned building:</p>
+<p>Only the Governor commissions, in planning, once any vote that month is over. The colony works on up to <span class="num">3</span> buildings at once (Decided by Heiko on 6 Nov, pace set C): while three are being paid for or built, the Governor cannot start another. Each building can be built once per game, and there is no cancel. The phone's catalogue dims a building the Governor cannot start and says why, in the engine's words, for example "The colony already has 3 buildings under way".</p>
+<p>From the next month end on, the fund pays toward the commissioned building. With more than one being paid for, it pays every open building in the order they were commissioned: a building whose credits are all in takes no more (it may still buy goods), so one waiting for its plot or goods never holds up the ones behind it, and the reserve is kept across all of them. For each, in turn:</p>
 <ol>
 <li>It pays as many of the missing credits as it can, keeping its <span class="num">100</span> cr reserve.</li>
 <li>For each missing good, it buys what it can from the store at the store's selling price: no more than is missing, no more than the store will sell, and no more than the fund can pay above its reserve. No sales tax is charged on these.</li>
 <li>Once every credit and every good is in, building starts. No building waits for land. It does not count down until the next month end.</li>
 </ol>
 <p>Players can speed this up by donating credits or the goods it still needs (see <a href="#donations">Donations</a>).</p>
-<div class="box example"><h4>Example: the Observatory needs 3 Crystite</h4><p>The Governor commissions the Observatory in month 4. At that month end, after the grant and the Governor's pay, the fund holds <span class="num">900</span> cr. It pays the <span class="num">700</span> cr at once and has <span class="num">200</span> left, so only <span class="num">100</span> above its reserve. The store sells Crystite at about <span class="num">110</span> cr and starts the game with none on its shelves, so the fund buys nothing. The Observatory waits, fully paid in credits, for its 3 Crystite. In month 5 a player who mines Crystite donates 3 units: the plaque gets their name with <span class="num">300</span> cr (3 × the price the store posts that day, <span class="num">100</span>: a gift counts at the posted price, not the <span class="num">111</span> the store sells at), and building starts. It stands after two more month ends, at the end of month 7, and pays <span class="num">50</span> cr upkeep from the end of month 8.</p></div>
-<div class="box why"><h4>Why it is like this</h4><p>"One project open at a time" keeps the colony's money from being spread thin. The fund buying missing goods from the store was a question put to Heiko on 4 Nov; the engine has it on behind a switch (<code>COLONY.fundBuysGoods</code>), so that only donors' goods count once it is turned off.</p></div>
+<div class="box example"><h4>Example: the Observatory needs 2 Crystite</h4><p>The Governor commissions the Observatory in month 4. At that month end, after the grant and the Governor's pay, the fund holds <span class="num">900</span> cr. It pays the <span class="num">350</span> cr at once and has <span class="num">550</span> left, <span class="num">450</span> above its reserve. The store sells Crystite at about <span class="num">110</span> cr and starts the game with none on its shelves, so the fund buys nothing. The Observatory waits, fully paid in credits, for its 2 Crystite. In month 5 a player who mines Crystite donates 2 units: the plaque gets their name with <span class="num">200</span> cr (2 × the price the store posts that day, <span class="num">100</span>: a gift counts at the posted price, not the <span class="num">111</span> the store sells at), and building starts. It stands after two more month ends, at the end of month 7, and pays <span class="num">25</span> cr upkeep from the end of month 8.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The colony was first limited to one project open at a time, to keep its money from being spread thin. Decided by Heiko on 6 Nov (pace set C): up to three at once, with half-cost buildings, a <span class="num">250</span> cr grant and computer Governors who commission at 10% of the credits, so a colony actually builds within a game. The fund pays every open building in the order they were commissioned. The fund buying missing goods from the store was a question put to Heiko on 4 Nov; the engine has it on behind a switch (<code>COLONY.fundBuysGoods</code>), so that only donors' goods count once it is turned off.</p></div>
 <div class="box next"><h4>What is changing</h4><p>Whether the fund should buy goods from the store at all is still listed as open with Heiko in the PM's log of 4 Nov (the switch is on today). Owner: WS7, decision Heiko.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/colony.ts::commission</code> · <code>::commissionRefusal</code> · <code>::stillNeeds</code> · <code>::runColony</code> · <code>config.ts::COLONY.maxOpen</code> · <code>::COLONY.reserve</code> · G-5 RULE-21, RULE-22</p>
 <p class="owner">Kept current by: WS7.</p>
@@ -367,9 +367,9 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Persona</th><th class="n">Runs for Governor</th><th class="n">Tax it steers toward</th><th class="n">Proposes its best law</th></tr></thead>
 <tbody>
-<tr><td>Trader</td><td class="n">50%</td><td class="n">5%</td><td class="n">50%</td></tr>
-<tr><td>Cautious</td><td class="n">30%</td><td class="n">4%</td><td class="n">30%</td></tr>
-<tr><td>Aggressive</td><td class="n">80%</td><td class="n">8%</td><td class="n">70%</td></tr>
+<tr><td>Trader</td><td class="n">50%</td><td class="n">10%</td><td class="n">50%</td></tr>
+<tr><td>Cautious</td><td class="n">30%</td><td class="n">10%</td><td class="n">30%</td></tr>
+<tr><td>Aggressive</td><td class="n">80%</td><td class="n">10%</td><td class="n">70%</td></tr>
 <tr><td>Saboteur</td><td class="n">60%</td><td class="n">10%</td><td class="n">60%</td></tr>
 </tbody>
 </table></div>
@@ -386,7 +386,7 @@
 <li><strong>Proposes a law.</strong> It looks at every law: each law not in force at its middle setting (export tax 20%, land tax 10, pollution tax 20, emission cap 50) and the repeal of each law in force. It picks the one that costs the leader (the other player with the highest Worth) most compared with itself. It proposes only if that gap is at least <span class="num">20</span> cr a month, and then only with its persona's chance. With three laws in force, the new one replaces the law that costs it most.</li>
 <li><strong>Pays a general strike</strong> if its persona does and the fund holds the <span class="num">250</span> cr.</li>
 <li><strong>Repairs</strong> damaged buildings, the most prestige first, while the fund covers the cost, if its persona does.</li>
-<li><strong>Commissions</strong> the building with the most prestige whose credits the fund holds now (the cheaper one on a tie), if its persona commissions and the colony is free to start one.</li>
+<li><strong>Commissions</strong> only a building whose goods are within reach: for each good it needs, the players' stock, the store's stock and what the players made last month together cover it (as the computer sees it: other players' stock as the market panel implies it, and only its own production). Among those, it takes the one with the most prestige once the fund holds <span class="num">10</span>% of its credits (the cheaper one on a tie), if its persona commissions and fewer than three buildings are open; the fund pays the rest month by month, and donations help. With nothing in reach it commissions nothing (Decided by Heiko on 6 Nov, pace set C; goods in reach decided by the PM on 6 Nov). It builds on the colony's grounds once funded; no building waits for land.</li>
 </ol>
 <div class="table-wrap"><table>
 <thead><tr><th>Persona</th><th>Commissions</th><th>Pays strikers</th><th>Repairs</th></tr></thead>
@@ -397,8 +397,8 @@
 <tr><td>Saboteur</td><td>No</td><td>No</td><td>No</td></tr>
 </tbody>
 </table></div>
-<div class="box example"><h4>Example</h4><p>An Aggressive computer is Governor in month 5. The tax stands at 5% and the fund at <span class="num">1,100</span> cr. Its target is 8%, so it sets 8% (a step of 3). The fund is not low, so there is no bump. Nothing is damaged and there is no strike. The Spaceport upgrade's <span class="num">1,380</span> cr is more than the fund holds; the Stadium's <span class="num">1,000</span> is not, and it has the most prestige of the rest (4). It commissions the Stadium, which takes the next place on the colony's grounds. Had a Saboteur been Governor, it would have raised the tax toward 10% and built nothing.</p></div>
-<div class="box why"><h4>Why it is like this</h4><p>The PM approved the computer Governor's colony steps on 5 Nov under Heiko's design authority: pay the strike, then repair the most prestige first, then commission the most prestige it can afford. Its site bid went with the site bid itself on 6 Nov (G-5 AM-16, see <a href="#site-bid">The colony's grounds</a>). The council's own draws use a separate seeded stream per seat and month, so adding the council moved no other dice in a replay. All persona numbers are placeholders until the sim tunes them.</p></div>
+<div class="box example"><h4>Example</h4><p>An Aggressive computer is Governor in month 5. The tax stands at 5% and the fund at <span class="num">1,100</span> cr. Its target is 10%, so it sets 10% (a step of 5). The fund is not low, so there is no bump. Nothing is damaged and there is no strike. The store has Alloy and Electronics, so every building's goods are in reach. The fund holds more than 10% of the Spaceport upgrade's <span class="num">690</span> cr (<span class="num">69</span>), and it has the most prestige (5). Had there been no Electronics anywhere, it would have taken the Observatory (if Crystite was in reach) or the Park. It commissions the Spaceport upgrade, which takes the next place on the colony's grounds. Had a Saboteur been Governor, it would have set the same 10% and built nothing.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The PM approved the computer Governor's colony steps on 5 Nov under Heiko's design authority: pay the strike, then repair the most prestige first, then commission the most prestige it can afford. Its site bid went with the site bid itself on 6 Nov (G-5 AM-16, see <a href="#site-bid">The colony's grounds</a>). Decided by Heiko on 6 Nov (pace set C): every persona steers the tax to 10%, and "can afford" means the fund holds 10% of the credits. The council's own draws use a separate seeded stream per seat and month, so adding the council moved no other dice in a replay. All persona numbers are placeholders until the sim tunes them.</p></div>
 <div class="box next"><h4>What is changing</h4><p>Computer players donating (C28, WS9, being built on ws9-c28-donate; see <a href="#donations">Donations</a>). Claude taking politics decisions for Smart seats, and making deals, waits for the deal cards (see <a href="#reputation-deals">Reputation and deal cards</a>).</p></div>
 <p class="code-ref">In the code: <code>packages/ai/src/hands/vote.ts::VoteHand</code> · <code>::nextTax</code> · <code>config.ts::POLITICS.ai</code> (runGovernor, taxTarget, taxFundBump, fundMonths, council, colony) · slice 2a RULE-46 · G-5 C25</p>
 <p class="owner">Kept current by: WS7 (rules), WS1 (the hands and the numbers).</p>
