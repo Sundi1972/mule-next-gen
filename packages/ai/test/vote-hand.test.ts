@@ -38,7 +38,7 @@ import { nextTax, ownVote, VoteHand, type VotePort } from '../src/hands/vote.js'
 import { breakGain, reputationCost } from '../src/politics-value.js';
 import type { Mind } from '../src/value.js';
 
-// WS1's values are stubs (0) until S3-PR-5, so the keep-or-break rows set the two numbers they compare.
+// The keep-or-break rows set the two numbers they compare, so the values are doubles here.
 vi.mock('../src/politics-value.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/politics-value.js')>()),
   breakGain: vi.fn(() => 0),
@@ -717,9 +717,9 @@ function counted(seed: number): Rng & { draws: () => number } {
   return { next: tally(rng.next), int: tally(rng.int), pick: tally(rng.pick), chance: tally(rng.chance), weighted: tally(rng.weighted), draws: () => draws } as Rng & { draws: () => number };
 }
 
-/** An active card ai0 gave ai1. */
-function activeCard(terms: DealTerms, from = 'ai0'): DealCard {
-  return { id: 'deal-test', from, to: 'ai1', terms, offered: 1, until: 1, status: 'active', brokenBy: null, settled: null };
+/** An active card, by default one ai0 gave ai1. */
+function activeCard(terms: DealTerms, from = 'ai0', to = 'ai1'): DealCard {
+  return { id: 'deal-test', from, to, terms, offered: 1, until: 1, status: 'active', brokenBy: null, settled: null };
 }
 
 /** Month 1's governor ballot, ai1 3 plots, ai2 1, ai3 2: a trader ai0 votes ai2 by the keyless rule. Cards are what ai0 promised. */
@@ -766,10 +766,17 @@ describe("S3-T-AC-9: VoteHand's S3-RULE-10 rows", () => {
     expect(lawVoteOf(lawBallot([]), handOf(mindOf('ai0', 'trader'), 3))).toBe(true);
   });
 
-  it('S3-T-AC-9 row 1: a card another seat gave, or one not active, is no promise of this seat', () => {
-    const others = [activeCard(PROMISE_AI1, 'ai3'), { ...activeCard(PROMISE_AI1), status: 'offered' as const }];
-    vi.mocked(breakGain).mockReturnValue(0);
+  it('S3-T-AC-9 row 1: a card another seat gave, one not active, or one for another office, is no promise of this seat', () => {
+    // ai1 gave ai0 a card for ai3: ai0 can see it, and it is not ai0's promise to keep.
+    const others = [
+      activeCard({ ...PROMISE_AI1, candidate: 'ai3' }, 'ai1', 'ai0'),
+      activeCard(PROMISE_AI1, 'ai3'),
+      { ...activeCard(PROMISE_AI1), status: 'offered' as const },
+    ];
+    expect(observe(promisedBallot(others), 'ai0').politics!.deals.map((d) => d.from)).toContain('ai1');
     expect(electionVoteOf(promisedBallot(others), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai2');
+    const sheriff = activeCard({ kind: 'vote', office: 'sheriff', candidate: 'ai1' });
+    expect(electionVoteOf(promisedBallot([sheriff]), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai2');
   });
 
   it('S3-T-AC-9 row 2: own is the promised choice, keep', () => {
@@ -788,8 +795,9 @@ describe("S3-T-AC-9: VoteHand's S3-RULE-10 rows", () => {
   it('S3-T-AC-9 row 4: breakGain above honesty times the reputation cost, vote its own; at or below it, the promised choice', () => {
     vi.mocked(reputationCost).mockReturnValue(10);
     // trader honesty 1: the line is 10; cautious honesty 2: the line is 20.
+    // The gain is the card's to the seat that gave it: asked of ai0 and the deal-test card, and 0 of anything else.
     const at = (persona: AiPersonaId, gain: number) => {
-      vi.mocked(breakGain).mockReturnValue(gain);
+      vi.mocked(breakGain).mockImplementation((_, me, card) => (me === 'ai0' && card.id === 'deal-test' ? gain : 0));
       return [
         electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), handOf(mindOf('ai0', persona), 3)),
         lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf(mindOf('ai0', persona), 3)),
@@ -802,8 +810,10 @@ describe("S3-T-AC-9: VoteHand's S3-RULE-10 rows", () => {
     expect(reputationCost).toHaveBeenCalledWith(expect.anything(), 'ai0', POLITICS.reputation.moves.voteBroken);
   });
 
-  it('S3-T-AC-9 row 5: otherwise the promised choice (the stub values are 0)', () => {
+  it('S3-T-AC-9 row 5: otherwise the promised choice; with two cards it gave on the ballot, the first', () => {
     expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai1');
+    const two = [activeCard(PROMISE_AI1), { ...activeCard({ ...PROMISE_AI1, candidate: 'ai3' }), id: 'deal-second' }];
+    expect(electionVoteOf(promisedBallot(two), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai1');
     expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf(mindOf('ai0', 'trader'), 3))).toBe(false);
   });
 
@@ -885,6 +895,8 @@ describe("S3-T-AC-9 (port rows), AM-5: WS2's VotePort in VoteHand and ownVote", 
     expect(electionVoteOf(promisedBallot([]), withPort(port))).toBe('ai2');
     expect(lawVoteOf(lawBallot([]), withPort(port))).toBe(true);
     expect(port.asked).toEqual(['election:governor', 'law']);
+    const proposal = lawBallot([]).politics!.council!.proposal;
+    expect(ownVote(observe(lawBallot([]), 'ai0'), mindOf('ai0', 'trader'), { proposal }, portAnswering(null, null))).toBe(true);
   });
 
   it('S3-T-AC-9 an electionVote outside the candidates counts as null', () => {
@@ -920,6 +932,30 @@ describe("S3-T-AC-9 (port rows), AM-5: WS2's VotePort in VoteHand and ownVote", 
     expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), withPort(portAnswering('ai3', true)))).toBe(true);
     // The port already chose the promised candidate: nothing to break.
     expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), withPort(portAnswering('ai1', null)))).toBe('ai1');
+  });
+
+  it('S3-T-AC-9 AM-8: on a law the sitting Governor votes yes and the port is not asked; any other seat asks it before the Baron row', () => {
+    const governing = lawBallot([]);
+    governing.politics = { ...governing.politics!, governor: 'ai0' };
+    const proposal = governing.politics.council!.proposal;
+    const port = portAnswering(null, false);
+    expect(ownVote(observe(governing, 'ai0'), mindOf('ai0', 'trader'), { proposal }, port)).toBe(true);
+    expect(port.asked).toEqual([]);
+
+    // A Baron's keyless vote on a land tax is no; the port, asked first, says yes.
+    const baron = lawBallot([]);
+    baron.politics = { ...baron.politics!, baron: 'ai0' };
+    const baronPort = portAnswering(null, true);
+    expect(ownVote(observe(baron, 'ai0'), mindOf('ai0', 'trader'), { proposal }, baronPort)).toBe(true);
+    expect(baronPort.asked).toEqual(['law']);
+    expect(ownVote(observe(baron, 'ai0'), mindOf('ai0', 'trader'), { proposal })).toBe(false);
+  });
+
+  it.each(['trader', 'rookie'] as const)('S3-T-AC-9 AM-8: a candidate votes itself, even holding a card for its rival on that office (%s)', (level) => {
+    vi.mocked(breakGain).mockReturnValue(0);
+    const state = ballotWith({ governor: ['ai0', 'ai1'] }, { ai0: 1, ai1: 3 });
+    state.politics = { ...state.politics!, deals: [activeCard(PROMISE_AI1)] };
+    expect(electionVoteOf(state, handOf(mindOf('ai0', 'trader', level), 3))).toBe('ai0');
   });
 
   it('S3-T-AC-9 (WS2 T-AC-B9): no VotePort, the vote is unchanged and the stream is called as often', () => {
