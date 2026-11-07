@@ -77,6 +77,24 @@ describe('MuleView.newsLines: the news, each line with the seats it names', () =
     expect(game.viewFor(null).newsLines![0]).toEqual({ text: 'Lena broke a pact with Heiko. Reputation −20.', who: ['s2', 's1'] });
   });
 
+  it('FM-news-who: a news list written from outside as bare strings, or a line without who, still renders on every screen and viewFor never throws', () => {
+    const fake = fakeContext({ table: TABLE });
+    const game = new MuleGame(fake.ctx, 10, { politics: true });
+    game.start(TABLE);
+    // As apps/web/e2e/hub-steps.ts's busyNews fixture wrote it before F-11: the room's game, its news replaced.
+    (game as unknown as { news: unknown }).news = ['Brix is Governor (appointed).', { text: 'Brix listed plot 3·4.' }, { text: 'Welcome.', who: ['s1'] }];
+
+    for (const viewer of [null, 's1']) {
+      const v = game.viewFor(viewer);
+      expect(v.news).toEqual(['Brix is Governor (appointed).', 'Brix listed plot 3·4.', 'Welcome.']);
+      expect(v.newsLines).toEqual([
+        { text: 'Brix is Governor (appointed).', who: [] },
+        { text: 'Brix listed plot 3·4.', who: [] },
+        { text: 'Welcome.', who: ['s1'] },
+      ]);
+    }
+  });
+
   // trace-allow: the PM's F-11 ruling (7 Nov), who lists only the seats a line names; no spec AC covers it
   it('a line naming nobody names no seat', () => {
     const fake = fakeContext({ table: TABLE });
