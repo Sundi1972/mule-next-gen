@@ -896,6 +896,7 @@ function tallyOverrule(state: GameState, overrule: Overrule): void {
     if (ballot === true) yes += weight;
     else if (ballot === false) no += weight;
   }
+  // literal-ok: more than half of all votes is the rule's definition (S5-RULE-8)
   const needed = Math.floor(total / 2) + 1;
   overrule.result = { passed: yes >= needed, yes, no, total, needed };
   overrule.stage = 'reveal';
