@@ -1,8 +1,9 @@
 import type { ColonyProjectView, ColonyView, MuleView, MyView, TableView } from '@mule/protocol';
 import { COLONY_SCORE } from '@mule/engine';
+import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -513,3 +514,52 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     for (const id of ['phone-month-score', 'colony-score-change', 'colony-band']) expect(has(harvest, id), `production has no ${id}`).toBe(false);
   });
 });
+
+describe('HC-3: the grounds when the art manifest fails', () => {
+  /** Month 12: the Park stands, the Stadium has 1 of its 3 months left, the Hospital is closed, the Spaceport only commissioned. */
+  const MONTH_12: ColonyView = {
+    ...MIDGAME,
+    projects: [
+      { ...PARK, place: { x: 1, y: 2, w: 1, h: 1 } },
+      { ...STADIUM, stage: 'building', monthsLeft: 1, place: { x: 0, y: 0, w: 2, h: 2 } },
+      { ...HOSPITAL, stage: 'closed', monthsLeft: null, place: { x: 3, y: 2, w: 1, h: 1 } },
+      { ...DAMAGED, stage: 'commissioned', repairCost: null, place: { x: 3, y: 3, w: 2, h: 2 } },
+    ],
+  };
+  const MANIFEST_URL = '/art/colony/manifest.json';
+  const manifestFile = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
+  /** The web server as the browser meets it: the manifest at its URL, nothing else. */
+  const serveManifest = (body: () => Response | Promise<Response>) => vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === MANIFEST_URL ? body() : new Response('', { status: 404 }))));
+  /** The shipped manifest with one part broken, as the server would send it. */
+  const broken = (spoil: (m: { frame: Record<string, unknown>; pictures: Record<string, Record<string, Record<string, unknown>>> }) => void) => () => {
+    const m = JSON.parse(manifestFile);
+    spoil(m);
+    return new Response(JSON.stringify(m));
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each<[string, () => Response | Promise<Response>]>([
+    ['the network fails', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['the server answers 404', () => new Response('Not found', { status: 404 })],
+    ['the file is not JSON', () => new Response('<!doctype html>')],
+    ['the JSON is not a manifest', () => new Response('{"pictures":null}')],
+    ['the frame is empty', broken((m) => void (m.frame = {}))],
+    ['the frame has no number for its width', broken((m) => void (m.frame.width = 'wide'))],
+    ['the frame centre is one number', broken((m) => void (m.frame.centre = [800]))],
+    ['an entry has no day picture', broken((m) => void delete m.pictures.park!.standing!.day)],
+    ["a kind's own frame is bad", broken((m) => void (m.pictures.stadium!.frame = {}))],
+  ])('HC-3: when %s, the grounds draw every place as its SVG shape and nothing breaks', async (_, body) => {
+    vi.resetModules();
+    const fresh = await import('../src/components/Grounds');
+    serveManifest(body);
+    await expect(fresh.loadGroundsManifest()).resolves.toBeNull();
+    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12, size: 'phone' }));
+    expect(has(html, 'colony-grounds')).toBe(true);
+    expect(html).not.toContain('<image');
+    for (const n of [1, 2, 3, 4]) expect(has(html, `shape-${n}`), `place ${n} is drawn`).toBe(true);
+  });
+});
+
