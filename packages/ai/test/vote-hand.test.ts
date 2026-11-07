@@ -10,6 +10,7 @@ import {
   createGame,
   createRng,
   electionDone,
+  observe,
   payStrike,
   repair,
   POLITICS,
@@ -22,15 +23,27 @@ import {
   WALK,
   type AiLevelId,
   type AiPersonaId,
+  type Council,
+  type DealCard,
+  type DealTerms,
   type Election,
   type GameState,
+  type LawProposal,
   type Office,
   type Rng,
   type TaxPromise,
 } from '@mule/engine';
 import type { Act, AiAction } from '../src/actions.js';
-import { nextTax, VoteHand } from '../src/hands/vote.js';
+import { nextTax, ownVote, VoteHand } from '../src/hands/vote.js';
+import { breakGain, reputationCost } from '../src/politics-value.js';
 import type { Mind } from '../src/value.js';
+
+// WS1's values are stubs (0) until S3-PR-5, so the keep-or-break rows set the two numbers they compare.
+vi.mock('../src/politics-value.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/politics-value.js')>()),
+  breakGain: vi.fn(() => 0),
+  reputationCost: vi.fn(() => 0),
+}));
 
 const SEATS = ['ai0', 'ai1', 'ai2', 'ai3'];
 const PERSONAS: AiPersonaId[] = ['trader', 'cautious', 'aggressive', 'saboteur'];
@@ -693,5 +706,142 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
     { fund: 239, want: 5 },
   ])('T-AC-62: by default the fund counts as low under POLITICS.ai.fundMonths of the elected offices\' pay: fund $fund → $want', ({ fund, want }) => {
     expect(nextTax(5, 5, fund, { low: 0, high: 10 }, 2)).toBe(want);
+  });
+});
+
+/** The seat's stream, wrapped so a test can count every draw from it. */
+function counted(seed: number): Rng & { draws: () => number } {
+  const rng = createRng(seed);
+  let draws = 0;
+  const tally = <F extends (...args: never[]) => unknown>(f: F) => ((...args: Parameters<F>) => (draws++, f(...args))) as F;
+  return { next: tally(rng.next), int: tally(rng.int), pick: tally(rng.pick), chance: tally(rng.chance), weighted: tally(rng.weighted), draws: () => draws } as Rng & { draws: () => number };
+}
+
+/** An active card ai0 gave ai1. */
+function activeCard(terms: DealTerms, from = 'ai0'): DealCard {
+  return { id: 'deal-test', from, to: 'ai1', terms, offered: 1, until: 1, status: 'active', brokenBy: null, settled: null };
+}
+
+/** Month 1's governor ballot, ai1 3 plots, ai2 1, ai3 2: a trader ai0 votes ai2 by the keyless rule. Cards are what ai0 promised. */
+function promisedBallot(cards: DealCard[]): GameState {
+  const state = ballotWith({ governor: ['ai1', 'ai2', 'ai3'] }, { ai1: 3, ai2: 1, ai3: 2 });
+  state.politics = { ...state.politics!, deals: cards };
+  return state;
+}
+
+/** Month 2's law ballot on a landTax enact, ai1 governing; ai0's keyless vote is yes (the law costs everyone the same). */
+function lawBallot(cards: DealCard[]): GameState {
+  const state = newGame();
+  state.month = 2;
+  const proposal: LawProposal = { kind: 'enact', law: 'landTax', setting: 10 };
+  const council: Council = { stage: 'ballot', clockMs: 0, proposal, proposer: 'ai1', ballots: { ai1: true }, done: [], result: null };
+  state.politics = { ...state.politics!, governor: 'ai1', baron: null, election: null, council, deals: cards };
+  return state;
+}
+
+/** What one tick of ai0's hand sends on a law ballot. */
+function lawVoteOf(state: GameState, hand: VoteHand): boolean | undefined {
+  const sent: AiAction[] = [];
+  hand.tick(state, 0, (action) => (sent.push(action), true));
+  return sent.find((a) => a.type === 'voteLaw')?.yes;
+}
+
+/** What ai0's hand votes for governor on the ballot. */
+function electionVoteOf(state: GameState, hand: VoteHand): string | undefined {
+  tickAlone(state, hand);
+  return electionOf(state).ballots.ai0?.governor;
+}
+
+const PROMISE_AI1: DealTerms = { kind: 'vote', office: 'governor', candidate: 'ai1' };
+const PROMISE_NO: DealTerms = { kind: 'vote', law: true, yes: false };
+
+describe("S3-T-AC-9: VoteHand's S3-RULE-10 rows", () => {
+  beforeEach(() => {
+    vi.mocked(breakGain).mockReset().mockReturnValue(0);
+    vi.mocked(reputationCost).mockReset().mockReturnValue(0);
+  });
+
+  it('row 1: no card, today\'s vote (an election and a law)', () => {
+    expect(electionVoteOf(promisedBallot([]), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai2');
+    expect(lawVoteOf(lawBallot([]), handOf(mindOf('ai0', 'trader'), 3))).toBe(true);
+  });
+
+  it('row 1: a card another seat gave, or one not active, is no promise of this seat', () => {
+    const others = [activeCard(PROMISE_AI1, 'ai3'), { ...activeCard(PROMISE_AI1), status: 'offered' as const }];
+    vi.mocked(breakGain).mockReturnValue(0);
+    expect(electionVoteOf(promisedBallot(others), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai2');
+  });
+
+  it('row 2: own is the promised choice, keep', () => {
+    vi.mocked(breakGain).mockReturnValue(1_000);
+    vi.mocked(reputationCost).mockReturnValue(1);
+    expect(electionVoteOf(promisedBallot([activeCard({ ...PROMISE_AI1, candidate: 'ai2' })]), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai2');
+  });
+
+  it('row 3: a Rookie keeps, however large the gain', () => {
+    vi.mocked(breakGain).mockReturnValue(1_000);
+    vi.mocked(reputationCost).mockReturnValue(1);
+    expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), handOf(mindOf('ai0', 'trader', 'rookie'), 3))).toBe('ai1');
+    expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf(mindOf('ai0', 'trader', 'rookie'), 3))).toBe(false);
+  });
+
+  it('row 4: breakGain above honesty times the reputation cost, vote its own; at or below it, the promised choice', () => {
+    vi.mocked(reputationCost).mockReturnValue(10);
+    // trader honesty 1: the line is 10; cautious honesty 2: the line is 20.
+    const at = (persona: AiPersonaId, gain: number) => {
+      vi.mocked(breakGain).mockReturnValue(gain);
+      return [
+        electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), handOf(mindOf('ai0', persona), 3)),
+        lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf(mindOf('ai0', persona), 3)),
+      ];
+    };
+    expect(at('trader', 15)).toEqual(['ai2', true]);
+    expect(at('trader', 10)).toEqual(['ai1', false]);
+    expect(at('cautious', 15)).toEqual(['ai1', false]);
+    expect(at('cautious', 25)).toEqual(['ai2', true]);
+    expect(reputationCost).toHaveBeenCalledWith(expect.anything(), 'ai0', POLITICS.reputation.moves.voteBroken);
+  });
+
+  it('row 5: otherwise the promised choice (the stub values are 0)', () => {
+    expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai1');
+    expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf(mindOf('ai0', 'trader'), 3))).toBe(false);
+  });
+
+  it('a promised candidate who is not in the field is no promise the ballot can take: today\'s vote', () => {
+    vi.mocked(breakGain).mockReturnValue(0);
+    expect(electionVoteOf(promisedBallot([activeCard({ ...PROMISE_AI1, candidate: 'ai0' })]), handOf(mindOf('ai0', 'trader'), 3))).toBe('ai2');
+  });
+
+  it.each([
+    { name: 'a tie draw', level: 'trader' as const, candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: {} as Record<string, number> },
+    { name: "a Rookie's guess", level: 'rookie' as const, candidates: { governor: ['ai1', 'ai2', 'ai3'] }, plots: { ai1: 1 } },
+  ])('no draw: the stream is called as often with a card as without, keep or break ($name)', ({ level, candidates, plots }) => {
+    vi.mocked(reputationCost).mockReturnValue(10);
+    const drawsWith = (cards: DealCard[], gain: number) => {
+      vi.mocked(breakGain).mockReturnValue(gain);
+      const state = ballotWith(candidates, plots);
+      state.politics = { ...state.politics!, deals: cards };
+      const rng = counted(5);
+      tickAlone(state, new VoteHand(mindOf('ai0', 'trader', level), rng));
+      return rng.draws();
+    };
+    const without = drawsWith([], 0);
+    expect(without).toBeGreaterThan(1); // the pause draw and the tie or guess
+    expect(drawsWith([activeCard(PROMISE_AI1)], 0)).toBe(without);
+    expect(drawsWith([activeCard(PROMISE_AI1)], 1_000)).toBe(without);
+  });
+
+  it('ownVote: today\'s choice with no draw; null on a tie and for a Rookie guess', () => {
+    const election = (cands: string[], persona: AiPersonaId = 'trader', level: AiLevelId = 'trader') =>
+      ownVote(observe(promisedBallot([]), 'ai0'), mindOf('ai0', persona, level), { office: 'governor', candidates: cands });
+    expect(election(['ai1', 'ai2', 'ai3'])).toBe('ai2');
+    expect(election(['ai0', 'ai1'])).toBe('ai0');
+    expect(election(['ai1', 'ai2', 'ai3'], 'trader', 'rookie')).toBeNull();
+    const tie = observe(ballotWith({ governor: ['ai1', 'ai2'] }, {}), 'ai0');
+    expect(ownVote(tie, mindOf('ai0', 'trader'), { office: 'governor', candidates: ['ai1', 'ai2'] })).toBeNull();
+    const law = (state: GameState, level: AiLevelId = 'trader') =>
+      ownVote(observe(state, 'ai0'), mindOf('ai0', 'trader', level), { proposal: state.politics!.council!.proposal });
+    expect(law(lawBallot([]))).toBe(true);
+    expect(law(lawBallot([]), 'rookie')).toBeNull();
   });
 });
