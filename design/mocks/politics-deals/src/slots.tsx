@@ -5,7 +5,10 @@ import { useHub } from '../../../../apps/web/src/phone/hub/Hub';
 import { CouncilDesk } from '../../../../apps/web/src/phone/hub/politics/Council';
 import { GovernorDesk } from '../../../../apps/web/src/phone/hub/politics/Governor';
 import { COUNCIL_STAGE, ELECTION_DAY_STAGE } from '../../../../apps/web/src/phone/hub/politics/slots';
-import type { DeskSlot, HubSeat, HubSlots } from '../../../../apps/web/src/phone/hub/slots';
+import { firstGiven, type DeskSlot, type HubSeat, type HubSlots } from '../../../../apps/web/src/phone/hub/slots';
+import { usePhoneGame } from '../../../../apps/web/src/phone/game';
+import { connectedIn, hostMayContinue, readyFooter, stageWords } from '../../../../apps/web/src/phone/hub/ready';
+import { WaitingFor } from './proposed/ReadyBar';
 import { HUB_SLOTS } from '../../../../apps/web/src/phone/hub/today';
 import { makeTalkDesk, TalkBadge } from './proposed/desks';
 import { PromisedElectionDay } from './proposed/ElectionDay';
@@ -96,10 +99,66 @@ function HarnessSlot() {
   });
   return (
     <span ref={anchor} className="hidden">
+      <ReadyChips />
       {ask.standings && shell && createPortal(<StandingsSheet onClose={() => ask.setStandings(false)} />, shell)}
     </span>
   );
 }
+
+/**
+ * The proposed WaitingFor (chips on the others' names) in the real ReadyBar's place. The build changes
+ * ReadyBar.tsx::WaitingFor itself; the mock cannot reach inside the real Hub's footer, so this puts the proposed one where
+ * the real one is drawn, with the same seats and lead ReadyBar computes (readyFooter, the bar's words), and hides the
+ * real one. Mock machinery only: nothing here is for the build.
+ */
+function ReadyChips() {
+  const { table, view, me, self } = usePhoneGame();
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [holder, setHolder] = useState<HTMLElement | null>(null);
+  const footer = readyFooter({ me: self.id, players: view.players, hostId: table.hostId, connected: connectedIn(table.seats), mayContinue: hostMayContinue(view), confirm: false });
+  const words = firstGiven(HUB_SLOTS.readyWords ?? [], { view, me, self }) ?? stageWords(view.politics?.election?.stage, view.politics?.council?.stage);
+  useLayoutEffect(() => {
+    const actions = anchor.current?.closest('[data-testid="game-shell"]')?.querySelector<HTMLElement>('[data-testid="actions"]');
+    if (!actions) return;
+    const place = () => {
+      const real = [...actions.querySelectorAll<HTMLElement>('[data-testid="waiting-for"]')].find((el) => !el.closest('[data-mock-holder]'));
+      let h = actions.querySelector<HTMLElement>(':scope > [data-mock-holder]');
+      if (!real) {
+        h?.remove();
+        setHolder(null);
+        return;
+      }
+      if (!h) {
+        h = document.createElement('div');
+        h.dataset.mockHolder = '';
+        h.style.display = 'contents';
+      }
+      real.style.display = 'none';
+      if (h.nextSibling !== real) actions.insertBefore(h, real);
+      setHolder(h);
+    };
+    place();
+    const watch = new MutationObserver(place);
+    watch.observe(actions, { childList: true });
+    return () => watch.disconnect();
+  });
+  return (
+    <span ref={anchor} className="hidden">
+      {holder && footer.waiting.length > 0 && createPortal(<WaitingFor view={view} seats={footer.waiting} me={self.id} {...(footer.ready ? { lead: words.waiting } : {})} />, holder)}
+    </span>
+  );
+}
+
+/** A stage's body with the ready bar's chips: the harness slot is not drawn while a situation holds the stage. */
+const withChips = (Body: () => ReactNode) =>
+  function StageWithChips() {
+    return (
+      <>
+        <Body />
+        <ReadyChips />
+      </>
+    );
+  };
 
 const desk = (id: string) => HUB_SLOTS.desks.find((d) => d.id === id)!;
 
@@ -122,8 +181,8 @@ function slotsFor(variant: Variant): HubSlots {
       SHERIFF_DESK,
     ],
     stage: [
-      { ...ELECTION_DAY_STAGE, Body: PromisedElectionDay },
-      { ...COUNCIL_STAGE, Body: PromisedCouncilBallot },
+      { ...ELECTION_DAY_STAGE, Body: withChips(PromisedElectionDay) },
+      { ...COUNCIL_STAGE, Body: withChips(PromisedCouncilBallot) },
     ],
   };
 }

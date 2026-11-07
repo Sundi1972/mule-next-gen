@@ -1,10 +1,10 @@
 import { cx } from '@mule/ui';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useClientState } from '../../../../../apps/web/src/net/react';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { useHub } from '../../../../../apps/web/src/phone/hub/Hub';
 import { useToday } from '../../../../../apps/web/src/phone/hub/state';
-import { incomingOf, MyDeals, type DraftKind } from './Deals';
+import { IncomingDealSheet, incomingOf, MyDeals, type DraftKind } from './Deals';
 import { Chat, type Composing, type Variant } from './phone-parts';
 
 /*
@@ -16,7 +16,7 @@ import { Chat, type Composing, type Variant } from './phone-parts';
 type Section = 'chat' | 'cards';
 
 /** Where a focus lands: the section, the whisper, and the composer. */
-function landing(focus: string, cards: { id: string; from: string; to: string }[], me: string): { section: Section; to?: string; compose?: Composing; card?: boolean } | null {
+function landing(focus: string, cards: { id: string; from: string; to: string }[], me: string): { section: Section; to?: string; compose?: Composing; card?: boolean; answer?: string } | null {
   const [kind, id, sub] = focus.split(':');
   if (kind === 'whisper' && id) return { section: 'chat', to: id };
   if (kind === 'compose' && id) return { section: 'chat', to: id, compose: { to: id, ...(sub ? { kind: sub as DraftKind } : {}) } };
@@ -25,7 +25,8 @@ function landing(focus: string, cards: { id: string; from: string; to: string }[
   if (kind === 'deals') {
     // One card waiting for me: its whisper thread, where it sits. More: My cards lists them together.
     const mine = cards.filter((c) => c.to === me);
-    return mine.length === 1 ? { section: 'chat', to: mine[0]!.from } : { section: 'cards' };
+    // F-9 (team-lead, 7 Nov): one card opens over the rail, in A's sheet, as well as sitting in its thread.
+    return mine.length === 1 ? { section: 'chat', to: mine[0]!.from, answer: mine[0]!.id } : { section: 'cards' };
   }
   return null;
 }
@@ -40,6 +41,9 @@ export function makeTalkDesk(variant: Variant) {
     const [to, setTo] = useState<string | null>(null);
     const [composing, setComposing] = useState<Composing | null>(null);
     const [card, setCard] = useState(false);
+    const [answer, setAnswer] = useState<string | null>(null);
+    const root = useRef<HTMLDivElement>(null);
+    const closeAnswer = useCallback(() => setAnswer(null), []);
     useEffect(() => setSeenChat(chat.length), [chat.length, setSeenChat]);
     useEffect(() => {
       if (!focus) return;
@@ -50,10 +54,11 @@ export function makeTalkDesk(variant: Variant) {
       if (at.to) setTo(at.to);
       setComposing(at.compose ?? null);
       setCard(at.card ?? false);
+      setAnswer(at.answer ?? null);
     }, [focus, takeFocus, me]);
     const incoming = incomingOf(me).length;
     return (
-      <div className="flex flex-col gap-2" data-testid="talk-desk">
+      <div ref={root} className="flex flex-col gap-2" data-testid="talk-desk">
         <div role="tablist" aria-label="Talk" className="grid grid-cols-2 gap-1">
           {(['chat', 'cards'] as const).map((v) => (
             <button
@@ -92,6 +97,7 @@ export function makeTalkDesk(variant: Variant) {
         ) : (
           <MyDeals />
         )}
+        {answer && <IncomingDealSheet id={answer} onClose={closeAnswer} anchor={root.current} />}
       </div>
     );
   };

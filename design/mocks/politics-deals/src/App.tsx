@@ -300,18 +300,18 @@ const DECISIONS: [string, string][] = [
   ['Where', 'Everything lives where P0 put it: the Talk desk’s Chat and My cards, no new tab, no new tool; a deal starts from its player (a whisper, a name, a standings row).'],
   ['Composer', 'Two variants of + Deal, below; my pick is A, the sheet over the rail.'],
   ['Kinds', 'Two cards, one tap each, nothing to type: Pact (1, 3 or 6 months) or My vote (a declared Governor candidate, or yes/no on the next law vote).'],
-  ['Refusals', 'A choice the engine would refuse is replaced by the engine’s own words before the send; a refusal that still comes back shows in the composer, where she tapped.'],
+  ['Refusals', 'A choice the engine would refuse is replaced by the engine’s own words before the send; a refusal that still comes back shows in the composer, where the tap was.'],
   ['AI seats', 'Sending to an AI seat with a name under 30 is warned, not blocked: the seat’s answer is the rule, and it answers in seconds.'],
-  ['Incoming', 'A card offered to you leads “This month” (“1 deal offer”, Only you), badges the Talk tab, and sits at the foot of the pair’s whisper with both names’ chips, Accept and Decline.'],
+  ['Incoming', 'A card offered to you leads “This month” (“1 deal offer”, Only you) and badges the Talk tab; the door opens it over the rail in A’s sheet (label, terms, Accept / Decline together, no scroll at 667 or 844), and it also sits at the foot of the pair’s whisper. Two or more: the door opens My cards.'],
   ['Thread', 'Cards sit at the thread’s foot, not between lines: a card has no time of its own (finding F-5).'],
   ['My cards', 'Grouped by what you must do: answer, waiting (Withdraw, offers left), active (what it binds, until when), settled (with the month).'],
   ['Chip', 'The number always; a star at 70+, a dashed edge and a warning under 30, so the band reads in greyscale; +3 / −10 flashes on it for a few seconds when it moves.'],
   ['Chip, where', 'Standings, every name in a card, the whisper line, the ready bar’s others, the TV’s waiting box, ready list and league. Not in one-line tickers, the walking names, the whisper pills or the offices line.'],
   ['Chip, tap', 'Opens the player’s card: the band in words, what moved it in public (broken cards, unrest; kept cards never), and Whisper / + Deal. The TV and the footer’s chips are labels.'],
-  ['Ballots', '“You promised Brix your vote” under the ballot’s legend, PROMISED on the candidate, picked on her phone only; she casts as she likes.'],
+  ['Ballots', '“You promised Brix your vote” under the ballot’s legend, PROMISED on the candidate, picked on the promiser’s phone only; the vote is still theirs to cast.'],
   ['TV break', 'A red banner under the planning header, in the news’s words, with the drop (50 → 40) beside the breaker’s chip; it holds for that planning.'],
   ['Month end', 'The month’s broken cards in one dashed list, under the colony panel on the TV and under the league on the phone.'],
-  ['AI mark', 'Heiko, 8 Nov: a computer seat’s name on a deal card carries a quiet “· AI” (the Talk list’s mark): card label, names, lines, My cards, the TV banner and month end. Not after a possessive; the label carries it there.'],
+  ['AI mark', 'Heiko’s AI-mark ruling (#684): a computer seat’s name on a deal card carries a quiet “· AI” (the Talk list’s mark): card label, names, lines, My cards, the TV banner, news line and month end. Not after a possessive (“Ossa’s vote”): the label carries it there. For Heiko to confirm.'],
   ['Words', 'No pronouns anywhere: “Lena broke a promise to Brix: a vote for Brix” (finding F-3).'],
 ];
 
@@ -324,7 +324,8 @@ const FINDINGS: [string, string][] = [
   ['F-6', 'The composer’s sheet (A) and the player’s card cover the shell from inside the desk; the hub has no slot for a sheet over the rail. The mock portals into game-shell; the build may want a rail-sheet slot in Hub.'],
   ['F-7', 'useHub() throws outside the hub; the player’s card asks whether it is inside one (for + Deal). The mock catches the throw; Hub.tsx should export a non-throwing twin.'],
   ['F-8', 'The TV and the month end show a broken card’s drop (50 → 40) by working back from the move; at the clamp (a name at 5 breaking a pact) the “before” would be wrong. A `was` on the broken card, or the drop in the news’s data, would fix it.'],
-  ['F-9', 'At 667 × 375 the rail’s scroll body is 176 px (844: 195). The incoming card is 238 px and the Talk desk’s chat box (P0’s, 240 px) is taller than the body too: both scroll; the thread lands on Accept / Decline. If that is not good enough, the agenda’s door could open the card in A’s sheet.'],
+  ['F-9', 'Decided (team-lead, 7 Nov): at 667 × 375 the rail’s scroll body is 176 px (844: 195), shorter than the incoming card (238 px). The agenda’s door now opens the card in A’s sheet, where it fits without a scroll at 667 and 844; in the thread it still scrolls (the thread lands on Accept / Decline), as does P0’s 240 px chat box.'],
+  ['F-11', 'The news line is a string (view.news: string[]), so the TV cannot know which name in it is a computer seat’s. The mock marks by matching names; the build needs the breaker’s id on the news item (or a deal news entry with brokenBy) to mark it.'],
   ['F-10', 'P4 names the TV’s “players strip”: in planning the TV draws the ready list (chips drawn there); Players, the strip other phases draw, takes the same chip in the same place (not drawn here).'],
 ];
 
@@ -354,7 +355,7 @@ function Index() {
         </p>
       </header>
       <Section title="The hardest screen: + Deal, two ways" testid="variants">
-        <p className="max-w-4xl text-sm text-ink-2">Both at 667 × 375 (232 px rail), open on a pact for Brix. Both send the same card and read the same refusals; only where the composer lives differs.</p>
+        <p className="max-w-4xl text-sm text-ink-2">Both at 667 × 375 (232 px rail), open on a pact for Brix. Both send the same card and read the same refusals; only where the composer lives differs. Team-lead accepted A (7 Nov).</p>
         <div className="flex flex-wrap items-start gap-8">
           <VariantCard v="a" title="A · a sheet over the rail">
             The whole rail, header to Ready, becomes the composer; the map stays in view. Every choice and Offer fit at once, with no scroll, and a big target for Offer. It hides the whisper while open: the words that led to the card are one

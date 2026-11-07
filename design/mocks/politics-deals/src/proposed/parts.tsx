@@ -15,7 +15,7 @@ import { brokenWords } from './words';
  * also where a deal starts from a name (P1's "from the avatar or name", S3-C17).
  */
 
-// ---- Heiko's ruling (8 Nov): a computer seat's name on a deal card carries "· AI" ----------------------------------
+// ---- Heiko's AI-mark ruling (#684): a computer seat's name on a deal card carries "· AI" ----------------------------------
 
 /**
  * Stand-in for chat/Chat.tsx's AiMark (team-lead: landing on trunk shortly); the build imports that one. Exactly the
@@ -45,13 +45,7 @@ export function Marked({ text, view }: { text: string; view: Pick<MuleView, 'pla
 
 /** Who on a card: the name, its chip, and the mark for a computer seat. */
 export function CardWho(props: Parameters<typeof Who>[0]) {
-  const ai = props.view.players.find((p) => p.id === props.id)?.isAi;
-  return (
-    <span className="inline-flex items-center gap-1">
-      <Who {...props} />
-      {ai && <AiMark />}
-    </span>
-  );
+  return <Who {...props} mark />;
 }
 
 // ---- P4 · the chip ------------------------------------------------------------------------------------------
@@ -164,10 +158,10 @@ export function RepChip({ view, id, tv = false, onOpen, testid }: { view: Pick<M
 
 /**
  * A player by name, with their creature in their seat's colour; "You" for `me`. As parts.tsx::Who today, plus: `rep`
- * puts the chip after the name; `open` makes the name a button to the player's card (whisper, deal, reasons). Leave
+ * puts the chip after the name; `mark` puts " · AI" between a computer seat's name and its chip; `open` makes the name a button to the player's card (whisper, deal, reasons). Leave
  * both off inside another control (a ballot's label) and in one-line tickers (P0's rule).
  */
-export function Who({ view, id, size = 16, me = null, className, testid, rep = false, open = false }: { view: Pick<MuleView, 'players' | 'politics'>; id: string; size?: number; me?: string | null; className?: string; testid?: string; rep?: boolean; open?: boolean }) {
+export function Who({ view, id, size = 16, me = null, className, testid, rep = false, open = false, mark = false }: { view: Pick<MuleView, 'players' | 'politics'>; id: string; size?: number; me?: string | null; className?: string; testid?: string; rep?: boolean; open?: boolean; mark?: boolean }) {
   const [card, setCard] = useState(false);
   const anchor = useRef<HTMLSpanElement>(null);
   const p = view.players.find((q) => q.id === id);
@@ -187,6 +181,8 @@ export function Who({ view, id, size = 16, me = null, className, testid, rep = f
       ) : (
         name
       )}
+      {/* The AI-mark ruling: after the name, before the chip. */}
+      {mark && p.isAi && <AiMark />}
       {rep && <RepChip view={view} id={id} {...(open ? { onOpen: () => setCard(true) } : {})} testid={`${testid ?? `who-${id}`}-rep`} />}
       {card && <PlayerCard view={view} id={id} me={me} anchor={anchor.current} onClose={() => setCard(false)} />}
     </span>

@@ -252,31 +252,93 @@ function ComposerNotes({ c, testid }: { c: Composer; testid: string }) {
  */
 export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; kind?: DraftKind | undefined; onClose: () => void; anchor: Element | null }) {
   const c = useComposer(to, kind, onClose);
-  const sheet = (
-    <div className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={`Deal card for ${c.other.name}`} data-testid="composer-a">
-      <header className="flex items-center gap-1.5 border-b border-holo-faint py-0.5 pl-3 pr-1">
-        <span className="whitespace-nowrap text-xs font-semibold text-ink-2">Card for</span>
-        <CardWho view={c.view} id={to} size={14} rep />
-        <Button size="md" variant="ghost" className="ml-auto px-2.5" onClick={onClose} data-testid="composer-a-close">
-          Close
-        </Button>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-2">
-        <ComposerFields c={c} testid="composer-a" />
-        <ComposerNotes c={c} testid="composer-a" />
-      </div>
-      <footer className="flex flex-col gap-1 border-t border-holo-faint px-3 py-2">
-        <Button size="md" className="w-full" disabled={!c.canSend} onClick={c.send} data-testid="composer-a-send">
+  return (
+    <RailSheet
+      label={`Deal card for ${c.other.name}`}
+      testid="composer-a"
+      anchor={anchor}
+      onClose={onClose}
+      closeWord="Cancel"
+      title={
+        <>
+          <span className="whitespace-nowrap text-xs font-semibold text-ink-2">Card for</span>
+          <CardWho view={c.view} id={to} size={14} rep />
+        </>
+      }
+      action={
+        <Button size="md" className="px-3" disabled={!c.canSend} onClick={c.send} data-testid="composer-a-send">
           Offer to {c.other.name}
         </Button>
-        <span className="text-center text-[10px] text-ink-3" data-testid="composer-a-expiry">
-          {c.other.name} answers before planning ends, or it expires.
+      }
+      note={`${c.other.name} answers before planning ends, or it expires.`}
+    >
+      <ComposerFields c={c} testid="composer-a" />
+      <ComposerNotes c={c} testid="composer-a" />
+    </RailSheet>
+  );
+}
+
+/**
+ * A sheet over the whole rail, header to Ready, at the rail's width: the composer (A) and an offered card opened from
+ * the agenda. Its buttons sit in its footer, under the thumb and clear of the rail's top corner.
+ */
+function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: string; children: ReactNode }) {
+  const sheet = (
+    <div className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>
+      <header className="flex min-h-10 items-center gap-1.5 border-b border-holo-faint px-3 py-1.5">{title}</header>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-2" data-testid={`${testid}-body`}>
+        {children}
+      </div>
+      <footer className="flex flex-col gap-1 border-t border-holo-faint px-3 py-2">
+        <span className={cx('grid gap-1.5', action ? 'grid-cols-[auto_1fr]' : 'grid-cols-1')}>
+          <Button size="md" variant={action ? 'ghost' : 'outline'} className="px-3" onClick={onClose} data-testid={`${testid}-close`}>
+            {closeWord}
+          </Button>
+          {action}
         </span>
+        {note && (
+          <span className="text-center text-[10px] leading-tight text-ink-3" data-testid={`${testid}-note`}>
+            {note}
+          </span>
+        )}
       </footer>
     </div>
   );
   const shell = shellOf(anchor);
   return shell ? createPortal(sheet, shell) : sheet;
+}
+
+/**
+ * P2 from the agenda (team-lead's F-9 decision, 7 Nov): "1 deal offer" opens the card in the same sheet as the composer,
+ * so its label, terms and Accept / Decline are on screen together on the smallest phone. The card stays in the thread.
+ * The sheet closes itself once the card is answered (or withdrawn, or expired).
+ */
+export function IncomingDealSheet({ id, onClose, anchor }: { id: string; onClose: () => void; anchor: Element | null }) {
+  const { view, me } = usePhoneGame();
+  const c = (me.deals?.cards ?? []).find((x) => x.id === id && x.status === 'offered' && x.to === me.id);
+  useEffect(() => {
+    if (!c) onClose();
+  }, [c, onClose]);
+  if (!c) return null;
+  return (
+    <RailSheet
+      label={`Deal offer from ${nameOf(view, c.from, me.id)}`}
+      testid="incoming-sheet"
+      anchor={anchor}
+      onClose={onClose}
+      closeWord={`Answer later, in the whisper`}
+      title={
+        <>
+          <span className="label-caps text-[10px]!">Deal offer</span>
+          <span className="shrink-0 whitespace-nowrap">
+            <OnlyYou />
+          </span>
+        </>
+      }
+    >
+      <IncomingDeal c={c} testid={`sheet-card-${c.id}`} pair={false} />
+    </RailSheet>
+  );
 }
 
 /**
@@ -313,7 +375,7 @@ export function DealComposerInline({ to, kind, onClose }: { to: string; kind?: D
 // ---- P2 · a card as its two players see it ------------------------------------------------------------------------
 
 /** A card's face: who, what it binds, both names with their reputation, what it risks. Children: its buttons. */
-function DealFace({ c, tone = 'solid', expiry = false, testid, children }: { c: DealCard; tone?: 'solid' | 'quiet'; expiry?: boolean; testid: string; children?: ReactNode }) {
+function DealFace({ c, tone = 'solid', expiry = false, pair = true, testid, children }: { c: DealCard; tone?: 'solid' | 'quiet'; expiry?: boolean; pair?: boolean; testid: string; children?: ReactNode }) {
   const { view, me } = usePhoneGame();
   return (
     <section className={cx('flex shrink-0 flex-col gap-1 rounded-panel border-2 p-2', tone === 'solid' ? 'border-holo bg-holo-soft' : 'border-holo-line bg-panel')} data-testid={testid} data-status={c.status}>
@@ -321,9 +383,12 @@ function DealFace({ c, tone = 'solid', expiry = false, testid, children }: { c: 
         <span className="label-caps truncate text-[10px]!" data-testid={`${testid}-label`}>
           <Marked text={`Card ${c.from === me.id ? `to ${nameOf(view, c.to, me.id)}` : `from ${nameOf(view, c.from, me.id)}`}`} view={view} />
         </span>
-        <span className="shrink-0 whitespace-nowrap">
-          <OnlyYou text="You two" />
-        </span>
+        {/* In the rail sheet its header says Only you, and the label keeps the room. */}
+        {pair && (
+          <span className="shrink-0 whitespace-nowrap">
+            <OnlyYou text="You two" />
+          </span>
+        )}
       </span>
       <span className="font-display text-base font-semibold leading-tight" data-testid={`${testid}-title`}>
         <Marked text={titleWords(view, c, me.id)} view={view} />
@@ -333,9 +398,6 @@ function DealFace({ c, tone = 'solid', expiry = false, testid, children }: { c: 
       </span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" data-testid={`${testid}-names`}>
         <CardWho view={view} id={c.from} me={me.id} size={14} rep open testid={`${testid}-from`} />
-        <span aria-hidden className="text-ink-3">
-          ·
-        </span>
         <CardWho view={view} id={c.to} me={me.id} size={14} rep open testid={`${testid}-to`} />
       </span>
       <span className="text-[11px] leading-snug text-ink-2" data-testid={`${testid}-stakes`}>
@@ -348,16 +410,16 @@ function DealFace({ c, tone = 'solid', expiry = false, testid, children }: { c: 
 }
 
 /** P2: a card offered to me, with Accept and Decline, one tap each. */
-export function IncomingDeal({ c }: { c: DealCard }) {
+export function IncomingDeal({ c, testid = `incoming-${c.id}`, pair = true }: { c: DealCard; testid?: string; pair?: boolean }) {
   const client = useClient();
   const { view, me } = usePhoneGame();
   return (
-    <DealFace c={c} expiry testid={`incoming-${c.id}`}>
+    <DealFace c={c} expiry pair={pair} testid={testid}>
       <span className="grid grid-cols-2 gap-1.5">
-        <Button size="md" onClick={() => client.intent({ type: 'answerDeal', id: c.id, accept: true })} data-testid={`incoming-${c.id}-accept`}>
+        <Button size="md" onClick={() => client.intent({ type: 'answerDeal', id: c.id, accept: true })} data-testid={`${testid}-accept`}>
           Accept
         </Button>
-        <Button size="md" variant="outline" onClick={() => client.intent({ type: 'answerDeal', id: c.id, accept: false })} data-testid={`incoming-${c.id}-decline`}>
+        <Button size="md" variant="outline" onClick={() => client.intent({ type: 'answerDeal', id: c.id, accept: false })} data-testid={`${testid}-decline`}>
           Decline
         </Button>
       </span>

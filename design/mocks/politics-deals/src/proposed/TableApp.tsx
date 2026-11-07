@@ -12,7 +12,7 @@ import { TvHeader } from '../../../../../apps/web/src/table/TableApp';
 import { TvBody } from '../../../../../apps/web/src/table/TvFit';
 import { TvGovernorPromise } from '../../../../../apps/web/src/table/TvGovernorPromise';
 import { BrokenCards, LeagueTable } from './MonthEnd';
-import { RepChip } from './parts';
+import { Marked, RepChip } from './parts';
 import { WaitingFor } from './ReadyBar';
 import { TvBreakBanner } from './TvDeals';
 
@@ -23,7 +23,9 @@ import { TvBreakBanner } from './TvDeals';
  *   2. the reputation chip after every name in the ready list and the waiting box (and on Players, the strip the other
  *      phases draw: same change, same place);
  *   3. the month end's broken cards under the colony panel, and the league's chips.
- * MarketTiles and News are copied unchanged.
+ *   4. the news column marks a computer seat's name with " · AI" (the rulebook: in every ticker), so a break by an AI
+ *      seat reads "Ossa · AI broke a promise …" there too. The news item is a string today: finding F-11.
+ * MarketTiles is copied unchanged.
  */
 
 export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
@@ -66,7 +68,7 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
                 <MarketTiles game={game} />
               </div>
               <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" data-fit-gives>
-                <News news={game.news} />
+                <News news={game.news} game={game} />
               </div>
               <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
                 {readyRows(game.players, connected).map((row) => {
@@ -136,12 +138,13 @@ function MarketTiles({ game }: { game: MuleView }) {
   );
 }
 
-function News({ news }: { news: string[] }) {
+function News({ news, game }: { news: string[]; game: MuleView }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
       {news.map((n, i) => (
         <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
-          {n}
+          {/* CHANGE 4: by name, as a stand-in; the build marks the breaker's id (F-11). */}
+          <Marked text={n} view={game} />
         </li>
       ))}
     </ul>
