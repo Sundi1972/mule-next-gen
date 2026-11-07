@@ -6,7 +6,8 @@ import { dotsOf } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../../server/src/mule-game';
 import { fakeContext, walkers } from '../../server/test/fake-context';
-import { bestLine, bestWords, droneReport, nextDroneWords, ScanReport } from '../src/phone/plotInfo';
+import { bestWords } from '../src/phone/arcade/plots';
+import { bestLine, droneReport, MyPlotsList, nextDroneWords, PlotRow, ScanReport } from '../src/phone/plotInfo';
 
 /**
  * The Drone report is drawn from the view (the seat's droneOrder and its tiles' ground), never from the tap on Scan, so
@@ -81,5 +82,29 @@ describe('C2: "best for" never names a good the plot draws no dot for', () => {
   it('one dot is enough to name it: water 0 is 1 dot, "best for Water"', () => {
     expect(bestWords(dotsOf({ ...POOR, water: 0 }))).toBe('best for Water');
     expect(bestLine({ ...POOR, crystite: 2 })).toBe('best for Crystite');
+  });
+});
+
+describe("My plots' list, shared by planning and the walking screen", () => {
+  const PLOT = { x: 0, y: 0, terrain: 'plains', peaks: 0, owner: 's1', outfit: null, pollution: 0, filter: false } as const;
+  const list = (props: Partial<Parameters<typeof MyPlotsList>[0]>) => renderToStaticMarkup(createElement(MyPlotsList, { tiles: [], note: 'the clock keeps running', ...props })).replaceAll('<!-- -->', '');
+
+  it('says "My plots · n" with its note, then a row per plot', () => {
+    const html = list({ tiles: [PLOT, { ...PLOT, x: 1 }] });
+    expect(html.replace(/<[^>]+>/g, '')).toContain('My plots · 2the clock keeps running');
+    expect(html).toContain('data-testid="plot-row-0-0"');
+    expect(html).toContain('data-testid="plot-row-1-0"');
+  });
+
+  it('with no plots says how to get a first', () => {
+    expect(list({})).toContain('No plots yet: claim one in the land grant.');
+  });
+
+  it('a row with nothing to pick is no toggle; with onPick it is a button saying whether it is picked', () => {
+    const still = renderToStaticMarkup(createElement(PlotRow, { t: PLOT }));
+    expect(still).toMatch(/^<div[^>]*data-testid="plot-row-0-0"/);
+    expect(still).not.toContain('aria-pressed');
+    const picked = renderToStaticMarkup(createElement(PlotRow, { t: PLOT, selected: true, onPick: () => {} }));
+    expect(picked).toMatch(/^<button[^>]*aria-pressed="true"/);
   });
 });

@@ -100,7 +100,8 @@ export function MapStage({ data, width, height, density, interactive = false, na
       {/* Offset by top, not a transform: a transform would make the layer its own stacking context, and the colonists
           could then never rise above the screen's status bar. */}
       <div ref={layer} className="absolute left-0" style={{ width, height: mapH, top: -(mapH - viewH) / 2 }}>
-        <MemoMap width={view.width} height={view.height} tiles={tiles} density={density === 'wide' ? 'tv' : density} hideGround selected={selected} className="w-full" />
+        {/* Your own screen shows your geology (its dots and gems; the server sends ground only to its player); the TV's never. */}
+        <MemoMap width={view.width} height={view.height} tiles={tiles} density={density === 'wide' ? 'tv' : density} hideGround={!interactive} selected={selected} className="w-full" />
         {/* The store's two doors, on its left and right faces: the only way in. */}
         {(['L', 'R'] as const).map((side) => (
           <span

@@ -26,7 +26,6 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   donate: true,
   payStrike: true,
   repair: true,
-  setSiteBid: true,
   propose: true,
   voteLaw: true,
 };
