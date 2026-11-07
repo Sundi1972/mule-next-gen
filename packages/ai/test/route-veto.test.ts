@@ -106,6 +106,13 @@ describe("routeVeto: why the hands refuse a route MULE before it is bought, or n
     expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBe(`lake: no shore reaches plot ${plot}`);
   });
 
+  it("on the floor, a lake plot a shore reaches (seed 4, plot 24) is played while the MULE the seat leads, fitted, has bolted", () => {
+    const state = development(4);
+    const plot = own(state, 9, 1);
+    Object.assign(state.players.find((p) => p.id === ME)!, { carriedMule: 'water', muleBolted: true });
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
+  });
+
   it('where the game taps, the same lake plot is played: a tap installs on any lake', () => {
     const state = development(4);
     const plot = own(state, 10, 0);
