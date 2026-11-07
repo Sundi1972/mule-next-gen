@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
+import { BOARD_TYPE, labelLines, spreadLabels, tickCovered } from './board-layout';
 import { Creature } from './Creature';
-import { useSeatSpecies } from './species';
+import { boardGait, GAIT, type BoardTrack, type Motion } from './motion/gait';
+import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
 
 export interface BoardWalker {
@@ -13,6 +15,12 @@ export interface BoardWalker {
   /** Unrounded, for drawing. */
   at: number;
   done?: boolean;
+  /** Units held of the good up now, live as units trade. */
+  units?: number;
+  /** Units over (or, negative, under) what they need this month. */
+  surplus?: number;
+  /** A seller stopped at what they must hold (RULE-4): the KEEPS mark over the creature, with this many. */
+  keeps?: number;
 }
 
 /** Units changing hands: between two players, or with a house ('store', 'ship'). */
@@ -21,6 +29,18 @@ export interface BoardDeal {
   seller: string;
   price: number;
   units: number;
+  /** How fast its units move now: 0 at its first unit, 1 at the top speed. Without it, no speed is shown. */
+  speed?: number;
+}
+
+/** A deal's speed on the board: one chevron per step, so the table sees units go faster and faster. */
+export const SPEED_STEPS = 4;
+export const speedStep = (speed: number) => Math.min(SPEED_STEPS, 1 + Math.floor(Math.max(0, speed) * SPEED_STEPS));
+
+/** Which of the two moving lines to draw: the lowest ask and the highest bid. */
+export interface BoardMarks {
+  ask: boolean;
+  bid: boolean;
 }
 
 const HOUSES: Record<string, string> = { store: 'STORE', ship: 'SHIP' };
@@ -35,6 +55,49 @@ function ticks(lo: number, hi: number): number[] {
   return out;
 }
 
+/** The lowest ask among sellers with units to sell, and the highest bid; null when nobody is on that side. See RULE-1. */
+export function bestPrices(walkers: BoardWalker[]): { ask: BoardWalker | null; bid: BoardWalker | null } {
+  // A caller that doesn't pass units leaves them undefined: that seller still counts.
+  const sellers = walkers.filter((w) => w.side === 'seller' && (w.units === undefined || w.units > 0));
+  const buyers = walkers.filter((w) => w.side === 'buyer');
+  const ask = sellers.reduce<BoardWalker | null>((best, w) => (best === null || w.at < best.at ? w : best), null);
+  const bid = buyers.reduce<BoardWalker | null>((best, w) => (best === null || w.at > best.at ? w : best), null);
+  return { ask, bid };
+}
+
+/**
+ * The closest pair that could trade, as the TV's readout measures its gap: a player's lowest ask against the best bid
+ * (a buyer's, the ship's or the store's), or the best ask (a seller's, or the store's while it has stock) against a
+ * player's highest bid, whichever stands closer. The ship and the store crossing each other is no pair: every deal has
+ * a player on one side. Null on both when no player's price faces one.
+ */
+export function bestOffers({
+  walkers,
+  storeSells,
+  storeStock,
+  storeBuys,
+  shipPays,
+}: {
+  walkers: BoardWalker[];
+  storeSells: number | null;
+  storeStock?: number | undefined;
+  storeBuys: number | null;
+  shipPays: number | null;
+}): { ask: number | null; bid: number | null } {
+  const player = bestPrices(walkers);
+  const playerAsk = player.ask?.price ?? null;
+  const playerBid = player.bid?.price ?? null;
+  const asks = [playerAsk, storeStock === undefined || storeStock > 0 ? storeSells : null].filter((p): p is number => p !== null);
+  const bids = [playerBid, shipPays, storeBuys].filter((p): p is number => p !== null);
+  const bestAsk = asks.length > 0 ? Math.min(...asks) : null;
+  const bestBid = bids.length > 0 ? Math.max(...bids) : null;
+  const pairs = [
+    ...(playerAsk !== null && bestBid !== null ? [{ ask: playerAsk, bid: bestBid }] : []),
+    ...(bestAsk !== null && playerBid !== null ? [{ ask: bestAsk, bid: playerBid }] : []),
+  ];
+  return pairs.sort((a, b) => a.ask - a.bid - (b.ask - b.bid))[0] ?? { ask: null, bid: null };
+}
+
 /**
  * The walk auction's board, as in the original M.U.L.E.: a vertical price
  * axis, one column per player, everyone drawn as their species creature in
@@ -43,7 +106,9 @@ function ticks(lo: number, hi: number): number[] {
  * store's selling price (near the top), its buying price (near the bottom)
  * and the export ship's price. Units changing hands show as a glowing bar
  * with a counter. With `onDir`, dragging on the board walks your creature
- * toward your finger.
+ * toward your finger. With `marks`, the lowest ask and highest bid are drawn
+ * as moving lines with the gap between them; walkers with `units` show them
+ * under the creature; `storeStock` puts the store's stock on its selling line.
  */
 export function WalkBoard({
   lo,
@@ -53,10 +118,16 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
-  stage,
+  shipCaption,
+  lines: extra = [],
+  marks,
+  storeStock,
   meId,
   onDir,
   size = 'phone',
+  wrapCreature,
+  zones = null,
+  soldOutAt = null,
   className,
 }: {
   lo: number;
@@ -66,19 +137,38 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
-  stage: 'declare' | 'walk';
+  /** Words on the ship's line, just under it: "The ship buys Crystite at 120". */
+  shipCaption?: string;
+  /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
+  lines?: { id: string; label: string; price: number }[];
+  /** The lowest-ask and highest-bid lines, drawn during the walk while no units change hands. */
+  marks?: BoardMarks;
+  /** The store's stock of this good: shown on its selling line, or as SOLD OUT when 0 and it sells none. */
+  storeStock?: number;
   meId?: string;
   onDir?: (dir: -1 | 0 | 1) => void;
   size?: 'phone' | 'tv';
+  /** Wraps each walker's creature, such as in a chat bubble's anchor. */
+  wrapCreature?: CreatureWrap;
+  /**
+   * The rest zones, where nobody trades: sellers wait above the store's selling line (or `sellersBottom` while none is
+   * drawn), buyers below `buyersTop`, the buying line as it stood when the good came up. Drawn as hatched bands.
+   */
+  zones?: { buyersTop: number; sellersBottom: number } | null;
+  /** The store is sold out and its selling line stands here: the highest bid when `bid`, else its old price. */
+  soldOutAt?: { price: number; bid: boolean } | null;
   className?: string;
 }) {
   const tv = size === 'tv';
+  const type = BOARD_TYPE[size];
   const span = Math.max(1, hi - lo);
   const pct = (p: number) => Math.min(100, Math.max(0, ((hi - p) / span) * 100));
   const area = useRef<HTMLDivElement>(null);
   const dir = useRef<-1 | 0 | 1>(0);
   const [drag, setDrag] = useState<number | null>(null);
   const me = walkers.find((w) => w.id === meId);
+  const room = useHeight(area, type.room);
+  const px = (p: number) => (pct(p) / 100) * room;
 
   // While dragging, walk toward the finger and stop when there.
   useEffect(() => {
@@ -97,12 +187,46 @@ export function WalkBoard({
   };
 
   const lines = [
-    { key: 'sells', price: storeSells, who: 'STORE', what: 'SELLS', tone: 'border-rise text-rise' },
-    { key: 'buys', price: storeBuys, who: 'STORE', what: 'BUYS', tone: 'border-fall text-fall' },
-    { key: 'ship', price: shipPays, who: 'SHIP', what: 'PAYS', tone: 'border-warn text-warn' },
+    { key: 'sells', price: storeSells, who: 'STORE', what: 'SELLS', note: storeStock === undefined ? '' : ` · ${storeStock} LEFT`, tone: 'border-rise text-rise' },
+    // Sold out, the selling line follows the highest bid, so a seller sees what a walk down would fetch.
+    soldOutAt?.bid
+      ? { key: 'follows', price: soldOutAt.price, who: 'SOLD OUT', what: 'HIGHEST BID', note: ' ↑', tone: 'border-rise/70 text-rise' }
+      : { key: 'follows', price: soldOutAt?.price ?? null, who: 'STORE', what: 'SOLD OUT', note: '', tone: 'border-rise/70 text-rise' },
+    { key: 'buys', price: storeBuys, who: 'STORE', what: 'BUYS', note: '', tone: 'border-fall text-fall' },
+    { key: 'ship', price: shipPays, who: 'SHIP', what: 'PAYS', note: '', tone: 'border-warn text-warn' },
+    ...extra.map((l) => ({ key: `line-${l.id}`, price: l.price, who: l.label, what: '', note: '', tone: 'border-holo text-holo' })),
   ].filter((l): l is typeof l & { price: number } => l.price !== null);
+  const LABEL_GAP = 2;
+  const labelText = (l: (typeof lines)[number]) => (l.what ? `${l.what} ${l.price}${l.note}` : String(l.price));
+  const labelSize = lines.map((l) => (labelLines(l.who, type.perLine) + labelLines(labelText(l), type.perLine)) * type.lineBox);
+  const labelAt = spreadLabels(
+    lines.map((l, i) => ({ at: px(l.price), size: labelSize[i]! })),
+    LABEL_GAP,
+  );
+  /** Each line label's box in px down the board: centred on labelAt, as tall as its two rows. */
+  const labelBox = labelAt.map((at, i) => ({ top: at - labelSize[i]! / 2, bottom: at + labelSize[i]! / 2 }));
   // The lines' labels sit in a gutter on the right, clear of the creatures.
   const gutter = tv ? 104 : 56;
+  /** Where the sellers' zone ends: the store's selling line, or while it is sold out its line, else S. */
+  const sellersEdge = (z: { sellersBottom: number }) => storeSells ?? soldOutAt?.price ?? z.sellersBottom;
+  /**
+   * The sellers' band's words, longest first: a ship paying inside the zone still buys there, the short form fitting a
+   * phone's gutter (WS6). A band too thin for the first form takes the next that fits (RestBand).
+   */
+  const sellersWords = (z: { sellersBottom: number }) =>
+    shipPays !== null && shipPays > sellersEdge(z)
+      ? [...(tv ? ['SELLERS WAIT · ONLY THE SHIP BUYS'] : []), 'SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT']
+      : ['SELLERS WAIT · NO TRADE', 'SELLERS WAIT'];
+  /**
+   * The room for a band's words, in px: from the side they sit on (the band's top for sellers, its bottom for buyers) to
+   * the nearest line label reaching into the band, which is drawn over them, or else the band's far edge; less the inset.
+   */
+  const wordsRoom = (from: number, to: number, side: 'top' | 'bottom') => {
+    const [top, bottom] = [(from / 100) * room, (to / 100) * room];
+    const inside = labelBox.filter((b) => b.top < bottom && b.bottom > top);
+    const clear = side === 'top' ? Math.min(bottom, ...inside.map((b) => b.top)) - top : bottom - Math.max(top, ...inside.map((b) => b.bottom));
+    return clear - BAND_INSET;
+  };
 
   const cols = walkers.length;
   const colOf = new Map(walkers.map((w, i) => [w.id, i]));
@@ -110,6 +234,26 @@ export function WalkBoard({
   /** A share of the players' columns as a CSS length: the columns stop at the gutter. */
   const x = (share: number) => `calc(${share} * (100% - ${gutter}px))`;
   const creature = tv ? 64 : 34;
+
+  // While units change hands the trade bar is where the two lines met, so they give way to it.
+  const best = bestPrices(walkers);
+  const moving = deals.length === 0;
+  const askLine = moving && marks?.ask ? best.ask : null;
+  const bidLine = moving && marks?.bid ? best.bid : null;
+  // The gap counts only a pair with a player on one side, as the TV's readout does, so the table sees one number.
+  const offers = bestOffers({ walkers, storeSells, storeStock, storeBuys, shipPays });
+  const gap = moving && marks?.ask && marks.bid && offers.ask !== null && offers.bid !== null ? offers.ask - offers.bid : 0;
+  // Midway between the two prices; when they are too close for the chip to sit between them, just above the ask.
+  const CHIP_CLEAR = 4;
+  const chipAt =
+    offers.ask === null || offers.bid === null
+      ? 0
+      : px(offers.bid) - px(offers.ask) >= type.chipBox + 2 * CHIP_CLEAR
+        ? (px(offers.ask) + px(offers.bid)) / 2
+        : px(offers.ask) - CHIP_CLEAR - type.chipBox / 2;
+  // A moving line's price tag covers the axis number it sits on.
+  const tags = [askLine, bidLine].flatMap((l) => (l ? [px(l.at)] : []));
+  const axisTicks = ticks(lo, hi).filter((v) => !tickCovered(px(v), tags, type.tickReach));
 
   return (
     <div
@@ -130,28 +274,18 @@ export function WalkBoard({
     >
       {/* Price axis */}
       <div className={cx('relative shrink-0 border-r border-holo-faint', tv ? 'w-16' : 'w-9')}>
-        <div className={cx('absolute inset-x-0', tv ? 'bottom-12 top-12' : 'bottom-7 top-6')}>
-          {ticks(lo, hi).map((v) => (
+        <div className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
+          {axisTicks.map((v) => (
             <span key={v} data-num className={cx('absolute right-1.5 -translate-y-1/2 font-mono text-ink-3', tv ? 'text-base' : 'text-[10px]')} style={{ top: `${pct(v)}%` }}>
               {v}
             </span>
           ))}
+          {askLine && <AxisTag top={pct(askLine.at)} price={askLine.price} tone="seller" tv={tv} testid="tag-ask" />}
+          {bidLine && <AxisTag top={pct(bidLine.at)} price={bidLine.price} tone="buyer" tv={tv} testid="tag-bid" />}
         </div>
       </div>
 
       <div className="relative min-w-0 flex-1">
-        {stage === 'declare' && (
-          <>
-            <div className={cx('absolute inset-x-0 top-0 bg-rise/5', tv ? 'h-24' : 'h-12')} />
-            <div className={cx('absolute inset-x-0 bottom-0 bg-fall/5', tv ? 'h-28' : 'h-14')} />
-            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-rise/80', tv ? 'top-28 text-xl' : 'top-14 text-[11px]')}>
-              ▼ SELLERS START AT THE TOP AND WALK DOWN TO ASK LESS
-            </span>
-            <span className={cx('absolute inset-x-0 text-center font-display font-semibold text-fall/80', tv ? 'bottom-32 text-xl' : 'bottom-16 text-[11px]')}>
-              ▲ BUYERS START AT THE BOTTOM AND WALK UP TO BID MORE
-            </span>
-          </>
-        )}
         {/* Column guides */}
         <div className="absolute inset-y-0 left-0 flex" style={{ right: gutter }}>
           {walkers.map((w) => (
@@ -159,21 +293,65 @@ export function WalkBoard({
           ))}
         </div>
 
-        <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-12 top-12' : 'bottom-7 top-6')}>
-          {lines.map((l) => (
-            <div key={l.key} className={cx('absolute inset-x-0 border-t-2 border-dashed', l.tone)} style={{ top: `${pct(l.price)}%` }}>
+        <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
+          {/* The rest zones. Nobody trades in them; their edge is where trading begins, drawn solid. */}
+          {zones && (
+            <RestBand from={0} to={pct(sellersEdge(zones))} edge="bottom" tone="seller" words={fitWords(sellersWords(zones), wordsRoom(0, pct(sellersEdge(zones)), 'top'), type)} tv={tv} gutter={gutter} />
+          )}
+          {zones && (
+            <RestBand from={pct(zones.buyersTop)} to={100} edge="top" tone="buyer" words={fitWords(['BUYERS WAIT · NO TRADE', 'BUYERS WAIT'], wordsRoom(pct(zones.buyersTop), 100, 'bottom'), type)} tv={tv} gutter={gutter} />
+          )}
+          {storeStock === 0 && storeSells === null && soldOutAt === null && (
+            <span
+              data-num
+              data-testid="store-sold-out"
+              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[10px]')}
+              style={{ width: gutter }}
+            >
+              <span className="block font-normal opacity-80">STORE</span>SOLD OUT
+            </span>
+          )}
+          {lines.map((l, i) => (
+            <div key={l.key} className={cx('absolute inset-x-0 border-t border-dashed opacity-80', l.tone)} style={{ top: `${pct(l.price)}%` }} data-testid={`limit-${l.key}`}>
               <span
                 data-num
-                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[9px]')}
-                style={{ width: gutter }}
+                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[10px]')}
+                style={{ width: gutter, top: labelAt[i]! - px(l.price) }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
-                <span>
-                  {l.what} {l.price}
-                </span>
+                <span>{labelText(l)}</span>
               </span>
             </div>
           ))}
+          {shipCaption && shipPays !== null && (
+            <span
+              className={cx(
+                // Under the line, against the gutter: sellers walk down from above, so the room under it is clear.
+                'pointer-events-none absolute z-20 whitespace-nowrap rounded-chip border border-warn/70 bg-void/90 font-display font-semibold text-warn',
+                tv ? 'mt-1.5 px-2.5 py-0.5 text-xl' : 'mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
+              )}
+              style={{ top: `${pct(shipPays)}%`, right: `calc(${gutter}px + ${tv ? 0.5 : 0.25}rem)` }}
+              data-testid="ship-caption"
+            >
+              {shipCaption}
+            </span>
+          )}
+
+          {askLine && <MovingLine testid="line-ask" top={pct(askLine.at)} width={x(1)} tone="seller" />}
+          {bidLine && <MovingLine testid="line-bid" top={pct(bidLine.at)} width={x(1)} tone="buyer" />}
+          {gap > 0 && (
+            <span
+              data-num
+              data-testid="gap-label"
+              className={cx(
+                'absolute z-10 -translate-y-1/2 whitespace-nowrap rounded-chip border border-holo-line bg-void px-1.5 font-mono font-bold text-ink',
+                tv ? 'text-lg' : 'text-[10px]',
+              )}
+              style={{ top: chipAt, left: `calc(${x(1)} - ${tv ? 112 : 64}px)` }}
+            >
+              {gap} APART
+            </span>
+          )}
 
           {deals.map((d) => {
             const players = [d.buyer, d.seller].filter((id) => colOf.has(id));
@@ -183,19 +361,39 @@ export function WalkBoard({
             const right = house ? 1 : Math.max(...xs);
             // The counter sits under the trading creature, or between the two players trading.
             const at = house ? left : (left + right) / 2;
+            // Below the trading walker's stock caption ("3 (+1)"), which sits right under the creature, never over it; near
+            // the board's foot there is no room under it before the names row, so it sits above the creatures instead.
+            const CAPTION_CLEAR = tv ? 28 : 18;
+            const above = pct(d.price) > 75;
             return (
               <div key={`${d.buyer}-${d.seller}`} data-testid="deal">
+                {/* The bar pulses faster as the deal speeds up: 1.2 s a beat at its first unit, 0.25 s at the top speed. */}
                 <div
                   className="absolute h-1.5 -translate-y-1/2 animate-pulse rounded-full bg-holo shadow-glow"
-                  style={{ top: `${pct(d.price)}%`, left: x(left), width: house ? `calc(100% - ${x(left)})` : x(Math.max(0.02, right - left)) }}
+                  style={{
+                    top: `${pct(d.price)}%`,
+                    left: x(left),
+                    width: house ? `calc(100% - ${x(left)})` : x(Math.max(0.02, right - left)),
+                    ...(d.speed !== undefined ? { animationDuration: `${1.2 - Math.min(1, Math.max(0, d.speed)) * 0.95}s` } : {}),
+                  }}
                 />
                 <span
                   data-num
-                  className={cx('absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-chip border border-holo bg-void px-1.5 font-mono font-bold text-holo', tv ? 'text-lg' : 'text-[10px]')}
-                  style={{ top: `calc(${pct(d.price)}% + ${creature / 2 + 2}px)`, left: x(at) }}
+                  className={cx('absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-chip border border-holo bg-void px-1.5 font-mono font-bold text-holo', tv ? 'text-lg' : 'text-[10px]', above && '-translate-y-full')}
+                  style={{ top: `calc(${pct(d.price)}% ${above ? '-' : '+'} ${above ? creature / 2 + 4 : creature / 2 + CAPTION_CLEAR}px)`, left: x(at) }}
+                  data-place={above ? 'above' : 'below'}
                 >
                   ×{d.units} @ {d.price}
                   {house ? ` · ${house}` : ''}
+                  {d.speed !== undefined && (
+                    <span className="ml-1 tracking-[-0.15em]" aria-label={`speed ${speedStep(d.speed)} of ${SPEED_STEPS}`} data-testid="deal-speed">
+                      {Array.from({ length: SPEED_STEPS }, (_, k) => (
+                        <span key={k} className={k < speedStep(d.speed!) ? 'text-holo' : 'text-ink-3/40'}>
+                          ›
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
               </div>
             );
@@ -203,13 +401,23 @@ export function WalkBoard({
 
           {walkers.map((w) =>
             w.side === 'pass' ? null : (
-              <Walker key={w.id} w={w} left={x(centre(w.id))} top={pct(w.at)} size={creature} tv={tv} me={w.id === meId} trading={deals.some((d) => d.buyer === w.id || d.seller === w.id)} />
+              <Walker
+                key={w.id}
+                w={w}
+                left={x(centre(w.id))}
+                top={pct(w.at)}
+                size={creature}
+                tv={tv}
+                me={w.id === meId}
+                trading={deals.some((d) => d.buyer === w.id || d.seller === w.id)}
+                wrap={wrapCreature}
+              />
             ),
           )}
         </div>
 
         {/* Names along the bottom; a player who passed sits there, off the board. */}
-        <div className={cx('absolute inset-x-0 bottom-0 flex border-t border-holo-faint bg-void/90', tv ? 'h-10' : 'h-6')} style={{ paddingRight: gutter }}>
+        <div className={cx('absolute inset-x-0 bottom-0 flex border-t border-holo-faint bg-void/90', tv ? 'h-10' : 'h-6')} style={{ paddingRight: gutter }} data-testid="walk-names">
           {walkers.map((w) => (
             <span
               key={w.id}
@@ -227,30 +435,170 @@ export function WalkBoard({
   );
 }
 
-function Walker({ w, left, top, size, tv, me, trading }: { w: BoardWalker; left: string; top: number; size: number; tv: boolean; me: boolean; trading: boolean }) {
-  const species = useSeatSpecies(w.slot);
-  const seller = w.side === 'seller';
+/** The element's height in px, kept current as it resizes; `fallback` until it is first measured. */
+function useHeight(ref: RefObject<HTMLElement | null>, fallback: number): number {
+  const [height, setHeight] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const measure = () => el.clientHeight > 0 && setHeight(el.clientHeight);
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [ref]);
+  return height;
+}
+
+/** How far a rest band's words sit in from its edge (top-0.5 / bottom-0.5), in px. */
+const BAND_INSET = 2;
+
+/**
+ * The first of `forms` whose gutter lines fit in `height` px, by the board's own label lines (BOARD_TYPE, labelLines),
+ * so a band's words stay clear of the line labels and its edge; null when none fits.
+ */
+function fitWords(forms: string[], height: number, type: { lineBox: number; perLine: number }): string | null {
+  const lines = (form: string) => form.split(' · ').reduce((n, part) => n + labelLines(part, type.perLine), 0);
+  return forms.find((form) => lines(form) * type.lineBox <= height) ?? null;
+}
+
+/** A rest zone, hatched in its side's colour, with a solid edge where trading begins; its words sit in the gutter. */
+function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; to: number; edge: 'top' | 'bottom'; tone: 'seller' | 'buyer'; words: string | null; tv: boolean; gutter: number }) {
+  const colour = tone === 'seller' ? 'var(--color-rise)' : 'var(--color-fall)';
   return (
     <div
-      className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 transition-[top] duration-100 ease-linear"
-      style={{ left, top: `${top}%` }}
-      data-testid={`walker-${w.id}`}
-      data-side={w.side}
+      aria-hidden
+      className={cx('pointer-events-none absolute left-0 transition-[top,height] duration-100 ease-linear', edge === 'bottom' ? 'border-b-2' : 'border-t-2', tone === 'seller' ? 'border-rise' : 'border-fall')}
+      style={{
+        top: `${from}%`,
+        height: `${Math.max(0, to - from)}%`,
+        right: gutter,
+        background: `repeating-linear-gradient(135deg, color-mix(in oklab, ${colour} 13%, transparent) 0 6px, transparent 6px 14px)`,
+      }}
+      data-testid={`rest-${tone}`}
     >
-      <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
-        <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} />
-      </span>
+      {/* In the gutter with the store's labels, at the band's far end: never under a creature. */}
       <span
-        data-num
         className={cx(
-          'flex flex-col items-start rounded-control border bg-void/90 px-1 font-mono font-bold leading-none',
-          tv ? 'py-1 text-xl' : 'py-0.5 text-[11px]',
-          seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
+          'absolute flex flex-col items-end px-1 text-right font-mono font-bold leading-tight opacity-80',
+          edge === 'bottom' ? 'top-0.5' : 'bottom-0.5',
+          tv ? 'text-sm' : 'text-[10px]',
+          tone === 'seller' ? 'text-rise' : 'text-fall',
         )}
+        style={{ left: '100%', width: gutter }}
       >
-        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>{seller ? 'ASK' : 'BID'}</span>
-        {w.price}
+        {words?.split(' · ').map((w) => (
+          <span key={w}>{w}</span>
+        ))}
       </span>
+    </div>
+  );
+}
+
+/** One of the two moving lines, across the players' columns. */
+function MovingLine({ testid, top, width, tone }: { testid: string; top: number; width: string; tone: 'seller' | 'buyer' }) {
+  return (
+    <>
+      {/* A wider transparent box carries the testid, so a 3 px line can be picked and measured. */}
+      <div className="absolute left-0 h-3.5 -translate-y-1/2" style={{ top: `${top}%`, width }} data-testid={testid} />
+      <div
+        aria-hidden
+        className={cx('pointer-events-none absolute left-0 border-t-[3px] border-dashed transition-[top] duration-100 ease-linear', tone === 'seller' ? 'border-rise' : 'border-fall')}
+        style={{ top: `${top}%`, width }}
+      />
+    </>
+  );
+}
+
+/** A moving line's price on the axis, in the line's colour. */
+function AxisTag({ top, price, tone, tv, testid }: { top: number; price: number; tone: 'seller' | 'buyer'; tv: boolean; testid: string }) {
+  return (
+    <span
+      data-num
+      data-testid={testid}
+      className={cx(
+        'absolute right-0.5 z-10 -translate-y-1/2 rounded-sm px-0.5 font-mono font-bold leading-tight text-on-holo transition-[top] duration-100 ease-linear',
+        tv ? 'text-base' : 'text-[10px]',
+        tone === 'seller' ? 'bg-rise' : 'bg-fall',
+      )}
+      style={{ top: `${top}%` }}
+    >
+      {price}
+    </span>
+  );
+}
+
+/** Walks while the walker's price moves, stands while it holds (boardGait); wakes once to stand when the price stops. */
+function useBoardMotion(at: number): Motion {
+  const track = useRef<BoardTrack | null>(null);
+  const [, wake] = useState(0);
+  const now = performance.now();
+  const { track: next, motion } = boardGait(track.current, at, now);
+  useEffect(() => {
+    track.current = next;
+    if (motion !== 'walk' || next.movedAt === null) return;
+    const t = setTimeout(() => wake((n) => n + 1), GAIT.boardHoldMs - (now - next.movedAt) + 1);
+    return () => clearTimeout(t);
+  });
+  return motion;
+}
+
+/**
+ * One walker: a full-height column at its x, moved to its price by a transform (the compositor glides it, no layout),
+ * carrying the creature, its units and its price. Up and down have no facing, so the creature faces right.
+ */
+function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w: BoardWalker; left: string; top: number; size: number; tv: boolean; me: boolean; trading: boolean; wrap?: CreatureWrap | undefined }) {
+  const species = useSeatSpecies(w.slot);
+  const seller = w.side === 'seller';
+  const motion = useBoardMotion(w.at);
+  return (
+    <div className="absolute inset-y-0 w-0 transition-transform duration-100 ease-linear" style={{ left, transform: `translateY(${top}%)` }}>
+      <div
+        className="absolute left-0 top-0 flex w-max -translate-x-1/2 -translate-y-1/2 items-center gap-1"
+        data-testid={`walker-${w.id}`}
+        data-side={w.side}
+      >
+        <span className="relative flex flex-col items-center">
+          {w.keeps !== undefined && (
+            <span
+              data-num
+              data-testid={`keeps-${w.id}`}
+              className={cx('absolute bottom-full mb-1 whitespace-nowrap rounded-chip border border-ok/70 bg-void/90 px-1 font-mono font-bold leading-tight text-ok', tv ? 'text-base' : 'text-[10px]')}
+            >
+              {`KEEPS ${w.keeps}`}
+            </span>
+          )}
+          {wrap(
+            w.id,
+            <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
+              <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} motion={motion} cycle={motion === 'walk' ? GAIT.fullCycle : GAIT.idleCycle} shadow={false} />
+            </span>,
+          )}
+          {w.units !== undefined && (
+            <span
+              data-num
+              data-testid={`units-${w.id}`}
+              className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[10px]')}
+            >
+              {w.units}
+              {w.surplus !== undefined && (
+                <span className={cx('font-normal', w.surplus < 0 ? 'text-alert' : w.surplus > 0 ? 'text-ok' : 'text-ink-3')}> ({w.surplus > 0 ? '+' : ''}{w.surplus})</span>
+              )}
+            </span>
+          )}
+        </span>
+        <span
+          data-num
+          className={cx(
+            'flex flex-col items-start rounded-control border bg-void/90 px-1 font-mono font-bold leading-none',
+            tv ? 'py-1 text-xl' : 'py-0.5 text-[11px]',
+            seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
+          )}
+        >
+          <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[10px]')}>{seller ? 'ASK' : 'BID'}</span>
+          {w.price}
+        </span>
+      </div>
     </div>
   );
 }

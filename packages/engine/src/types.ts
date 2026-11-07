@@ -70,6 +70,29 @@ export interface Tile {
   filter: boolean;
   /** Months in a row this plot's current outfit has run. Factories gain from experience. */
   runMonths: number;
+  /** A special field on this plot, placed with the map or, for a meteor crater, formed in play; absent on most plots. */
+  special?: SpecialField;
+}
+
+export type SpecialKind = 'ruins' | 'crystalCavern' | 'geyser' | 'oasis' | 'relic' | 'meteorCrater';
+
+export interface SpecialField {
+  kind: SpecialKind;
+  /** Ruins only: the good its salvage pays, drawn when the map is made. */
+  salvage?: 'alloy' | 'electronics';
+}
+
+/** Where a MULE was taken off a plot, and the outfit and run it had there. Never changed in place (cloneForSim shares it). */
+export interface TakenMule {
+  readonly x: number;
+  readonly y: number;
+  readonly outfit: Outfit;
+  readonly runMonths: number;
+  /**
+   * It came off by a swap (AM-35): another MULE stands on its plot now, so if the turn ends with it still carried it
+   * goes to the corral, not back to the plot.
+   */
+  readonly swapped?: true;
 }
 
 export interface Player {
@@ -81,26 +104,53 @@ export interface Player {
   stock: Stock;
   /** MULEs bought but not yet installed, with their outfit if any. */
   carriedMule: Outfit | 'empty' | null;
+  /**
+   * The carried MULE bolted in a lost wolf fight (arcade RULE-4): still this player's, but it outfits and installs
+   * again only once caught. Absent means false.
+   */
+  muleBolted?: boolean;
+  /**
+   * The plot the carried MULE was taken off this turn (arcade AM-2), with the outfit and run it had there: if the turn
+   * ends with it still carried, it goes back. Absent when the carried MULE was not taken off a plot.
+   */
+  takenMule?: TakenMule;
+  /**
+   * Each plot a MULE was taken off this turn, with the outfit and run it had before the first take: a MULE with that
+   * outfit installed there again, by any route, gets the run back (AM-2, review F3). Cleared when development ends.
+   */
+  takenRuns?: readonly TakenMule[];
   reputation: number;
   /** Plots claimed in the current land grant. */
   claimsThisGrant: number;
+  /** The player pressed Done in the current land grant ("Done with land"): they claim no more this month. */
+  doneWithLand: boolean;
   /** True when the player started development short of Food: less time to build. */
   hungry: boolean;
   /** Seconds of development time this month, set when development starts. */
   devSeconds: number;
   /** True when sickness cost development time this month (no Medicine to cure it). */
   sick: boolean;
+  /** True when an epidemic made the player sick: next development they are sick again unless they then hold a Medicine. */
+  sickNext: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
+  /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
+  installedThisTurn: boolean;
   /** Indices of tiles whose ground this player has analysed. Private to them. */
   analysed: number[];
-  /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
+  /** Free or listed plots this planning's geo drone flew over, analysed at once; it marks the drone used until the land grant clears it. */
   droneOrder: number[];
+  /**
+   * The plots this month's drone surveyed, set when it is sent and kept until the next month opens, so the player's
+   * phone can say "Your drone: …" while one is lit. Private to them, like analysed.
+   */
+  droneFound: number[];
 }
 
 export type Phase =
   | 'planning'
   | 'landGrant'
+  | 'landAuction'
   | 'development'
   | 'production'
   | 'auction'
@@ -122,6 +172,26 @@ export interface Store {
   refPrice: Stock;
   /** Off-world price for each good: what the export ship pays for its first unit. */
   offWorld: Stock;
+  /**
+   * What each good's walk this month taught the store, read when it next posts prices. Optional, so records saved
+   * before it existed still load.
+   */
+  lastWalk?: Partial<Record<Good, WalkLesson>>;
+  /** The band each good was posted in this month, which sets its spread; a good without one is normal, so older records load. */
+  band?: Partial<Record<Good, PriceBand>>;
+}
+
+/** How short the colony is of a good when its price is posted (pricing RULE-6); off-world is a good only export buyers want. */
+export type PriceBand = 'offWorld' | 'normal' | 'tight' | 'short' | 'severe';
+
+/** One good's walk, as the store's next prices read it (pricing spec §3). */
+export interface WalkLesson {
+  /** The highest price paid between players while the store had none for sale, or null. */
+  soldOutHigh: number | null;
+  /** The highest price a unit traded at between players, or null when none traded. */
+  highTrade: number | null;
+  /** True when the store wanted the good as it came up and wanted no more when its walk finished. */
+  dryBudget: boolean;
 }
 
 /** The colony government's money, filled only by taxes, fines and donations. */
@@ -142,7 +212,7 @@ export interface ExportShip {
   bought: Partial<Stock>;
 }
 
-/** The land grant: free plots light up one at a time, in a random order each sweep. */
+/** The land grant: free plots light up one at a time, in reading order each sweep. */
 export interface Grant {
   /** Tile indices in the order they light up this sweep. */
   order: number[];
@@ -172,9 +242,155 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
+  /**
+   * The colonists' meal at this upkeep (needs C1, RULE-1): how many ate, before the month's growth, and of Food and of
+   * Water their need and what they took, unrounded. Absent in older reports.
+   */
+  colonistMeal?: { colonists: number; food: { need: number; took: number }; water: { need: number; took: number } };
+  /** The production events that fired this month, in the order they fired. Absent in older reports. */
+  events?: MonthEvent[];
+  /** Events announced ahead of time. Absent in older reports. */
+  warnings?: EventWarning[];
+  /** The colony fund's money in and out this month; absent when the game plays without politics. */
+  ledger?: FundLedger;
+  /** Every working plot's output, part by part. Absent in older reports. */
+  lines?: ProductionLine[];
+}
+
+export type EventKey =
+  | 'dustStorm'
+  | 'drought'
+  | 'acidRain'
+  | 'solarFlare'
+  | 'cometPass'
+  | 'flood'
+  | 'volcanicAsh'
+  | 'pestSwarm'
+  | 'wildfire'
+  | 'bumperHarvest'
+  | 'cavernCollapse'
+  | 'federationTax'
+  | 'federationGrant'
+  | 'immigrationWave'
+  | 'inheritance'
+  | 'muleTheft'
+  | 'epidemic'
+  | 'coldSnap'
+  | 'meteorStrike'
+  | 'pirateRaid'
+  | 'storeFire'
+  | 'ratsInSilo'
+  | 'crookedAccountant'
+  | 'packageFromHome'
+  // G-5 C26: the colony's social events, rolled in planning (a general strike also files a production event when unpaid).
+  | 'festival'
+  | 'generalStrike'
+  | 'emigrationWave'
+  | 'blamedForUnrest'
+  // G-5 C26 PR-B: development's store strike, production's walkout and loyal crew, the month end's riot and clean-up.
+  | 'storeStrike'
+  | 'walkout'
+  | 'loyalCrew'
+  | 'riot'
+  | 'volunteerCleanup';
+
+/** How the screens animate an event; several events share a kind. */
+export type EventKind =
+  | 'storm'
+  | 'drought'
+  | 'flare'
+  | 'comet'
+  | 'flood'
+  | 'quake'
+  | 'blight'
+  | 'fire'
+  | 'bounty'
+  | 'ledger'
+  | 'colony'
+  | 'plot'
+  | 'colonists'
+  | 'sweep'
+  | 'strike'
+  | 'store';
+
+/** One change an event made off the map: whose (a player's id, the store or the colony), of what, and by how much. */
+export interface EventEffect {
+  on: string | 'store' | 'colony';
+  /** G-5 C26 adds 'mood' (moodShift's change), 'prestige' (lasting points), 'air' (the gauge) and 'reputation'. */
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
+  delta: number;
+  /** The holder's count of `what` right after this effect, before anything later in the month moves it; absent means not reported. */
+  to?: number;
+}
+
+export interface MonthEvent {
+  key: EventKey;
+  kind: EventKind;
+  /** Two to four words, e.g. "Dust storm". */
+  title: string;
+  /** One plain sentence of the effect. */
+  line: string;
+  scope: 'colony' | 'local' | 'personal';
+  /** Where the animation starts: an edge point for a colony sweep, the first plot otherwise. */
+  origin: { x: number; y: number };
+  /** For a colony sweep, the map edge it comes in from. */
+  direction?: 'n' | 'e' | 's' | 'w';
+  /** Each plot hit, in the order the event reached it, and how much its output changed. */
+  plots: {
+    index: number;
+    order: number;
+    good: Good;
+    delta: number;
+    /** The special field the plot had before the event, when the event removes it (a cavern collapse). */
+    was?: SpecialKind;
+    /**
+     * What the plot is after the event, when the event changes what it is: 'plain' its special is gone, 'crater' a meteor
+     * made it a crater, 'idle' its MULE was taken.
+     */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the event destroyed or took the plot's MULE. */
+    muleLost?: true;
+  }[];
+  /** For a personal event, the player whose land it started on. */
+  player?: string;
+  sign: 'good' | 'bad' | 'mixed';
+  /** The phase whose roll produced this event. */
+  phase: Phase;
+  /** What the event changed off the map, in the order it changed it; absent when it changed nothing there. */
+  effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot); absent when it damaged none. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
+  /** A sabotage order's effect (slice 4): the culprit only if attributed by then; a later investigation does not rewrite it. */
+  sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean };
+}
+
+export interface EventWarning {
+  key: EventKey;
+  title: string;
+  line: string;
+  arrivesMonth: number;
+  visibility: 'public' | 'observatory';
+}
+
+export interface ProductionLine {
+  tile: number;
+  good: Good;
+  made: number;
+  /**
+   * What made up the output, in order; the deltas sum to `made`. `energyOff`: the plot was turned off for want of
+   * Energy and made UPKEEP.offOutputShare of its output (AM-17). `noEnergy` is the halving it replaced, kept for
+   * screens and fixtures that still name it; the engine no longer files it.
+   */
+  parts: {
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'event' | 'factory' | 'special';
+    delta: number;
+    event?: EventKey;
+  }[];
 }
 
 export interface GameState {
+  /** Set on a what-if copy (an AI's look-ahead): no production event and no colony lot is ever rolled on it. */
+  whatIf?: true;
   seed: number;
   month: number;
   maxMonths: number;
@@ -193,8 +409,328 @@ export interface GameState {
   /** Month in which the last free plot was claimed, if it happened. */
   landRanOutMonth: number | null;
   history: MonthReport[];
+  /**
+   * Every event fired this month, in fired order, whatever the phase. A new array when the month opens; a what-if copy
+   * gets its own copy (observe.ts::cloneForSim).
+   */
+  monthEvents: MonthEvent[];
   /** The live goods auction, while the auction phase runs. */
   auction: LiveAuction | null;
+  /** This month's lots, in listing order. Made in planning, cleared when the land auction ends. */
+  listings: Listing[];
+  /** The live land auction, while the landAuction phase runs. */
+  landAuction: LandAuction | null;
+  /**
+   * Offices, elections and the Governor's tax; null when the host switched politics off.
+   * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  politics: Politics | null;
+  /**
+   * The colony as a shared project: its fund's ledger and projects; null when the game plays without politics.
+   * Written only by colony.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  colony: Colony | null;
+}
+
+/** Where money comes into the colony fund from. */
+export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
+/** What the colony fund pays out for. */
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'welfare' | 'security';
+
+/** One month's money into and out of the colony fund. */
+export interface FundLedger {
+  month: number;
+  in: Partial<Record<FundSource, number>>;
+  out: Partial<Record<FundLine, number>>;
+}
+
+export type PrestigeId = 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport';
+
+/** A prestige object from the moment the Governor commissions it. */
+export interface Project {
+  id: PrestigeId;
+  stage: 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
+  funded: { credits: number; goods: Partial<Record<Good, number>> };
+  /** Upkeeps left until it stands; null unless building. */
+  monthsLeft: number | null;
+  /** The month it was commissioned. */
+  since: number;
+  /** Each donor's credits plus goods at reference price. */
+  plaque: Record<string, number>;
+  /** Its place on the colony's own grounds: the anchor cell of its block, y × size + x (G-5 RULE-32b); null or absent holds none. */
+  slot?: number | null;
+}
+
+export interface Colony {
+  ledger: FundLedger;
+  /** In commission order. */
+  projects: Project[];
+  /** Each month a sitting Governor's tax promise was kept or broken. */
+  promises: { month: number; governor: string; kind: TaxPromise['kind']; kept: boolean }[];
+  /** Prestige that stays whatever happens to the objects, such as a festival's. */
+  permanentPrestige: number;
+  /** The gauges as each of the last two months ended, oldest first: what the screens' "this month" change is read from. */
+  monthEnds: ColonyGauges[];
+  /** The colony's mood, a whole number 0..100: it drifts at upkeep and events move it at once. See G-5 RULE-20. */
+  happiness: number;
+  /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
+  strike: Strike | null;
+  /** This month's Welfare payment (slice 5): who got it and how much; null when none. */
+  welfare: { month: number; to: string; paid: number } | null;
+}
+
+/** The colony's mood band, from happiness. See G-5 RULE-20. */
+export type MoodBand = 'thriving' | 'content' | 'restless' | 'unhappy' | 'unrest';
+
+/** A general strike on one good: every plot of it makes a fraction of its output this month, unless the fund pays. */
+export interface Strike {
+  month: number;
+  good: Good;
+  /** What the strikers want from the fund, in credits. */
+  cost: number;
+  paid: boolean;
+}
+
+/** The colony's gauges at one moment; happiness is null until the colony has a mood. */
+export interface ColonyGauges {
+  month: number;
+  wealth: number;
+  prestige: number;
+  happiness: number | null;
+  /** The air as the month ended, 0..POLLUTION.airMax: with the other three, it scores the month end (G-5 AM-12). */
+  air: number;
+}
+
+export type Office = 'governor' | 'sheriff';
+
+/** Why an office went to its winner, as the ceremony shows it. */
+export type ElectionHow = 'votes' | 'unopposed' | 'appointed' | 'baron' | 'land' | 'lot';
+
+/**
+ * Whether a player may run for an office now, or why not. Running for the other office is no refusal: it moves the
+ * candidacy. 'notPlanning': outside the planning phase. 'notElected': the office is not in POLITICS.offices.
+ */
+export type CanRun = true | 'notPlanning' | 'closed' | 'termLimit' | 'notElected';
+
+/** A Governor candidate's tax promise, in whole percent for a cap. See WS7 spec RULE-10. */
+export type TaxPromise = { kind: 'cap'; percent: number } | { kind: 'lower' } | { kind: 'hold' };
+
+export interface OfficeResult {
+  winner: string;
+  how: ElectionHow;
+  /** Every candidate's weighted votes, highest first. Never who voted for whom. */
+  tallies: { id: string; votes: number }[];
+}
+
+/** One entry per office elected, keyed by POLITICS.offices. */
+export type ElectionResult = Partial<Record<Office, OfficeResult>>;
+
+/**
+ * The beats of one office in the ceremony, in the order they come: the office's title, its candidates popping in,
+ * the vote blocks growing, a tie stamped (only when one was broken), the winner, and the office's end.
+ */
+export type CeremonyBeat = 'title' | 'candidates' | 'bars' | 'tie' | 'winner' | 'end';
+
+/** One election, announce → ballot → ceremony → over, inside a planning phase. Only the ceremony runs on a clock. */
+export interface Election {
+  stage: 'announce' | 'ballot' | 'ceremony' | 'over';
+  /** The ceremony's one show clock, from 0 when the ballot closes, and its whole length; null outside the ceremony. */
+  ceremony: { elapsedMs: number; totalMs: number } | null;
+  /** Copied from Politics when the ballot opens; empty until then. */
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's promise, copied with the candidacy. */
+  promises: Record<string, TaxPromise>;
+  /** Secret: each voter's choice per office. Only the voter may see their own. */
+  ballots: Record<string, Partial<Record<Office, string>>>;
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** Fixed when the ballot closes; the ceremony shows it office by office. */
+  result: ElectionResult | null;
+}
+
+export interface Politics {
+  governor: string | null;
+  sheriff: string | null;
+  /** Month the current terms began. */
+  termStart: number;
+  /** Terms served per player, in either office; a term counts once it starts. */
+  terms: Record<string, number>;
+  /** The sitting Governor and how many terms in a row they have served, for the two-in-a-row rule. */
+  governorRun: { id: string; terms: number } | null;
+  /** The Land Baron, fixed when planning opens each month. */
+  baron: string | null;
+  /** treasury.salesTax when this month's planning opened: the Governor's bounds are around it. */
+  taxAtStart: number;
+  /** Who runs for each office in the next election, public, from declaration until that election's ballot opens. */
+  candidates: Record<Office, string[]>;
+  /** Each Governor candidate's promise, public like the candidacy and dropped with it. */
+  promises: Record<string, TaxPromise>;
+  /** The sitting Governor's promise, held for the term; null when they were appointed. */
+  promise: TaxPromise | null;
+  /** The sales tax in whole percent when the sitting Governor's term began: what lower and hold are judged against; null before anyone governs. */
+  promiseFrom: number | null;
+  /** This month's election, live or just finished; null in a month without one. */
+  election: Election | null;
+  /** The Governor's law proposal, public from the moment it is made until the next planning opens its ballot. */
+  proposal: { by: string; month: number; proposal: LawProposal } | null;
+  /** This month's law ballot, live or just finished; null in a month without one. */
+  council: Council | null;
+  /** The laws in force, each at its setting since the month it passed. */
+  laws: Partial<Record<LawId, { setting: number; since: number }>>;
+  /** The month each failed proposal failed, by `kind:law`: it may not come back for POLITICS.council.retryMonths. */
+  failed: Record<string, number>;
+  /** Every deal card of the game, settled ones too (slice 3). A seat sees the cards it is party to, and broken ones. */
+  deals: DealCard[];
+  /** Every sabotage order of the game (slice 4). A seat sees its own, and every done or caught one (`by` null unless culpritPublic). */
+  sabotage: SabotageOrder[];
+  /** This month's guarded tiles (slice 4). Only the Sheriff sees them. */
+  guards: number[];
+  /** This auction's worked rumours (slice 4): each good's posted price before its shift, so the auction's end restores it exactly. */
+  rumoured: { good: Good; from: number }[];
+  /** The colony budget in force (slice 5); null means POLITICS.budget.default. */
+  budget: Budget | null;
+  /** The budget when this month's planning opened: an overrule restores it, as taxAtStart does the tax. */
+  budgetAtStart: Budget | null;
+  /** This month's overrule or no-confidence vote (slice 5); null in a month without one. */
+  overrule: Overrule | null;
+  /** Tax and budget overrules passed since termStart. */
+  overruled: number;
+  /** The month a snap election falls in, or null. */
+  snapMonth: number | null;
+  /** This term's Sheriff inquiry into the Governor, or null. */
+  inquiry: { term: number; record: InquiryRecord; finding: boolean } | null;
+}
+
+/** What a deal card binds (slice 3). A card moves nothing of value (HC-3). */
+export type DealTerms =
+  /** Mutual: neither party sabotages the other while it binds. */
+  | { kind: 'pact' }
+  /** `from` votes for `candidate` in the next election for `office`. */
+  | { kind: 'vote'; office: Office; candidate: string }
+  /** `from` votes yes or no on the next law ballot. */
+  | { kind: 'vote'; law: true; yes: boolean };
+
+/** A deal card between two players (slice 3). */
+export interface DealCard {
+  /** 'deal-<n>', from a counter in state, so a replay makes the same ids. */
+  id: string;
+  /** The proposer. */
+  from: string;
+  /** The receiver. */
+  to: string;
+  terms: DealTerms;
+  /** Month offered. */
+  offered: number;
+  /** Last month it binds, inclusive. */
+  until: number;
+  status: 'offered' | 'active' | 'declined' | 'withdrawn' | 'expired' | 'kept' | 'broken';
+  brokenBy: string | null;
+  /** Month it was kept, broken, declined, withdrawn or expired; null while offered or active. */
+  settled: number | null;
+}
+
+/** An offer as a phone or a hand sends it: the terms, and for a pact its months (one of POLITICS.deals.pactMonths). */
+export interface DealOffer {
+  to: string;
+  terms: DealTerms;
+  months?: number;
+}
+
+/** What a sabotage order aims at (slice 4). */
+export type SabotageTarget =
+  /** The victim is the tile's owner when the order resolves. */
+  | { kind: 'powerCut'; tile: number }
+  | { kind: 'rumour'; good: Good; dir: 'up' | 'down' };
+
+/** One player's sabotage order (slice 4). */
+export interface SabotageOrder {
+  /** 'sab-<n>'. */
+  id: string;
+  /** The orderer. Engine state always holds it; only observe() sets null, on another seat's order whose culprit is not public. */
+  by: string | null;
+  month: number;
+  target: SabotageTarget;
+  cost: number;
+  outcome: 'pending' | 'done' | 'failed' | 'caught';
+  /** True once caught, or once an investigation reveals the culprit. */
+  culpritPublic: boolean;
+  /** Set when it resolves: the tile's owner then; null for a rumour, and while pending. */
+  victim?: string | null;
+  /** Set when it resolves: whether the effect happened. */
+  worked?: boolean | null;
+  /** The month the Sheriff investigated it; null if never. */
+  investigated?: number | null;
+  /** The fine levied on it, once. */
+  fine?: SabotageFine | null;
+}
+
+/** A fine the Sheriff (or the standard fine) levied on a sabotage order's culprit (slice 4). */
+export interface SabotageFine {
+  base: number;
+  due: number;
+  paid: number;
+  toVictim: number;
+  by: 'sheriff' | 'standard';
+  month: number;
+}
+
+/** A line of the colony budget (slice 5). */
+export type BudgetLine = 'projects' | 'welfare' | 'security';
+
+/** How the Governor shares out the fund above COLONY.reserve (slice 5). */
+export interface Budget {
+  month: number;
+  /** The Governor, or null for the default. */
+  setBy: string | null;
+  /** Whole percent per line; the sum is at most 100, and the rest stays in the fund. */
+  shares: Record<BudgetLine, number>;
+}
+
+/** What a vote of this kind can undo; 'confidence' is the Sheriff's inquiry's no-confidence motion. */
+export type OverruleTarget = 'tax' | 'budget' | 'confidence';
+/** Why a player may not call an overrule on a target now. */
+export type OverruleWhy = 'politicsOff' | 'notNow' | 'noGovernor' | 'governor' | 'called' | 'notYet' | 'sheriffOnly' | 'unchanged';
+
+/** This month's overrule or no-confidence motion: called in planning, voted as planning ends, revealed, over (slice 5). */
+export interface Overrule {
+  month: number;
+  target: OverruleTarget;
+  caller: string;
+  stage: 'called' | 'ballot' | 'reveal' | 'over';
+  /** Ms of the reveal shown; 0 until it starts. */
+  clockMs: number;
+  /** Secret: each voter's yes (undo it) or no. Only the voter may see their own. */
+  ballots: Record<string, boolean>;
+  done: string[];
+  /** Fixed when the ballot closes. */
+  result: { passed: boolean; yes: number; no: number; total: number; needed: number } | null;
+}
+
+/** The Governor's public record for the term, as the inquiry reads it (slice 5). */
+export interface InquiryRecord {
+  /** Months a tax promise was broken. */
+  brokenPromises: number[];
+  /** Broken DealCard ids. */
+  brokenDeals: string[];
+  overruled: number;
+}
+
+export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap';
+
+/** Enact a law at a setting (replacing one in force when three already are), or repeal one. */
+export type LawProposal = { kind: 'enact'; law: LawId; setting: number; replaces?: LawId } | { kind: 'repeal'; law: LawId };
+
+/** A law ballot: untimed until every player is Done, then a short reveal on its own clock. */
+export interface Council {
+  stage: 'ballot' | 'reveal' | 'over';
+  /** Ms of the reveal shown so far; 0 until it starts. */
+  clockMs: number;
+  proposal: LawProposal;
+  proposer: string;
+  /** Secret: each voter's yes or no. Only the voter may see their own. */
+  ballots: Record<string, boolean>;
+  done: string[];
+  result: { passed: boolean; yes: number; no: number; tie: boolean } | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';
@@ -211,6 +747,15 @@ export interface Walker {
   dir: -1 | 0 | 1;
   /** Board time (ms into the walk) when their rounded price last changed: who got there first. */
   since: number;
+  /** A seller stopped at the amount they must hold of this good (RULE-4): they sell nothing more until a hold of ▼ frees them. Survives a side switch. */
+  held?: true;
+  /**
+   * Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. Written on every hold,
+   * read only for a held seller (RULE-4 row 2), so with WALK.needStop off nothing reads it.
+   */
+  downSince?: number;
+  /** A stopped seller who held ▼ for WALK.shortHoldMs: sells into shortage for the rest of this good (RULE-4 row 2). */
+  sellsShort?: true;
 }
 
 /** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */
@@ -250,6 +795,18 @@ export interface WalkBoard {
   between: { units: number; value: number };
 }
 
+/** The goods board's rest zones and hard edges, fixed as the good comes up: a house that stops buying moves none of them. */
+export interface BoardZones {
+  /** The store's buying line at the good's start: sellers never walk below it, so a buyer resting under it never trades. */
+  buyersTop: number;
+  /** The store's selling line at the good's start: buyers walk no higher while the store sells. */
+  sellersBottom: number;
+  /** The buyers' hard edge: no buyer walks or taps below it. */
+  lo: number;
+  /** The sellers' hard edge: no seller walks or taps above it. */
+  hi: number;
+}
+
 /** One player's line on the status screen before a good comes up. */
 export interface StatusRow {
   id: string;
@@ -268,23 +825,97 @@ export interface StatusRow {
 /** Why a good was skipped without a screen of its own. */
 export type SkipReason = 'nobody has any' | 'nobody buys' | 'nobody trading';
 
-/** The live goods auction: goods one at a time, each with a status screen, a declare and a walk. */
+/** One side of a seat's receipt for a good: the units, each unit's price, the sales tax on a sale, and who with. */
+export interface ReceiptSide {
+  units: number;
+  /** Before tax. */
+  gross: number;
+  /** The sales tax the engine took, unit by unit. */
+  tax: number;
+  /**
+   * The export tax on units sold to the export ship (slice 2a RULE-43), what chargeExportTax took; 0 without the law.
+   * The engine always sets it; optional so receipts built before it still type.
+   */
+  exportTax?: number;
+  prices: number[];
+  /** Counterparties in the order first traded with: player ids, 'store' or 'ship'. */
+  with: string[];
+}
+
+/** What one seat bought and sold of the good that is up (UX audit G-5). */
+export interface GoodReceipt {
+  bought: ReceiptSide;
+  sold: ReceiptSide;
+}
+
+/** The live goods auction: goods one at a time, each with a status screen, a walk and a close stage with the receipts. */
 export interface LiveAuction extends WalkBoard {
-  /** clockMs is the status screen's, the declare's or the walk's clock, by stage. */
+  /** The status screen's, the walk's or the close stage's clock, by stage. */
+  clockMs: number;
   /** Goods still to come after the current one. */
   queue: Good[];
   good: Good | null;
-  stage: 'status' | 'declare' | 'walk' | 'over';
+  stage: 'status' | 'walk' | 'close' | 'over';
+  /** In the close stage: the good that comes up next, or null when the auction ends after this one. */
+  upNext: Good | null;
+  /** Each seat that traded this good: what it bought and sold. Reset when the next good comes up. */
+  receipts: Record<string, GoodReceipt>;
+  /** Each seat's net credits from this month's auction so far: sales after tax less purchases. */
+  tally: Record<string, number>;
   /** Store prices for this good, fixed when it comes up. Whether the store trades at them depends on its stock and budget. */
   storeBuy: number;
   storeSell: number;
   /** Units the store will still buy of this good, from its demand and its budget. */
   storeBudget: number;
+  zones: BoardZones;
   /** Players who pressed Done in this stage. */
   done: string[];
   status: StatusRow[];
   /** Goods skipped since the last one that came up, shown as one line. */
   skipped: { good: Good; reason: SkipReason }[];
-  /** Per AI player, what it plans for this good. */
-  ai: Record<string, { keep: number; worth: number; budget: number; waitMs: number }>;
+}
+
+/** What is for sale: a plot with whatever stands on it, or the MULE off one of the seller's plots. */
+export type LotItem = { kind: 'plot'; x: number; y: number } | { kind: 'mule'; x: number; y: number; outfit: Outfit };
+
+/** One lot for the land auction, public from the moment it is listed in planning. */
+export interface Listing {
+  id: string;
+  /** A player's id, or 'colony' for a plot the colony puts up: its proceeds go to store capital. */
+  seller: string;
+  item: LotItem;
+  minimum: number;
+  /** If no bid reaches the minimum: the store buys it at storePays, or the seller keeps it. */
+  unsold: 'store' | 'keep';
+  /** Fixed when the lot is listed. */
+  storePays: number;
+}
+
+export type LotResult = { kind: 'sold'; buyer: string; price: number } | { kind: 'store'; price: number } | { kind: 'kept' };
+
+/**
+ * The live land auction: one lot at a time, each with an intro, a walk and
+ * a result. Only buyers walk; the highest bid at or over the minimum wins at
+ * the bell. clockMs is the intro's, the walk's or the result's clock, by stage.
+ */
+export interface LandAuction extends WalkBoard {
+  /** Lots still to come after the current one. */
+  queue: Listing[];
+  lot: Listing | null;
+  stage: 'intro' | 'walk' | 'result' | 'over';
+  /** Players who pressed Done in this stage. */
+  done: string[];
+  /** Players who can't bid on this lot, and why: too little money, or already leading a MULE. */
+  aside: Record<string, 'money' | 'mule'>;
+  /** The lot's outcome, from the bell until the next lot comes up. */
+  result: LotResult | null;
+  /** This lot's place in the month's line-up, from 1, and the line-up's length. */
+  number: number;
+  count: number;
+  /** True once this lot's leading bid has passed hi and the walk sped up. */
+  fast: boolean;
+  /** Ms the soft close has put back on this lot's walk clock. */
+  addedMs: number;
+  /** The last buyer to lead this lot, kept while nobody reaches the minimum, so only a change of hands counts as an overtake. */
+  leaderId: string | null;
 }

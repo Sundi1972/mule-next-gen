@@ -1,0 +1,125 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { MuleView, ServerEnvelope } from '@mule/protocol';
+import { expect, it } from 'vitest';
+import WebSocket from 'ws';
+import { AI_NAMES } from '../src/mule-game.js';
+import { createMuleServer } from '../src/server.js';
+
+type Envelope = ServerEnvelope<MuleView>;
+
+/** A phone on a real socket. `next` waits for the first message after the last one it returned that matches. */
+async function phone(url: string) {
+  const socket = new WebSocket(url);
+  const inbox: Envelope[] = [];
+  socket.on('message', (d) => inbox.push(JSON.parse(d.toString())));
+  await new Promise((r) => socket.once('open', r));
+  let seen = 0;
+  const next = async (match: (m: Envelope) => boolean): Promise<Envelope> => {
+    for (let i = 0; i < 200; i++) {
+      const at = inbox.findIndex((m, j) => j >= seen && match(m));
+      if (at >= 0) {
+        seen = at + 1;
+        return inbox[at]!;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error('no matching message');
+  };
+  return { socket, send: (msg: object) => socket.send(JSON.stringify(msg)), next };
+}
+
+it('T-AC-3: a species picked over the socket reaches the game; a seat that never picked and an AI seat keep the default', async () => {
+  // Seed 43 turns the defaults (FM-species-by-chair): of 3 seats, seat i gets DEFAULT_SPECIES[(i + 43) % 3].
+  const running = createMuleServer({ seed: () => 43 });
+  const sockets: WebSocket[] = [];
+  let code = '';
+  try {
+    await new Promise<void>((r) => running.server.listen(0, '127.0.0.1', r));
+    const { port } = running.server.address() as AddressInfo;
+    ({ code } = (await (await fetch(`http://127.0.0.1:${port}/rooms`, { method: 'POST' })).json()) as { code: string });
+    const ws = `ws://127.0.0.1:${port}/ws`;
+
+    const heiko = await phone(ws);
+    sockets.push(heiko.socket);
+    heiko.send({ t: 'join', code, name: 'Heiko' });
+    await heiko.next((m) => m.t === 'welcome');
+    const mia = await phone(ws);
+    sockets.push(mia.socket);
+    mia.send({ t: 'join', code, name: 'Mia' });
+    const { seatId: miaSeat } = (await mia.next((m) => m.t === 'welcome')) as Extract<Envelope, { t: 'welcome' }>;
+
+    mia.send({ t: 'pick', pick: 'quibbit' });
+    const picked = await mia.next((m) => m.t === 'error' || (m.t === 'view' && m.view.seats.some((s) => s.id === miaSeat && s.pick === 'quibbit')));
+    expect(picked.t === 'error' ? picked.message : 'pick shown').toBe('pick shown');
+
+    heiko.send({ t: 'pick', pick: 'dragon' });
+    const refused = await heiko.next((m) => m.t === 'error');
+    expect(refused.t === 'error' && refused.message).toBe('Unknown choice');
+
+    heiko.send({ t: 'addAi' });
+    heiko.send({ t: 'start' });
+    const started = (await heiko.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
+    expect(started.view.game?.players.map((p) => [p.name, p.isAi, p.species])).toEqual([
+      ['Heiko', false, 'bramblet'], // never picked (its refused pick stored nothing): DEFAULT_SPECIES[1], not the chair's [0]
+      ['Mia', false, 'quibbit'], // picked: not her default DEFAULT_SPECIES[2], which is gearling
+      [AI_NAMES[0], true, 'zipwing'], // AI seats never pick: DEFAULT_SPECIES[0], not the chair's [2]
+    ]);
+    const miaView = (await mia.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
+    expect(miaView.view.game?.me?.species).toBe('quibbit');
+  } finally {
+    for (const s of sockets) s.terminate();
+    running.registry.get(code)?.dispose(); // stops the game's phase timers
+    await running.close();
+  }
+});
+
+// Three seeds, three rotations of the defaults at three seats (43, 42, -5 put a different species first), so a
+// lobby that showed the base order, or one rotation for every seed, can't pass.
+it.each([
+  { seed: 43, recorded: false },
+  { seed: 42, recorded: false },
+  { seed: -5, recorded: true },
+])(
+  'T-AC-LS1: at seed $seed (recorded: $recorded) the lobby tells each seat the species it will play if it never picks, and Start gives it exactly that',
+  async ({ seed, recorded }) => {
+    // A recording server hosts the game through the recorder's wrapper, which must pass the defaults on too.
+    const recordDir = recorded ? mkdtempSync(join(tmpdir(), 'mule-ls1-')) : null;
+    const running = createMuleServer({ seed: () => seed, recordDir });
+    const sockets: WebSocket[] = [];
+    let code = '';
+    try {
+      await new Promise<void>((r) => running.server.listen(0, '127.0.0.1', r));
+      const { port } = running.server.address() as AddressInfo;
+      ({ code } = (await (await fetch(`http://127.0.0.1:${port}/rooms`, { method: 'POST' })).json()) as { code: string });
+      const ws = `ws://127.0.0.1:${port}/ws`;
+
+      const heiko = await phone(ws);
+      sockets.push(heiko.socket);
+      heiko.send({ t: 'join', code, name: 'Heiko' });
+      await heiko.next((m) => m.t === 'welcome');
+      const mia = await phone(ws);
+      sockets.push(mia.socket);
+      mia.send({ t: 'join', code, name: 'Mia' });
+      await mia.next((m) => m.t === 'welcome');
+      heiko.send({ t: 'addAi' });
+
+      // The last lobby view before Start, once all three seats are in it: what every phone is showing when the host presses.
+      const lobby = (await heiko.next((m) => m.t === 'view' && m.view.status === 'lobby' && m.view.seats.length === 3)) as Extract<Envelope, { t: 'view' }>;
+      const shown = lobby.view.seats.map((s) => s.defaultPick);
+      expect(new Set(shown).size, 'three seats, three different species').toBe(3);
+
+      heiko.send({ t: 'start' });
+      const started = (await heiko.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
+      expect(started.view.game?.players.map((p) => p.species)).toEqual(shown);
+      expect(started.view.seats.every((s) => s.defaultPick === undefined), 'a started table no longer shows lobby defaults').toBe(true);
+    } finally {
+      for (const s of sockets) s.terminate();
+      running.registry.get(code)?.dispose();
+      await running.close();
+      if (recordDir) rmSync(recordDir, { recursive: true, force: true });
+    }
+  },
+);

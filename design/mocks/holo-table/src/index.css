@@ -1,3 +1,8 @@
 @import "tailwindcss";
 @import "@mule/ui/theme.css";
 @source "../../../../packages/ui/src";
+
+/* The sideways phone's side rail, as in apps/web/src/index.css. */
+:root {
+  --rail: clamp(232px, 31vw, 300px);
+}

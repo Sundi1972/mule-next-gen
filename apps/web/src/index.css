@@ -16,3 +16,12 @@ body {
 :root {
   --rail: clamp(232px, 31vw, 300px);
 }
+
+/* A short screen, such as a small phone on its side: the rail packs its padding tighter. Never the wide shell. */
+@custom-variant short {
+  @media (max-height: 380px) {
+    @container shell (width < 1100px) {
+      @slot;
+    }
+  }
+}

@@ -1,0 +1,456 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  AI_LEVELS,
+  AI_PERSONAS,
+  callStrike,
+  COLONY,
+  commission,
+  createGame,
+  createRng,
+  HAPPINESS,
+  POLITICS,
+  PRESTIGE,
+  stepVotes,
+  votesOpen,
+  WALK,
+  type AiLevelId,
+  type AiPersonaId,
+  type Council,
+  type GameState,
+  type LawProposal,
+  type Good,
+  type PrestigeId,
+  type Rng,
+} from '@mule/engine';
+import type { Act, AiAction } from '../src/actions.js';
+import { goodsInReach, VoteHand } from '../src/hands/vote.js';
+import { applyAction } from '../src/play.js';
+import { AiSeat } from '../src/seat.js';
+import type { Mind } from '../src/value.js';
+
+const SEATS = ['ai0', 'ai1', 'ai2', 'ai3'];
+const LAND_10: LawProposal = { kind: 'enact', law: 'landTax', setting: 10 };
+
+const savedChance = { ...POLITICS.ai.council.proposeChance };
+const savedColony = structuredClone(POLITICS.ai.colony);
+const savedOffices = [...POLITICS.offices];
+afterEach(() => {
+  POLITICS.offices = [...savedOffices];
+  Object.assign(POLITICS.ai.council.proposeChance, savedChance);
+  Object.assign(POLITICS.ai.colony, structuredClone(savedColony));
+});
+
+/** A seat's mind as the sim and the server build it (AiSeat), so it carries the seat's own seed. */
+function mindOf(me: string, persona: AiPersonaId, level: AiLevelId = 'trader', seed = 1): Mind {
+  return new AiSeat({ id: me, name: me, persona, level, seed }).mind;
+}
+
+/** The seat's election stream, wrapped so a test can count every draw from it. */
+function counted(seed: number): Rng & { draws: () => number } {
+  const rng = createRng(seed);
+  let draws = 0;
+  const tally = <F extends (...args: never[]) => unknown>(f: F) => ((...args: Parameters<F>) => (draws++, f(...args))) as F;
+  return { next: tally(rng.next), int: tally(rng.int), pick: tally(rng.pick), chance: tally(rng.chance), weighted: tally(rng.weighted), draws: () => draws } as Rng & { draws: () => number };
+}
+
+/** Month 2's planning, no election, ai0 governing, a full fund. */
+function governed(seed = 7): GameState {
+  const state = createGame({ seed, players: SEATS.map((id) => ({ id, name: id, isAi: true })) });
+  state.month = 2;
+  state.politics = { ...state.politics!, governor: 'ai0', election: null, baron: null };
+  state.treasury.money = 5_000;
+  // Every good any object needs is on the store's shelf, so goods in reach decide nothing unless a case says so.
+  for (const row of Object.values(PRESTIGE)) for (const [good, need] of Object.entries(row.goods) as [Good, number][]) state.store.stock[good] = Math.max(state.store.stock[good], need);
+  return state;
+}
+
+function give(state: GameState, id: string, plots: number): void {
+  for (const t of state.tiles.filter((t) => t.owner === null && t.terrain !== 'store').slice(0, plots)) t.owner = id;
+}
+
+const act = (state: GameState, id: string): Act => (action) => applyAction(state, id, action);
+
+/** One tick of a hand at planning's pace; the council and the colony act at once. Returns every move it sent. */
+function tick(hand: VoteHand, state: GameState): AiAction[] {
+  const sent: AiAction[] = [];
+  hand.tick(state, 0, (action) => (sent.push(action), applyAction(state, hand.mind.me, action)));
+  return sent;
+}
+
+/** The fund an AI Governor needs before it commissions this object: POLITICS.ai.colony.commissionShare of its credits. */
+function atShare(id: PrestigeId): number {
+  return Math.ceil(PRESTIGE[id].credits * POLITICS.ai.colony.commissionShare);
+}
+
+/** The colony acts a tick sent, without the tax its Governor steers. */
+const colonyActs = (sent: AiAction[]) => sent.filter((a) => a.type !== 'setTax');
+
+function ballot(state: GameState, proposal: LawProposal, proposer = 'ai0'): void {
+  const council: Council = { stage: 'ballot', clockMs: 0, proposal, proposer, ballots: { [proposer]: true }, done: [], result: null };
+  state.politics = { ...state.politics!, council };
+}
+
+describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
+  it('T-AC-50: an AI Governor proposes the law that costs the leader most against itself, at its middle setting', () => {
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+    const state = governed();
+    give(state, 'ai1', 12);
+    tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), state);
+    const pending = state.politics!.proposal;
+    expect(pending?.by).toBe('ai0');
+    expect(pending?.proposal).toEqual({ kind: 'enact', law: 'landTax', setting: POLITICS.laws.landTax.settings[Math.floor(POLITICS.laws.landTax.settings.length / 2)] });
+  });
+
+  it('T-AC-50: with no law that costs the leader minGap more than itself, the AI Governor proposes nothing', () => {
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+    const state = governed();
+    tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), state);
+    expect(state.politics!.proposal).toBeNull();
+  });
+
+  it("T-AC-50: a law in force that costs the AI Governor more than the leader is the one it repeals; a law still waiting after failing is never put", () => {
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+    const repeal = governed();
+    give(repeal, 'ai0', 12);
+    repeal.politics = { ...repeal.politics!, laws: { landTax: { setting: 20, since: 1 } } };
+    tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), repeal);
+    expect(repeal.politics!.proposal?.proposal).toEqual({ kind: 'repeal', law: 'landTax' });
+
+    const waiting = governed();
+    give(waiting, 'ai1', 12);
+    waiting.politics = { ...waiting.politics!, failed: { 'enact:landTax': 1 } };
+    const sent = tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), waiting);
+    expect(sent.filter((a) => a.type === 'propose' && a.proposal?.law === 'landTax'), 'it never even tries the waiting law').toEqual([]);
+  });
+
+  it('T-AC-50: a fourth law names as replaces the law in force that costs the AI Governor the most', () => {
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+    const state = governed();
+    give(state, 'ai1', 12);
+    give(state, 'ai0', 1);
+    // The emission cap is the only law in force that costs ai0 anything: its one plot mines Rare earth above the cap.
+    Object.assign(state.tiles.find((t) => t.owner === 'ai0')!, { outfit: 'rareEarth' });
+    state.air = 80;
+    state.politics = { ...state.politics!, laws: { exportTax: { setting: 10, since: 1 }, pollutionTax: { setting: 10, since: 1 }, emissionCap: { setting: 50, since: 1 } } };
+    tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), state);
+    expect(state.politics!.proposal?.proposal).toEqual({ kind: 'enact', law: 'landTax', setting: 10, replaces: 'emissionCap' });
+  });
+
+  it.each([
+    { row: 1, who: 'the Governor keeps its yes', seat: 'ai0', persona: 'trader' as AiPersonaId, level: 'trader' as AiLevelId, plots: 20, yes: true },
+    { row: 2, who: 'the Land Baron fights a land tax', seat: 'ai3', persona: 'trader' as AiPersonaId, level: 'trader' as AiLevelId, plots: 0, yes: false, baron: true },
+    { row: 4, who: 'a seat paying at most the median votes for it', seat: 'ai1', persona: 'cautious' as AiPersonaId, level: 'trader' as AiLevelId, plots: 0, yes: true },
+    { row: 4, who: 'a seat paying above the median votes against it', seat: 'ai2', persona: 'cautious' as AiPersonaId, level: 'trader' as AiLevelId, plots: 8, yes: false },
+  ])('T-AC-50: RULE-46 vote row $row — $who', ({ seat, persona, level, plots, yes, baron }) => {
+    const state = governed();
+    give(state, seat, plots);
+    if (baron) state.politics = { ...state.politics!, baron: seat };
+    ballot(state, LAND_10);
+    tick(new VoteHand(mindOf(seat, persona, level), createRng(1)), state);
+    expect(state.politics!.council!.ballots[seat]).toBe(yes);
+    expect(state.politics!.council!.done, 'it presses Done after voting').toContain(seat);
+  });
+
+  it('T-AC-50: RULE-46 vote row 4 with an even count: the median is the mean of the middle two, not either middle cost', () => {
+    const state = governed();
+    give(state, 'ai1', 2);
+    give(state, 'ai2', 6);
+    give(state, 'ai3', 10);
+    ballot(state, LAND_10);
+    // Costs 0, 20, 60, 100: the median is 40, so ai2 at 60 votes against; the upper middle (60) would have said yes.
+    tick(new VoteHand(mindOf('ai2', 'cautious'), createRng(1)), state);
+    expect(state.politics!.council!.ballots.ai2).toBe(false);
+  });
+
+  it('T-AC-50: RULE-46 vote row 2 is the land tax only: on any other law the Land Baron votes by the median', () => {
+    const state = governed();
+    state.politics = { ...state.politics!, baron: 'ai3' };
+    ballot(state, { kind: 'enact', law: 'exportTax', setting: 10 });
+    tick(new VoteHand(mindOf('ai3', 'trader'), createRng(1)), state);
+    expect(state.politics!.council!.ballots.ai3, 'it costs nobody anything, so the median says yes').toBe(true);
+  });
+
+  it('T-AC-50 (RULE-46 with the reveal): in a ballot month the AI Governor still acts once the ballot is over — it pays the strike and commissions — in the sim loop and the server alike', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    POLITICS.ai.colony.paysStrike.trader = true;
+    const state = governed();
+    state.month = 3;
+    state.treasury.money = 1_000;
+    callStrike(state, 'food');
+    ballot(state, LAND_10);
+    const hands = SEATS.map((id) => new VoteHand(mindOf(id, 'trader'), createRng(1)));
+    const all = () => hands.forEach((h) => h.tick(state, WALK.tickMs, act(state, h.mind.me)));
+    // As play.ts and the server step it: hands, then the votes, until every vote is over; then one more tick.
+    for (let i = 0; i < 10_000 && votesOpen(state); i++) {
+      all();
+      stepVotes(state, WALK.tickMs);
+    }
+    expect(state.politics!.council!.stage, 'the ballot ran through its reveal').toBe('over');
+    all();
+    expect(state.colony!.strike!.paid, 'the strike is paid after the reveal').toBe(true);
+    expect(state.colony!.projects.length, 'and an object commissioned').toBe(1);
+  });
+
+  it("T-AC-45 (HC-41): the council's stream is the seat's: across 40 seat seeds a Rookie's coin for the same month comes up both ways", () => {
+    const votes = new Set<boolean>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const state = governed();
+      ballot(state, LAND_10);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie', seed), createRng(99)), state);
+      votes.add(state.politics!.council!.ballots.ai2!);
+    }
+    expect([...votes].sort()).toEqual([false, true]);
+  });
+
+  it("T-AC-45 (HC-41): and it is the month's: over 20 months of one game a Rookie's coin for the same seat comes up both ways", () => {
+    const votes = new Set<boolean>();
+    for (let month = 2; month <= 21; month++) {
+      const state = governed();
+      state.month = month;
+      ballot(state, LAND_10);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), createRng(99)), state);
+      votes.add(state.politics!.council!.ballots.ai2!);
+    }
+    expect([...votes].sort()).toEqual([false, true]);
+  });
+
+  it('T-AC-50: RULE-46 vote rows 4-5 against the median — an enact passes for the cheap half, a repeal for the dear half', () => {
+    const state = governed();
+    give(state, 'ai2', 2);
+    give(state, 'ai3', 6);
+    state.politics = { ...state.politics!, laws: { landTax: { setting: 10, since: 1 } } };
+    ballot(state, { kind: 'repeal', law: 'landTax' });
+    for (const seat of ['ai1', 'ai3']) tick(new VoteHand(mindOf(seat, 'cautious'), createRng(1)), state);
+    expect(state.politics!.council!.ballots).toMatchObject({ ai1: false, ai3: true });
+  });
+
+  it("T-AC-45 (HC-41): the council's acts, a Rookie's coin included, draw nothing from the hand's election stream", () => {
+    const state = governed();
+    ballot(state, LAND_10);
+    const stream = counted(11);
+    tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), stream), state);
+    expect(typeof state.politics!.council!.ballots.ai2).toBe('boolean');
+    expect(stream.draws()).toBe(0);
+
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+    const proposing = governed();
+    give(proposing, 'ai1', 12);
+    const governor = counted(12);
+    tick(new VoteHand(mindOf('ai0', 'aggressive'), governor), proposing);
+    expect(proposing.politics!.proposal).not.toBeNull();
+    expect(governor.draws(), "the proposal's chance comes from the council's own stream").toBe(0);
+  });
+
+  it("INV-41: no AI hand reads the game's seed — games that differ only in it get the same council coin and the same proposal", () => {
+    POLITICS.ai.council.proposeChance.aggressive = 0.5;
+    const plays = [3, 41, 977, 65_521, 2_147_483_647].map((gameSeed) => {
+      const voting = governed();
+      voting.seed = gameSeed;
+      ballot(voting, LAND_10);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), createRng(99)), voting);
+      const proposing = governed();
+      proposing.seed = gameSeed;
+      give(proposing, 'ai1', 12);
+      tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), proposing);
+      return { coin: voting.politics!.council!.ballots.ai2, proposal: proposing.politics!.proposal?.proposal ?? null };
+    });
+    expect(new Set(plays.map((p) => JSON.stringify(p))).size).toBe(1);
+  });
+
+  it("T-AC-45: a Rookie's council coin is the same for the same game, month and seat", () => {
+    const votes = [0, 1].map(() => {
+      const state = governed();
+      ballot(state, LAND_10);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), createRng(99)), state);
+      return state.politics!.council!.ballots.ai2;
+    });
+    expect(votes[0]).toBe(votes[1]);
+  });
+});
+
+describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () => {
+  it('T-AC-36: an AI Governor whose persona builds commissions the most prestige the fund holds its commission share of, once the votes are over', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    const state = governed();
+    state.treasury.money = atShare('stadium') - 1;
+    expect(state.treasury.money, 'the case: the Hospital and Observatory are in reach, the Stadium is not').toBeGreaterThanOrEqual(atShare('observatory'));
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Hospital (3) over the Park (2); the Observatory ties it and costs more').toEqual(['hospital']);
+    const exact = governed();
+    exact.treasury.money = atShare('hospital');
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), exact);
+    expect(exact.colony!.projects.map((p) => p.id), 'a fund of exactly its share commissions it (pace set C)').toEqual(['hospital']);
+    const short = governed();
+    short.treasury.money = atShare('hospital') - 1;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), short);
+    expect(short.colony!.projects.map((p) => p.id), 'one credit short of its share, the Park is the most it reaches').toEqual(['park']);
+  });
+
+  /** No unit of `goods` anywhere the Governor can see: not with a player, not in the store, not made last month. */
+  function without(state: GameState, goods: Good[]): void {
+    for (const good of goods) {
+      state.store.stock[good] = 0;
+      for (const p of state.players) p.stock[good] = 0;
+      for (const report of state.history) for (const row of Object.values(report.produced)) row[good] = 0;
+    }
+  }
+
+  it('T-AC-36 (PM ruling, 6 Nov): it commissions only an object whose goods are within reach; with no Electronics anywhere and 28 Crystite held, the Observatory over the Spaceport', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    const state = governed();
+    without(state, ['electronics', 'crystite']);
+    state.players.find((p) => p.id === 'ai0')!.stock.crystite = 28;
+    expect(goodsInReach(state, 'spaceport'), 'the case: no Electronics anywhere').toBe(false);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Observatory (3, Crystite in reach) over the Spaceport (5, no Electronics)').toEqual(['observatory']);
+
+    const none = governed();
+    without(none, ['alloy', 'electronics', 'crystite']);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), none);
+    expect(none.colony!.projects, 'nothing in reach: it commissions nothing').toEqual([]);
+  });
+
+  it('T-AC-36 (PM ruling, 6 Nov): with every object\'s goods in reach, prestige decides', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    const state = governed();
+    without(state, ['electronics', 'crystite']);
+    state.players.find((p) => p.id === 'ai0')!.stock.crystite = 28;
+    state.store.stock.electronics = PRESTIGE.spaceport.goods.electronics;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Spaceport upgrade (5) over the Observatory (3)').toEqual(['spaceport']);
+  });
+
+  it('T-AC-36 (PM ruling, 6 Nov): units made last month count toward reach', () => {
+    const state = governed();
+    without(state, ['electronics']);
+    expect(goodsInReach(state, 'hospital')).toBe(false);
+    state.history = [{ ...structuredClone(state.history.at(-1) ?? ({} as GameState['history'][number])), produced: { ai0: { ...state.players[0]!.stock, electronics: PRESTIGE.hospital.goods.electronics } } }];
+    expect(goodsInReach(state, 'hospital'), 'the Governor made the Electronics last month').toBe(true);
+  });
+
+  it('T-AC-36 (C48): every persona that builds commissions by prestige alone, the Spaceport upgrade included, and sends nothing after the commission', () => {
+    for (const persona of ['trader', 'saboteur'] as const) {
+      POLITICS.ai.colony.commissions[persona] = true;
+      const state = governed();
+      state.treasury.money = 1_500;
+      const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
+      expect(state.colony!.projects.map((p) => p.id), `${persona}: the Spaceport upgrade (5) builds on the colony's grounds, no plot to wait for`).toEqual(['spaceport']);
+      // Its other planning moves (the tax, a law) are its own business; of the colony's acts it sends the commission only.
+      expect(sent.map((a) => a.type).filter((t) => !['setTax', 'propose'].includes(t)), persona).toEqual(['commission']);
+    }
+  });
+
+  it('T-AC-36: a strike paid this tick leaves less to build with — the Governor commissions only from the fund that is left', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    POLITICS.ai.colony.paysStrike.trader = true;
+    const state = governed();
+    // Every object's share is within it, but once the strike is paid only the Park's is.
+    state.treasury.money = COLONY.strike.cost + atShare('park');
+    expect(state.treasury.money - COLONY.strike.cost, 'the case: after the strike the Hospital is out of reach').toBeLessThan(atShare('hospital'));
+    callStrike(state, 'food');
+    const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.strike!.paid).toBe(true);
+    expect(sent.filter((a) => a.type === 'commission'), 'it does not try a commission the fund can no longer pay').toEqual([{ type: 'commission', id: 'park' }]);
+  });
+
+  it('T-AC-36 (C25, AM-10): the strike comes before a repair — with room for one, the strikers are paid and the damaged object waits', () => {
+    POLITICS.ai.colony.paysStrike.trader = true;
+    POLITICS.ai.colony.repairs.trader = true;
+    const state = governed();
+    state.treasury.money = COLONY.strike.cost + PRESTIGE.park.repairCost - 1;
+    callStrike(state, 'food');
+    state.colony!.projects.push({ id: 'park', stage: 'damaged', funded: { credits: PRESTIGE.park.credits, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
+    const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.strike!.paid, 'the strikers are paid').toBe(true);
+    expect(sent.some((a) => a.type === 'repair'), 'no repair the fund can no longer pay').toBe(false);
+    expect(state.colony!.projects.find((p) => p.id === 'park')!.stage).toBe('damaged');
+  });
+
+  it('T-AC-36 (C25, AM-10): an AI Governor whose persona repairs mends a damaged object, the most prestige first, from the fund before it builds; one that does not, or a fund too short, leaves it', () => {
+    POLITICS.ai.colony.repairs.trader = true;
+    POLITICS.ai.colony.repairs.saboteur = false;
+    POLITICS.ai.colony.commissions.trader = true;
+    const damaged = (state: GameState) => {
+      for (const id of ['park', 'stadium'] as const) {
+        state.colony!.projects.push({ id, stage: 'damaged', funded: { credits: PRESTIGE[id].credits, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
+      }
+    };
+    const stadium = PRESTIGE.stadium.repairCost;
+    for (const [persona, fund, mended] of [
+      ['trader', stadium, ['stadium']],
+      ['trader', stadium + PRESTIGE.park.repairCost, ['stadium', 'park']],
+      ['saboteur', 5_000, []],
+      ['trader', PRESTIGE.park.repairCost - 1, []],
+    ] as const) {
+      const state = governed();
+      state.treasury.money = fund;
+      damaged(state);
+      const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
+      const standing = state.colony!.projects.filter((p) => p.stage === 'standing').map((p) => p.id);
+      expect(standing.sort(), `${persona} with ${fund} cr`).toEqual([...mended].sort());
+      expect(sent.filter((a) => a.type === 'repair').map((a) => (a as { id: string }).id), `${persona} with ${fund} cr only tries repairs it can pay`).toEqual([...mended]);
+      if (mended.length > 0) expect(state.treasury.money, 'the fund pays each repair').toBe(fund - mended.reduce((sum, id) => sum + PRESTIGE[id].repairCost, 0));
+    }
+  });
+
+  it("T-AC-36: no commission when the persona doesn't build, when nothing is affordable, or while an object is open", () => {
+    POLITICS.ai.colony.commissions.saboteur = false;
+    const wontBuild = governed();
+    tick(new VoteHand(mindOf('ai0', 'saboteur'), createRng(1)), wontBuild);
+    expect(wontBuild.colony!.projects).toEqual([]);
+
+    POLITICS.ai.colony.commissions.trader = true;
+    const poor = governed();
+    poor.treasury.money = atShare('park') - 1;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), poor);
+    expect(poor.colony!.projects).toEqual([]);
+
+    const busy = governed();
+    const open = (['observatory', 'hospital', 'park', 'stadium', 'spaceport'] as const).slice(0, COLONY.maxOpen);
+    for (const id of open) commission(busy, 'ai0', id);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), busy);
+    expect(busy.colony!.projects.map((p) => p.id), `COLONY.maxOpen (${COLONY.maxOpen}) objects open: no more`).toEqual([...open]);
+  });
+
+  it('INV-41: a VoteHand whose mind has no seat salt refuses to draw the council\'s coin rather than share a stream', () => {
+    const state = governed();
+    ballot(state, LAND_10);
+    const bare: Mind = { ...mindOf('ai2', 'trader', 'rookie') };
+    delete bare.salt;
+    expect(() => tick(new VoteHand(bare, createRng(99)), state)).toThrow(/salt/);
+  });
+
+  it('T-AC-36: an AI Governor whose persona pays strikes pays one the fund can afford; one that does not, or a fund too short, leaves it', () => {
+    POLITICS.ai.colony.paysStrike.trader = true;
+    POLITICS.ai.colony.paysStrike.aggressive = false;
+    for (const [persona, fund, paid] of [['trader', 1_000, true], ['aggressive', 1_000, false], ['trader', COLONY.strike.cost - 1, false]] as const) {
+      const state = governed();
+      state.treasury.money = fund;
+      callStrike(state, 'food');
+      const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
+      expect(state.colony!.strike!.paid, `${persona} with ${fund} cr`).toBe(paid);
+      expect(sent.some((a) => a.type === 'payStrike'), `${persona} with ${fund} cr only tries when it means to pay`).toBe(paid);
+    }
+  });
+
+  it('T-AC-36: an AI voter leans against the sitting Governor when the colony is Unhappy or in Unrest, and not when Content or Restless', () => {
+    const vote = (happiness: number, office: 'governor' | 'sheriff' = 'governor') => {
+      // The sheriff is elected only when the table plays both offices.
+      POLITICS.offices = office === 'sheriff' ? ['governor', 'sheriff'] : ['governor'];
+      const state = governed();
+      state.month = POLITICS.electionMonths[1]!;
+      give(state, 'ai2', 3);
+      state.colony!.happiness = happiness;
+      const election = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: true })) }).politics!.election!;
+      const candidates = office === 'governor' ? { governor: ['ai1', 'ai2'], sheriff: [] } : { governor: [], sheriff: ['ai1', 'ai2'] };
+      state.politics = { ...state.politics!, governor: 'ai1', election: { ...election, stage: 'ballot', candidates } };
+      const hand = new VoteHand(mindOf('ai3', 'trader'), createRng(1));
+      for (let i = 0; i < 100 && state.politics!.election!.ballots.ai3?.[office] === undefined; i++) hand.tick(state, POLITICS.ai.actMs[1], act(state, 'ai3'));
+      return state.politics!.election!.ballots.ai3?.[office];
+    };
+    expect(vote(HAPPINESS.bands.content), 'content: the fewest plots, the sitting Governor').toBe('ai1');
+    expect(vote(HAPPINESS.bands.restless), 'restless: still the fewest plots').toBe('ai1');
+    expect(vote(HAPPINESS.bands.restless - 1), 'unhappy: against the sitting Governor').toBe('ai2');
+    expect(vote(HAPPINESS.bands.restless - 1, 'sheriff'), 'the sheriff vote is not about the Governor').toBe('ai1');
+  });
+});

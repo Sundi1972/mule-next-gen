@@ -1,0 +1,15 @@
+/* The workspace's own styles (the app's Tailwind, the @mule/ui theme, the mock's keyframes), unchanged. */
+@import "../../mock.css";
+
+/*
+ * Stands for the product's `short:` variant (apps/web/src/index.css on feat/strategist: max-height 380 px, inside the
+ * shell container under 1100 px). A frame on a desktop page has the window's height, so the frame says it is short
+ * itself, with data-short. Its own name, so it never collides with `short` once this workspace has the app's.
+ */
+@custom-variant frame-short {
+  &:where([data-short] *) {
+    @container shell (width < 1100px) {
+      @slot;
+    }
+  }
+}

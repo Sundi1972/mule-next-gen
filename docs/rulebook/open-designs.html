@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open designs and backlog · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Open designs and backlog</h1>
+<p class="rb-lede">Every decision that is not in the game yet, and every open question, with the team responsible. Each item links to the chapter that explains the rule in full.</p>
+<p class="owner">As of 6 Nov 2026. Kept current the day each decision is made (Heiko's rule, 5 Nov): the owning team or the programme manager adds it here and in its chapter.</p>
+<h2 id="being-designed">Being designed <span class="pill open">Being designed</span></h2>
+<p>A design is under way or a question is open. Nothing is built yet.</p>
+<h3 id="food-supply">Is there enough Food in the economy? <span class="pill open">Being designed</span></h3>
+<p>Once computer players buy the Food they need, they empty the same store shelf the colonists buy from. With the buying fix (Heiko&#x27;s &#x27;sell surplus&#x27;, the computer players also keeping back the Energy and, with a farm, the Water they need), colonists are short of Food or Water in about 66-70% of months, against 62-66% if they kept back only their Food and about 50% before. The levers are Heiko&#x27;s: start Food, the store&#x27;s Food per player, Food spoilage (50%), farm yield.</p>
+<p class="owner">Responsible: Heiko, at the balance pass at the end; measured by the Balance team (WS1) · Status: Recorded 5 Nov; on 6 Nov Heiko approved the colony economy: the supply pass starts with power, Food spoils a quarter a month, and the colonists' hardship and sickness ship with it, tuned in one pass (decisions 1 to 3) · The rule in full: <a href="production.html">production</a></p>
+<h3 id="inert-traits">Five plot traits do nothing yet <span class="pill open">Being designed</span></h3>
+<p>Bedrock, sheltered, unstable, infested and flood plain are drawn on the map but change nothing. Wanted or not is Heiko&#x27;s call; if wanted, a small design.</p>
+<p class="owner">Responsible: Balance team (WS1) with the Maps team (WS5) · Status: Waiting for Heiko · The rule in full: <a href="land.html">land</a></p>
+<h3 id="glimmer-perk">The Glimmer&#x27;s perk: seeing next month&#x27;s event early <span class="pill open">Being designed</span></h3>
+<p>Promised in the lobby, not built.</p>
+<p class="owner">Responsible: Balance team (WS1) · Status: Waiting for Heiko; a small design after the next colony piece · The rule in full: <a href="game-flow.html">game flow</a></p>
+<h3 id="claude-code-seat">A friend's Claude Code plays a seat <span class="pill open">Being designed</span></h3>
+<p>The host hands a computer seat to someone's Claude Code, on their own Pro or Max plan, with no API key; each seat has its own join code, so several can play at once. A player who leaves early can hand over their own seat the same way.</p>
+<p class="owner">Responsible: Brain team (WS2), with the Table team (WS4) for the lobby, the TV and the phone screens, and the Auctions team (WS3) for the game server's seams · Status: Heiko agreed the goals and chose design B (6 Nov); spec being written, built after the MVP proof · The rule in full: <a href="computer-players.html#claude-code-seat">computer players</a></p>
+<h2 id="designed">Designed, not built yet <span class="pill designed">Designed</span></h2>
+<p>Decided by Heiko, or ruled by the programme manager under his authority. Not in the game yet; the named team builds it.</p>
+<h3 id="smarter-computer-players">Smarter buying and selling for computer players <span class="pill designed">Designed</span></h3>
+<p>One value for every unit a computer player could hold: the chance it is needed times the cost of going short, plus the chance it is not times what it fetches later. Computer players buy their shortfall first, stock up when goods are cheap, sell surplus when dear, value power plants and wells at what they save, and later speculate. Claude&#x27;s plan can set its price view.</p>
+<p class="owner">Responsible: AI Strategy team (WS9), with the Balance team (WS1) for its files · Status: Heiko chose option B and said &#x27;Yes, build it&#x27; (5 Nov); spec #385; the first piece ships switched off until measured · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="complete-store-pricing">The store's prices on Heiko's five rules <span class="pill designed">Designed</span></h3>
+<p>The store prices each good from the colony's months of cover: normal while the colony holds two months or makes what it eats, then tight, shortage and severe (1.25, 2 and 4 times normal) while it eats into its stock; colonists short last month counts as severe. Each step has its own spread. Prices go straight up, come down a quarter a month, never below normal, move halfway towards a high trade between players, stop at 12 times normal, and read the same on the hub, the auction and the TV. Food: 30, 38, 60, 120. Replaces the 5 Nov market-maker steps; the ceiling, sell-out rule, moving ship prices and MULE cap stay.</p>
+<p class="owner">Responsible: Maps team (WS5), with WS1 and WS3 for their files · Status: Designed, not in the game yet, WS5 (Heiko approved the colony economy, 6 Nov); ships with the supply pass (decision 1) · The rule in full: <a href="store-and-prices.html#store-pricing-design">store and prices</a></p>
+<h3 id="plot-consumption">What each kind of plot uses <span class="pill designed">Designed</span></h3>
+<p>One table of Food, Water and Energy per kind of plot: miners eat more, farms and plants drink, works burn extra Energy. The household's 2 Food and 1 Water stay; quarters are summed per player and rounded up once; crews eat from their owner's stock, never the store.</p>
+<p class="owner">Responsible: Maps team (WS5), built in WS1's files · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); ships with the supply pass (decision 1); how it meets the 5 Nov Water-use design is open · The rule in full: <a href="production.html#plot-consumption">production</a></p>
+<h3 id="colony-demand">The colony's demand: what the store counts <span class="pill designed">Designed</span></h3>
+<p>Players' households and crews by the plot table, the Energy their plots burn, and the colonists' full need at any price (no wages), plus a festival and the export ship.</p>
+<p class="owner">Responsible: Maps team (WS5), built in WS1's files · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); ships with the supply pass (decision 1) · The rule in full: <a href="store-and-prices.html#colony-demand">store and prices</a></p>
+<h3 id="medicine-electronics-demand">Medicine and Electronics demand <span class="pill designed">Designed</span></h3>
+<p>Colonists take their Medicine from the store, free, and it counts as demand; short of it they fall sick. They want Electronics (a mood bonus when met, nothing lost when not), and that want also counts as demand for Rare earth and Alloy. The price is the signal; the 12x ceiling is a safety rail. Nothing is imported: colony buildings get Alloy and Electronics only from what the colony made. Decisions 14 and 15 are superseded by the health rule (Heiko, 6 Nov): Medicine reaches the colonists' mood only through sickness, and hunger raises the Medicine need only through the sick share.</p>
+<p class="owner">Responsible: Maps team (WS5); the mood bonus is the Politics team's (WS7) · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); ships with the Medicine supply (decision 1) · The rule in full: <a href="store-and-prices.html#medicine-electronics-demand">store and prices</a></p>
+<h3 id="crew-shortfall">Hungry, thirsty and sick crews work slower <span class="pill designed">Designed</span></h3>
+<p>A crew left short at the month end works slower next month on the colonists' tolerance curve: nothing under a tenth short, half output with nothing. The farm's dry halving goes. From a fifth of the colony sick, the same share of crews is sick; one Medicine a month cures a player's crews.</p>
+<p class="owner">Responsible: Maps team (WS5), built in WS1's files · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); ships with the Food and Medicine supply (decision 1) · The rule in full: <a href="production.html#crew-shortfall">production</a></p>
+<h3 id="sickness-from-colony">The colony's sickness reaches players <span class="pill designed">Designed</span></h3>
+<p>A player's chance of falling sick rises with the colonists' sick share, by up to 10 points at the worst, added rather than multiplied.</p>
+<p class="owner">Responsible: Maps team (WS5) · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); ships with the Medicine supply (decision 1) · The rule in full: <a href="development.html#sickness-from-colony">development</a></p>
+<h3 id="colony-health-gauge">The colony health gauge <span class="pill designed">Designed</span></h3>
+<p>Beside the mood, the share of colonists who are well, 100 down to 60. A new piece of screen: it needs a mock before it is built.</p>
+<p class="owner">Responsible: Maps team (WS5) · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); mock first; ships with the Medicine supply (decision 1) · The rule in full: <a href="colony-and-politics.html#colony-health-gauge">colony and politics</a></p>
+<h3 id="hunger-and-spoilage">Hunger from the last meal; Food spoils a quarter a month <span class="pill designed">Designed</span></h3>
+<p>A player is hungry when their household went short at the last month end, not when they start development holding too little. Food in a player's stock spoils a quarter a month instead of half.</p>
+<p class="owner">Responsible: Maps team (WS5), built in WS1's and WS3's files · Status: Designed, not in the game yet, WS5 (Heiko, 6 Nov); set in the supply pass with the power supply (decision 1) · The rule in full: <a href="development.html#hunger-last-meal">development</a> and <a href="production.html#food-spoilage-quarter">production</a></p>
+<h3 id="colony-fund-buildings-6nov">The colony fund and buildings: Heiko's rulings of 6 Nov <span class="pill designed">Designed</span></h3>
+<p>Heiko's pace choice (option C, 6 Nov): the Federation's grant is 250 a month end (200 since 7 Nov, Heiko, so taxes stay the fund's largest income); up to 3 colony buildings can be in progress at once; AI Governors commission at a tenth of the price and tax at about 10%; every colony building costs half the credits, goods and upkeep; build times stay 1 to 3 months per building; nothing is imported, so buildings take only goods made in the colony.</p>
+<p class="owner">Responsible: Politics team (WS7) for the fund and buildings, Balance team (WS1) for the numbers · Status: Heiko's ruling, 6 Nov; recorded here by WS5 until those chapters carry it · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="auction-rules-b-to-e">Auction rules: stop at your need, switch sides, rest zones, bidding above a sold-out store <span class="pill designed">Designed</span></h3>
+<p>Selling stops by itself at next month&#x27;s need, whoever you sell to; holding the arrow for one second sells below it on purpose. Buyers get no automatic stop. You can switch between buying and selling during the walk. Rest bands above and below the store&#x27;s lines stop accidental trades. When the store is sold out, buyers can walk above it and push the price up.</p>
+<p class="owner">Responsible: Auctions team (WS3), screens by the UX team (WS6) · Status: Heiko: hold the arrow 1 s; the stop covers all sales; no buyer stop (5 Nov). Rules amendment a33879c4 · The rule in full: <a href="goods-auction.html">goods auction</a></p>
+<h3 id="drone-and-geology">Plot info: dots in the store's box (Scan, My plots, the soil-test card and the gem are in the game) <span class="pill designed">Designed</span></h3>
+<p>In the game: every good at 0-3 dots on every screen; mark plots and tap Scan for an instant report in the side rail (batch 59); a My plots list in planning and on the walking screen, the Plots chip on the phone (#545) and on the laptop; a card after each soil test saying what the plot is best for, with its dots; Look shows the dots first; the gem for Crystite or Rare earth on your own map, never on the TV (WS4). Still designed: dots in the store's "Your plots" box, which needs a layout that fits the side room; the box points to Plots meanwhile. Terrain hints stay.</p>
+<p class="owner">Responsible: UX &amp; Gameplay team (WS6), with WS4 (the map gem) · Status: Heiko chose option B with the report in the side rail (5 Nov); Scan in the game (batch 59), My plots (#545), the map gem (#558, #562), the soil-test card, Look's order and the laptop's Plots chip (PR-3b); the store box's dots wait for a layout · The rule in full: <a href="land.html#drone-geology-redesign">land</a></p>
+<h3 id="water-base-resource">Water is a base resource: every plot uses it <span class="pill designed">Designed</span></h3>
+<p>Food farms use 2 Water, every other working plot 1. Energy is settled first, then Water: the biggest Water user is turned off first and makes 20%. Wells and plants take the other good last and are never turned off.</p>
+<p class="owner">Responsible: Balance team (WS1), rule AM-18 · Status: Designed by Heiko 5 Nov; built after the buying fix, about 1.5 to 2 days · The rule in full: <a href="production.html">production</a></p>
+<h3 id="colony-score-monthly">The colony score shows every month <span class="pill designed">Designed</span></h3>
+<p>Shown next to the league at every month end, on the TV and the phones, not only at game over.</p>
+<p class="owner">Responsible: Politics team (WS7), screens by the Events team (WS8) · Status: Heiko: &#x27;Yes, every month&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="colony-grounds-look">The colony grounds look: direction C <span class="pill designed">Designed</span></h3>
+<p>Each colony building is modelled once and shown as a finished, lit picture for every stage, with lamps, colonists, smoke and the month-end dusk drawn live over it; the ground is painted like the world map. Live 3D on the TV comes later from the same models.</p>
+<p class="owner">Responsible: Visual Design team (WS10), screens with WS4 and WS6 · Status: Heiko ruled direction C on 6 Nov; free (CC0) assets only for now · The rule in full: <a href="colony-and-politics.html#colony-grounds-look">colony and politics</a></p>
+<h3 id="claude-voice">Claude&#x27;s own lines at the table <span class="pill designed">Designed</span></h3>
+<p>A Claude seat&#x27;s routine picks say no template line; instead Claude&#x27;s line from each land and auction plan is said at the start of that phase, within the chat limits.</p>
+<p class="owner">Responsible: Brain team (WS2), with the Auctions team (WS3) for one seam · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="theft-richest">MULE theft is likelier for the richest player <span class="pill designed">Designed</span></h3>
+<p>The catalogue's MULE theft has a +1 point for the richest player besides its mood part. The mood part is in the game with the colony's second set of social events (6 Nov); the richest +1 waits, since it would change games played without politics.</p>
+<p class="owner">Responsible: Balance team (WS1), C29 · Status: Designed, not in the game yet: C29, WS1 (PM, 6 Nov) · The rule in full: <a href="colony-and-politics.html#theft-richest">colony and politics</a></p>
+<h3 id="need-vs-hold">"Need" for next month, "hold" at the auction <span class="pill designed">Designed</span></h3>
+<p>The phone hub keeps "need" for what next month uses; every auction label for the larger number, which adds upkeep and spoilage, says "hold": the TV status column, the phone's status words ("Hold 4 more Water: upkeep and spoilage take some before next month."), the keep line and the bidding readout.</p>
+<p class="owner">Responsible: UX team (WS6), with the Auctions team (WS3) for its screens · Status: Designed, not in the game yet, WS6 (ruling 6 Nov; built after the auction need fix #439) · The rule in full: <a href="goods-auction.html">the goods auction</a></p>
+<h2 id="being-built">Being built <span class="pill progress">Being built</span></h2>
+<p>A team is building it or it is in a pull request.</p>
+<h3 id="claude-proof">Proving Claude can play: the 120-game tournament <span class="pill progress">Being built</span></h3>
+<p>Claude's seats play on Sonnet (Heiko's choice). The cheaper Haiku proof passed on 5 Nov (20 games, $0.033 a game, no stalls). Now a 120-game Sonnet tournament against the computer players, which Heiko cleared on 6 Nov (about $57, capped at $60), shows whether Claude's seats beat them. It runs on one fixed build, after a free check that the test is fair.</p>
+<p class="owner">Responsible: Brain team (WS2) · Status: Cleared 6 Nov; runs once the auction need fix (#439) is in the build · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h2 id="backlog">Backlog <span class="pill backlog">Backlog</span></h2>
+<p>Wanted, nobody on it yet.</p>
+<h3 id="return-mule-refund">Hand a MULE back to the store mid-turn for money <span class="pill backlog">Backlog</span></h3>
+<p>From the MULE swap rule: a swapped-out MULE goes back to the corral only at turn end, with no refund.</p>
+<p class="owner">Responsible: Not assigned · Status: Waiting for Heiko to want it · The rule in full: <a href="development.html">development</a></p>
+<h3 id="strategy-engine-4">Computer players keep a plan and re-plan on triggers <span class="pill backlog">Backlog</span></h3>
+<p>The next step of the AI&#x27;s strategy engine.</p>
+<p class="owner">Responsible: AI Strategy team (WS9) · Status: Not started · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="social-ai">Social computer players <span class="pill backlog">Backlog</span></h3>
+<p>Monthly social reasoning, replies to whispers, replies that can change a vote, a mute button, deal cards, politics from the reasoning, and a proof that social AIs win more.</p>
+<p class="owner">Responsible: Brain team (WS2) · Status: Not started · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="politics-next">Deal cards and reputation, sabotage and the Sheriff, budget and projects <span class="pill backlog">Backlog</span></h3>
+<p>The colony politics still to come after the council and four laws.</p>
+<p class="owner">Responsible: Politics team (WS7) · Status: Not started · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="air-gauge-bands">The air gauge reads its bands from the game <span class="pill backlog">Backlog</span></h3>
+<p>The TV&#x27;s air gauge keeps its own copy of the pollution bands; it should read them from the game so they cannot drift.</p>
+<p class="owner">Responsible: Events team (WS8) · Status: Backlog · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="retire-old-walk-settings">Retire the old walk-time setting and the steering switch <span class="pill backlog">Backlog</span></h3>
+<p>Once the last walking piece is in, the old development walk time and its switch go.</p>
+<p class="owner">Responsible: Balance team (WS1) with the Brain team (WS2) · Status: After the last walking piece · The rule in full: <a href="development.html">development</a></p>
+<h3 id="colonists-as-workers">Colonists as workers <span class="pill backlog">Backlog</span></h3>
+<p>Players&#x27; plots would be worked by the colony&#x27;s colonists, paid wages by the players, so the population limits production and players compete for workers.</p>
+<p class="owner">Responsible: not assigned · Status: Parked by Heiko on 6 Nov because wages would add a second economy · The rule in full: <a href="colony-and-politics.html#colonists-as-workers">colony and politics</a></p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

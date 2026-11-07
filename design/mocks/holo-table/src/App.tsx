@@ -8,6 +8,7 @@ import { PhonePlanning } from './screens/phone/PhonePlanning';
 import { PhoneResults } from './screens/phone/PhoneResults';
 import { MapLab } from './screens/MapLab';
 import { System } from './screens/System';
+import { TableMocks } from './screens/table/TableMocks';
 import { TvAuction } from './screens/tv/TvAuction';
 import { TvDevelop } from './screens/tv/TvDevelop';
 import { TvEvent } from './screens/tv/TvEvent';
@@ -58,6 +59,7 @@ export function App() {
   if (kind === 'tv' && step) return <TvOnly step={step} />;
   if (kind === 'system') return <System />;
   if (kind === 'map') return <MapLab />;
+  if (kind === 'table') return <TableMocks id={id} />;
   return <Overview />;
 }
 
@@ -104,9 +106,14 @@ function Overview() {
               screen on your actual phone and the big screen on a laptop to feel both.
             </p>
           </div>
-          <a href="#system" className="inline-flex h-11 items-center rounded-control border border-holo-line bg-holo-soft px-4 font-display font-semibold hover:border-holo">
-            Design system
-          </a>
+          <span className="flex gap-3">
+            <a href="#table" className="inline-flex h-11 items-center rounded-control border border-holo-line bg-holo-soft px-4 font-display font-semibold hover:border-holo">
+              Table screens (sideways)
+            </a>
+            <a href="#system" className="inline-flex h-11 items-center rounded-control border border-holo-line bg-holo-soft px-4 font-display font-semibold hover:border-holo">
+              Design system
+            </a>
+          </span>
         </header>
         {STEPS.map((s, i) => (
           <section key={s.id} className="flex flex-col gap-4">

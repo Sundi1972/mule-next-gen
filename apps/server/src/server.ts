@@ -1,15 +1,26 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { RuleError } from '@mule/engine';
+import { GOODS, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
-import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type Room } from '@tabletop/core';
+import { RoomRegistry, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { familyFilter } from './family-filter.js';
 import { AI_NAMES, MuleGame } from './mule-game.js';
+import { createRecordedGame, isUserError } from './record.js';
 
 const MAX_MESSAGE_BYTES = 4_096;
-/** Messages per second a screen may send before it is told to slow down. */
+/**
+ * Messages per second a screen may send; the rest are dropped. It fits a phone steering at DEV_STEER.steerMaxPerSecond
+ * (10) with its presses and pings beside it (AM-15); a faster stick would need it raised.
+ */
 const RATE_LIMIT = 20;
+/**
+ * Bytes ws holds beyond what the OS has taken before a socket's frames are skipped: room for three ~19 kB views. It
+ * reads `bufferedAmount`, which leaves out the kernel's own TCP buffer, so a socket skips frames only once that is full
+ * too: about 5 s of 600 B frames here is a lower bound on how far behind it is by then.
+ */
+export const FRAME_BACKLOG_BYTES = 64 * 1024;
 const IDLE_ROOM_MS = 30 * 60_000;
 
 const TYPES: Record<string, string> = {
@@ -31,14 +42,37 @@ export interface MuleServer {
 /**
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
+ * Games play politics unless `politics` is false. With a `recordDir`, each game's record is written there at game over.
+ * `forceWolves: true`, for tests, brings a pack to the first colonist out on wolf land at once.
  */
-export function createMuleServer(options: { staticDir?: string; seed?: () => number } = {}): MuleServer {
+export function createMuleServer(
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null; forceWolves?: boolean } = {},
+): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
+  const recordDir = options.recordDir ?? null;
+  const createGame = (ctx: GameContext) => {
+    const gameSeed = seed();
+    const gameOptions = {
+      maxMonths: options.maxMonths,
+      phaseScale: options.phaseScale,
+      politics: options.politics ?? true,
+      // A test option: a pack for the first colonist out on wolf land at once.
+      ...(options.forceWolves ? { forceWolves: true } : {}),
+    };
+    if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
+    return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir, isUserError }).game;
+  };
   const registry = new RoomRegistry<MuleIntent, MuleView>({
-    createGame: (ctx) => new MuleGame(ctx, seed()),
+    createGame,
     aiNames: AI_NAMES,
     emotes: EMOTES,
-    isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    picks: SPECIES,
+    // Every chat line, a computer seat's included, and every player's name: a children's table plays this game.
+    moderate: familyFilter,
+    // The same test the recorder uses: what the room shows a player, the record keeps as a refusal, not a crash.
+    isUserError,
+    // The room has already ended itself; only the stack is logged, never what the players sent.
+    onError: (err) => console.error(`game error: ${err instanceof Error ? err.stack : String(err)}`),
   });
   const staticDir = options.staticDir && existsSync(options.staticDir) ? resolve(options.staticDir) : null;
 
@@ -53,6 +87,7 @@ export function createMuleServer(options: { staticDir?: string; seed?: () => num
     close: () =>
       new Promise((done) => {
         clearInterval(sweeper);
+        registry.disposeAll();
         for (const client of wss.clients) client.terminate();
         wss.close();
         server.close(() => done());
@@ -87,12 +122,21 @@ function handleHttp(
   createReadStream(file).pipe(res);
 }
 
-function attach(socket: WebSocket, registry: RoomRegistry<MuleIntent, MuleView>): void {
-  const conn: Connection<MuleView> = {
+/** The part of a ws socket a room's connection uses. */
+export type FrameSocket = Pick<WebSocket, 'readyState' | 'OPEN' | 'bufferedAmount' | 'send'>;
+
+/** A socket as a room sees it: sent to while open, and behind, so it misses frames, while its backlog is over the cap. */
+export function socketConnection(socket: FrameSocket): Connection<MuleView> {
+  return {
     send: (msg) => {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
     },
+    behind: () => socket.bufferedAmount > FRAME_BACKLOG_BYTES,
   };
+}
+
+function attach(socket: WebSocket, registry: RoomRegistry<MuleIntent, MuleView>): void {
+  const conn = socketConnection(socket);
   const from = { seatId: null as string | null };
   let room: Room<MuleIntent, MuleView> | undefined;
   let windowStart = Date.now();
@@ -144,16 +188,29 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
   switch (m.t) {
     case 'join':
-      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) ? (m as ClientEnvelope<MuleIntent>) : null;
+      return str(m.code) && str(m.name) && (m.seatToken === undefined || str(m.seatToken)) && (m.handoff === undefined || str(m.handoff))
+        ? (m as ClientEnvelope<MuleIntent>)
+        : null;
     case 'board':
       return str(m.code) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'addAi':
     case 'start':
+    case 'close':
+    case 'leave':
+    case 'handoff':
       return m as ClientEnvelope<MuleIntent>;
+    case 'kick':
+      return str(m.seatId) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'chat':
       return str(m.text) && (m.to === undefined || str(m.to)) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'emote':
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'pick':
+      return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'setSeatKind':
+      return str(m.seatId) && (m.kind === 'builtin' || m.kind === 'claude') ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'color':
+      return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
       return num(m.clientTime) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'intent':
@@ -163,15 +220,39 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   }
 }
 
+/** A stick component: a number from -1 to 1 (the protocol's 1/8 steps are the phone's; the floor takes any). */
+const isAxis = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1;
+
+const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
+/** The shape of a tax promise; RULE-10 in the engine checks the rest. */
+const isPromise = (x: unknown) => {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Record<string, unknown>;
+  return p.kind === 'cap' ? Number.isInteger(p.percent) : p.kind === 'lower' || p.kind === 'hold';
+};
+
+function isProposal(v: unknown): boolean {
+  const p = v as Record<string, unknown> | null;
+  if (typeof p !== 'object' || p === null || typeof p.law !== 'string') return false;
+  if (p.kind === 'repeal') return true;
+  return p.kind === 'enact' && Number.isInteger(p.setting) && (p.replaces === undefined || typeof p.replaces === 'string');
+}
+
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
   const i = v as Record<string, unknown>;
   const int = (x: unknown) => Number.isInteger(x);
   switch (i.type) {
     case 'ready':
+    case 'continue':
+    case 'act':
+    case 'hurry':
+    // Development's old taps reach the game, which refuses them in words (C14): an old bundle's phone is told why.
     case 'buyMule':
     case 'pub':
       return true;
+    case 'steer':
+      return isAxis(i.x) && isAxis(i.y) && (i.tick === undefined || (Number.isInteger(i.tick) && (i.tick as number) >= 0));
     case 'claim':
     case 'install':
     case 'analyse':
@@ -185,6 +266,34 @@ function isIntent(v: unknown): v is MuleIntent {
       return i.side === 'buyer' || i.side === 'seller' || i.side === 'pass';
     case 'walk':
       return i.dir === 'up' || i.dir === 'down' || i.dir === 'stop';
+    case 'walkStep':
+      return i.dir === 'up' || i.dir === 'down';
+    case 'list': {
+      const item = i.item as Record<string, unknown> | null;
+      return typeof item === 'object' && item !== null && typeof item.kind === 'string' && int(item.x) && int(item.y) && typeof i.minimum === 'number' && typeof i.unsold === 'string';
+    }
+    case 'unlist':
+      return typeof i.id === 'string';
+    case 'run':
+      return (i.office === null || isOffice(i.office)) && (i.promise === undefined || isPromise(i.promise));
+    case 'vote':
+      return isOffice(i.office) && (i.candidate === null || typeof i.candidate === 'string');
+    case 'setTax':
+      return int(i.percent);
+    case 'commission':
+    case 'repair':
+      return typeof i.id === 'string';
+    case 'payStrike':
+      return true;
+    case 'propose':
+      return i.proposal === null || isProposal(i.proposal);
+    case 'voteLaw':
+      return typeof i.yes === 'boolean';
+    case 'donate': {
+      const goods = i.goods as Record<string, unknown> | undefined;
+      const record = typeof goods === 'object' && goods !== null && !Array.isArray(goods);
+      return typeof i.id === 'string' && int(i.credits) && (goods === undefined || (record && Object.entries(goods).every(([g, n]) => (GOODS as readonly string[]).includes(g) && int(n))));
+    }
     default:
       return false;
   }
