@@ -10,6 +10,8 @@ import {
   createGame,
   emptyStock,
   GOOD_CONFIG,
+  MULE,
+  mulePrice,
   needsOf,
   PERCENT,
   UPKEEP,
@@ -141,5 +143,23 @@ describe('deep3 fix 1: the Water production checks for the Food plots', () => {
       .split('\n')
       .find((l) => l.startsWith('- production: '))!;
     expect(production).toContain('Who is short of Water is decided as production begins, before any plot runs, from the Water the last upkeep left: Water made at a production waters the next one.');
+  });
+});
+
+describe("deep3 fix 2: what a MULE counts for in Worth", () => {
+  it("deep3 fix 2: the land brief's MULE line says each MULE the seat owns counts at the store's MULE price, labour plus Smithore at its posted price times the factor, live, and that it moves with Smithore", () => {
+    const { state } = table(['food', 'smithore', 'greenBelt', null]);
+    state.store.muleFactor = 1.25;
+    const line = (smithore: number) =>
+      `Each MULE you own (3 now) counts in your Worth at the store's MULE price, now ${mulePrice(state)} cr: ` +
+      `(${MULE.labour} labour + ${MULE.smithorePerMule} Smithore × the posted Smithore price ${smithore}) × the store's factor 1.25. ` +
+      "At the game's end each counts at that day's price, which rises and falls with Smithore's price.";
+    state.store.posted.smithore = 40;
+    const cheap = mulePrice(state);
+    expect(land(state)).toContain(line(40));
+    state.store.posted.smithore = 1_500;
+    expect(mulePrice(state)).toBeGreaterThan(cheap);
+    expect(land(state)).toContain(line(1_500));
+    expect(land(state)).toContain(`now ${mulePrice(state)} cr`);
   });
 });
