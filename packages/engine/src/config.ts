@@ -106,13 +106,13 @@ export const EXPORT_DEMAND: Partial<Record<Good, number>> = {
 };
 
 /**
- * Factory recipes: what one month's run takes and makes. Its Energy and Water are the factory's use of the base goods
- * (AM-17, AM-18): short of either, the factory is turned off. The rest are its inputs. Water 1 for every recipe (AM-18
- * W1, Heiko 5 Nov: every plot drinks; Alloy and Electronics gained it, Medicine's was already 1).
+ * Factory recipes: what one month's run takes and makes. Its Energy is the factory's use of a base good (AM-17): short
+ * of it, the factory is turned off. The rest are its inputs. With AM-18 on, a factory's Water is UPKEEP.factoryWaterUse,
+ * also a use, and Medicine's 1 here is that use rather than an input.
  */
 export const RECIPES: Record<ProcessedGood, { inputs: Partial<Stock>; output: number }> = {
-  alloy: { inputs: { smithore: 2, energy: 2, water: 1 }, output: 2 },
-  electronics: { inputs: { rareEarth: 1, alloy: 1, energy: 1, water: 1 }, output: 1 },
+  alloy: { inputs: { smithore: 2, energy: 2 }, output: 2 },
+  electronics: { inputs: { rareEarth: 1, alloy: 1, energy: 1 }, output: 1 },
   medicine: { inputs: { food: 1, water: 1, energy: 1 }, output: 2 },
 };
 
@@ -277,8 +277,23 @@ export const UPKEEP = {
    * Factories use what their recipe says. The household's drink is kept back first; an owner short of the rest turns
    * plots off after the Energy pass, biggest use first, until the rest fit, and a plot off makes offOutputShare. A well
    * pays its use from its own output and is never turned off; a plant takes its Water last, from what the others leave.
+   * `food`, the farm's Water, is AM-18's switch (production.ts::plotWaterOn): 2 turns it on (Heiko's number); at 0 no
+   * plot or factory uses Water and the farm halving below is the rule, as before AM-18. It stays 0 until PR-12 turns it
+   * on with a Food lever on corrected Water prices (PM ruling, 8 Nov: at 2 the colony made about half the Food).
    */
-  waterUse: { food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
+  waterUse: { food: 0, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
+  /**
+   * Water a factory uses a month with AM-18 on (AM-18 W1, Heiko 5 Nov: every plot drinks; Alloy and Electronics gain 1,
+   * Medicine's is the 1 already in its recipe). Off, Medicine takes its recipe's Water as an input, as before.
+   */
+  factoryWaterUse: { alloy: 1, electronics: 1, medicine: 1 } satisfies Record<ProcessedGood, number>,
+  /**
+   * With AM-18 off (plotWaterOn): plots that need irrigation. When their owner holds less Water than the household and
+   * crew need, they make shortOutputShare (on top of any Energy turn-off). With AM-18 on, waterUse replaces this.
+   */
+  irrigated: ['food'] as RawGood[],
+  /** With AM-18 off: share of its output an irrigated plot makes when its owner is short of Water, rounded down. */
+  shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
   /** Colonists' Energy demand, as a share of their Food and Water units. */

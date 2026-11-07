@@ -38,6 +38,7 @@ import {
   walkSeconds,
   WALK,
   baseOffOrder,
+  plotWaterOn,
   energyOffOrder,
   energyUseOf,
   feedOf,
@@ -137,7 +138,7 @@ export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01,
  */
 export function ownSupply(o: Outlook, good: Good): number {
   if (good === 'energy') return Math.max(0, o.made.energy - o.plantsUse);
-  if (good === 'water') return Math.max(0, o.made.water - o.wellsUse);
+  if (good === 'water' && plotWaterOn()) return Math.max(0, o.made.water - o.wellsUse);
   return o.made[good];
 }
 
@@ -147,7 +148,7 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
   if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - STRATEGIST.greenBeltCost : -STRATEGIST.greenBeltCost;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
   // A plant or a well pays its own use from what it makes (AM-17 R2, AM-18 W5): only the rest is its to sell or to use.
-  const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : outfit === 'water' ? Math.max(0, y.made - y.water) : y.made;
+  const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : outfit === 'water' && plotWaterOn() ? Math.max(0, y.made - y.water) : y.made;
   let revenue = afterTax(obs, made * P(outfit, made));
   // Output is sold at its own month's auction, before upkeep spoils it: held 0 months.
   const each = AI_VALUE.unit ? carrySell(obs, outfit, mind, P(outfit, made), 0) : 0;
@@ -162,7 +163,7 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
     revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, made)));
   }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
-  const water = outfit === 'water' ? 0 : y.water * P('water', -y.water);
+  const water = outfit === 'water' || y.water === 0 ? 0 : y.water * P('water', -y.water);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
   const crew = full ? y.crew * (P('food') / UPKEEP.crewPerFood + P('water') / UPKEEP.crewPerWater) : 0;
   const air = full ? y.air * airUnitCost(obs) : 0;
@@ -305,7 +306,7 @@ export function chainOf(obs: GameState, me: string, good: Good): { links: Good[]
 function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[] } {
   if (!chainsOn()) return { links: [], standing: [] };
   // Water, like Energy, is a base good every plot uses (AM-18), never a chain's link.
-  const unfed = unfedInputs(obs, me, good).filter((g) => g !== 'water');
+  const unfed = unfedInputs(obs, me, good).filter((g) => g !== 'water' || !plotWaterOn());
   const household = householdNeeds(obs, me);
   if (unfed.some((g) => g in household)) return { links: [], standing: [] };
   const links = new Set<Good>();
@@ -442,6 +443,11 @@ export function keptUnits(good: Good, n: number): number {
 export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
   if (good === 'food') return needsOf(obs, me).food + keptUnits(good, needsOf(obs, me).food);
   if (good === 'energy') return keptUnits(good, monthNeeds(obs, me).energy);
+  if (good === 'water' && !plotWaterOn()) {
+    // AM-18 off: a seat with a farm to water carries next month's drink, as the farm halving reads it.
+    const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
+    return farms ? needsOf(obs, me).water + keptUnits(good, needsOf(obs, me).water) : 0;
+  }
   const drinks = obs.tiles.some((t) => t.owner === me && t.outfit !== 'water' && waterUseOf(t) > 0);
   if (good === 'water' && drinks) return needsOf(obs, me).water + keptUnits(good, monthNeeds(obs, me).water);
   return 0;
@@ -539,6 +545,14 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const eat = needsOf(obs, me).food;
     block = eat + Math.ceil(eat / keepRate);
     use = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / block;
+  } else if (good === 'water' && !plotWaterOn()) {
+    // AM-18 off: a month short of Water halves the seat's irrigated farms, over the drink and its carry.
+    const farms = mine.filter((t) => UPKEEP.irrigated.includes(t.outfit as never));
+    const drink = needsOf(obs, me).water;
+    if (need > 0 && farms.length > 0) {
+      block = drink + Math.ceil(drink / keepRate);
+      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
+    }
   } else if (good === 'energy' || good === 'water') {
     // AM-17 and AM-18: the own plants' or wells' net output covers, in order, the household's drink (Water: kept back
     // first) and then the plots; a unit short keeps on the plot baseOffOrder would turn off at that point, worth what
@@ -567,7 +581,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   for (const t of mine) {
     if (!isFactory(t.outfit!)) continue;
     const q = RECIPES[t.outfit].inputs[good];
-    if (!q || good === 'energy' || good === 'water') continue;
+    if (!q || good === 'energy' || (good === 'water' && plotWaterOn())) continue;
     const units = Object.values(RECIPES[t.outfit].inputs).reduce((n, x) => n + (x ?? 0), 0);
     const each = afterTax(obs, factoryFit(obs, t, t.outfit, me).output * P(t.outfit)) / units;
     const add = Math.ceil(q / keepRate);
@@ -580,7 +594,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
   const { sell: resale, buy: resaleBuy, room } = carryOf(obs, o, good, mind);
   const length = Math.max(block, room) + 1;
-  const floorUnits = good === 'food' || good === 'energy' || good === 'water' ? Math.min(block, need) : 0;
+  const floorUnits = good === 'food' || good === 'energy' || (good === 'water' && plotWaterOn()) ? Math.min(block, need) : 0;
 
   const keep: number[] = [];
   const buy: number[] = [];
@@ -809,8 +823,15 @@ function heldDamageOf(obs: GameState, o: Outlook, good: Good, mind: Mind, need: 
   return Array.from({ length: need.target }, (_, h) => (h < household ? worth : input));
 }
 
-/** What a month short of Water costs the seat: each plot in its Water turn-off order loses (1 − offOutputShare) of its output (AM-18). */
+/**
+ * What a month short of Water costs the seat: each plot in its Water turn-off order loses (1 − offOutputShare) of its
+ * output (AM-18); with AM-18 off, its irrigated farms lose (1 − UPKEEP.shortOutputShare) of theirs.
+ */
 function waterDamage(obs: GameState, o: Outlook, me: string): number {
+  if (!plotWaterOn()) {
+    const farms = obs.tiles.filter((t) => t.owner === me && UPKEEP.irrigated.includes(t.outfit as never));
+    return farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, belief(obs, o, 'food'));
+  }
   return baseOffOrder(obs, me, 'water', 1).reduce((n, p) => n + (1 - UPKEEP.offOutputShare) * p.full * afterTax(obs, belief(obs, o, p.tile.outfit as Good)), 0);
 }
 

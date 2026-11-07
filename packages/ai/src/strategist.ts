@@ -17,6 +17,7 @@ import {
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
+  plotWaterOn,
   UPKEEP,
   scoreParts,
   shipInPort,
@@ -359,7 +360,9 @@ export function sellWanted(obs: GameState, mind: Mind, keep: readonly Outfit[] =
   if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
-  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || outfit === 'water') && mine.filter((m) => m.tile.outfit === outfit).length === 1;
+  // A last well matters for any seat with AM-18 on, and with it off only for one with a farm to water.
+  const watered = plotWaterOn() || mine.some((m) => (UPKEEP.irrigated as readonly string[]).includes(m.tile.outfit ?? ''));
+  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || (outfit === 'water' && watered)) && mine.filter((m) => m.tile.outfit === outfit).length === 1;
   const lots = mine.flatMap(({ tile, plot }): { item: SellListing['item']; plot: number; worth: number }[] => {
     if (!tile.outfit) return [{ item: 'plot', plot, worth: plotValue(obs, mind, plot) }];
     if (isLast(tile.outfit) || keep.includes(tile.outfit)) return [];
