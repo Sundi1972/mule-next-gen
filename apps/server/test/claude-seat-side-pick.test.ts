@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function startedGame(table = TABLE) {
+function startedGame(table = TABLE, phaseScale = 1) {
   const fake = fakeContext({ table });
-  const game = new MuleGame(fake.ctx, 10, { maxMonths: 1 });
+  const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, phaseScale });
   game.start(table);
   return { game, fake };
 }
@@ -99,6 +99,16 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     expect(pick.claudeDone).toBeLessThanOrEqual(WAIT_MS + PRESS_MS);
     expect(pick.ended).toBeLessThanOrEqual(WAIT_MS + PRESS_MS);
     expect(writerOf(game).openAsk(), 'its ask was aborted at the wait’s end').toBeNull();
+  });
+
+  it('B-AC-5: at a faster table (phaseScale 0.5) the wait is still 45 real seconds: a chat thinks in real time', async () => {
+    const { game, fake } = startedGame(TABLE, 0.5);
+    const good = await toFirstSidePick(game, fake);
+
+    const pick = await runSidePick(game, fake, good);
+
+    expect(pick.claudeDone).toBeGreaterThanOrEqual(WAIT_MS);
+    expect(pick.claudeDone).toBeLessThanOrEqual(WAIT_MS + PRESS_MS);
   });
 
   it('B-AC-5: a plan from the chat at 20 s makes the Claude seat Done at 20 s, and the side pick ends when the others are Done, as today', async () => {

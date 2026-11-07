@@ -104,8 +104,11 @@ describe('C7: Playbooks keeps a Claude seat’s auction ask open past the auctio
 
     const absent = await run(({ state, playbooks }) => playbooks.takePhase(state, 'auction'));
     const empty = await run(({ state, playbooks }) => playbooks.takePhase(state, 'auction', new Set()));
+    // The seat's stock moves between the start and the take: takeSeat plays the draft made at the start (AM-A17).
     const later = await run(({ state, playbooks }) => {
       playbooks.takePhase(state, 'auction', new Set(['p0']));
+      const p0 = state.players.find((p) => p.id === 'p0')!;
+      for (const good of Object.keys(p0.stock) as (keyof typeof p0.stock)[]) p0.stock[good] += 7;
       playbooks.takeSeat(state, 'auction', 'p0');
     });
 
@@ -114,11 +117,13 @@ describe('C7: Playbooks keeps a Claude seat’s auction ask open past the auctio
     expect(later).toEqual(absent);
   });
 
-  it('C7: answered is false with no ask, and for an ask of another month; takeSeat with nothing open does nothing', () => {
-    const { state, notes, playbooks } = atAuction();
+  it('C7: answered is false with no ask, and for an answered ask of another month; takeSeat with nothing open does nothing', async () => {
+    const { state, notes, playbooks, writer } = atAuction();
     expect(playbooks.answered(state, 'p1', 'auction'), 'no ask for that seat').toBe(false);
     expect(playbooks.answered(state, 'p0', 'development'), 'no ask for that phase').toBe(false);
     playbooks.takePhase(state, 'auction', new Set(['p0']));
+    await answer(writer);
+    expect(playbooks.answered(state, 'p0', 'auction'), 'the premise: answered this month').toBe(true);
 
     advanceTo(state, 'upkeep');
     const later = { ...state, month: state.month + 1 };
