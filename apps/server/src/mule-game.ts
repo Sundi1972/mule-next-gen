@@ -5,6 +5,7 @@ import {
   allPrices,
   auctionDone,
   ballotAhead,
+  BRAIN,
   castVote,
   claimPlot,
   colonyFailed,
@@ -105,7 +106,7 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
 import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
-import { seatClaude, seatKindOf } from './claude-seat/seats.js';
+import { claudeSeatAt, seatClaude, seatKindOf } from './claude-seat/seats.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
@@ -415,6 +416,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
+  /** C7: the Claude seats the first good's side pick still waits for, that good, and when its side pick opened. */
+  private sidePickWait: { seats: Set<string>; good: Good; openedAt: number } | null = null;
   /** When the one development clock runs out for every seat, epoch ms; null outside development. */
   private devEndsAt: number | null = null;
   /** Development's floor, inputs and tick; null outside development. */
@@ -719,6 +722,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const a = state.auction;
       if (!a || !a.good || a.stage !== 'status') throw new RuleError('The walk keeps its clock');
       const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !a.done.includes(s.id)).map((s) => s.name);
+      // A Claude seat still waited for is taken now, on its built-in plan unless its plan came (RULE-6).
+      this.endSidePickWait(state, this.ctx.now(), true);
       // AIs too: one still deciding declares its side once the walk has begun, as it would after a slow decision.
       for (const s of this.seats) auctionDone(state, s.id);
       // With nobody able to trade there is no walk: the good is skipped on the next tick.
@@ -961,8 +966,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // Game over has no clocks; enterPhase finished it before any hold.
     if (state.phase === 'gameOver') return;
     if (state.phase === 'auction') {
-      // Before the first good's status screen: a playbook adopted now plays from the first good (AM-20).
-      this.playbooks?.takePhase(state, 'auction');
+      // Before the first good's status screen: a playbook adopted now plays from the first good (AM-20). A Claude seat
+      // whose plan hasn't come is kept asking into the first good's side pick (C7, RULE-6).
+      const keep = new Set(this.seats.filter((s) => claudeSeatAt(this, s.id) && !this.playbooks?.answered(state, s.id, 'auction')).map((s) => s.id));
+      const kept = this.playbooks?.takePhase(state, 'auction', keep) ?? [];
+      const first = state.auction?.stage === 'status' ? state.auction.good : null;
+      this.sidePickWait = kept.length > 0 && first ? { seats: new Set(kept), good: first, openedAt: this.ctx.now() } : null;
+      if (!first) for (const id of kept) this.playbooks?.takeSeat(state, 'auction', id);
       this.phaseEndsAt = null;
       this.dealsInGood = [];
       this.news = ['The auction opens. Walk up to buy, down to sell.'];
@@ -1451,10 +1461,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not teleport walkers across the board.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         const good = state.auction.good;
+        this.endSidePickWait(state, now);
         for (const seat of this.seats) {
           try {
             const ai = this.ai.get(seat.id);
-            if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
+            // A Claude seat the side pick waits for has no hand yet: it reads its plan, and declares, once taken (C7).
+            if (ai && !this.sidePickWait?.seats.has(seat.id)) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
             // The side pick holds an away seat for its Done or the host's Continue (A-7); in the walk it sits out.
             else if (this.away.has(seat.id) && state.auction.stage === 'walk') this.sitOut(seat.id);
           } catch (err) {
@@ -1482,6 +1494,25 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.ctx.changed();
       }),
     );
+  }
+
+  /**
+   * RULE-6 (C7): takes each Claude seat the first good's side pick waits for once its auction plan has come,
+   * BRAIN.claudeSeat.sidePickWaitMs after the side pick opened, or as that side pick ends; `all` takes them all (the
+   * host's Continue). An unanswered seat's ask is aborted and it plays its built-in plan.
+   */
+  private endSidePickWait(state: GameState, now: number, all = false): void {
+    const wait = this.sidePickWait;
+    if (!wait) return;
+    const a = state.auction;
+    const open = a?.stage === 'status' && a.good === wait.good;
+    const timeUp = now - wait.openedAt >= BRAIN.claudeSeat.sidePickWaitMs;
+    for (const id of [...wait.seats]) {
+      if (!all && open && !timeUp && !this.playbooks?.answered(state, id, 'auction')) continue;
+      this.playbooks?.takeSeat(state, 'auction', id);
+      wait.seats.delete(id);
+    }
+    if (wait.seats.size === 0) this.sidePickWait = null;
   }
 
   /**

@@ -1,14 +1,14 @@
 /** Which seats a Claude chat plays, and how a seat named by a code reaches its writer. */
-import type { SeatInfo } from '@tabletop/core';
+import type { SeatInfo, SeatKind } from '@tabletop/core';
 import type { PlaybookWriter } from '../brain/index.js';
 import { ClaudeSeatWriter } from './writer.js';
 
-/** Who plays a computer seat: the built-in AI, or a Claude chat holding the seat's code. */
-export type SeatKind = 'builtin' | 'claude';
+/** Who plays a computer seat: the Room's own type (C1), named here for the brain's imports. */
+export type { SeatKind };
 
 /** A seat's kind as the Room hands it to the game; a seat with none plays builtin. */
 export function seatKindOf(seat: SeatInfo): SeatKind {
-  return (seat as SeatInfo & { kind?: unknown }).kind === 'claude' ? 'claude' : 'builtin';
+  return seat.kind === 'claude' ? 'claude' : 'builtin';
 }
 
 export interface ClaudeSeat {
@@ -19,9 +19,25 @@ export interface ClaudeSeat {
 /** Each started game's Claude seats by seat id, keyed by the game that hosts them; a disposed game takes its own along. */
 const tables = new WeakMap<object, Map<string, ClaudeSeat>>();
 
-/** Records a started game's Claude seat; a writer that is not a ClaudeSeatWriter (a test's brain) records nothing. */
-export function seatClaude(table: object, seatId: string, name: string, writer: PlaybookWriter | null): void {
-  if (!(writer instanceof ClaudeSeatWriter)) return;
+/** The ClaudeSeatWriter behind each writer that wraps one (the recorder's), by the wrapper; a dropped wrapper takes its entry along. */
+const behind = new WeakMap<object, ClaudeSeatWriter>();
+
+/**
+ * Names `writer` as the one behind `wrapper`, when it is a Claude seat's, so seatClaude finds the seat's writer through
+ * the wrapper the game is handed. Returns `wrapper`; any other writer registers nothing.
+ */
+export function wrapsClaudeSeat<W extends object>(wrapper: W, writer: PlaybookWriter): W {
+  if (writer instanceof ClaudeSeatWriter) behind.set(wrapper, writer);
+  return wrapper;
+}
+
+/**
+ * Records a started game's Claude seat: `given` is its ClaudeSeatWriter, or a wrapper wrapsClaudeSeat registered for
+ * one (the recorder's). Any other writer (a test's brain) records nothing.
+ */
+export function seatClaude(table: object, seatId: string, name: string, given: PlaybookWriter | null): void {
+  const writer = given instanceof ClaudeSeatWriter ? given : given ? behind.get(given) : undefined;
+  if (!writer) return;
   const seats = tables.get(table) ?? new Map<string, ClaudeSeat>();
   const seat = { name, writer };
   seats.set(seatId, seat);
