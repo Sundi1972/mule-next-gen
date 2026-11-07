@@ -85,6 +85,20 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     expect(moodTarget({ ...QUIET, gap: 1_000_000 }), 'the gap past its cap takes nothing more').toBe(moodTarget({ ...QUIET, gap: W.gapCap * W.gapUnit }));
   });
 
+  it("S5-T-AC-5: S5-RULE-5's examples — 100 cr -> +2, 200 cr -> +4 (the cap holds at more), nothing paid -> +0, an earlier month's Welfare counts 0", () => {
+    const state = colony();
+    const quiet = moodTarget(moodInputs(state, []));
+    expect(quiet, 'nothing paid: the quiet month\'s base').toBe(HAPPINESS.base);
+    const paid = (credits: number, month = state.month): number => {
+      state.colony = { ...state.colony!, welfare: { month, to: 'kai', paid: credits } };
+      return moodTarget(moodInputs(state, [])) - quiet;
+    };
+    expect(paid(100)).toBe(2);
+    expect(paid(200)).toBe(4);
+    expect(paid(1_000), 'the cap: no more than welfareCap units').toBe(4);
+    expect(paid(100, state.month - 1), 'last month\'s payment counts 0').toBe(0);
+  });
+
   it('T-AC-31: moodInputs reads the month: the shortages given, the air, the tax in whole %, standing prestige and the gap', () => {
     const state = colony();
     state.air = 55;
