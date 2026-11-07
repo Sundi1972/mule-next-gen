@@ -300,7 +300,7 @@ export const MOVES: MoveTable = {
       refused("candidates are open: not from the ballot until the result, nor in an election month's announce after month 1", 'Candidates are closed until the result'),
       refused(`for Governor, you have not served ${POLITICS.maxGovernorTermsInRow} Governor terms in a row`, `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`),
       refused(`the office is one that is elected: ${POLITICS.offices.join(', ')}`, 'The <office> is not elected yet'),
-      refused('a Sheriff run carries no promise', 'Sheriff candidates make no promise yet'),
+      refused('a Sheriff run carries no promise', 'Sheriff candidates make no promise'),
       refused(`a cap promise is a whole ${TAX_MIN}% to ${TAX_MAX}%`, `A tax promise is ${TAX_MIN}% to ${TAX_MAX}%`),
       refused('a Governor run carries a promise', 'Pick a promise to run for Governor'),
     ],
