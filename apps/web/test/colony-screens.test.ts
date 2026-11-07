@@ -403,6 +403,13 @@ describe('C34: the build site at the TV month end, one line a project (PM ruling
     expect(line(tv(at({ id: 'hospital', monthsLeft: 2 })), 'hospital')).toBe('Hospital Building stands in 2 months');
   });
 
+  it('PM ruling 7 Nov (TV-FIT, five projects): beside the gauges the colony panel names the air\'s change in its header and leaves the level, band and fund to the Environment and Wealth gauges', () => {
+    const panel = element(tv(MIDGAME), 'colony-panel');
+    expect(text(element(panel, 'colony-air'))).toBe('Air ↓ worse than month 6 (35)');
+    for (const id of ['air-level', 'air-band', 'colony-fund', 'fund-balance']) expect(has(panel, id)).toBe(false);
+    expect(has(panel, 'colony-hungry')).toBe(true);
+  });
+
   it('B-AC-34-4 (negative): without politics the month end has no build site', () => {
     expect(has(onTv(game(null), TvMonthEnd), 'build-site')).toBe(false);
   });
