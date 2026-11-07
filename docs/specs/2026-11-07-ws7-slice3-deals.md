@@ -633,8 +633,10 @@ S3-RULE-1 · A card's life                                              shape: s
   active    vote: its ballot's result takes effect (S3-RULE-4)         kept | broken | expired    month
   active    vote: planning of `until` closes with no ballot settling it expired                   month
   kept      pact: a later pactBreach for a month it bound              broken, brokenBy = breaker month (updated)
-ids        'deal-<n>', n = politics.deals.length + 1: the engine keeps every card, so the count never falls and the
-           same game replays the same ids.
+ids        'deal-<tag>': tag = 6 base-36 characters drawn from createRng over a hash of (state.seed, n, 'deal'),
+           n = politics.deals.length + 1 (a collision with an existing id redraws with n's next salt). The same game
+           replays the same ids; a seat can't recover n, because observe() hides the seed, so an id says nothing about
+           how many cards other pairs hold (AM-2, WS1's #669 question 4).
 until      pact: min(maxMonths, month + months − 1) · vote for an office: that office's next ballot month (this month
            while its election is in announce or ballot, else nextElectionMonth) · law: this month while a law ballot is
            open, else month + 1 (the pending proposal's ballot). Fixed at offer.
@@ -860,7 +862,7 @@ export type DealTerms =
   | { kind: 'vote'; office: Office; candidate: string }       // `from` votes for `candidate` in the next election for `office`
   | { kind: 'vote'; law: true; yes: boolean };                // `from` votes yes or no on the next law ballot
 export interface DealCard {
-  id: string;               // 'deal-<n>', from a counter in state (deterministic, replayable)
+  id: string;               // 'deal-<tag>', opaque, seeded from the card's number (deterministic, replayable)
   from: string;             // proposer
   to: string;               // receiver
   terms: DealTerms;
@@ -984,10 +986,10 @@ ai: { …,
 - *HC-B1's catch:* an AI bluffs about its intentions; a broken card is what the table sees (S3-RULE-11).
 
 **Worked example** (month 3 planning). Lena offers `{ to: 'brix', terms: { kind: 'vote', office: 'governor', candidate:
-'brix' } }`; Brix accepts. Brix's `me.deals.cards[0] = { id: 'deal-4', from: 'lena', to: 'brix', terms: { kind: 'vote',
+'brix' } }`; Brix accepts. Brix's `me.deals.cards[0] = { id: 'deal-q7k2m9', from: 'lena', to: 'brix', terms: { kind: 'vote',
 office: 'governor', candidate: 'brix' }, offered: 3, until: 4, status: 'active', brokenBy: null, settled: null }`; Ossa's
-view and observe have no `deal-4`; every view has Lena's `reputation: 50`. In month 4 Lena votes Kai; at the ceremony's
-end every view has Lena's `reputation: 40`, `politics.brokenDeals[0]` is deal-4 with `status: 'broken', brokenBy:
+view and observe have no `deal-q7k2m9`; every view has Lena's `reputation: 50`. In month 4 Lena votes Kai; at the ceremony's
+end every view has Lena's `reputation: 40`, `politics.brokenDeals[0]` is deal-q7k2m9 with `status: 'broken', brokenBy:
 'lena', settled: 4`, and the news reads "Lena broke a promise to Brix: a vote for Brix. Reputation −10."
 
 ## §4 · Failure & Ops `[handoff]`
@@ -1018,7 +1020,7 @@ the feature at the table.
 | S3-B-AC-5 | WITHDRAWN (AM-1): the tax promise's reputation | — | — | — |
 | S3-B-AC-6 | Given any planning screen · When reputation changes · Then a chip beside every player's name shows the new number on phone standings, hub names and the TV strip, and its tap lists the public reasons | C10 C19 | phone and TV DOM (e2e) | a kept card is never among the reasons |
 | S3-B-AC-7 (S3-UBER-AC-2) | Given `pnpm sim` on the three seed sets, politics on · Then S3-UBER-AC-2's thresholds hold and politics-off output is byte-identical | C13-C16 | the sim report | — |
-| S3-T-AC-1 (serves B-AC-1) | every S3-RULE-2 row's verdict and words, for offer, answer, withdraw; every call leaves money, stock, tiles, MULEs unchanged (S3-HC-1); ids run deal-1, deal-2, … | C2 | engine test | row 13 never fires on a third party's card |
+| S3-T-AC-1 (serves B-AC-1) | every S3-RULE-2 row's verdict and words, for offer, answer, withdraw; every call leaves money, stock, tiles, MULEs unchanged (S3-HC-1); ids are opaque `deal-<tag>`, unique, and the same on a replay | C2 | engine test | row 13 never fires on a third party's card |
 | S3-T-AC-2 (serves B-AC-2) | every S3-RULE-4 row, election and law; the sweep expires stale cards; S3-RULE-1's until for each terms kind | C3 C8 | engine test | — |
 | S3-T-AC-3 (serves B-AC-2) | the move applies at takeOffice/takeEffect, not at ballot close; the tally's weights are taken at close before any move | C3 | engine test; server views during the ceremony | — |
 | S3-T-AC-4 (serves B-AC-2, B-AC-6) | S3-RULE-3: deltas, the kept limit per partner per term, clamping at 0 and 100; reputationReasons lists broken cards and unrest only | C5 | engine test | the unrest event still moves −1 with its change line |
@@ -1097,6 +1099,18 @@ because   S3-1, S3-2: five lanes build in parallel from one contract
 goal      S3-1, S3-2 — still met; swaps and asking for a vote move to later (two cards do a swap)
 folded    the sections above; D-S3-2 (what a break reveals) is now implemented by the frozen rule, recorded under the
           decisions for Heiko to overrule if he wants
+```
+
+```
+AM-2 · 2026-11-07 · WS7 (WS1's #669 question 4, via PM) · opaque card ids
+
+target    §2 the card lifecycle's ids line; §3 DealCard.id's comment; the worked example; S3-T-AC-1
+said      'deal-<n>', n = politics.deals.length + 1
+did       'deal-<tag>', six base-36 characters from createRng over a hash of (state.seed, n, 'deal'). The counter
+          stays inside the engine; the id carries none of it. The type is unchanged (id: string).
+because   a sequential id told any seat how many cards other pairs had made, which observe() otherwise hides
+          (the frozen HC-4 rule). Humans' views carry the same ids, so this closes it for both
+goal      S3-1, S3-2 — still met
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

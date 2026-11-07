@@ -670,7 +670,8 @@ first match wins
   6   rumour, good not a good                                  refuse "Pick a good"
   7   money < the order's cost                                 refuse "A crew costs C cr; you have M"
   8   otherwise                                                the order (replacing any earlier one this month)
-unknown   no earlier order → a new one. The order gets id 'sab-<n>' (a counter: the orders' count + 1),
+unknown   no earlier order → a new one. The order gets id 'sab-<tag>' (opaque, as slice 3's deal ids: 6 base-36
+          characters from createRng over a hash of (state.seed, n, 'sab'), n = the orders' count + 1),
           month, cost = the kind's cost now, outcome 'pending', culpritPublic false. Its victim is fixed only
           when it resolves (the frozen rule: the tile's owner then).
 examples  power cut on Brix's Food plot, Lena has 300 → valid · on her own plot → row 4 · on a free plot →
@@ -794,7 +795,8 @@ first match wins
   4   culpritPublic already                          refuse "That one is solved"
   5   investigated ≠ null                            refuse "The trail went cold on that one"
   6   otherwise (outcome 'done', culprit unknown)    investigated = month; a draw from createRng over
-                                                     (seed, the order's number n of 'sab-<n>', salt):
+                                                     (seed, the order's number n, its position in
+                                                     politics.sabotage + 1, salt):
                                                      < POLITICS.sheriff.investigateOdds → attribution
                                                      (S4-RULE-5); else cold
 public    the result, solved (with the name) or cold, is public at once (news, the incidents list, a notice)
@@ -981,7 +983,7 @@ export type SabotageTarget =
   | { kind: 'powerCut'; tile: number }                        // the victim is the tile's owner when the order resolves
   | { kind: 'rumour'; good: Good; dir: 'up' | 'down' };
 export interface SabotageOrder {
-  id: string;               // 'sab-<n>'
+  id: string;               // 'sab-<tag>', opaque (S4-RULE-2's unknown line): no count of hidden orders leaks
   by: string;
   month: number;
   target: SabotageTarget;
@@ -1069,7 +1071,8 @@ export interface IncidentView {
 sabotage?: {
   terms: Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
   incidents: IncidentView[];               // public orders only
-  sheriff: { guards: number; investigations: number; investigationsLeft: number };
+  sheriff: { guards: number; investigations: number; investigationsLeft: number };  // guards = guardsMax(state), how
+                                           // many the Sheriff MAY post; never how many are posted (a guard shows only by its catch)
 } | null;                                   // null with sabotage off
 // MyPoliticsView gains (the owner's phone only):
 sabotage?: {
@@ -1096,11 +1099,11 @@ key allow-list (the server's privacy test) gains `sabotage` with `terms`, `incid
 
 Worked example (Brix's phone, month 4 planning, Brix is Sheriff, after the votes):
 `politics.sabotage: { terms: { powerCut: { cost: 120, success: 0.6, detect: 0.3 }, rumour: { cost: 60,
-success: 0.8, detect: 0.15 } }, incidents: [{ id: 'sab-1', month: 3, kind: 'powerCut', victim: 'kai', at: { x:
+success: 0.8, detect: 0.15 } }, incidents: [{ id: 'sab-x4p8tn', month: 3, kind: 'powerCut', victim: 'kai', at: { x:
 4, y: 2 }, good: 'food', worked: true, culprit: null, how: null, investigated: false, fine: null }], sheriff: {
 guards: 2, investigations: 1, investigationsLeft: 1 } }`, `me.politics.sheriff: { canAct: true, guards: [],
 max: 2, investigationsLeft: 1, fineable: [], steps: [50, 100, 150, 200, 250, 300], multiplier: 1 }`,
-`me.politics.sabotage: { order: null, canOrder: true, owed: 0, mine: [] }`. Lena's phone carries sab-1 in
+`me.politics.sabotage: { order: null, canOrder: true, owed: 0, mine: [] }`. Lena's phone carries sab-x4p8tn in
 `mine` with `culprit: 'lena'`; Brix's, Kai's and the TV's carry `culprit: null`.
 
 **Config** (`packages/engine/src/config.ts`, the POLITICS block, WS7; placeholders until WS1 tunes, HC-25):
@@ -1210,7 +1213,21 @@ No spike needed.
 
 ## §8 · Amendments `[review-only]`
 
-None yet: this spec has not been agreed.
+```
+AM-1 · 2026-11-07 · WS7 (WS1's #669 questions 1-4, via PM) · what other seats see of sabotage
+
+target    S4-RULE-2's unknown line, S4-RULE-7 row 6, §3 SabotageOrder.id and PoliticsView.sabotage.sheriff, the
+          worked example
+said      'sab-<n>' ids; an investigation's draw keyed on the n of 'sab-<n>'; the public sheriff.guards undefined
+did       'sab-<tag>' ids, opaque as slice 3's AM-2 (createRng over a hash of (state.seed, n, 'sab')); the
+          investigation's draw keys on n, the order's position in politics.sabotage + 1, which the engine holds;
+          the public sheriff.guards is guardsMax(state), never the count posted. Unchanged and confirmed: a
+          failed order stays the orderer's alone (S4-C9, the notice's parties); politics.guards is [] for every
+          seat but the Sheriff's; another seat's order keeps `cost: 0` in observe (the frozen HC-4 rule)
+because   a sequential id told a seat that someone else had ordered this month; a guard is revealed only by its
+          catch (design 05)
+goal      S4-1, S4-2 — still met
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 
