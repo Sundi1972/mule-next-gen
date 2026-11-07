@@ -413,7 +413,7 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
     sabotage.possible = true;
     worthTo({ ai1: 2, ai2: 9, ai3: 4 });
     const { sent, refused } = run(state, new DealHand(mindOf('ai0')));
-    const months = POLITICS.deals.pactMonths[Math.floor(POLITICS.deals.pactMonths.length / 2)];
+    const months = POLITICS.ai.deals.pactMonths;
     expect(sent.filter((a) => a.type === 'offerDeal')).toEqual([{ type: 'offerDeal', offer: { to: 'ai2', terms: { kind: 'pact' }, months } }]);
     expect(refused).toEqual([]);
     // the draft the hand valued carries the card the engine made: its id and the until the engine computed (month 2 + 3 months - 1)
