@@ -5,6 +5,7 @@ import { GOODS, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
 import { RoomRegistry, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { familyFilter } from './family-filter.js';
 import { AI_NAMES, MuleGame } from './mule-game.js';
 import { createRecordedGame, isUserError } from './record.js';
 
@@ -66,6 +67,8 @@ export function createMuleServer(
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
+    // Every chat line, a computer seat's included, and every player's name: a children's table plays this game.
+    moderate: familyFilter,
     // The same test the recorder uses: what the room shows a player, the record keeps as a refusal, not a crash.
     isUserError,
     // The room has already ended itself; only the stack is logged, never what the players sent.

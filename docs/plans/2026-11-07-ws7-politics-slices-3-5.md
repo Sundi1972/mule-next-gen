@@ -307,7 +307,7 @@ it is built in S3-PR-7; S3-PR-8 is WS4's, as the spec sizes it.
 | S3-PR-4 | `ws7-s3-hands` | Tasks S3-4.1-4.3 (S3-C14, S3-C13) | S3-T-AC-9, S3-T-AC-8 | `DealHand` (tick, flush, offer, answer), `DealPort`, `ownVote` | S3-PR-1; #669's `politics-value.ts` | No | WS7 (+ WS1 named edits on tests) |
 | S3-PR-5 | WS1 names it | Task S3-5.1 (S3-C15, S3-C16 windows and row) | S3-B-AC-7, S3-UBER-AC-2, S3-T-AC-6 (sim) | the sim's deals row | S3-PR-4 | No | WS1 |
 | S3-PR-6 | WS6 names it | Task S3-6.1 (mocks for S3-C17-S3-C21) | — (Heiko approves) | `design/mocks/<slug>/` | the spec's "What the table sees" | No (mock) | mocks WS6 per spec |
-| S3-PR-7 | `ws7-s3-phone` | Tasks S3-7.0-7.7 (S3-C17, S3-C18, S3-C19 phone, S3-C21, S3-C20's TvDeals.tsx) | S3-B-AC-1 (UBER-AC-3 leg A, e2e), S3-B-AC-6 (phone part), S3-B-AC-2 (ballot line, TV banner component) | `TvDeals.tsx` and the chip component, for WS4 to place | S3-PR-3; S3-PR-6's approved mock | Yes | the phone build lane is the PM's choice (spec Sizing: 'WS7 path, PM's build lane'); the PM confirms |
+| S3-PR-7 | `ws7-s3-phone` | Tasks S3-7.0-7.7 (S3-C17, S3-C18, S3-C19 phone, S3-C21, S3-C20's TvDeals.tsx) | S3-B-AC-1 (UBER-AC-3 leg A, e2e), S3-B-AC-6 (phone part), S3-B-AC-2 (ballot line, TV banner component), S3-T-AC-16 (AM-7) | `TvDeals.tsx` and the chip component, for WS4 to place | S3-PR-3; S3-PR-6's approved mock | Yes | the phone build lane is the PM's choice (spec Sizing: 'WS7 path, PM's build lane'); the PM confirms |
 | S3-PR-8 | WS4 names it | Task S3-8.1 (tracking: S3-C19 TV strip and standings chip, S3-C20's placement and month end) | S3-B-AC-6 (TV, standings), S3-B-AC-2 (month end) | — | S3-PR-7 (`TvDeals.tsx`, the chip); S3-PR-6's mock | Yes | WS4 (spec Sizing) |
 | S3-PR-9 | `ws7-s3-e2e` | Tasks S3-9.1-9.4 | S3-B-AC-2 (S3-UBER-AC-1, e2e), S3-B-AC-6 (e2e), S3-B-AC-3 (UBER-AC-3 leg C, e2e); S3-B-AC-4 handed to S4-PR-8 | — | S3-PR-7, S3-PR-8 | e2e only | WS7 |
 
@@ -321,7 +321,7 @@ it is built in S3-PR-7; S3-PR-8 is WS4's, as the spec sizes it.
 | S3-PR-4 | `packages/ai/src/hands/deal.ts` (new), `packages/ai/src/hands/vote.ts`, `packages/ai/src/index.ts` (export line); named edits `packages/ai/test/vote-hand.test.ts`, `packages/ai/test/deal-hand.test.ts` (new) (WS1: `packages/ai/test/**` is WS1's) | — | `politics-value.ts` (WS1's bodies, S3-PR-5); `play.ts`, `sim.ts` (S3-PR-5); `actions.ts` (done in S3-PR-1); engine, server |
 | S3-PR-5 | WS1's: `packages/ai/src/politics-value.ts`, `play.ts`, `sim.ts`, `packages/ai/test/**`; named edit: `POLITICS.ai.deals` values (WS7 OKs the SHA) | — | `hands/{deal,vote}.ts` (WS7); every engine rule |
 | S3-PR-6 | `design/mocks/<slug>/` (WS6) | — | `apps/**` |
-| S3-PR-7 | `apps/web/src/phone/hub/politics/Deals.tsx` (new), `parts.tsx`, `ElectionDay.tsx`, `LawBallot.tsx`, `apps/web/src/table/TvDeals.tsx` (new, WS7's by the PM's 7 Nov ruling), `apps/web/test/politics-deals.test.ts` (new), `apps/web/test/politics-tv.test.ts`, `apps/web/e2e/politics.ts` (leg A step); named edits `apps/web/src/chat/Chat.tsx` (WS4), `apps/web/src/phone/hub/Standings.tsx` (the composer entry only, WS4), `apps/web/src/phone/hub/{desks,today}.tsx` (WS6) | the approved mock's files for P1-P3, P5's banner and the ballot line under `design/mocks/<slug>/` | `TableApp.tsx`, `MonthEnd.tsx`, Standings' chip (WS4's S3-PR-8); server, engine, protocol |
+| S3-PR-7 | `apps/web/src/phone/hub/politics/Deals.tsx` (new), `hub/politics/parts.tsx`, `ElectionDay.tsx`, `LawBallot.tsx`, `apps/web/src/table/TvDeals.tsx` (new, WS7's by the PM's 7 Nov ruling), `apps/web/test/politics-deals.test.ts` (new), `apps/web/test/politics-tv.test.ts`, `apps/web/e2e/politics.ts` (leg A step); named edits `apps/web/src/phone/parts.tsx::Chat` (WS4), `apps/web/src/phone/hub/Standings.tsx` (the composer entry only, WS4), `apps/web/src/phone/hub/{desks,today}.tsx` (WS6) | the approved mock's files for P1-P3, P5's banner and the ballot line under `design/mocks/<slug>/` | `TableApp.tsx`, `MonthEnd.tsx`, Standings' chip (WS4's S3-PR-8); server, engine, protocol |
 | S3-PR-8 | WS4's: `apps/web/src/table/TableApp.tsx` (strip chip, TvDeals route line), `apps/web/src/components/MonthEnd.tsx`, `apps/web/src/phone/hub/Standings.tsx` (the chip), WS4's tests | the approved mock's files for P4's TV part and P5's month-end line | `TvDeals.tsx`, the chip component and the phone hub's politics files (WS7, S3-PR-7): a change goes to WS7 for its OK |
 | S3-PR-9 | `apps/web/e2e/politics.ts` (S3-UBER-AC-1 and leg C steps), `docs/rulebook/colony-and-politics.html` | — | every `src` file: a gap the e2e finds goes back to that file's PR and owner |
 
@@ -518,7 +518,7 @@ Before suggesting merge of `ws7-s3-engine` into `ws7-politics`:
 - [ ] The slice 4 contract is exercised from the engine's index (Task S3-1.8 Step 1); WS1's moves test exercises the AiAction contract
 - [ ] `pnpm typecheck && pnpm test` green; CI 4/4 (check, e2e, e2e-regression, sim); the INV-1 literal guard green; politics-off sim rows byte-identical (S3-HC-4)
 - [ ] Owners' OKs on every named-edit SHA: WS1 (actions.ts, play.ts, moves.test.ts), WS3 (types.ts)
-- [ ] The §9 enforcement grep is empty outside diplomacy.ts and politics.ts: `git grep -nE '\.deals\s*=|deals\.push|editPolitics' -- 'packages/*/src' 'apps/*/src' ':!packages/engine/src/diplomacy.ts' ':!packages/engine/src/politics.ts' ':!packages/engine/src/observe.ts'` (observe.ts filters its own copy, #669; test fixtures may set cards)
+- [ ] The §9 enforcement grep is empty outside diplomacy.ts and politics.ts: `git grep -nE '\.deals\s*=|deals\.push|editPolitics' -- 'packages/**/src/**' 'apps/**/src/**' ':!packages/engine/src/diplomacy.ts' ':!packages/engine/src/politics.ts' ':!packages/engine/src/observe.ts'` (observe.ts filters its own copy, #669; test fixtures may set cards)
 - [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the line
 - [ ] Rulebook chapter updated the same day and `build-index.mjs` re-run
 - [ ] One code review once CI is green
@@ -747,25 +747,26 @@ WS7's path; `TvDeals.tsx` is WS7's own file (PM ruling 7 Nov), so it is built he
   - Altitude: unit of the screen against a fixture view (the front-to-back proof is Task S3-7.6).
   - Observed at: the intent the client sends; the refusal text rendered. Traps: the lengths come from `me.deals.pactMonths`, never typed; the candidate list from the declared candidates in the view.
 - [ ] **Step 2: Run** `pnpm --filter @mule/web test politics-deals` — expected FAIL. **Commit** `test(web): S3-B-AC-1 the composer (red)`.
-- [ ] **Step 3: Implement S3-C17 per spec §1 S3-C17** — `apps/web/src/phone/hub/politics/Deals.tsx` (DealComposer) on the mock's scaffold; opened from its target player: `apps/web/src/chat/Chat.tsx`'s whisper input (WS4 named edit, one mount), `parts.tsx::Who` and the standings row (`Standings.tsx`, WS4 named edit, the entry only). Mechanism: fill_scaffold.
+- [ ] **Step 3: Implement S3-C17 per spec §1 S3-C17** — `apps/web/src/phone/hub/politics/Deals.tsx` (DealComposer) on the mock's scaffold; opened from its target player: `apps/web/src/phone/parts.tsx::Chat`'s whisper input (WS4 named edit, one mount), `parts.tsx::Who` and the standings row (`Standings.tsx`, WS4 named edit, the entry only). Mechanism: fill_scaffold.
 - [ ] **Step 4: Run** — expected PASS. **Commit** `feat(web): S3-C17 the deal card composer (S3-B-AC-1)`.
 
 #### Task S3-7.2 — S3-C18: the incoming card and My cards (P2, P3)
 
 - [ ] **Step 1: Write failing `S3-B-AC-1: Brix's whisper thread and agenda show Lena's card with both reputations and Accept / Decline; My cards lists offered (Withdraw), incoming, active (what it binds, until when) and settled cards`** in `apps/web/test/politics-deals.test.ts`. Altitude: unit of the screen. Negative case: Decline → the card shows declined.
 - [ ] **Step 2: Run** — expected FAIL. **Commit** `test(web): S3-B-AC-1 the incoming card and My cards (red)`.
-- [ ] **Step 3: Implement S3-C18 per spec §1 S3-C18** — `Deals.tsx` (IncomingDeal, MyDeals); the thread mount in `Chat.tsx` (WS4); My cards as one section of the Talk desk in `apps/web/src/phone/hub/desks.tsx::TalkDesk` (WS6); the agenda's "N deal offers" in `apps/web/src/phone/hub/today.tsx` (WS6). Mechanism: fill_scaffold.
+- [ ] **Step 3: Implement S3-C18 per spec §1 S3-C18** — `Deals.tsx` (IncomingDeal, MyDeals); the thread mount in `phone/parts.tsx::Chat` (WS4); My cards as one section of the Talk desk in `apps/web/src/phone/hub/desks.tsx::TalkDesk` (WS6); the agenda's "N deal offers" in `apps/web/src/phone/hub/today.tsx` (WS6). Mechanism: fill_scaffold.
 - [ ] **Step 4: Run** — expected PASS. **Commit** `feat(web): S3-C18 the incoming card and My cards (S3-B-AC-1)`.
 
 #### Task S3-7.3 — S3-C19 (phone), S3-C21: the reputation chip and "You promised"
 
-**ACs verified:** S3-B-AC-6 (phone part), S3-B-AC-2 (ballot line)
+**ACs verified:** S3-B-AC-6 (phone part), S3-B-AC-2 (ballot line), S3-T-AC-16 (AM-7)
 
 - [ ] **Step 1: Write failing `S3-B-AC-6: a chip beside every name in the hub (Who) shows PlayerView.reputation with the 70/30 thresholds readable, and its tap lists the public reasons`**. Altitude: unit of the screen. Negative case: a kept card is never among the reasons.
 - [ ] **Step 2: Write failing `S3-B-AC-2: Lena's election ballot with MyPoliticsView.promised naming Brix says "You promised Brix your vote" and preselects Brix without sending a vote until she casts`** (the same for `LawBallot.tsx` with a law promise). Traps: assert no intent is sent on open (S3-HC-2, §0.1's rejected preset).
-- [ ] **Step 3: Run** — expected 2 FAIL. **Commit** `test(web): S3-B-AC-6 the chip, S3-B-AC-2 "You promised" (red)`.
-- [ ] **Step 4: Implement S3-C19's phone part and S3-C21 per spec §1 S3-C19, S3-C21** — the chip in `parts.tsx::Who`, as a component S3-PR-8 reuses on the TV strip and the standings; the line and local preselect in `ElectionDay.tsx` and `LawBallot.tsx`. Mechanism: fill_scaffold / in_place.
-- [ ] **Step 5: Run** — expected PASS. **Commit** `feat(web): S3-C19 the reputation chip on the phone; S3-C21 "You promised" (S3-B-AC-6, S3-B-AC-2)`.
+- [ ] **Step 2b: Write failing `S3-T-AC-16: with a promise and no pick, Cast my vote (and the law ballot's Ready) sends the promised choice, then the press`** — every S3-RULE-12 row on both ballots (AM-7). Altitude: unit of the screen; observed at the client's intents, in order. Negative cases: a pick of another candidate, or Abstain, sends no promised choice; nothing is sent on open.
+- [ ] **Step 3: Run** — expected 3 FAIL. **Commit** `test(web): S3-B-AC-6 the chip, S3-B-AC-2 "You promised", S3-T-AC-16 the press sends the promise (red)`.
+- [ ] **Step 4: Implement S3-C19's phone part and S3-C21 per spec §1 S3-C19, S3-C21** — the chip in `hub/politics/parts.tsx::Who`, as a component S3-PR-8 reuses on the TV strip and the standings; the line, the local preselect and S3-RULE-12's send at the Done press in `ElectionDay.tsx` and `LawBallot.tsx`. Mechanism: fill_scaffold / in_place.
+- [ ] **Step 5: Run** — expected PASS. **Commit** `feat(web): S3-C19 the reputation chip on the phone; S3-C21 "You promised" (S3-B-AC-6, S3-B-AC-2, S3-T-AC-16)`.
 
 #### Task S3-7.4 — S3-C20: TvDeals.tsx, the TV's break banner (P5; WS7's file)
 
@@ -778,7 +779,7 @@ WS7's path; `TvDeals.tsx` is WS7's own file (PM ruling 7 Nov), so it is built he
 
 #### Task S3-7.5 — named edits, one commit per owner
 
-- [ ] **Step 1: WS4** — `Chat.tsx` (composer and thread mounts) and `Standings.tsx` (composer entry): one commit, `feat(web): named edit Chat.tsx, Standings.tsx — the deal card's mounts (S3-C17, S3-C18, WS4)`; WS4 OKs the SHA through the PM.
+- [ ] **Step 1: WS4** — `phone/parts.tsx::Chat` (composer and thread mounts) and `Standings.tsx` (composer entry): one commit, `feat(web): named edit phone/parts.tsx::Chat, Standings.tsx — the deal card's mounts (S3-C17, S3-C18, WS4)`; WS4 OKs the SHA through the PM.
 - [ ] **Step 2: WS6** — `desks.tsx` (My cards in the Talk desk) and `today.tsx` (the agenda line): one commit, `feat(web): named edit desks.tsx, today.tsx — My cards and deal offers (S3-C18, WS6)`; WS6 OKs the SHA through the PM.
 
 #### Task S3-7.6 — UBER-AC-3 leg A, front to back
@@ -799,7 +800,7 @@ WS7's path; `TvDeals.tsx` is WS7's own file (PM ruling 7 Nov), so it is built he
 - [ ] Front to back: Task S3-7.6's e2e drives the change from the phones and asserts the server's views
 - [ ] The branch's base holds the approved mock; composition, routes and tokens unchanged from it
 - [ ] `pnpm typecheck && pnpm test` green; CI 4/4 (check, e2e, e2e-regression, sim)
-- [ ] Owners' OKs: WS4 (Chat.tsx, Standings.tsx), WS6 (desks.tsx, today.tsx)
+- [ ] Owners' OKs: WS4 (phone/parts.tsx::Chat, Standings.tsx), WS6 (desks.tsx, today.tsx)
 - [ ] Rulebook updated the same day; one code review once CI is green
 - [ ] On merge, tell the PM with the SHA, for WS4's S3-PR-8 (TvDeals.tsx and the chip component are on the lane)
 
@@ -1468,7 +1469,7 @@ votes tick calls `overruleNews` (freeze point: its signature, `overruleNews(stat
 
 | PR | may_edit | may_edit_content | must_not_edit (and why) |
 |---|---|---|---|
-| S5-PR-1 | `packages/engine/src/politics.ts`, `packages/engine/src/colony.ts`, the POLITICS block of `packages/engine/src/config.ts`, new `packages/engine/test/budget.test.ts`, `colony-budget.test.ts`, `overrule.test.ts`, existing `packages/engine/test/colony-mood.test.ts`, `docs/rulebook/colony-and-politics.html`, `open-designs.html`, `search-index.js` (generated); named edits (one commit per owner, OK'd by SHA): HAPPINESS block of config.ts (WS1), `packages/ai/src/actions.ts`, `play.ts::applyAction`, `packages/ai/test/moves.test.ts` (WS1), `packages/engine/src/index.ts` export lines (anyone) | — | `packages/engine/src/types.ts`, `packages/protocol/**` (the contract is landed; a shape change is a PM ruling); `packages/engine/src/game.ts` (spec §1: no change; WS3's); `observe.ts` (WS1, #669); `play.ts`'s planning case (S5-PR-3, WS1); every server and web file (S5-PR-4..7) |
+| S5-PR-1 | `packages/engine/src/politics.ts`, `packages/engine/src/colony.ts`, the POLITICS block of `packages/engine/src/config.ts`, new `packages/engine/test/budget.test.ts`, `colony-budget.test.ts`, `overrule.test.ts`, existing `packages/engine/test/colony-mood.test.ts`, `docs/rulebook/colony-and-politics.html`, `search-index.js` (generated); named edits (one commit per owner, OK'd by SHA): HAPPINESS block of config.ts (WS1), `packages/ai/src/actions.ts`, `play.ts::applyAction`, `packages/ai/test/moves.test.ts` (WS1), `packages/engine/src/index.ts` export lines (anyone) | — | `packages/engine/src/types.ts`, `packages/protocol/**` (the contract is landed; a shape change is a PM ruling); `packages/engine/src/game.ts` (spec §1: no change; WS3's); `observe.ts` (WS1, #669); `play.ts`'s planning case (S5-PR-3, WS1); every server and web file (S5-PR-4..7) |
 | S5-PR-2 | new `packages/ai/src/hands/budget.ts`, `packages/ai/src/hands/vote.ts` (serialised S3 → S5 → S4), `docs/rulebook/computer-players.html`; named edit: new `packages/ai/test/budget-hand.test.ts` (WS1's test tree; precedent `council-ai.test.ts`), `packages/ai/src/index.ts` export line | — | `politics-value.ts` (WS1's values; #669, S5-PR-3); `play.ts`, `sim.ts`, `actions.ts` (WS1); the engine (S5-PR-1 is merged; a rule gap goes back to the lead) |
 | S5-PR-3 | WS1's: `packages/ai/src/{politics-value,play,sim}.ts`, `packages/ai/test/**`, `packages/engine/src/observe.ts` (#669) | — | `hands/budget.ts`, `hands/vote.ts` (WS7); the engine rules (WS7) |
 | S5-PR-4 | WS3's: `apps/server/src/mule-game.ts`, `apps/server/src/server.ts`, WS3's new server test file | — | `apps/server/src/politics-view.ts`, `colony-view.ts` (WS7, S5-PR-5); `packages/engine/**` |
@@ -1529,8 +1530,9 @@ votes tick calls `overruleNews` (freeze point: its signature, `overruleNews(stat
 - [ ] **Step 3: Record the named edits in SEAMS through the PM** before their commits: config.ts HAPPINESS block
   (WS1, S5-C3), `packages/ai/src/actions.ts`, `play.ts::applyAction`, `packages/ai/test/moves.test.ts` (WS1, S5-C9's
   AiAction part).
-- [ ] **Step 4: Check `docs/rulebook/open-designs.html`** carries slice 5 as "Designed, not in the game yet, WS7"
-  (spec §5). If not, add it in this PR's first commit: `docs(rulebook): slice 5 budget and overrule, designed`.
+- [ ] **Step 4: Check `docs/rulebook/colony-and-politics.html`** carries slice 5 as "Designed, not in the game yet,
+  WS7" (spec §5). Do not edit `open-designs.html`: it is the PM's, hand-edited; a missing entry there goes to the
+  lead, who asks the PM.
 
 #### Task S5-1.1 — config and exported names (S5-C1, S5-C3, S5-C5, S5-C6 config; securitySpend)
 
@@ -1731,8 +1733,8 @@ S5-RULE-2
 #### Task S5-1.9 — rulebook, push, tell the PM
 
 - [ ] **Step 1: Move the RC rules into `docs/rulebook/colony-and-politics.html`** (S5-C1, S5-C2, S5-C3, S5-C4, S5-C5
-  as built: the budget, Welfare, the tax overrule), keeping Security, the budget overrule, the snap and the inquiry
-  in `open-designs.html`; then `node docs/rulebook/build-index.mjs`. Commit `docs(rulebook): slice 5 RC rules as built`.
+  as built: the budget, Welfare, the tax overrule), leaving Security, the budget overrule, the snap and the inquiry
+  marked "Designed, not in the game yet" (`open-designs.html` is the PM's: the lead asks the PM for its entry); then `node docs/rulebook/build-index.mjs`. Commit `docs(rulebook): slice 5 RC rules as built`.
 - [ ] **Step 2: Push `ws7-s5-engine`, open the PR into `ws7-politics`, and tell the PM** (the working rule): the
   PR, the WS1 named-edit SHAs (Task S5-1.1 Step 2, Task S5-1.8), and that S5-PR-2/4/5 can start.
 
@@ -2063,8 +2065,8 @@ owner, CI 4/4, one review, rulebook the same day, money numbers to Heiko before 
     (line 93). Deal cards from slice 3's `Politics.deals`. D-S5-4 B drops this task.
     Commit `feat(engine): S5-C16 the Sheriff's inquiry and the no-confidence vote (S5-T-AC-20)`.
 - [ ] **Task S5-8.5: WS1 named edits** (one commit, OK'd by SHA): AiAction `openInquiry`, its `applyAction` case,
-  its `moves.test.ts` row (S5-C18's AI part). Then the rulebook: the after-RC rules move from `open-designs.html`
-  to `colony-and-politics.html`; `node docs/rulebook/build-index.mjs`.
+  its `moves.test.ts` row (S5-C18's AI part). Then the rulebook: the after-RC rules are written into `colony-and-politics.html` as built
+  (the lead asks the PM to take them off `open-designs.html`, which is the PM's); `node docs/rulebook/build-index.mjs`.
 - [ ] **S5-PR-8 merge gate:** S5-T-AC-9, -18, -19, -20 and S5-B-AC-7 green by id, red first; the RC tests unchanged;
   politics-off sim byte-identical; WS1's OK on the SHA; CI 4/4; one review once green; rulebook the same day.
 
