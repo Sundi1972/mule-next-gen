@@ -30,11 +30,13 @@ export function settingWords(law: LawId, s: number): string {
       return `${s} cr per air point`;
     case 'emissionCap':
       return `air ${s}`;
+    case 'sabotageBan':
+      return `×${s}`;
   }
 }
 
 /** The chip's short label: the number and the least of its unit. */
-export const chipWords = (law: LawId, s: number) => (law === 'exportTax' ? `${s}%` : law === 'emissionCap' ? `air ${s}` : `${s} cr`);
+export const chipWords = (law: LawId, s: number) => (law === 'exportTax' ? `${s}%` : law === 'emissionCap' ? `air ${s}` : law === 'sabotageBan' ? `×${s}` : `${s} cr`);
 
 /** What the law does, in plain words, at no particular setting. */
 export const LAW_MEANING: Record<LawId, string> = {
@@ -42,6 +44,7 @@ export const LAW_MEANING: Record<LawId, string> = {
   landTax: 'Every player pays for each plot they own, at each month end, into the fund.',
   pollutionTax: 'Each player pays for the air their plots fouled that month, at its end.',
   emissionCap: 'No new Rare earth mine or smelter while the air is above the cap.',
+  sabotageBan: 'A caught saboteur pays the fine and loses the reputation times the setting.',
 };
 
 /** "Land tax 10 cr a plot", "Repeal the Export tax". */

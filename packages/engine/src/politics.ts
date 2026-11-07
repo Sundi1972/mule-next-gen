@@ -460,7 +460,7 @@ export function officeScore(state: GameState, playerId: string): number {
 
 // ---- The council: laws proposed by the Governor, voted at the next planning, after the election. See WS7 slice 2a.
 
-export const LAW_NAME: Record<LawId, string> = { exportTax: 'Export tax', landTax: 'Land tax', pollutionTax: 'Pollution tax', emissionCap: 'Emission cap' };
+export const LAW_NAME: Record<LawId, string> = { exportTax: 'Export tax', landTax: 'Land tax', pollutionTax: 'Pollution tax', emissionCap: 'Emission cap', sabotageBan: 'Sabotage ban' };
 
 function electionLive(state: GameState): boolean {
   const election = state.politics?.election;
@@ -718,6 +718,9 @@ function enactImpact(state: GameState, law: LawId, setting: number, playerId: st
       const blocksNow = state.air > setting;
       return { cost: blocksNow ? plots * POLITICS.ai.council.capPlotCost : 0, capped: { blocksNow, plots } };
     }
+    // S4-C20's stand-in; Task S4-1.9 replaces it with S4-RULE-10's preview from revealed cases.
+    case 'sabotageBan':
+      return { cost: 0 };
   }
 }
 
