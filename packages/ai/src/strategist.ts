@@ -421,6 +421,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const keepBackFor = (good: Good) => keepBacks.get(good) ?? keepBacks.set(good, cashReserve(obs, mind, o, good)).get(good)!;
   const needFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food');
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
+  const needWater = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'water');
   const analysed = new Set(p.analysed);
   const cands: Candidate<DevAction>[] = [];
   const chain = focus === null ? null : chainValue(obs, o, mind, focus);
@@ -481,21 +482,24 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
     }
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
-  if (STRATEGIST.energyFirst && needEnergy) energyFirst(cands);
+  // Energy first, then Water: a rule that finds its install allowed rules the rest out, and the next one finds none.
+  if (STRATEGIST.energyFirst && needEnergy) firstOf(cands, 'energy', 'no Energy plant of my own yet');
+  if (STRATEGIST.waterFirst && needWater) firstOf(cands, 'water', 'no well of my own yet');
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
-const ENERGY_FIRST = 'no Energy plant of my own yet';
-
-/** STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. */
-function energyFirst(cands: Candidate<DevAction>[]): void {
-  const isPlant = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === 'energy';
-  if (!cands.some((c) => isPlant(c) && !c.veto)) return;
+/**
+ * STRATEGIST.energyFirst and waterFirst: when an install of `outfit` is allowed, rules out every other candidate, "Keep
+ * the cash" too, for `why`. Does nothing when another rule already left only its own installs.
+ */
+function firstOf(cands: Candidate<DevAction>[], outfit: Outfit, why: string): void {
+  const isIt = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === outfit;
+  if (!cands.some((c) => isIt(c) && !c.veto)) return;
   for (const c of cands) {
-    if (isPlant(c) || c.veto) continue;
-    c.veto = ENERGY_FIRST;
+    if (isIt(c) || c.veto) continue;
+    c.veto = why;
     c.utility = 0;
-    c.rationale = `Ruled out: ${ENERGY_FIRST}`;
+    c.rationale = `Ruled out: ${why}`;
   }
 }
 
