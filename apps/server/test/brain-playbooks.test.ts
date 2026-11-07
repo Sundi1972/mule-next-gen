@@ -335,19 +335,18 @@ const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you 
 
 describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
   it('T-AC-A3: phases start on time with a fake model that never answers: each land grant opens as the people press Ready in planning, each planning as they press it at the month end', async () => {
-    const silent = fakeSdk(() => new Promise(() => {}));
+    // A silent model, like the SDK, gives up when its call is cancelled or its wait runs out.
+    const silent = fakeSdk((_n, _params, options) => neverAnswers(options));
     const starts = await phaseStarts(smartOn(silent));
 
     const opened = (month: number, phase: string) => starts.find(([m, p]) => m === month && p === phase)?.[2];
     expect(starts.at(-1)?.[1]).toBe('gameOver');
     for (const month of [1, 2]) expect(opened(month, 'landGrant')! - opened(month, 'planning')!, `month ${month}'s land grant`).toBe(READ_MS);
     expect(opened(2, 'planning')! - opened(1, 'upkeep')!, "month 2's planning").toBe(READ_MS);
-    // The model was asked to write at game start and never answered: month 1's land grant cancelled that call. The
-    // auction's write, asked in the production show (AM-A16), the auction's start cancelled. The seat's next decision
-    // then opened the call that stayed open all game, so every later write found the seat busy.
-    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, true, false]);
-    expect(silent.requests[0]!.options.signal?.aborted).toBe(true);
-    expect(silent.requests[1]!.options.signal?.aborted).toBe(true);
+    // An unanswered call never mutes the next one: each write is cancelled by the phase it was for, each decision ends
+    // at its wait, so both months' land and auction writes are asked and no call is still open at game over.
+    expect(silent.requests.filter((r) => isWrite(r.params)), "months 1 and 2: the land's and the auction's writes").toHaveLength(4);
+    for (const [i, r] of silent.requests.entries()) expect(r.options.signal?.aborted, `call ${i + 1}`).toBe(true);
   });
 });
 
