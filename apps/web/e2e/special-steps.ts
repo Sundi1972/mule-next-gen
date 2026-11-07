@@ -132,10 +132,10 @@ export async function checkSpecialLine(card: Locator, kind: string, what: string
   const shown = await card.evaluate((el) => {
     const l = el.querySelector('[data-testid=special-line]');
     const next = el.querySelector('[data-testid=terrain-hint], [data-testid=ground]');
-    return { kind: l?.getAttribute('data-kind') ?? null, first: !!l && !!next && !!(l.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING) };
+    return { kind: l?.getAttribute('data-kind') ?? null, beforeGround: !!l && !!next && !!(l.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING) };
   });
   check(shown.kind === kind, `${what}: the special line says ${kind}, got ${shown.kind}`);
-  check(shown.first, `${what}: the special line comes before the terrain hint or the ground card`);
+  check(shown.beforeGround, `${what}: the special line comes before the plot's ground facts (the terrain hint or the ground card)`);
 }
 
 /**
