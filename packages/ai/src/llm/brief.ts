@@ -357,13 +357,20 @@ function energyLine(obs: GameState, me: PlayerId, afterProduction: boolean, deve
 
 const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
 
+/** Whether upkeep spoils every unit of Water it leaves: a `pnpm sim --set` sweep may set its spoilage to 1 or more. */
+const waterSpoilsWhole = () => GOOD_CONFIG.water.spoilage >= 1;
+
 /** What upkeep leaves of `held` Water for the next production, as runUpkeep plays it: the drink, spoilage rounded down, the depot cap. */
 const waterAfterUpkeep = (held: number, drink: number) =>
   Math.min(UPKEEP.depotCapacity, Math.floor(Math.max(0, held - drink) * (1 - GOOD_CONFIG.water.spoilage)));
 
-/** The least Water the seat may end the auction with, upkeep drinking `drink`, and still hold `check` at the next production; null when the depot cannot keep `check`. */
+/**
+ * The least Water the seat may end the auction with, upkeep drinking `drink`, and still hold `check` at the next
+ * production; null when the depot cannot keep `check`, or when upkeep spoils it all (waterSpoilsWhole).
+ */
 function waterToKeep(drink: number, check: number): number | null {
   if (check > UPKEEP.depotCapacity) return null;
+  if (check > 0 && waterSpoilsWhole()) return null;
   let held = check;
   while (waterAfterUpkeep(held, drink) < check) held++;
   return held;
@@ -415,7 +422,10 @@ function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): stri
   const subject = farms === 0 ? `a ${kind} plot you install next month` : `${plots}`;
   const keep = waterToKeep(drink, need);
   if (keep === null) {
-    return `${head}; your household and crew drink ${drink} at upkeep, and the depot keeps at most ${UPKEEP.depotCapacity} Water after it, less than the ${need} the next production checks, so no holding keeps ${subject} whole next month.`;
+    const after = waterSpoilsWhole()
+      ? `${pct(GOOD_CONFIG.water.spoilage)} of what is left after it spoils at upkeep`
+      : `the depot keeps at most ${UPKEEP.depotCapacity} Water after it, less than the ${need} the next production checks`;
+    return `${head}; your household and crew drink ${drink} at upkeep, and ${after}, so no holding keeps ${subject} whole next month.`;
   }
   const verdict = held >= keep ? 'covered' : `short by ${keep - held}, or ${cut} next month`;
   const grow = room(need) + 1;
@@ -425,7 +435,7 @@ function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): stri
   const top = grow + UPKEEP.crewPerWater - 1;
   const grown =
     `If next month's MULEs add ${grow} to ${top} crew${beyond} (${crewRule}), production checks ${next}: ` +
-    `${keepNext === null ? `more than the depot keeps after upkeep, ${UPKEEP.depotCapacity}, so no holding covers that` : `hold ${keepNext}`}; ` +
+    `${keepNext === null ? `${waterSpoilsWhole() ? 'all of it spoils at upkeep' : `more than the depot keeps after upkeep, ${UPKEEP.depotCapacity}`}, so no holding covers that` : `hold ${keepNext}`}; ` +
     `every ${UPKEEP.crewPerWater} crew past that add one more to the check.`;
   return (
     `${farms === 0 ? `${noFarm} To keep ${subject} whole` : `${head}. To keep ${subject} whole next month`}, end this auction holding ${keep}: upkeep drinks ${drink}, ` +
