@@ -17,6 +17,10 @@ describe('the family filter: a matched word is masked, the rest of the line is k
     ['scheisse!', '********!'],
     ['fick dich, Kai', '**** dich, Kai'],
     ['HURENSOHN', '*********'],
+    ['Scheiß drauf', '****** drauf'],
+    ['SCHEIẞE', '*******'],
+    ['gefickt', '*******'],
+    ['🍔Scheiße🍔', '🍔*******🍔'],
   ])('masks %j as %j', (line, masked) => {
     expect(familyFilter(line)).toBe(masked);
   });
@@ -31,6 +35,9 @@ describe('the family filter: a matched word is masked, the rest of the line is k
     'I will assassinate the price',
     'a fickle market',
     'Spaß haben',
+    'Verschleiß und Scheich',
+    'Spastik',
+    'Wichtel und Arschbombe',
     'pass it to Kai',
     'buy at 30, sell at 40',
     'the analysis',
@@ -108,11 +115,12 @@ describe('every chat line at the table passes the family filter (the server hand
   });
 
   it("a player's name is masked on every screen, the TV's too", async () => {
-    const { tv } = await table(['Heiko', 'Shithead']);
+    const { screens } = await table(['Heiko', 'Shithead']);
 
-    const view = await tv.waitFor('view', (m) => m.view.seats.length === 2);
-
-    expect(view.view.seats.map((s) => s.name)).toEqual(['Heiko', '****head']);
+    for (const s of screens) {
+      const view = await s.waitFor('view', (m) => m.view.seats.length === 2);
+      expect(view.view.seats.map((seat) => seat.name)).toEqual(['Heiko', '****head']);
+    }
   });
 
   it('a whisper to a computer seat reaches the game masked, so an AI never hears the word', async () => {
