@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, monthlyDemand, MULE, observe, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, monthlyDemand, MULE, observe, OFF_WORLD, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
@@ -12,6 +12,17 @@ import { canFeed, chainInputs, chainLinks, chainOf, chainOutlook, installGain, l
 const ME = 'ai0';
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
 const WORKS: Outfit[] = ['alloy', 'electronics'];
+
+// The ship's Electronics price holds where pricedAt sets it: the off-world walk (pricing C3) would pull it back to its
+// reference, and a forecast with it (pricing §3). It holds within the month only: a real month opening still clamps it
+// to the walk's band.
+const savedPhi = OFF_WORLD.others.phi;
+beforeEach(() => {
+  OFF_WORLD.others.phi = 1;
+});
+afterEach(() => {
+  OFF_WORLD.others.phi = savedPhi;
+});
 
 /**
  * Development in month 1: ai0 holds the given plots on row 0, analysed, with cash and a full larder; the others hold
@@ -41,8 +52,8 @@ function development(plots: { x: number; outfit?: Outfit; ground?: Partial<typeo
  * Electronics at `price` as the store itself keeps posting it, with or without the store's bands (C17): `price` is
  * their normal, off-world and posted price, and the colony's shelf holds two months of its Electronics demand, so the
  * bands post normal and the price neither climbs nor falls. A hand-set price alone moves under the bands (by up to a
- * quarter a month toward the band's posting), so the seat would weigh another. Asserted: its outlook reads `price` now
- * and later.
+ * quarter a month toward the band's posting), so the seat would weigh another. The off-world price holds there too
+ * (OFF_WORLD.others.phi 1, above). Asserted: its outlook reads `price` now and later.
  */
 function pricedAt(state: GameState, price: number): GameState {
   Object.assign(state.store, {
@@ -102,6 +113,12 @@ function upstreamFirst(installed: readonly Outfit[], standing: readonly Outfit[]
 /** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off. */
 const CHAIN_ON_MONTHS = 3;
 
+/**
+ * The 30-seed sweeps play 30 to 31 whole development phases at 100 ms ticks: 1 to 2 s alone, over vitest's default
+ * 5 s on a loaded CI runner (over 5000 ms in #591's check, 5815 ms in #598's). The work is inherent, so they get room.
+ */
+const SWEEP_TIMEOUT_MS = 30_000;
+
 /** Runs `fn` with chains switched on, then puts the switch back. */
 function withChains<T>(fn: () => T): T {
   const shipped = AI_PLANS.chain.months;
@@ -129,7 +146,7 @@ function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
 }
 
 describe('a factory chain (AM-33)', () => {
-  it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
+  it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', { timeout: SWEEP_TIMEOUT_MS }, () => withChains(() => {
     // Every seat seed 1-30: the plan is Electronics, and no works goes in before the links it needs.
     const broken: string[] = [];
     for (let seed = 1; seed <= 30; seed++) {
@@ -145,7 +162,7 @@ describe('a factory chain (AM-33)', () => {
     expect(['rareEarth', 'smithore'], `installed ${installed.join(', ')}`).toContain(installed[0]);
   }));
 
-  it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
+  it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', { timeout: SWEEP_TIMEOUT_MS }, () => withChains(() => {
     const plots = [{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' as Outfit }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' as Outfit }, { x: 4 }, { x: 6 }, ...FARMS];
     const broken: string[] = [];
     for (let seed = 1; seed <= 30; seed++) {

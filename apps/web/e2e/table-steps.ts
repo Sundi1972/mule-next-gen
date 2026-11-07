@@ -272,9 +272,17 @@ export async function moveDialogOutlivedThePhase(ctx: GameStepContext, link: str
   check(await phone.getByTestId('move-to-phone').evaluate((el) => el === document.activeElement), "B-AC-13 (handoff, in game): focus goes back to the new phase's move-to-phone");
 }
 
-/** B-AC-9 (WS4, plot look A), held in development: the TV map shows who owns each plot and what is installed on it. */
+/**
+ * B-AC-9 (WS4, plot look A), held in development: the TV map shows who owns each plot and what is installed on it. The
+ * MULE goes in on the server just before; the TV draws it a broadcast later, so the read waits for its disc (CI read the
+ * map first once, 6 Nov, and failed "the map shows an installed good").
+ */
 export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<string> {
-  return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
+  return ctx.held(async () => {
+    const map = ctx.tv.locator('[data-phase=development]');
+    await map.locator('[data-testid^=installed-]').first().waitFor({ state: 'attached', timeout: 3_000 });
+    return checkPlotLook(map, 'TV, development', { installed: true });
+  });
 }
 
 type Rect = { left: number; top: number; right: number; bottom: number };
@@ -329,10 +337,10 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
       const undo: (() => void)[] = [];
       try {
         check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
-        const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
         const index = (t: { x: number; y: number }) => t.y * state.width + t.x;
         const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
-        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store' && !sited.has(index(t));
+        // No colony building stands on a map plot (G-5 C48): every plot but the store's is open.
+        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store';
         const known = [...me.analysed];
         undo.push(() => me.analysed.splice(0, me.analysed.length, ...known));
         const analyse = (t: { x: number; y: number }) => {
@@ -388,8 +396,13 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         // (c): a plot inside the map, so its ring reaches out on every side, under a plot that can show its dots. For (d)
         // and (e) that plot's left, right and upper neighbours show their dots too; a MULE on any of them is lifted for the step.
         const around = (t: { x: number; y: number }) => [at(t.x, t.y - 1), at(t.x - 1, t.y - 1), at(t.x + 1, t.y - 1), at(t.x, t.y - 2)];
-        const selected = state.tiles.find((t) => t.x > 0 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && open(t) && around(t).every((n) => !!n && open(n)));
-        check(selected, `${id}: a plot inside the map whose upper neighbour, and that one's left, right and upper neighbours, can show their dots`);
+        // (f) also needs a special plot that shows no dots left of one that does: two left of the plot above the selection.
+        const hiddenOf = (t: { x: number; y: number }) => at(t.x - 2, t.y - 1);
+        const selected = state.tiles.find((t) => {
+          const hidden = hiddenOf(t);
+          return t.x > 1 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && open(t) && around(t).every((n) => !!n && open(n)) && !!hidden && open(hidden) && !specials.includes(hidden) && hidden !== owned;
+        });
+        check(selected, `${id}: a plot inside the map whose upper neighbour, and that one's left, right and upper neighbours, can show their dots, with a plot two left of the upper one to stage a special without dots`);
         const { x, y } = selected;
         const neighbours = around(selected) as GameState['tiles'][number][];
         for (const n of neighbours) {
@@ -398,6 +411,29 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
           n.outfit = null;
           analyse(n);
         }
+        // (f): a special plot nobody here has analysed, so it shows its badge and no dots, left of a plot showing its dots.
+        const hidden = hiddenOf(selected)!;
+        const hiddenWas = hidden.special;
+        undo.push(() => {
+          if (hiddenWas) hidden.special = hiddenWas;
+          else delete hidden.special;
+        });
+        hidden.special = hidden.special ?? { kind: 'oasis' };
+        me.analysed.splice(0, me.analysed.length, ...me.analysed.filter((i) => i !== index(hidden)));
+        // (i): the store's side neighbours show their dots, so its sign has dots beside it (WS6 ruling in #636).
+        const store = state.tiles.find((t) => t.terrain === 'store');
+        check(store, `${id}: the map has a store`);
+        // Never (f)'s plot, which must keep showing no dots (#656 review).
+        const besideStore = [at(store.x - 1, store.y), at(store.x + 1, store.y)].filter((t): t is GameState['tiles'][number] => !!t && open(t) && t !== hidden);
+        check(besideStore.length > 0, `${id}: a plot beside the store that can show its dots`);
+        for (const n of besideStore) {
+          const was = n.outfit;
+          undo.push(() => Object.assign(n, { outfit: was }));
+          n.outfit = null;
+          analyse(n);
+        }
+        // (h): the plot above the selection, which the drone flags between two plots showing their dots.
+        const flagged = neighbours[0]!;
         room.broadcast();
 
         const planning = ctx.phone.locator('[data-phase=planning]');
@@ -432,20 +468,35 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         check(!o.pips.some((d) => o.gems.some((g) => covers(d, g))), `${id}: on owned plot ${owned.x}-${owned.y} the gem is clear of the dots`);
 
         const phone = await selectionUnderDots(map, x, y, id);
+        const sign = await storeSignClearOfTheDots(map, besideStore, id);
         await ctx.phone.setViewportSize(PHONE_SMALL.viewport);
         let small: Awaited<ReturnType<typeof selectionUnderDots>>;
         let fit: Awaited<ReturnType<typeof dotsFitTheirPlots>>;
+        let strip: Awaited<ReturnType<typeof marksClearOfTheChips>>;
+        let flag: string;
         try {
           const where = `${id}, ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height}`;
           small = await selectionUnderDots(map, x, y, where);
           fit = await dotsFitTheirPlots(map, [...specials, owned, ...neighbours].map((t) => `${t.x}-${t.y}`), where);
+          strip = await marksClearOfTheChips(map, where);
+          check(await gone(map.getByTestId('map-store')), `${where}: under 24 px the store draws no STORE sign (WS6 ruling in #636)`);
+          // Free only for (h), so the drone may pick it: (b)'s owned plot may be this one.
+          const owner = flagged.owner;
+          flagged.owner = null;
+          room.broadcast();
+          try {
+            flag = await aFlagTakesTheChipsPlace(planning, flagged, where);
+          } finally {
+            flagged.owner = owner;
+            room.broadcast();
+          }
         } finally {
           await ctx.phone.setViewportSize(PHONE.viewport);
         }
         const third = (sp: (typeof marks.specials)[number]) => `${sp.at} ${px(Math.max(sp.badge!.left - sp.third!.right, sp.badge!.top - sp.third!.bottom))}`;
         const gap = (over: number) => (over > 0 ? `${px(over)} into` : `${px(-over)} under`);
         const c = (r: typeof phone) => `on a ${px(r.plot)} plot no pin, the ring's band ${gap(r.bandOver)} the dots, the glow's half-strength edge ${gap(r.glowOver)}`;
-        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} ${c(small)}; at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}`;
+        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} ${c(small)}; at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}; (f) no mark of ${strip.marks} meets any of the ${fit.chips} chips, (g) the ${strip.strip} tabs, gems and badges in the small strip at least ${px(strip.smallest)}; (h) ${flag}; (i) at ${PHONE.viewport.width}×${PHONE.viewport.height} ${sign}, at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} no STORE sign`;
       } finally {
         for (const step of undo.reverse()) step();
       }
@@ -485,6 +536,12 @@ async function selectionUnderDots(map: Locator, x: number, y: number, id: string
   const bandOver = foot - (ringBox.top - Math.max(0, ...spread.map((s) => s.spread)));
   check(bandOver <= SLACK_PX, `${id}: the ring on ${x}-${y}, as painted, keeps off the dots of ${x}-${y - 1}: its band reaches ${px(bandOver)} into their row on a ${px(box.right - box.left)} plot`);
   const glowOver = foot - (glowBox.top - Math.max(0, ...glow.map((s) => s.spread)));
+  // SA-1372 (WS6 ruling, 7 Nov): under 24 px the ring and its glow are drawn inside the plot, so no neighbour's dot is under them.
+  if (box.right - box.left < 24) {
+    check(spread.length === 0 && glow.length === 0 && !covers(ringBox, { left: box.right, right: box.right + 99, top: box.top, bottom: box.bottom }) && !covers(ringBox, { left: box.left - 99, right: box.left, top: box.top, bottom: box.bottom }), `${id}: on a ${px(box.right - box.left)} plot the ring and its glow on ${x}-${y} are drawn inside it, painting nothing outward`);
+    const others = await rectsOf(map, [`[data-testid^=map-dots-]:not([data-testid=map-dots-${x}-${y}]) span.rounded-full`]).then(([r = []]) => r);
+    check(!others.some((d) => covers(d, ringBox) || covers(d, glowBox)), `${id}: the inside ring on ${x}-${y} covers no neighbour's dot`);
+  }
   check(glowOver <= 0, `${id}: the glow on ${x}-${y}, at half strength, stays clear of the dots of ${x}-${y - 1}: it reaches ${px(glowOver)} into their row on a ${px(box.right - box.left)} plot`);
   await plot.click({ timeout: PRESS_MS });
   return { plot: box.right - box.left, bandOver, glowOver };
@@ -520,6 +577,65 @@ async function dotsFitTheirPlots(map: Locator, analysed: string[], id: string): 
       }
     }
   return { chips: all.length, width: Math.max(...all.map((r) => r.right - r.left)), height: Math.max(...all.map((r) => r.bottom - r.top)), out, pairs, overlap };
+}
+
+/**
+ * (f) and (g) of theMarksStayClearOfTheDots, SA-1372 (WS6 ruling, 7 Nov), at the phone's size now: no mark on the map
+ * (a tab, a gem, a badge, a flag, a MULE's disc, a building's chip) meets any dots chip, only the owner's
+ * border; and every tab, gem and badge in a small plot's strip is drawn at 3 px or more. Returns the counts and the smallest.
+ */
+async function marksClearOfTheChips(map: Locator, id: string): Promise<{ marks: number; strip: number; smallest: number }> {
+  // The store's sign is not among the ruling's marks: under 24 px it is not drawn at all, checked apart (WS6 ruling in #636).
+  const MARKS = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span', '[data-testid^=map-flag-]', '[data-testid^=installed-]', '[data-testid^=plot-object-] [data-num]'];
+  const STRIP = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span'].map((m) => `[data-testid^=map-strip-] ${m}`);
+  const [chips = [], marks = [], strip = []] = await rectsOf(map, ['[data-testid^=map-dots-]', MARKS.join(', '), STRIP.join(', ')]);
+  check(chips.length > 0 && strip.length > 0, `${id}: the map draws dots chips (${chips.length}) and a small strip's marks (${strip.length})`);
+  for (const c of chips)
+    for (const m of marks) check(!covers(c, m), `${id}: a mark (${px(m.left)}–${px(m.right)}, ${px(m.top)}–${px(m.bottom)}) meets the dots chip at ${px(c.left)}–${px(c.right)}, ${px(c.top)}–${px(c.bottom)}`);
+  const sides = strip.map((m) => Math.min(m.right - m.left, m.bottom - m.top));
+  for (const [i, side] of sides.entries()) check(side >= 3 - 0.05, `${id}: a tab, gem or badge in the small strip is drawn at ${px(side)}, under a dot's 3 px (${px(strip[i]!.left)}, ${px(strip[i]!.top)})`);
+  return { marks: marks.length, strip: strip.length, smallest: Math.min(...sides) };
+}
+
+/**
+ * (i) of theMarksStayClearOfTheDots, SA-1372 (WS6 ruling in #636), at the phone's size now (24 px or more): the STORE sign
+ * covers none of the dots of the plots beside the store. Returns a line for the log.
+ */
+async function storeSignClearOfTheDots(map: Locator, beside: { x: number; y: number }[], id: string): Promise<string> {
+  for (const t of beside) await map.getByTestId(`map-dots-${t.x}-${t.y}`).waitFor({ timeout: PRESS_MS });
+  const [[sign] = [], dots = []] = await rectsOf(map, ['[data-testid=map-store]', beside.map((t) => `[data-testid=map-dots-${t.x}-${t.y}] span.rounded-full`).join(', ')]);
+  check(sign && dots.length >= 3, `${id}: the STORE sign is drawn, and the dots beside it (${dots.length})`);
+  const clear = Math.min(...dots.map((d) => Math.max(d.left - sign.right, sign.left - d.right, d.top - sign.bottom, sign.top - d.bottom)));
+  check(!dots.some((d) => covers(d, sign)), `${id}: the STORE sign (${px(sign.left)}–${px(sign.right)}) covers a dot beside the store: ${px(-clear)} into it`);
+  return `the ${px(sign.right - sign.left)} STORE sign ${px(clear)} clear of the ${dots.length} dots beside it`;
+}
+
+/**
+ * (h) of theMarksStayClearOfTheDots, SA-1372 (WS6 ruling, 7 Nov), at the phone's size now: the drone flags `plot`, which
+ * shows its dots between two plots showing theirs; its SCAN flag takes its chip's place and meets no other chip. Unpicks
+ * it and goes back to Look after.
+ */
+async function aFlagTakesTheChipsPlace(planning: Locator, plot: { x: number; y: number }, id: string): Promise<string> {
+  const at = `${plot.x}-${plot.y}`;
+  const map = planning.getByTestId('hub-map');
+  await planning.getByTestId('tool-drone').click({ timeout: PRESS_MS });
+  try {
+    await map.getByTestId(`map-plot-${at}`).click({ timeout: PRESS_MS });
+    await map.getByTestId(`map-flag-${at}`).waitFor({ timeout: PRESS_MS });
+    check(await gone(map.getByTestId(`map-dots-${at}`)), `${id}: the flagged plot ${at} draws no dots chip while its SCAN flag shows`);
+    const [[flag] = [], chips = []] = await rectsOf(map, [`[data-testid=map-flag-${at}]`, '[data-testid^=map-dots-]']);
+    check(flag, `${id}: the flag on ${at} is drawn`);
+    for (const c of chips) check(!covers(c, flag), `${id}: the SCAN flag on ${at} (${px(flag.left)}–${px(flag.right)}, ${px(flag.top)}–${px(flag.bottom)}) meets a neighbour's dots chip (${px(c.left)}–${px(c.right)}, ${px(c.top)}–${px(c.bottom)})`);
+    // PM ruling A, WS6's glyphs: a 7×7 glyph chip, its word in the plot's label.
+    check(Math.abs(flag.right - flag.left - 7) <= SLACK_PX && Math.abs(flag.bottom - flag.top - 7) <= SLACK_PX && (await map.locator(`[data-testid=map-flag-${at}] svg`).count()) === 1, `${id}: the flag on ${at} is a 7×7 glyph chip, got ${px(flag.right - flag.left)}×${px(flag.bottom - flag.top)}`);
+    const label = (await map.getByTestId(`map-plot-${at}`).getAttribute('aria-label')) ?? '';
+    check(label.includes('drone scan'), `${id}: the flagged plot's label says "drone scan", got "${label}"`);
+    await map.getByTestId(`map-plot-${at}`).click({ timeout: PRESS_MS });
+    await map.getByTestId(`map-flag-${at}`).waitFor({ state: 'detached', timeout: PRESS_MS });
+    return `the SCAN flag on ${at}, a ${px(flag.right - flag.left)}×${px(flag.bottom - flag.top)} glyph chip, takes its chip's place, clear of ${chips.length} chips`;
+  } finally {
+    await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
+  }
 }
 
 /** readPlotLook's read, failing with every check that failed. Returns a line for the log. */

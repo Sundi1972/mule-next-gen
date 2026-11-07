@@ -38,7 +38,7 @@ Cost: free.
 
 ### buyMule
 In: development.
-Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 15% after a month the corral sold out), and Gearlings pay 95% of it.
+Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 25% after a month the corral sold out), and Gearlings pay 95% of it.
 Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); the walk there ends before the clock does (else: "Not enough time to walk there"); you are not already leading a MULE (else: "Already leading a MULE"); the corral has a MULE left (else: "The store is out of MULEs"); you have the price in hand (else: "Not enough money").
 Cost: yes, as it says under Does.
 
@@ -128,7 +128,7 @@ Cost: free.
 
 ### commission
 In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
-Does: The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).
+Does: The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid, on the colony's own grounds.
 Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Commission once the votes are over"); you are the Governor (else: "Only the Governor commissions for the colony"); the object is one the colony can build (else: "The colony can't build that"); the colony has none of it (else: "The colony already has a <name>"); the colony is not already building it (else: "The colony is already building the <name>").
 Cost: free.
 
@@ -150,12 +150,6 @@ Does: The Governor pays from the colony fund to mend a damaged prestige object, 
 Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Repair once the votes are over"); you are the Governor (else: "Only the Governor repairs for the colony"); the object is damaged (else: "The <name> isn't damaged"); the fund covers the repair (else: "The fund has <fund> cr; the repair costs <cost> cr").
 Cost: free.
 
-### setSiteBid
-In: planning. Args: id (park | hospital | observatory | stadium | spaceport), maxBid (number).
-Does: The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.
-Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Set the bid once the votes are over"); you are the Governor (else: "Only the Governor sets the colony's bid"); a commissioned object is waiting for a site (else: "Nothing is waiting for a site"); the object needs a plot (else: "The <name> needs no plot"); it has no site yet (else: "The <name> already has its site"); the bid is whole credits, or null (else: "Bid a whole number of credits").
-Cost: free.
-
 ### propose
 In: planning. Args: proposal ({ kind: 'enact', law, setting, replaces? } | { kind: 'repeal', law } | null).
 Does: The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it.
@@ -173,7 +167,7 @@ Each line names the move and the playbook field you set to play it.
 - claim (LandGrantPlay.ranked): a plot adds 300 to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes 1 more.
 - claim (LandGrantPlay.deny): take a plot before a rival does when it is worth more to them than it costs you to hold.
 - done (LandGrantPlay.claims): claim fewer when you cannot pay for a MULE on the plot (120 plus Smithore, then the outfit): a plot without one makes nothing.
-- buyMule (DevelopmentPlay.route): buy early: the corral has a MULE for each plot claimed this month plus 2, and a sold-out corral raises next month's price by 15%.
+- buyMule (DevelopmentPlay.route): buy early: the corral has a MULE for each plot claimed this month plus 2, and a sold-out corral raises next month's price by 25%.
 - analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 60, so analyse only where the answer changes the outfit.
 - outfit (Strategy.moneyMaker): for the good the colony is short of or the export ship wants (3 goods, every 3 months): a scarce good sells dear.
 - pub (DevelopmentPlay.ifSoldOut): when the corral is out or your route is done: the pub pays more the earlier you go, 20 plus up to 60 + 20 times the month.

@@ -223,8 +223,10 @@ describe('RULE-6: every board draws the rest zones', () => {
     // Phones: the ship's words, as long as fit (the full short form is reached in the thin-band sweep below).
     for (const id of ['s1', 's2']) bandWords(phoneScreen(withShip(game.viewFor(id)), id), 'phone', 'seller', SHIP_INSIDE.phone, id);
     const tv = tvScreen(withShip(game.viewFor(null)));
-    // The TV names the ship (its full long form is reached in the thin-band sweep below, over a taller board).
-    expect(bandWords(tv, 'tv', 'seller', SHIP_INSIDE.tv, 'the TV')).toMatch(/SHIP/);
+    // The TV names the ship on a board tall enough for its words: the store's spread sets how much of the board the
+    // sellers' band takes (its full long form is reached in the thin-band sweep below).
+    const tall = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi: view.auction!.hi + 20 } });
+    expect(bandWords(tvScreen(tall(withShip(game.viewFor(null)))), 'tv', 'seller', SHIP_INSIDE.tv, 'the TV')).toMatch(/SHIP/);
     // The buyers' band never changes, and a ship at or under S leaves the sellers' band as it was.
     // On a taller board, so the band has room for the full words: a ship exactly at S is not inside it.
     const atS = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi: view.auction!.hi + 20, shipPays: S } });

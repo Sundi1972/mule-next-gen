@@ -1,4 +1,4 @@
-import { HoloMap, selectionGlow, selectionRing, smallDots, specialBadgeBox, type MapTile } from '@mule/ui';
+import { HoloMap, RING_INSIDE_PLOT, selectionGlow, selectionRing, smallDots, smallStrip, specialBadgeBox, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -172,17 +172,6 @@ describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
     expect(render(GEM_TILES, true)).not.toMatch(/data-testid="(map-)?gem-/);
   });
 
-  it('T-AC-3 (gem): a colony building’s plot shows the building, not its ground: no gem and no pip', () => {
-    const park = { kind: 'park', name: 'Park', stage: 'standing', buildMonths: 1 } as const;
-    const map = render([{ x: 0, y: 0, terrain: 'plains', owner: null, ground: { crystite: 2, food: 3 }, object: park }]);
-    expect(map).toContain('data-testid="plot-object-0-0"');
-    expect(map).not.toMatch(/data-testid="(map-)?gem-/);
-    expect(map).not.toMatch(/\brounded-control\b/);
-    const label = tag(map, /data-testid="map-plot-0-0"/).match(/aria-label="([^"]*)"/)?.[1] ?? '';
-    expect(label).toContain('Food 3 of 3');
-    expect(label).toContain('Crystite here');
-  });
-
   it('T-AC-3 (gem): the plot’s label names its gems, "Crystite here", and none without ground or under hideGround', () => {
     const label = (markup: string, x: number) => tag(markup, new RegExp(`data-testid="map-plot-${x}-0"`)).match(/aria-label="([^"]*)"/)?.[1] ?? '';
     const map = render(GEM_TILES);
@@ -240,26 +229,13 @@ describe('B-AC-9 (WS4, plot look A): the selected ring’s outer reach stops und
     const r = selectionRing(plot, 'phone');
     return (r.inset ?? plot * 0.06) + r.band + r.edge;
   };
-  /** The phone chip's dot row ends P/2 − 6.5 px over the plot's foot (P/2 − 1.5 for the small chip); the ring stops half a pixel under that. */
-  const room = (plot: number) => plot / 2 - (plot < 16 ? 1.5 : 6.5) - 0.5;
+  /** The phone chip's dot row ends P/2 − 6.5 px over the plot's foot; the ring stops half a pixel under that. */
+  const room = (plot: number) => plot / 2 - 6.5 - 0.5;
 
-  it('on a 20 px plot and the phone’s 25 px plot, comes in and thins to stop half a pixel under the dots', () => {
-    expect(selectionRing(20, 'phone')).toEqual({ inset: 0, band: 1, edge: 2, inside: false });
+  it('on the phone’s 24 and 25 px plots, comes in and thins to stop half a pixel under the dots (under 24 px it is drawn inside: SA-1372)', () => {
+    expect(selectionRing(24, 'phone')).toEqual({ inset: 0, band: 3, edge: 2, inside: false });
     expect(selectionRing(25, 'phone')).toEqual({ inset: 0.5, band: 3, edge: 2, inside: false });
-    for (const plot of [20, 25]) expect(reach(plot)).toBeLessThanOrEqual(room(plot));
-  });
-
-  it('on the small phone’s 12.8 px hub plot, under the small chip’s dots, comes in 0.4 px out with its full 2 px band', () => {
-    const r = selectionRing(12.8, 'phone');
-    expect(r).toMatchObject({ band: 2, edge: 2, inside: false });
-    expect(r.inset).toBeCloseTo(0.4, 6);
-    expect(reach(12.8)).toBeLessThanOrEqual(room(12.8) + 1e-9);
-  });
-
-  it('on a 16–19 px plot, too small for even a 1 px band under the full chip’s dots, is drawn inside under dots and keeps its full band elsewhere', () => {
-    expect(selectionRing(16, 'phone')).toEqual({ inset: 0, band: 2, edge: 2, inside: true });
-    expect(selectionRing(19, 'phone')).toEqual({ inset: 0, band: 2, edge: 2, inside: true });
-    expect(selectionRing(20, 'phone').inside).toBe(false);
+    for (const plot of [24, 25]) expect(reach(plot)).toBeLessThanOrEqual(room(plot));
   });
 
   it('from a 30 px plot, and on the TV, is drawn as ever: 6% out, a ninth of the plot thick, a 2 px (TV 3 px) void edge', () => {
@@ -274,13 +250,12 @@ describe('B-AC-9 (WS4, plot look A): the selected ring’s outer reach stops und
 describe('B-AC-9 (WS4, plot look A; PM ruling, 7 Nov): under dots the selection’s glow stops at half strength under the dots above', () => {
   /** The glow is at half strength on its spread edge, 4 px outside its box: the box's reach out plus 4. */
   const halfReach = (plot: number) => (selectionGlow(plot, 'phone') ?? plot * 0.08) + 4;
-  const room = (plot: number) => plot / 2 - (plot < 16 ? 1.5 : 6.5) - 0.5;
+  const room = (plot: number) => plot / 2 - 6.5 - 0.5;
 
-  it('on the 12.8 px and 25 px plots its box comes in so that edge stops within the ring’s room', () => {
-    expect(selectionGlow(12.8, 'phone')).toBeCloseTo(0.4, 6);
+  it('on the 24 px and 25 px plots its box comes in so that edge stops within the ring’s room (under 24 px it is drawn inside: SA-1372)', () => {
+    expect(selectionGlow(24, 'phone')).toBeCloseTo(1, 6);
     expect(selectionGlow(25, 'phone')).toBeCloseTo(1.5, 6);
-    expect(selectionGlow(20, 'phone')).toBeCloseTo(-1, 6);
-    for (const plot of [12.8, 20, 25]) expect(halfReach(plot)).toBeLessThanOrEqual(room(plot) + 1e-9);
+    for (const plot of [24, 25]) expect(halfReach(plot)).toBeLessThanOrEqual(room(plot) + 1e-9);
   });
 
   it('where 8% of the plot already stops short (from 30 px), and on the TV, is not capped: 8% out, a 12 px blur, a 4 px spread', () => {
@@ -338,5 +313,71 @@ describe('B-AC-9 (MG-2): the special badge is sized with the plot, so it hides n
     const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 1, terrain: 'plains', owner: null, special: { kind: 'oasis' } }] }));
     const badge = map.match(/data-testid="special-glyph-1-1"[^>]*><span[^>]*style="([^"]*)"/)?.[1] ?? '';
     expect(badge).toMatch(/right:-2.75px;bottom:-2.75px;width:11px;height:11px/);
+  });
+});
+
+describe('SA-1372 (WS6 ruling, 7 Nov): on a phone plot under 16 px that shows its dots, no mark meets the chip', () => {
+  /** The small chip: 7 px tall (2 px padding, 3 px dots), half a pixel over the plot's foot; its dots at 3 px. */
+  const chipTop = (plot: number) => plot - 0.5 - 7;
+
+  it('lays the tab, the gem and the badge in a strip above the chip, each at least 3 px, the strip ending 1 px over the chip', () => {
+    for (const plot of [12.8, 13.5, 15, 15.9]) {
+      const s = smallStrip(plot, { tab: true, gems: 1, badge: true });
+      expect(s, `${plot} px`).toMatchObject({ tab: true, gems: 1, badge: true });
+      expect(s.size).toBeGreaterThanOrEqual(3);
+      expect(s.top + s.size).toBeLessThanOrEqual(chipTop(plot) - 1 + 1e-9);
+      // Three marks and the 1 px between each, inside the plot's half-pixel edges.
+      expect(3 * s.size + 2).toBeLessThanOrEqual(plot - 1 + 1e-9);
+    }
+  });
+
+  it('when they do not all fit at 3 px, drops the badge first, then the gem; the tab always stays', () => {
+    const two = smallStrip(12.8, { tab: true, gems: 2, badge: true });
+    expect(two).toMatchObject({ tab: true, gems: 2, badge: false });
+    expect(two.size).toBeGreaterThanOrEqual(3);
+    expect(2.5 * two.size + 1).toBeLessThanOrEqual(12.8 - 1 + 1e-9);
+    const tight = smallStrip(9, { tab: true, gems: 2, badge: true });
+    expect(tight).toMatchObject({ tab: true, gems: 0, badge: false });
+    expect(smallStrip(12.8, { tab: false, gems: 0, badge: true })).toMatchObject({ tab: false, gems: 0, badge: true });
+  });
+
+  it('draws the chip at the plot’s foot only under 16 px; from 16 px it stays centred (ruling X)', () => {
+    const at = (plot: number) => smallDots(plot, 'phone');
+    expect(at(12.8)).toBe(true);
+    expect(at(16)).toBe(false);
+  });
+});
+
+describe('SA-1372 (WS6 ruling, 7 Nov): the selection ring never covers a neighbour’s dots', () => {
+  /** The phone chip's three dots, 3 px with 1 px between, centred in the plot: their row's gap to the plot's side. */
+  const sideGap = (plot: number) => (plot - 11) / 2;
+  /** Outside its plot the ring paints 6% of the plot out, its band and its 2 px void edge; the glow is at half strength 8% plus 4 px out. */
+  const ringReach = (plot: number) => plot * 0.06 + Math.max(2, Math.round(plot / 9)) + 2;
+  const glowReach = (plot: number) => plot * 0.08 + 4;
+
+  it(`is drawn inside its plot under ${RING_INSIDE_PLOT} px on a phone, the size measured where a ring or glow outside would reach a side neighbour’s dots`, () => {
+    expect(RING_INSIDE_PLOT).toBe(24);
+    for (const plot of [12.8, 15, 16, 19, 20, 23.9]) expect(selectionRing(plot, 'phone').inside, `${plot} px`).toBe(true);
+    for (let plot = RING_INSIDE_PLOT; plot <= 60; plot += 0.05) {
+      expect(selectionRing(plot, 'phone').inside, `${plot} px`).toBe(false);
+      expect(ringReach(plot), `ring at ${plot} px`).toBeLessThanOrEqual(sideGap(plot) + 1e-9);
+      expect(glowReach(plot), `glow at ${plot} px`).toBeLessThanOrEqual(sideGap(plot) + 1e-9);
+    }
+    // Just under it, a ring outside would reach them: the threshold is the measurement, not a choice.
+    expect(ringReach(23.8)).toBeGreaterThan(sideGap(23.8));
+    expect(selectionRing(20, 'tv').inside).toBe(false);
+  });
+});
+
+describe('SA-1372, #640 review: no mark from a plot beside reaches a neighbour’s dots', () => {
+  it('beside a right-column special showing its dots, whose chip steps left, the selection’s ring and glow are drawn inside at any phone size', () => {
+    const tiles: MapTile[] = [];
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) tiles.push({ x, y, terrain: 'plains', owner: null, ...(x === 2 && y === 1 ? { ground: { food: 3 }, special: { kind: 'oasis' } } : {}) });
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected: { x: 1, y: 1 } }));
+    expect(tag(map, /data-testid="selected-ring"/)).toMatch(/\binset-0\b/);
+    expect(tag(map, /data-testid="selected-glow"/)).toMatch(/\binset-0\b/);
+    // Without the stepped chip beside it, the 30 px plot's ring is drawn outside as ever.
+    const plain = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: tiles.map(({ special: _, ...t }) => t), selected: { x: 1, y: 1 } }));
+    expect(tag(plain, /data-testid="selected-ring"/)).toMatch(/-inset-\[6%\]/);
   });
 });

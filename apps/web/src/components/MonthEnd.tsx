@@ -192,16 +192,18 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
   const top = lg.rows[0];
   if (!top) return null;
   const line = winnerWords(view, lg);
-  // Everyone level at the top shares the win: each gets a mark, smaller when there are several.
+  // Everyone level at the top shares the win: each gets a mark, smaller when there are several. The TV's card is about
+  // 418 px inside (TvGameOver's 2fr column of 1,200 less its gap, padding and border): four 80 px marks fit a row, five
+  // do not, so a tie of five or six draws them at 48 (as TvWinner's), and the row wraps rather than run past the card.
   const winners = lg.rows.filter((r) => r.rank === 1);
   if (density === 'tv')
     return (
       <div className="relative flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow animate-pulse-glow" data-testid="tv-winner">
         <span className="label-caps text-lg!">The game goes to</span>
-        <ul className="flex items-center justify-center gap-4" data-testid="winner-marks">
+        <ul className="flex flex-wrap items-center justify-center gap-4" data-testid="winner-marks">
           {winners.map((w) => (
             <li key={w.player.id}>
-              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 1 ? 80 : 112} label={w.player.name} />
+              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 4 ? 48 : winners.length > 1 ? 80 : 112} label={w.player.name} />
             </li>
           ))}
         </ul>
@@ -435,13 +437,28 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
               </span>
             )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
-              {r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`}
+              {colonistsLine(view, r)}
             </span>
           </span>
         </Block>
       </div>
     </section>
   );
+}
+
+/**
+ * The month end's colonists line (needs C6): what the store fed them, and of Food and Water how much when something was
+ * missing ("19 of 20 Food and all their Water"). Without the meal in the view, the line says only fed or short.
+ */
+function colonistsLine(view: MuleView, r: ReturnType<typeof colonyReport>): string {
+  const meal = view.colonistMeal;
+  if (meal) {
+    const got = (g: { took: number; need: number }, name: string) => (g.took >= g.need ? `all their ${name}` : `${fmt(g.took)} of ${fmt(g.need)} ${name}`);
+    // The colonists who ate, from the meal itself: the month's growth or shrinking comes after.
+    const fed = `The store fed the colony’s ${fmt(meal.colonists)} colonists`;
+    return meal.food.took >= meal.food.need && meal.water.took >= meal.water.need ? fed : `${fed} ${got(meal.food, 'Food')} and ${got(meal.water, 'Water')}`;
+  }
+  return r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`;
 }
 
 // --- Your worth (your phone only) --------------------------------------------------------------------

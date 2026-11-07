@@ -21,7 +21,7 @@ export const CHIP_CLASS = {
 export type ChipWord = keyof typeof CHIP_CLASS;
 
 export const LOBBY_CHIP: Record<LobbyLink, ChipWord> = { waiting: 'WAITING FOR CLAUDE', connected: 'CLAUDE · CONNECTED' };
-export const PLAY_CHIP: Record<PlayLink, ChipWord> = { thinking: 'CLAUDE · THINKING', ready: 'CLAUDE · READY', offline: 'CLAUDE · OFFLINE' };
+export const PLAY_CHIP: Record<PlayLink, ChipWord> = { thinking: 'CLAUDE · THINKING', ready: 'CLAUDE · READY', offline: 'CLAUDE · OFFLINE', waiting: 'WAITING FOR CLAUDE' };
 
 /** `suffix` follows the word, such as the side pick's countdown (CLAUDE · THINKING · 0:32). */
 export function Chip({ word, suffix, className, testid }: { word: ChipWord; suffix?: string | undefined; className?: string; testid?: string }) {

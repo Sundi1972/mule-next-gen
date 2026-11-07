@@ -23,14 +23,15 @@ import {
   pace,
   playerEventChance,
   POLLUTION,
-  PRICE,
   PROCESSED_GOODS,
   rawOutput,
   RECIPES,
   SPECIES_PERK,
   STRATEGIST,
+  storeBuyAt,
   storeForSale,
   storeQuotes,
+  storeSellAt,
   storeSellLine,
   tileIndex,
   UPKEEP,
@@ -330,8 +331,9 @@ const madeCache = new WeakMap<GameState, Map<string, Stock>>();
 /**
  * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
  * and the turn-off rule included, with the factory `adding` (when given) installed on a stand-in plot: the seat's first
- * idle plot, else the first free one, with one run of its inputs in stock, as it runs once fed: the engine puts a
- * factory in the turn-off order only when its inputs are in stock. Its Energy use may turn a farm off (AM-17).
+ * idle plot, else the first free one, with a run of inputs in stock for it and for each factory of the seat's that takes
+ * one of its inputs (canFeed counts those running), as they run once fed: the engine puts a factory in the turn-off order
+ * only when its inputs are in stock. Their Energy use may turn a farm off (AM-17).
  * Remembered per observation, seat, month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
  * production has run and the outlook rolls none before the auction (its `made` is empty), so the month's report says
  * what the plots make: the plots are the ones that made it, without the factory being weighed.
@@ -350,8 +352,21 @@ function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
       adding && at >= 0
         ? (sim: GameState) => {
             Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 });
-            // As it will run once fed: the engine lists a factory in the turn-off order only with its inputs in stock.
-            if (isFactory(adding)) addStock(sim.players.find((p) => p.id === me)!.stock, inputsOf(adding));
+            // As they will run once fed: the engine lists a factory in the turn-off order only with its inputs in stock,
+            // reserving them in factory, then tile order. canFeed counts each of the seat's factories taking one of the
+            // new factory's inputs as running (inputLasts' `taken`), so the stock holds a run for each of those and for
+            // the stand-in, and each is listed: a run for the stand-in alone would go to such a factory ahead of it, and
+            // leave its Energy out of the turn-off. A factory sharing no input is not counted, so it is not stocked:
+            // run on inputs the seat lacks, it would make what it can't (an unfed Alloy works the Alloy of a new
+            // Electronics works).
+            if (isFactory(adding)) {
+              const stock = sim.players.find((p) => p.id === me)!.stock;
+              const needs = inputsOf(adding);
+              const counted = (o: ProcessedGood) => Object.keys(inputsOf(o)).some((g) => g in needs);
+              const runs = { ...emptyStock(), ...needs };
+              for (const t of obs.tiles) if (t.owner === me && t.outfit && isFactory(t.outfit) && counted(t.outfit)) addStock(runs, inputsOf(t.outfit));
+              for (const g of GOODS) stock[g] = Math.max(stock[g], runs[g]);
+            }
           }
         : undefined;
     seen.set(key, (made = outlook(obs, me, { lookAhead: true, ...(apply && { apply }) }).made));
@@ -438,7 +453,7 @@ function neededReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): 
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
     const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(o, g) : 0));
-    cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
+    cost += short * Math.min(storeSellAt(obs, g, obs.store.posted[g], { exact: true }), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
 }
@@ -630,7 +645,7 @@ function unitCarry(obs: GameState, o: Outlook, good: Good, mind: Mind): { sell: 
 /** RULE-4's sell side: what the store pays for a unit at the posted `price`, after the sales tax and `months` of spoilage. */
 function carrySell(obs: GameState, good: Good, mind: Mind, price: number, months: number): number {
   const keepRate = 1 - (mind.level.fullScoring ? GOOD_CONFIG[good].spoilage : 0);
-  return afterTax(obs, price * (1 - PRICE.storeSpread)) * keepRate ** months;
+  return afterTax(obs, storeBuyAt(obs, good, price, { exact: true })) * keepRate ** months;
 }
 
 // --- The resource-utility model, switched on by AI_VALUE.unit ------------------
@@ -791,7 +806,7 @@ function waterDamage(obs: GameState, o: Outlook, me: string): number {
 function replaceCost(obs: GameState, o: Outlook, good: Good): number {
   if (storeForSale(obs, good) <= 0) return 0;
   const today = (obs.auction?.good === good ? storeSellLine(obs) : storeQuotes(obs, good).sell) ?? 0;
-  return Math.max(today, belief(obs, o, good) * (1 + PRICE.storeSpread) * AI_VALUE.shortFloorMarkup);
+  return Math.max(today, storeSellAt(obs, good, belief(obs, o, good), { exact: true }) * AI_VALUE.shortFloorMarkup);
 }
 
 /**
@@ -898,7 +913,7 @@ export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], val
 function monthPlan(obs: GameState, mind: Mind, o?: Outlook, except?: Good): CashPlan {
   const look = o ?? outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const goods = WALK.order.filter((g) => g !== except);
-  return cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => belief(obs, look, g) * (1 + PRICE.storeSpread));
+  return cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => storeSellAt(obs, g, belief(obs, look, g), { exact: true }));
 }
 
 /** The cash the month's needed units take at the belief's prices, as far as the money goes: the model's reserve off the auction. */

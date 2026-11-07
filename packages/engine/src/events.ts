@@ -3,7 +3,7 @@ import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moo
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
 import { airBand, cleanAir, type AirBand } from './pollution.js';
-import { createRng } from './rng.js';
+import { createRng, seedOf } from './rng.js';
 import { GOODS, RAW_GOODS, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type MoodBand, type Phase, type Player, type PrestigeId, type SpecialKind, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
@@ -744,14 +744,4 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
     }
     if (effects.length > 0) event.effects = effects;
   }
-}
-
-/** A seed from a game's seed, its month and some names: FNV-1a over them. */
-function seedOf(seed: number, month: number, ...names: string[]): number {
-  let h = 2_166_136_261; // literal-ok: FNV-1a offset basis
-  for (const part of [String(seed), String(month), ...names]) {
-    for (let i = 0; i < part.length; i++) h = Math.imul(h ^ part.charCodeAt(i), 16_777_619); // literal-ok: FNV-1a prime
-    h = Math.imul(h ^ 0, 16_777_619); // literal-ok: FNV-1a prime, a separator between parts
-  }
-  return h >>> 0;
 }

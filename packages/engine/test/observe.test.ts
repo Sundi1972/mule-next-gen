@@ -72,6 +72,28 @@ describe('secret ballots', () => {
       expect(state.politics!.election!.ballots.lena).toEqual({ governor: 'brix' });
     }
   });
+
+  it('T-AC-7 (law ballots): observe() for one seat holds only its own law ballot, in every stage; the reveal shows totals only', () => {
+    const state = createGame({ seed: 11, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+    for (const stage of ['ballot', 'reveal', 'over'] as const) {
+      state.politics!.council = {
+        stage,
+        clockMs: 0,
+        proposal: { kind: 'enact', law: 'landTax', setting: 5 },
+        proposer: 'brix',
+        ballots: { lena: true, tam: false },
+        done: ['lena', 'tam'],
+        result: stage === 'ballot' ? null : { passed: false, yes: 1, no: 1, tie: true },
+      };
+      // Besides its own, a seat sees only the proposer's opening yes, which is public.
+      expect(observe(state, 'lena').politics!.council!.ballots, stage).toEqual({ brix: true, lena: true });
+      expect(observe(state, 'tam').politics!.council!.ballots, stage).toEqual({ brix: true, tam: false });
+      expect(observe(state, 'brix').politics!.council!.ballots, stage).toEqual({ brix: true });
+      // The totals are public, and the real game keeps every ballot.
+      expect(observe(state, 'brix').politics!.council!.result, stage).toEqual(state.politics!.council!.result);
+      expect(state.politics!.council!.ballots, stage).toEqual({ lena: true, tam: false });
+    }
+  });
 });
 
 describe('what a seat sees of the others', () => {

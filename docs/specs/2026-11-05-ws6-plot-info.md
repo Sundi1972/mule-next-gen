@@ -366,6 +366,48 @@ lands at the land grant (droneOrder is kept until then).
   components/AuctionParts.tsx through phone/ground.tsx::GroundCard (the land auction's lot card): it follows GroundCard
   with no edit to WS3's file, and its tests' dot counts change with R-2's. (3) packages/ai/src/llm/moves-stub.ts is on
   trunk now (C1's anchor said WS2's branch). (4) The mock lands on trunk in its own PR (#505) before PR-1.
+- 6 Nov, after PR-1c (#524), PM ruling on UBER-AC-1: at 844×390 the built rail showed the Drone report's first plot
+  and needed a scroll for the second, which fails "see it at the table". C2's report becomes compact: per plot one line
+  (where, land, best for) and one row of six goods by icon with 0–3 dots, a found Crystite or Rare earth as its gem;
+  "Next drone: month N" closes the report instead of the rail's footer. Mock #528 (79c253d6), measured 132 px against
+  about 137 px of room at 844×390 and 146 px at 667×375. Built in PR-2 (it already edits plotInfo.tsx), with a browser
+  check that both plots sit inside the rail at both sizes.
+- 6 Nov, at PR-2 (#545), measured: C4's store box keeps its words. The mock's row with six goods needs about 194 px;
+  the real "Your plots" box is 148 px wide at 844×390 and 103 px at 667×375. The Plots chip already gives G-2 every
+  plot with dots anywhere on the walking screen, the hall included, so the box ends "+n more · Plots ▸ shows all".
+  The chip sits at the top of the left side room (on the right the box overran the store button by 20 px at 667).
+  "Dots in the store's box" stays Designed in the rulebook.
+- 7 Nov, PM ruling X on #562 (C7), measured at real plot sizes (25 px at 3 seats, 30 px at 6 on 844×390): the 0–3
+  dots chip stays centred on the plot, as PR-1a built it, not at the plot's foot as the mock drew it (bottom 8%). At the
+  foot a 17 px chip clipped a bottom-row pin, went under the owner's tab and gem on the right column, and lost its third
+  dot under a special's badge; centred, the tab and gem stay clear and a badge clips about 1 px of dot 3. The mock's
+  MapMarks pip position is superseded by this line.
+- 7 Nov, WS6 ruling on #562 (C7, built): on a phone plot under 16 px the dots chip drops its icon and keeps three
+  3 px dots in the good's colour (13×7 px); its label still names the good.
+- 7 Nov, WS6 ruling on Jira SA-1372 (C7, the small phone's hub map, plots 12.8–15 px at 667×375), under the PM's
+  principle that no mark hides a rating. Under 16 px, on a plot showing its dots: (1) the chip sits at the plot's foot
+  (ruling X's centring was measured at 25–30 px and stays there); (2) the owner's tab, the gem and a special's badge
+  shrink into the strip above the chip, each at least a dot's 3 px, none touching the chip; if they cannot all fit, the
+  badge goes first, then the gem; the owner's border always stays; (3) a SALE, SCAN or OFF flag replaces the chip
+  while it shows; (4) the selection ring sits inside the selected plot and may cover only that plot's own dots, which
+  the rail shows in full beside the map (Look, My plots); never a neighbour's, at any size where the ring outside would
+  reach them (WS4 measures the threshold, 16–18 px today). A plot without dots keeps every mark as today. Rejected: a
+  bigger hub map at 667 (the roadmap, needs and agenda above it are planning's content, and a full-height 19-column
+  map stays width-bound, about 18 px by estimate, so the clash moves rather than goes); hiding the tab or the gem
+  outright (they carry the plot look A and Heiko's gem choice B). Checked by extending table-steps.ts
+  theMarksStayClearOfTheDots at 667×375. WS4 builds HoloMap.
+- 7 Nov, on SA-1372 after WS4's build measures: (a) PM ruling A: under 16 px a SALE, SCAN or OFF flag (28×12.5 px at
+  12.8 px plots, over a neighbour's chip) becomes a 7×7 glyph chip in its usual colour, in the dots chip's place, and
+  so on a plot without dots too (the one mark such a plot changes; WS4 on #636); its
+  word moves to the plot's label and the rail. WS6's glyphs, rendered at 7×7 at 2× and 3×: OFF ×, SCAN a ring with a
+  centre dot, SALE a gavel (an upright T); told apart by shape, so in greyscale too. The drone glyph and a coin were
+  set aside: at 7×7 the drone reads as the gavel's T and the coin as a plain dot. (b) WS4 measured the inside ring's
+  threshold at 24 px, not 16–18: under 24 px the selection ring sits inside the selected plot.
+- 7 Nov, WS6 rulings on WS4's two questions from #640 (SA-1372's build, defcf0d0): (1) the STORE sign, about 33 px
+  wide, is not drawn on plots under 24 px (the ring's measured threshold), where it overhangs into its neighbours' dots;
+  the store plot keeps its terrain look and its label. (2) On a plot without dots, under 16 px, an installed MULE's icon
+  wins over a special's badge: the badge is not drawn there (Look and the label name the special). A flag still replaces
+  what the plot shows while it shows, MULE icon included, as it does the dots; the label names the good.
 
 ## §9 · Ownership Boundaries
 

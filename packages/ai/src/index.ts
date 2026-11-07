@@ -11,6 +11,7 @@ export * from './strategist.js';
 export * from './summary.js';
 export * from './utility.js';
 export * from './value.js';
+export * from './politics-value.js';
 export * from './hands/auction.js';
 export * from './hands/develop.js';
 export * from './hands/lot.js';

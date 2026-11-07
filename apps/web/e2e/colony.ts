@@ -73,7 +73,9 @@ async function main(): Promise<void> {
     // Month 1: through the election to planning proper, where the Governor commissions and anyone donates.
     await voteThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
     // Commissioning needs a sitting Governor. When nobody ran, or another seat won, there is none for Lena; so she is
-    // seated the way the server's colony tests do it. The AI never commissions, so the colony has no project yet.
+    // seated the way the server's colony tests do it. An AI Governor commissions too (pace set C), but only once the
+    // fund holds commissionShare of a building's credits; the fund starts at 0 and takes no tax or grant before
+    // month 1's planning, so the colony has no project yet.
     await held(server, code, async () => {
       const game = (room() as unknown as { game: { state: GameState } }).game;
       const politics = game.state.politics!;

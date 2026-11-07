@@ -175,6 +175,36 @@ describe('a factory the seat holds none of the inputs for yet still turns the fa
   });
 });
 
+describe('a farm both factories would turn off does not feed a second one, though the first holds no input yet (R2)', () => {
+  it('FM-factory-input-unstocked-second: an unfed Medicine factory ahead of the new one, Energy for two plots: the farm goes off', () => {
+    // ai0 owns a farm on column 0 (rating 4: 6 Food a month), an unfed Medicine factory on column 2 and an idle plot on
+    // column 4, none beside another (so no factory saves Energy as the farm's neighbour), with no Food, Water to spare
+    // and `energy` Energy. Once Food is in stock both factories are in the turn-off order: farm, factory and factory use
+    // 1 Energy each, 3 against 2, and the farm, worth least, goes off: 20% of 6 is 1 Food, under the household's 4. The
+    // check counts the first factory as taking its Food (N7) and so must count its Energy too: stocking only the new
+    // factory's run, the first factory (lower tile) takes it and the new one is left out of the order, so the farm kept
+    // its Energy and read 6.
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food: 4 },
+      { x: 2, outfit: 'medicine' },
+      { x: 4, outfit: null },
+    ]);
+    const withEnergy = (energy: number) => {
+      for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 30, energy } : {}, p.id === ME ? 5000 : 0);
+      return observe(state, ME);
+    };
+    const obs = withEnergy(2);
+    expect(outlook(obs, ME, { lookAhead: true }).made.food, 'the case: the farm makes 6 while neither factory is fed').toBe(6);
+    const before = JSON.stringify(obs);
+    expect(canFeed(obs, ME, 'medicine'), 'the farm goes off once both factories are fed').toBe(false);
+    expect(JSON.stringify(obs), 'the observation is untouched').toBe(before);
+    // The control: Energy for all three, and the farm feeds the second factory (as FM-factory-input-N7b).
+    expect(canFeed(withEnergy(20), ME, 'medicine'), 'Energy for all three').toBe(true);
+  });
+});
+
 describe("in the production phase a farm counts with what it makes, not with nothing (N8)", () => {
   /** ai0's farm (rating `food`) and an idle plot, played into the production phase; then its Food set to 0. */
   function inProduction(food: number): { state: GameState; made: number } {
@@ -207,7 +237,8 @@ describe("in the production phase a farm counts with what it makes, not with not
 describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input, option 1)", () => {
   /**
    * Month 1's auction, Food up: ai0 owns one Medicine factory and holds Water and Energy for it, no Food. The store
-   * has no Food to sell (its shelf is the colonists'); ai1 holds 30 Food and nothing else. Medicine posts at `medicine`.
+   * has no Food to sell (its shelf is the colonists'); ai1 holds 30 Food and nothing else. Food posts at 120, a severe
+   * shortage's price, and Medicine at `medicine`.
    */
   function auction(medicine: number): GameState {
     const state = game();
@@ -219,7 +250,7 @@ describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input
     setStock(state, 'ai3', {}, 0);
     state.store.stock.food = 0;
     state.store.stock.medicine = 0;
-    state.store.posted.food = 300;
+    state.store.posted.food = 120;
     state.store.posted.medicine = medicine;
     startAuction(state);
     expect(state.auction!.good).toBe('food');
@@ -241,7 +272,8 @@ describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input
   }
 
   it('FM-factory-input-1: its run worth far more than its inputs, it buys enough Food from a player for the factory to run', () => {
-    const state = auction(1500);
+    // Medicine at its ceiling, 12 × 120.
+    const state = auction(1440);
     const obs = observe(state, ME);
     const o = outlook(obs, ME, { lookAhead: true });
     // The arrangement: the run's two Medicine are worth twice and more the 5 Food the factory needs past upkeep (3 eaten,
@@ -258,6 +290,8 @@ describe('the keep side does not move (Heiko 5 Nov, "sell surplus")', () => {
   /** Month 1's auction with `good` up; ai0 owns `plots` and holds `stock`. */
   function at(plots: { x: number; outfit: Outfit }[], stock: Partial<Stock>): GameState {
     const state = game();
+    // Energy's shelf is full before the month's prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+    state.store.stock.energy = 200;
     while (state.phase !== 'auction') advancePhase(state);
     place(state, plots);
     setStock(state, ME, stock, 2000);
