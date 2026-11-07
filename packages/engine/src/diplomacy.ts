@@ -187,7 +187,8 @@ function judge(state: GameState, card: DealCard): Verdict {
   if (terms.kind !== 'vote') return 'expired';
   if ('office' in terms) {
     const field = politics.election?.candidates[terms.office] ?? [];
-    if (field.length < 2 || !field.includes(terms.candidate)) return 'expired';
+    // A ballot needs two candidates at least: fewer is an uncontested or appointed office.
+    if (field.length < 2 || !field.includes(terms.candidate)) return 'expired'; // literal-ok: the definition of a contested office
     return politics.election!.ballots[card.from]?.[terms.office] === terms.candidate ? 'kept' : 'broken';
   }
   return politics.council?.ballots[card.from] === terms.yes ? 'kept' : 'broken';
@@ -291,10 +292,35 @@ export function monthEndDeals(state: GameState, gameOver: boolean, possible: boo
   }
 }
 
-export function reputationReasons(_state: GameState, _playerId: string): ReputationReason[] {
-  throw new Error('NotImplemented: reputationReasons');
+/** The months a player was blamed for unrest: the reports' events, and this month's list, which repeats the report's at upkeep. */
+function unrestMonths(state: GameState, playerId: string): Set<number> {
+  const blamed = (e: { key: string; player?: string }): boolean => e.key === 'blamedForUnrest' && e.player === playerId;
+  const months = new Set<number>();
+  for (const report of state.history) if (report.events?.some(blamed)) months.add(report.month);
+  if (state.monthEvents.some(blamed)) months.add(state.month);
+  return months;
 }
 
-export function promisedVotes(_state: GameState, _playerId: string): PromisedVotes {
-  throw new Error('NotImplemented: promisedVotes');
+/**
+ * Why a player's reputation fell, from what is already public (S3-RULE-7): the cards they broke and the months they
+ * were blamed for unrest, newest first (a card's month is the month it broke; on a tie the card first). Nothing is stored.
+ */
+export function reputationReasons(state: GameState, playerId: string): ReputationReason[] {
+  const broken = (state.politics?.deals ?? []).filter((d) => d.status === 'broken' && d.brokenBy === playerId);
+  const reasons: [number, ReputationReason][] = [
+    ...broken.map((card): [number, ReputationReason] => [card.settled!, { kind: 'broken', card }]),
+    ...[...unrestMonths(state, playerId)].map((month): [number, ReputationReason] => [month, { kind: 'unrest', month }]),
+  ];
+  return reasons.sort(([a], [b]) => b - a).map(([, reason]) => reason);
+}
+
+/** The vote promises a player has made that still bind: active vote cards only, an unanswered offer is no promise. */
+export function promisedVotes(state: GameState, playerId: string): PromisedVotes {
+  const promised: PromisedVotes = { election: {}, law: null };
+  for (const d of state.politics?.deals ?? []) {
+    if (d.status !== 'active' || d.from !== playerId || d.terms.kind !== 'vote') continue;
+    if ('office' in d.terms) (promised.election[d.terms.office] ??= { candidate: d.terms.candidate, to: [] }).to.push(d.to);
+    else (promised.law ??= { yes: d.terms.yes, to: [] }).to.push(d.to);
+  }
+  return promised;
 }
