@@ -7,7 +7,7 @@ import { BRAIN } from '@mule/engine';
 import { replySchema, WRITER_SYSTEM } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { RoomRegistry } from '@tabletop/core';
-import type { SeatLookup } from './lookup.js';
+import { withGameOver, type SeatLookup } from './lookup.js';
 import { claudeSeatAt, type ClaudeSeat } from './seats.js';
 
 const MINUTE_MS = 60_000;
@@ -116,11 +116,12 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
   const now = options.now ?? Date.now;
   const holdMs = options.holdMs ?? BRAIN.claudeSeat.holdMs;
   const wrong = new WrongCodes(now);
+  const lookup = withGameOver(options.lookup);
 
   /** RULE-2 for one call. The code is never logged, echoed or kept. */
   const find = (code: unknown): Found | Refusal => {
     if (wrong.empty()) return { kind: 'busy', retry_s: wrong.retryS() };
-    const answer = typeof code === 'string' ? options.lookup(code) : null;
+    const answer = typeof code === 'string' ? lookup(code) : null;
     if (!answer) {
       wrong.draw();
       return { kind: 'no_such_seat' };

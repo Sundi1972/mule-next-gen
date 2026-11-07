@@ -10,7 +10,25 @@ export type CodeAnswer = { state: 'live'; table: object; seatId: string } | { st
 /** Asked on every tool call; never logs or keeps the code it is given. */
 export type SeatLookup = (code: string) => CodeAnswer;
 
-const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/** A game that can say where it stands: MuleGame's stateNow. */
+interface Standing {
+  stateNow(): { phase: string } | null;
+}
+
+const isOver = (table: object) => 'stateNow' in table && (table as Standing).stateNow()?.phase === 'gameOver';
+
+/**
+ * `lookup` with game over decided here: the Room kills a code only when the seat is taken back, so a live code of a
+ * game that has ended answers game_over before anything else reads it.
+ */
+export function withGameOver(lookup: SeatLookup): SeatLookup {
+  return (code) => {
+    const answer = lookup(code);
+    return answer?.state === 'live' && isOver(answer.table) ? { state: 'game_over' } : answer;
+  };
+}
+
+const LETTERS ='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DIGITS = '0123456789';
 
 const normal = (code: string) => code.trim().toUpperCase();
