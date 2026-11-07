@@ -4,7 +4,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { BRAIN } from '@mule/engine';
-import { WRITER_SYSTEM } from '@mule/ai';
+import { replySchema, WRITER_SYSTEM } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { RoomRegistry } from '@tabletop/core';
 import type { SeatLookup } from './lookup.js';
@@ -37,15 +37,16 @@ const TOOLS = [
       properties: {
         code: CODE,
         ask_id: { type: 'string' },
-        strategy: {
-          type: 'object',
-          description: "Land asks only: the seat's strategy, all three fields.",
-          properties: { kind: { type: 'string' }, moneyMaker: { type: ['string', 'null'] }, reason: { type: 'string' } },
-          required: ['kind', 'moneyMaker', 'reason'],
-        },
+        // The API writer's own strategy schema, with every kind: the parser refuses a kind the seat may not take.
+        strategy: { ...replySchema(true).properties.strategy!, description: "Land asks only: the seat's strategy, all three fields." },
         edits: {
           type: 'array',
-          items: { type: 'object', properties: { path: { type: 'string' }, to: {}, reason: { type: 'string' } }, required: ['path', 'to', 'reason'] },
+          items: {
+            type: 'object',
+            properties: { path: { type: 'string' }, to: {}, reason: { type: 'string' } },
+            required: ['path', 'to', 'reason'],
+            additionalProperties: false,
+          },
         },
         line: { type: 'string' },
       },
