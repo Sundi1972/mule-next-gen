@@ -17,6 +17,7 @@ import {
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
+  S1_SPIKE,
   UPKEEP,
   scoreParts,
   shipInPort,
@@ -477,6 +478,16 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
     }
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
+  // S1 spike: with no Energy plant of its own and one it may install, the seat's next MULE is that plant.
+  if (S1_SPIKE.energyFirst && needEnergy && cands.some((c) => c.action.kind === 'install' && c.action.outfit === 'energy' && !c.veto)) {
+    for (const c of cands) {
+      if (c.action.kind === 'install' && c.action.outfit === 'energy') continue;
+      if (c.action.kind === 'stop' && !S1_SPIKE.alsoNoStop) continue;
+      c.veto = 'no Energy plant yet (S1)';
+      c.utility = 0;
+      c.rationale = `Ruled out: ${c.veto}`;
+    }
+  }
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 

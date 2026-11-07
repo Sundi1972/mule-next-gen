@@ -9,6 +9,8 @@ import * as engine from '../../packages/engine/src/index.ts';
 import { colonyScore, GOODS, GOOD_CONFIG, moodBand, mulePrice, scoreParts, SHIP_ID, STORE_ID, storeForSale, type Good, type GameState, type MoodBand, type PriceBand } from '../../packages/engine/src/index.ts';
 import { simSeats } from '../../packages/ai/src/lineup.ts';
 import { playGameAsync } from '../../packages/ai/src/play.ts';
+import { applySets, winnerOf } from '../../packages/ai/src/sim.ts';
+import { score } from '../../packages/engine/src/index.ts';
 import type { PhaseFact } from '../../packages/ai/src/playbook/index.ts';
 
 const CEILING_TIMES = 12;
@@ -87,6 +89,8 @@ interface GameRecord {
   worthMulePriceEnd: number;
   muleShareOfWorth: { month1: number[]; end: number[] };
   colonyScoreEnd: number | null;
+  /** S1 spike: the winner's engine score. */
+  winnerScore: number;
   moodMonths: Record<MoodBand, number> | null;
 }
 
@@ -226,6 +230,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
     farmMonthsOffForEnergy,
     made,
     hungrySeatMonths,
+    winnerScore: score(state, state.players[winnerOf(state)]!.id),
     soldOutMonths,
     between,
     traded,
@@ -347,6 +352,8 @@ const METRICS: Metric[] = [
   ...WATCHED.map((g): Metric => ({ name: `store sold out of ${label(g)} at some point (goods that came up), months`, value: (gs) => String(sum(gs.map((x) => x.soldOutMonths[g]))) })),
   ...(['food', 'water', 'medicine'] as Good[]).map((g): Metric => ({ name: `colonists short of ${label(g)} (months)`, value: (gs) => String(sum(gs.map((x) => x.shortages.filter((m) => m.includes(g)).length))) })),
   { name: "colonists short of Food or Water (months, the sim's figure)", value: (gs) => String(sum(gs.map((x) => x.colonistsHungryMonths))) },
+  { name: 'S1 colony Food made a month (mean over game-months)', value: (gs) => fmt(sum(gs.map((x) => x.made.food)) / sum(gs.map((x) => x.months)), 1) },
+  { name: 'S1 winner score median', value: (gs) => fmt(quantile(gs.map((x) => x.winnerScore), 0.5)) },
   { name: 'hungry seat-months', value: (gs) => String(sum(gs.map((x) => x.hungrySeatMonths))) },
   { name: 'colonists at the end (mean)', value: (gs) => fmt(sum(gs.map((x) => x.colonistsEnd)) / gs.length, 1) },
   { name: 'farm-months switched off for Energy', value: (gs) => share(sum(gs.map((x) => x.farmMonthsOffForEnergy)), sum(gs.map((x) => x.farmMonths))) },
@@ -440,6 +447,9 @@ const METRICS: Metric[] = [
 ];
 
 async function main() {
+  const sets: string[] = [];
+  process.argv.forEach((a, i) => { if (a === '--set') sets.push(process.argv[i + 1]!); });
+  if (sets.length) process.stderr.write(`config: ${applySets(sets).join(' ')}\n`);
   const name = flag('label') ?? process.argv[2] ?? '?';
   const games = Number(flag('games', '10'));
   const first = Number(flag('seed', '1'));
@@ -463,7 +473,7 @@ async function main() {
   const rows = METRICS.map((m) => [m.name, ...columns.map((c) => m.value(played[c]!))]);
   const widths = heads.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i + 1]!.length)));
   const w0 = Math.max(...rows.map((r) => r[0]!.length));
-  console.log(`colony-economy report: ${name} (${games} games from seed ${first}, 4 trader seats, walking on)\n`);
+  console.log(`colony-economy report: ${name} (${games} games from seed ${first}, 4 trader seats, walking on)${sets.length ? ` config: ${sets.join(' ')}` : ''}\n`);
   console.log(`${''.padEnd(w0)}  ${heads.map((h, i) => h.padStart(widths[i]!)).join('  ')}`);
   for (const [n, ...vs] of rows) console.log(`${n!.padEnd(w0)}  ${vs.map((v, i) => v.padStart(widths[i]!)).join('  ')}`);
   if (json) writeFileSync(json, JSON.stringify({ label: name, games, firstSeed: first, ...played }, null, 1));
