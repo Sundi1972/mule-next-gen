@@ -146,10 +146,10 @@ export class Playbooks {
       if (!writer) continue;
       try {
         const drafted = source.draft(state, seat.id);
-        // What the rules and the writer refused of last month's reply. The seat's last PhaseOutcome joins it once its
-        // producers write one (land: WS3; development and auction: WS9's playbook/outcome.ts); until then the brief
-        // says nothing of it.
+        // Asked at upkeep, the month just played is still state.month, so the seat's development outcome is that
+        // month's route; null at game start, or when the month's development played no route.
         const last = {
+          outcome: seat.outcome('development', state),
           feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null),
           worthBefore: this.worthAtAsk.get(seat.id) ?? null,
         };
