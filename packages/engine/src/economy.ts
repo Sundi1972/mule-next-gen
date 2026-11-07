@@ -421,7 +421,10 @@ export function shipPrice(state: GameState, good: Good): number | null {
  */
 export function driftReference(state: GameState, good: Good, clearingPrice: number | null): void {
   const ref = state.store.refPrice[good];
-  const implied = clearingPrice !== null ? clearingPrice / bandMultiple(state.store.band?.[good] ?? 'normal') : ref;
+  // A trade is evidence about the price the store posted, so it is scaled by how far that price sits above N: inside a
+  // band that is the band's multiple; while a price is still falling back after a shortage the band already reads
+  // normal but the mid is not, and dividing by 1 would read the crisis price as the normal one.
+  const implied = clearingPrice !== null ? (clearingPrice * ref) / Math.max(1, state.store.posted[good]) : ref;
   const next = ref + (implied - ref) * PRICE.refDrift + (state.store.offWorld[good] - ref) * PRICE.worldPull;
   state.store.refPrice[good] = Math.max(1, Math.round(next));
 }
