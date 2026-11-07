@@ -12,7 +12,9 @@ function auction(seed = 4): GameState {
 }
 
 describe('monthWalkSeconds: a plot-less seat on a map with a lake no shore reaches', () => {
-  it('seed 4: its month of walking is finite, and its Food walkAway is not its whole purse', () => {
+  // The rule food-short's cases hold the AI to: a seat with no land a walk reaches values Food beyond any price, so its
+  // month of walking stays Infinity and its Food walkAway is its whole purse.
+  it('seed 4: its month of walking is Infinity, and its Food walkAway is its whole purse', () => {
     const state = auction();
     expect(tileAt(state.tiles, state.width, 10, 0)!.terrain).toBe('lake');
     expect(state.tiles.some((t) => t.owner === 'ai0')).toBe(false);
@@ -20,9 +22,9 @@ describe('monthWalkSeconds: a plot-less seat on a map with a lake no shore reach
     me.stock.food = 0;
     me.money = 2_000;
     const seat = new AiSeat({ id: 'ai0', name: 'AI 1', persona: 'trader', level: 'trader', seed: 40 });
-    expect(Number.isFinite(monthWalkSeconds(state, seat.mind))).toBe(true);
+    expect(monthWalkSeconds(state, seat.mind)).toBe(Infinity);
     const food = draftGoodPlaybook({ state, seat: 'ai0', mind: seat.mind, seed: 40 }, 'food').auction!.food!;
-    expect(food.walkAway).toBeLessThan(me.money);
+    expect(food.walkAway).toBe(me.money);
   });
 });
 
