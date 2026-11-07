@@ -182,11 +182,11 @@ describe('deep3 fix 1: the Water production checks for the Food plots', () => {
     expect(grows, text).not.toBeNull();
     const [, low, high, rule, next, keepNext, every] = grows!;
     expect([rule, Number(next), Number(high) - Number(low) + 1, Number(every)]).toEqual([CREW_RULE, need + 1, UPKEEP.crewPerWater, UPKEEP.crewPerWater]);
-    const mules = (crew: string | number) => Math.ceil(Number(crew) / UPKEEP.crew.raw);
+    const mules = (crew: number) => Math.ceil(crew / UPKEEP.crew.raw);
     expect(waterCut(nextMonth(state, keep, 0))).toEqual([false]);
     expect(waterCut(nextMonth(state, keep - 1, 0))).toEqual([true]);
     // The stated holding keeps the Food plot whole across the whole stated range, and one past it the check rises again.
-    for (const crew of [low, high]) {
+    for (const crew of [Number(low), Number(high)]) {
       expect(waterCut(nextMonth(state, Number(keepNext), mules(crew)))).toEqual([false]);
       expect(waterCut(nextMonth(state, Number(keepNext) - 1, mules(crew)))).toEqual([true]);
     }
