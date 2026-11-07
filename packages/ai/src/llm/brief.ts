@@ -398,7 +398,7 @@ const FEEDS_ME: readonly [string, string][] = [
 const plotsCounted = (mind: Mind, line: string) =>
   mind.level.lookAhead ? line : FEEDS_ME.reduce((l, [said, counted]) => l.replace(said, counted), line);
 
-const valueText = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
+const valueText = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(Math.round(v)) : JSON.stringify(v));
 
 /**
  * What happened in the seat's last phase: each planned item against what it got, then each rival's public claims and
