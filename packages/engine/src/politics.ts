@@ -7,6 +7,7 @@
 import { fundIn, fundOut } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
+import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
@@ -32,6 +33,9 @@ function edit(state: GameState): Politics {
   state.politics = structuredClone(state.politics!);
   return state.politics;
 }
+
+/** edit() for diplomacy.ts, the only other writer of Politics (the deal cards). */
+export { edit as editPolitics };
 
 function currentElection(state: GameState): Shared<Election> | null {
   return state.politics?.election ?? null;
@@ -75,9 +79,9 @@ export interface VoteWeight {
   parts: { base: number; land: number; reputation: number; baron: number; taxes: number };
 }
 
-/** A player's votes, part by part, derived from the state on every call. See WS7 spec RULE-4. */
+/** A player's votes, part by part, derived from the state on every call; at least POLITICS.weight.minVotes. See WS7 spec RULE-4, slice 3 S3-RULE-8. */
 export function voteWeight(state: GameState, playerId: string): VoteWeight {
-  const { base, plotsPerVote, repHigh, repLow, repVotes, baronVotes, taxPerVote, taxCap } = POLITICS.weight;
+  const { base, plotsPerVote, repHigh, repLow, repVotes, baronVotes, taxPerVote, taxCap, minVotes } = POLITICS.weight;
   const { reputation } = player(state, playerId);
   const parts = {
     base,
@@ -86,7 +90,8 @@ export function voteWeight(state: GameState, playerId: string): VoteWeight {
     baron: state.politics?.baron === playerId ? baronVotes : 0,
     taxes: Math.min(taxCap, Math.floor((state.treasury.paid[playerId] ?? 0) / taxPerVote)),
   };
-  return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
+  // The parts are shown as they are; the total never leaves a player without a voice (S3-RULE-8).
+  return { total: Math.max(minVotes, parts.base + parts.land + parts.reputation + parts.baron + parts.taxes), parts };
 }
 
 /** An event's change to a player's reputation (blamed for the unrest, G-5 C26): whole points, POLITICS.reputation.min..max. No-op with politics off. */
@@ -104,7 +109,7 @@ function liveElection(state: GameState): Shared<Election> {
   return election;
 }
 
-function contested(election: Shared<Election>, office: Office): boolean {
+export function contested(election: Shared<Election>, office: Office): boolean {
   return election.candidates[office].length > 1;
 }
 
@@ -355,12 +360,15 @@ function takeOffice(state: GameState, politics: Politics): void {
     politics.terms[winner] = (politics.terms[winner] ?? 0) + 1;
   }
   const governor = result.governor?.winner;
-  if (governor === undefined) return;
-  // The promise holds for the term; an appointed Governor made none.
-  politics.promise = result.governor!.how === 'appointed' ? null : (election.promises[governor] ?? null);
-  politics.promiseFrom = Math.round(state.treasury.salesTax * PERCENT);
-  const run = politics.governorRun;
-  politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
+  if (governor !== undefined) {
+    // The promise holds for the term; an appointed Governor made none.
+    politics.promise = result.governor!.how === 'appointed' ? null : (election.promises[governor] ?? null);
+    politics.promiseFrom = Math.round(state.treasury.salesTax * PERCENT);
+    const run = politics.governorRun;
+    politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
+  }
+  // Last, and on the new term: it copies Politics, so `politics` is stale after it.
+  settleVotes(state, 'election');
 }
 
 /** The winner of one office, with weights taken now, as the ballot closes. See WS7 spec RULE-3. */
@@ -579,14 +587,14 @@ function takeEffect(state: GameState, politics: Politics): void {
   council.stage = 'over';
   if (!result!.passed) {
     politics.failed[`${proposal.kind}:${proposal.law}`] = state.month;
-    return;
-  }
-  if (proposal.kind === 'repeal') {
+  } else if (proposal.kind === 'repeal') {
     delete politics.laws[proposal.law];
-    return;
+  } else {
+    if (!politics.laws[proposal.law] && proposal.replaces) delete politics.laws[proposal.replaces];
+    politics.laws[proposal.law] = { setting: proposal.setting, since: state.month };
   }
-  if (!politics.laws[proposal.law] && proposal.replaces) delete politics.laws[proposal.replaces];
-  politics.laws[proposal.law] = { setting: proposal.setting, since: state.month };
+  // Last: it copies Politics, so `politics` is stale after it.
+  settleVotes(state, 'law');
 }
 
 /**

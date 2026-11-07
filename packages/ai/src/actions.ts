@@ -7,6 +7,7 @@ import {
   outfitCostFor,
   POLITICS,
   type AuctionSide,
+  type DealOffer,
   type GameState,
   type LawProposal,
   type Office,
@@ -56,7 +57,13 @@ export type AiAction =
   /** Planning, the Governor once the votes are over: put a law to the next planning's ballot; null withdraws it (slice 2a RULE-41). */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes (slice 2a RULE-40). */
-  | { type: 'voteLaw'; yes: boolean };
+  | { type: 'voteLaw'; yes: boolean }
+  /** Planning: offer another player a deal card, a pact or a promised vote (slice 3 S3-RULE-2). */
+  | { type: 'offerDeal'; offer: DealOffer }
+  /** Planning: take back a card the other player has not answered. */
+  | { type: 'withdrawDeal'; id: string }
+  /** Planning: accept or decline a card offered to this seat. */
+  | { type: 'answerDeal'; id: string; accept: boolean };
 
 /** Plays one action. Returns false when the rules refused it (a RuleError), so the hands move on to the next item. */
 export type Act = (action: AiAction) => boolean;
@@ -375,6 +382,47 @@ const DESCRIBED = {
     legalWhen: () => ['The law ballot is not open'],
     cost: null,
     args: { yes: 'true for yes, false for no' },
+  },
+  offerDeal: {
+    type: 'offerDeal',
+    command: 'offerDeal',
+    phases: ['planning'],
+    does: () => 'Offers another player a deal card: a pact for a few months, or a promise to vote for a candidate or on the next law; nothing binds until they accept.',
+    legalWhen: () => [
+      'This game plays without deals',
+      'Cards are offered in planning',
+      'Pick another player',
+      'You have {count} cards waiting for an answer',
+      '{name} has not answered your last card',
+      `A pact runs ${POLITICS.deals.pactMonths.slice(0, -1).join(', ')} or ${POLITICS.deals.pactMonths.at(-1)} months`,
+      'You already have a pact with {name}',
+      'The {office} is not elected yet',
+      'No election is left this game',
+      'Promise your vote to someone else',
+      '{name} is not running for {office}',
+      'No law is up for a vote',
+      'You already promised your vote on this ballot',
+    ],
+    cost: null,
+    args: { offer: "{ to, terms, months? }: terms is { kind: 'pact' }, { kind: 'vote', office, candidate } or { kind: 'vote', law: true, yes }; months is for a pact" },
+  },
+  withdrawDeal: {
+    type: 'withdrawDeal',
+    command: 'withdrawDeal',
+    phases: ['planning'],
+    does: () => 'Takes back a card this seat offered and the other player has not answered.',
+    legalWhen: () => ['This game plays without deals', 'That card is no longer open'],
+    cost: null,
+    args: { id: "the card's id, 'deal-…'" },
+  },
+  answerDeal: {
+    type: 'answerDeal',
+    command: 'answerDeal',
+    phases: ['planning'],
+    does: () => 'Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.',
+    legalWhen: () => ['Cards are answered in planning', 'That card is no longer open', 'You already have a pact with {name}'],
+    cost: null,
+    args: { id: "the card's id, 'deal-…'", accept: 'true to accept, false to decline' },
   },
 } satisfies Described;
 
