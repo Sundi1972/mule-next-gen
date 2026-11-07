@@ -518,7 +518,7 @@ Before suggesting merge of `ws7-s3-engine` into `ws7-politics`:
 - [ ] The slice 4 contract is exercised from the engine's index (Task S3-1.8 Step 1); WS1's moves test exercises the AiAction contract
 - [ ] `pnpm typecheck && pnpm test` green; CI 4/4 (check, e2e, e2e-regression, sim); the INV-1 literal guard green; politics-off sim rows byte-identical (S3-HC-4)
 - [ ] Owners' OKs on every named-edit SHA: WS1 (actions.ts, play.ts, moves.test.ts), WS3 (types.ts)
-- [ ] The §9 enforcement grep is empty outside diplomacy.ts and politics.ts: `git grep -nE '\.deals\s*=|deals\.push|editPolitics' -- 'packages/*/src' 'apps/*/src' ':!packages/engine/src/diplomacy.ts' ':!packages/engine/src/politics.ts' ':!packages/engine/src/observe.ts'` (observe.ts filters its own copy, #669; test fixtures may set cards)
+- [ ] The §9 enforcement grep is empty outside diplomacy.ts and politics.ts: `git grep -nE '\.deals\s*=|deals\.push|editPolitics' -- 'packages/**/src/**' 'apps/**/src/**' ':!packages/engine/src/diplomacy.ts' ':!packages/engine/src/politics.ts' ':!packages/engine/src/observe.ts'` (observe.ts filters its own copy, #669; test fixtures may set cards)
 - [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the line
 - [ ] Rulebook chapter updated the same day and `build-index.mjs` re-run
 - [ ] One code review once CI is green
