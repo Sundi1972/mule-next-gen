@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BRAIN, createGame, type GameState, type Playbook } from '@mule/engine';
+import { BRAIN, createGame, tileAt, tileIndex, type GameState, type Playbook } from '@mule/engine';
+import { unreachablePlot } from '../src/hands/develop.js';
 import { OFFERED, TOOL_DEFS, toolsFor, type ToolResult, type WhatIfSim } from '../src/llm/tools.js';
 
 const fixture = (): GameState =>
@@ -159,5 +160,54 @@ describe("Claude's tools (C9)", () => {
     expect(await tools.run('nope', {})).toMatchObject({ is_error: true });
     expect(await parsed(tools.run('nope', {}))).toEqual({ error: 'unknown_tool' });
     expect(await tools.run('whatIf', { edits: 'not a list' })).toMatchObject({ is_error: true });
+  });
+});
+
+describe('hands fix 1: whatIf refuses a route MULE the hands would refuse (routeVeto)', () => {
+  /** Seed 4's four-seat map (route-veto.test.ts's), seat `a` holding the plot at (x, y): (10, 0) is lake ringed by lake, (10, 1) lake with a free shore. */
+  function lakeTable(x: number, y: number): { state: GameState; plot: number } {
+    const state = createGame({ seed: 4, players: ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id.toUpperCase(), isAi: true })) });
+    tileAt(state.tiles, state.width, x, y)!.owner = 'a';
+    return { state, plot: tileIndex(state.width, x, y) };
+  }
+
+  const waterOn = (plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit: 'water' }, { act: 'install', plot }, { act: 'pub' }];
+
+  async function whatIfRoute(state: GameState, route: unknown): Promise<{ path: string; to: unknown; why: string }[]> {
+    const answer = (await parsed(toolsFor(state, 'a', simFor(state)).run('whatIf', { edits: [{ path: '/development/route', to: route }] }))) as {
+      rejected: { path: string; to: unknown; why: string }[];
+    };
+    return answer.rejected;
+  }
+
+  it("hands fix 1: a MULE on a lake plot no shore reaches is refused with the hands' reason, on its install step", async () => {
+    const { state, plot } = lakeTable(10, 0);
+    expect(state.tiles[plot]!.terrain).toBe('lake');
+    expect(unreachablePlot(state, plot)).toBe(true);
+    const rejected = await whatIfRoute(state, waterOn(plot));
+    expect(rejected).toEqual([{ path: '/development/route/2', to: { act: 'install', plot }, why: `route step 2: lake: no shore reaches plot ${plot}` }]);
+  });
+
+  it('hands fix 1: a MULE on a lake plot a shore reaches is not refused', async () => {
+    const { state, plot } = lakeTable(10, 1);
+    expect(state.tiles[plot]!.terrain).toBe('lake');
+    expect(unreachablePlot(state, plot)).toBe(false);
+    expect(await whatIfRoute(state, waterOn(plot))).toEqual([]);
+  });
+
+  it('hands fix 1: a second MULE is judged after the first is installed: the same outfit on the same plot is refused as stale', async () => {
+    const { state, plot } = lakeTable(10, 1);
+    const twice = [...waterOn(plot).slice(0, 3), ...waterOn(plot)];
+    const rejected = await whatIfRoute(state, twice);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toMatchObject({ path: '/development/route/5', to: { act: 'install', plot } });
+    expect(rejected[0]!.why).toMatch(/^route step 5: /);
+  });
+
+  it("hands fix 1: a route refused outright names only its own refusal, never the kept draft's steps", async () => {
+    const { state } = lakeTable(10, 0);
+    const rejected = await whatIfRoute(state, [{ act: 'outfit', outfit: 'water' }]);
+    expect(rejected.length).toBeGreaterThan(0);
+    expect(rejected.every((r) => r.path === '/development/route')).toBe(true);
   });
 });
