@@ -6,6 +6,13 @@ const CODE_LETTERS = 'BCDFGHJKLMNPQRSTVWXZ';
 /** Keeps the live rooms by their 4-letter code. */
 export class RoomRegistry<Intent, View> {
   private readonly rooms = new Map<string, { room: Room<Intent, View>; idleSince: number | null }>();
+  /**
+   * The seat codes of every room that has left (closed, failed, swept, shut down), taken back (PM ruling (a) on #628's
+   * review): a Claude chat still calling with one is told so, not counted as a wrong code, and no room issues it again.
+   * Each one costs roughly 50–80 bytes (a short string in a Set) for the server's life; a host flipping a seat's kind
+   * issues one per switch, so the rate limit is what bounds it.
+   */
+  private readonly retired = new Set<string>();
 
   constructor(
     private readonly options: Omit<RoomOptions<Intent, View>, 'code' | 'onClose'>,
@@ -24,10 +31,22 @@ export class RoomRegistry<Intent, View> {
       const answer = room.seatForCode(code);
       if (answer) return answer;
     }
-    return null;
+    return this.retired.has(code.trim().toUpperCase()) ? { state: 'taken_back' } : null;
   }
 
-  /** A seat code no live room holds or has taken back (spec §3: unique among live codes), so a code names one seat. */
+  /**
+   * Drops a room, retiring its seat codes. `room`, when given, must be the one listed: a room code is reused once its room
+   * has gone, so a late close from an old room never drops (and retires the live codes of) the new room under its code.
+   */
+  private remove(code: string, room?: Room<Intent, View>): Room<Intent, View> | undefined {
+    const entry = this.rooms.get(code);
+    if (!entry || (room && entry.room !== room)) return undefined;
+    this.rooms.delete(code);
+    for (const seatCode of entry.room.seatCodes) this.retired.add(seatCode);
+    return entry.room;
+  }
+
+  /** A seat code no room holds, has taken back or has retired (spec §3: unique among live codes), so a code names one seat. */
   private newSeatCode(): string {
     for (let i = 0; i < 100; i++) {
       const code = seatCode(this.seatRandom);
@@ -41,7 +60,7 @@ export class RoomRegistry<Intent, View> {
     do {
       code = Array.from({ length: 4 }, () => CODE_LETTERS[Math.floor(this.random() * CODE_LETTERS.length)]).join('');
     } while (this.rooms.has(code));
-    const room = new Room<Intent, View>({ ...this.options, code, newSeatCode: () => this.newSeatCode(), onClose: () => this.rooms.delete(code) });
+    const room = new Room<Intent, View>({ ...this.options, code, newSeatCode: () => this.newSeatCode(), onClose: () => void this.remove(code, room) });
     this.rooms.set(code, { room, idleSince: null });
     return room;
   }
@@ -56,10 +75,7 @@ export class RoomRegistry<Intent, View> {
 
   /** Disposes every room, as the server shuts down: no game's timers outlive it. One room that fails to stops no other. */
   disposeAll(): void {
-    for (const [code, entry] of this.rooms) {
-      this.rooms.delete(code);
-      disposeQuietly(code, entry.room);
-    }
+    for (const code of [...this.rooms.keys()]) disposeQuietly(code, this.remove(code)!);
   }
 
   /** Closes rooms nobody has been connected to for `idleMs`. Phones that drop briefly keep their room. */
@@ -68,10 +84,7 @@ export class RoomRegistry<Intent, View> {
     for (const [code, entry] of this.rooms) {
       if (!entry.room.isIdle) entry.idleSince = null;
       else if (entry.idleSince === null) entry.idleSince = now;
-      else if (now - entry.idleSince >= idleMs) {
-        this.rooms.delete(code);
-        disposeQuietly(code, entry.room);
-      }
+      else if (now - entry.idleSince >= idleMs) disposeQuietly(code, this.remove(code)!);
     }
   }
 }
