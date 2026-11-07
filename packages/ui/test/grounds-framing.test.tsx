@@ -200,6 +200,20 @@ describe('T-AC-11: the grounds frame the occupied extent like look.html (spec AM
     expect(html.indexOf('data-testid="grounds-vignette"')).toBeLessThan(html.indexOf('data-testid="callout-'));
   });
 
+  it("T-AC-11: the buildings' footprint centre sits at the view's centre", () => {
+    const corners = blocksOf(MONTH_12).flatMap(footprint);
+    const span = (vs: number[]) => (Math.min(...vs) + Math.max(...vs)) / 2;
+    const [fx, fy] = [span(corners.map(([x]) => x)), span(corners.map(([, y]) => y))];
+    const views = { 'TV 1280×720': render(), phone: render({ size: 'phone', framing: undefined, light: 'day', chips: true }) };
+    for (const [label, html] of Object.entries(views)) {
+      const vb = viewBoxOf(html);
+      // The month-12 view sits well inside the plate, so no clamp shift is owed.
+      expect(within(vb, PLATE_BOX, -1), `${label}: clear of the plate's edges`).toBe(true);
+      expect(Math.abs(fx - (vb.x + vb.w / 2)) / vb.w, `${label}: across`).toBeLessThanOrEqual(0.05);
+      expect(Math.abs(fy - (vb.y + vb.h / 2)) / vb.h, `${label}: down`).toBeLessThanOrEqual(0.05);
+    }
+  });
+
   it('HC-3: without a plate, framing is unchanged', () => {
     const cases = [{ framing: undefined }, { framing: { aspect: TV } }, { framing: { aspect: TV, leanOn: [MONTH_12.projects[2]!.place!], lean: 1 } }];
     cases.forEach((props, i) => {
