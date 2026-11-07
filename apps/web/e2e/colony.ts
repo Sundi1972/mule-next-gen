@@ -9,6 +9,7 @@ import type { ColonyView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
+import { theTvMonthEnd } from './grounds-opener-steps';
 import { check, doneWithLand, held, launch, PHONE, PHONE_SMALL, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { shownWhole, theTvHeaderFits, theTvScaleHolds, theTvScalesHeld, TV_SCALE_FLOOR, watchTvScales } from './tv-fit-steps';
@@ -126,7 +127,7 @@ async function main(): Promise<void> {
     await pressDoneThroughTheAuction(phone, board);
 
     // 2. The month end: the build site's row for the project at the server's stage, with Lena on its plaque.
-    await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+    await theTvMonthEnd(tv, MONTH_END_MS);
     check(board().phase === 'upkeep', `month 1 ends in upkeep, got ${board().phase}`);
     const stage = colony().projects.find((p) => p.id === PROJECT)!.stage;
     const row = tv.getByTestId('build-site').getByTestId(`project-${PROJECT}`);
@@ -239,7 +240,7 @@ async function theMonthEndsMoodDrift(): Promise<void> {
       await throughTheLandAuction(phone, board);
       await goToThePub(phone);
       await pressDoneThroughTheAuction(phone, board);
-      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+      await theTvMonthEnd(tv, MONTH_END_MS);
     };
 
     // Month 1's end: no month before it, so no drift; the gauge reads the server's mood from the start.
@@ -341,7 +342,7 @@ async function theColonyScoreEveryMonthEnd(): Promise<void> {
       await throughTheLandAuction(phone, board);
       await goToThePub(phone);
       await pressDoneThroughTheAuction(phone, board);
-      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+      await theTvMonthEnd(tv, MONTH_END_MS);
     };
     const shownTotal = async () => Number((await band.getByTestId('colony-total').innerText({ timeout: PRESS_MS })).replace(/[^\d-]/g, ''));
 
@@ -452,7 +453,7 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       await throughTheLandAuction(phone, board);
       await goToThePub(phone);
       await pressDoneThroughTheAuction(phone, board);
-      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+      await theTvMonthEnd(tv, MONTH_END_MS);
     };
     await throughTheMonth();
     await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });

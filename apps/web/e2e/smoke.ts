@@ -9,6 +9,7 @@ import { errors as playwrightErrors, type BrowserContext, type Page } from 'play
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
+import { theTvMonthEnd } from './grounds-opener-steps';
 import { planningIsTheHub } from './hub-steps';
 import { theDroneReportsInTheRail } from './plot-info-steps';
 import { theAuctionTvFits, theMonthEndTvFits, theTvBodyFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvScalesHeld, theTvTitleIsClear, watchTvScales } from './tv-fit-steps';
@@ -203,7 +204,7 @@ try {
 
   // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
   console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
-  await tv.getByTestId('tv-monthend').waitFor({ timeout: PRESS_MS });
+  await theTvMonthEnd(tv);
   console.log(`TV-FIT, the month end: ${await theMonthEndTvFits(tv, server, code)}`);
   console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
 
