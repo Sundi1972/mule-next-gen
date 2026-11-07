@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { advancePhase, budgetLines, budgetShares, createGame, POLITICS, RuleError, setBudget, type BudgetLine, type GameState } from '../src/index.js';
+import { advancePhase, budgetLines, budgetShares, callOverrule, createGame, POLITICS, RuleError, setBudget, stableJson, type BudgetLine, type GameState } from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const B = POLITICS.budget;
@@ -90,5 +91,21 @@ describe('S5-C1: the Governor sets a standing budget', () => {
     while (state.phase !== 'planning');
     expect(state.month).toBe(2);
     expect(state.politics!.budgetAtStart).toEqual({ month: 1, setBy: 'lena', shares: shares(80, 10) });
+  });
+});
+
+describe('S5-HC-5: politics off is untouched by slice 5', () => {
+  // The hash of stableJson(state) of this game on 7ecddae5, the base before slice 5.
+  const BASE_HASH = '64e555fc991749d341b742a436b1e10a95399c3670b7ebcf5d7746b489b32973';
+
+  it('S5-T-AC-12: politics off — no budget, no overrule, no Welfare; a month\'s state is identical to the base', () => {
+    const state = governed(false);
+    expect(refused(() => setBudget(state, 'lena', shares(80, 10)))).toBe("This game plays without the colony's council");
+    expect(refused(() => callOverrule(state, 'brix', 'tax'))).toBe("This game plays without the colony's council");
+    for (let steps = 0; state.month < 4 && steps < 200; steps++) advancePhase(state);
+    expect(state.month).toBe(4);
+    expect(state.politics).toBeNull();
+    expect(state.colony).toBeNull();
+    expect(createHash('sha256').update(stableJson(state)).digest('hex')).toBe(BASE_HASH);
   });
 });

@@ -464,9 +464,14 @@ function councilLive(state: GameState): boolean {
   return !!council && council.stage !== 'over';
 }
 
-/** Whether the colony is voting: the election or the law ballot is open in planning. See slice 2a RULE-40. */
+function overruleLive(state: GameState): boolean {
+  const stage = state.politics?.overrule?.stage;
+  return stage === 'ballot' || stage === 'reveal';
+}
+
+/** Whether the colony is voting: the election, the law ballot or the overrule ballot is open in planning. See slice 2a RULE-40, S5-RULE-7. */
 export function votesOpen(state: GameState): boolean {
-  return state.phase === 'planning' && (electionLive(state) || councilLive(state));
+  return state.phase === 'planning' && (electionLive(state) || councilLive(state) || overruleLive(state));
 }
 
 /** A small count as the sentence's first word, as RULE-41 writes it ("Three laws are in force"); digits past ten. */
@@ -549,15 +554,17 @@ function isCouncilDone(state: GameState, playerId: string): boolean {
   return state.phase === 'planning' && !!council && council.stage === 'ballot' && council.done.includes(playerId);
 }
 
-/** Presses Done on whichever vote is open: the election first, then the law ballot. */
+/** Presses Done on whichever vote is open: the election first, then the law ballot, then the overrule ballot. */
 export function votesDone(state: GameState, playerId: string, done = true): void {
   if (electionLive(state)) electionDone(state, playerId, done);
-  else councilDone(state, playerId, done);
+  else if (councilLive(state)) councilDone(state, playerId, done);
+  else overruleDone(state, playerId, done);
 }
 
 /** Whether the player is Done on the vote that is open. */
 export function isVotesDone(state: GameState, playerId: string): boolean {
-  return electionLive(state) ? isElectionDone(state, playerId) : isCouncilDone(state, playerId);
+  if (electionLive(state)) return isElectionDone(state, playerId);
+  return councilLive(state) ? isCouncilDone(state, playerId) : isOverruleDone(state, playerId);
 }
 
 /** The weighted tally at the ballot's close: the Governor's ballot breaks a tie. See slice 2a RULE-42. */
@@ -605,7 +612,7 @@ export function stepVotes(state: GameState, dt: number): ElectionResult | null {
     return result;
   }
   const council = state.politics.council;
-  if (!council || council.stage === 'over') return null;
+  if (!council || council.stage === 'over') return stepOverrule(state, dt);
   if (council.stage === 'ballot') {
     if (state.players.every((p) => isCouncilDone(state, p.id))) tally(state, edit(state).council!);
     return null;
@@ -624,6 +631,7 @@ export function closeVotes(state: GameState): ElectionResult | null {
     if (politics.council!.stage === 'ballot') tally(state, politics.council!);
     takeEffect(state, politics);
   }
+  closeOverrule(state);
   // A proposal from an earlier month had this planning for its ballot; one that never got it is dropped.
   const pending = state.politics?.proposal;
   if (pending && pending.month < state.month) edit(state).proposal = null;
@@ -720,11 +728,7 @@ export function lawImpact(state: GameState, proposal: LawProposal): Record<strin
   return out;
 }
 
-// ---- Slice 5: the Governor's budget and the overrule vote. Names exported ahead of their bodies so callers compile.
-
-const notBuilt = (): never => {
-  throw new RuleError('Not built yet');
-};
+// ---- Slice 5: the Governor's budget and the overrule vote.
 
 /** The lines the Governor may share the fund between, in order. RC offers Projects and Welfare; Security comes with S5-C13. See S5-RULE-1. */
 export function budgetLines(state: GameState): BudgetLine[] {
@@ -843,14 +847,94 @@ export function callOverrule(state: GameState, playerId: string, target: Overrul
   edit(state).overrule = { month: state.month, target, caller: id, stage: 'called', clockMs: 0, ballots: {}, done: [], result: null };
 }
 
-/** As planning would end: a pending call opens its ballot. Returns whether it did. See S5-RULE-7. */
+/** As planning would end: a pending call opens its ballot, the caller's yes and the Governor's no preset. Returns whether it did. See S5-RULE-7. */
 export function openOverrule(state: GameState): boolean {
-  return notBuilt();
+  const call = monthsOverrule(state);
+  const governor = state.politics?.governor;
+  if (state.phase !== 'planning' || !call || call.stage !== 'called' || !governor || votesOpen(state)) return false;
+  const overrule = edit(state).overrule!;
+  overrule.stage = 'ballot';
+  overrule.ballots = { [overrule.caller]: true, [governor]: false };
+  overrule.done = [];
+  return true;
 }
 
-/** A voter's yes (undo it) or no on the open overrule ballot. */
+function liveOverrule(state: GameState): void {
+  if (state.phase !== 'planning' || state.politics?.overrule?.stage !== 'ballot') throw new RuleError('The overrule vote is not open');
+}
+
+/** A voter's yes (undo it) or no on the open overrule ballot; a later vote replaces it until the ballot closes. A cast ballot is Done. */
 export function voteOverrule(state: GameState, voterId: string, yes: boolean): void {
-  return notBuilt();
+  const voter = player(state, voterId);
+  liveOverrule(state);
+  const overrule = edit(state).overrule!;
+  overrule.ballots[voter.id] = yes;
+  if (!overrule.done.includes(voter.id)) overrule.done = [...overrule.done, voter.id];
+}
+
+function overruleDone(state: GameState, playerId: string, done: boolean): void {
+  const overrule = state.politics?.overrule;
+  if (state.phase !== 'planning' || overrule?.stage !== 'ballot' || overrule.done.includes(playerId) === done) return;
+  const o = edit(state).overrule!;
+  o.done = done ? [...o.done, playerId] : o.done.filter((d) => d !== playerId);
+}
+
+function isOverruleDone(state: GameState, playerId: string): boolean {
+  const overrule = state.politics?.overrule;
+  return state.phase === 'planning' && overrule?.stage === 'ballot' && overrule.done.includes(playerId);
+}
+
+/** The tally at the ballot's close: more than half of all vote weight restores the start; an absent ballot is an abstention. See S5-RULE-8. */
+function tallyOverrule(state: GameState, overrule: Overrule): void {
+  let yes = 0;
+  let no = 0;
+  let total = 0;
+  for (const p of state.players) {
+    const weight = voteWeight(state, p.id).total;
+    total += weight;
+    const ballot = overrule.ballots[p.id];
+    if (ballot === true) yes += weight;
+    else if (ballot === false) no += weight;
+  }
+  const needed = Math.floor(total / 2) + 1;
+  overrule.result = { passed: yes >= needed, yes, no, total, needed };
+  overrule.stage = 'reveal';
+  overrule.clockMs = 0;
+}
+
+/** A passed overrule restores the month's start; the reveal is over either way. */
+function overruleTakesEffect(state: GameState, politics: Politics): void {
+  const overrule = politics.overrule!;
+  overrule.stage = 'over';
+  if (overrule.result!.passed && overrule.target === 'tax') state.treasury.salesTax = politics.taxAtStart;
+}
+
+/** The overrule's part of a step: tallies once every player is Done, then runs the reveal's clock. */
+function stepOverrule(state: GameState, dt: number): null {
+  const overrule = state.politics?.overrule;
+  if (!overrule) return null;
+  if (overrule.stage === 'ballot') {
+    if (state.players.every((p) => isOverruleDone(state, p.id))) tallyOverrule(state, edit(state).overrule!);
+  } else if (overrule.stage === 'reveal') {
+    const politics = edit(state);
+    politics.overrule!.clockMs += dt;
+    if (politics.overrule!.clockMs >= POLITICS.overrule.revealMs) overruleTakesEffect(state, politics);
+  }
+  return null;
+}
+
+/** Leaving planning: an open ballot is tallied now and a revealing result takes effect; a call that never got its ballot lapses. */
+function closeOverrule(state: GameState): void {
+  const call = monthsOverrule(state);
+  if (!call) return;
+  if (call.stage === 'called') {
+    edit(state).overrule = null;
+    return;
+  }
+  if (call.stage === 'over') return;
+  const politics = edit(state);
+  if (call.stage === 'ballot') tallyOverrule(state, politics.overrule!);
+  overruleTakesEffect(state, politics);
 }
 
 /** Credits the Security line pays this month: slice 4 reads it. 0 until the Security line is built (AM-3). */
