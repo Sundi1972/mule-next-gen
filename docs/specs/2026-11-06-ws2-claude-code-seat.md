@@ -453,7 +453,8 @@ RULE-4 · submit_plan                                                     shape:
   2  ask_id not this seat's open ask          refuse "unknown or closed ask"
   3  ask already answered                     refuse "one answer per ask"
   4  ask aborted (late)                       refuse "too late, played the built-in plan"
-  5  otherwise                                parse + validate as a Smart reply; resolve the write; return accepted/refused edits; status ready
+  5  the reply parser cannot use the reply     refuse "unusable: <cause>, resend"; the ask stays open (not answered)
+  6  otherwise                                parse + validate as a Smart reply; resolve the write; return accepted/refused edits; status ready
 ```
 
 ```
@@ -582,6 +583,12 @@ parser reads strategy only from the reply's strategy object, as the API writer s
 set its strategy. §3 now adds an optional `strategy` object, parsed exactly as the API writer's (HC-4); on an auction ask
 it is refused as not offered. Tested in `claude-seat-mcp.test.ts` (T-AC-1). Also: `holdMs` ships provisional at 25 s in
 `BRAIN.claudeSeat` until spike (b) sets it.
+
+**Amendment 3 (7 Nov, WS2, inside the lane, from PR-1b's review): an unusable reply is not an answer.** RULE-4 gains
+row 5: a submit the reply parser cannot use (bad shape, bad line, not JSON) is refused with its cause and the ask stays
+open, so the chat can resend before the phase starts; before, it counted as the answer and the seat silently played its
+built-in plan. Also, from the PM's ruling of 7 Nov: RULE-2 row 3's "game over" is decided in claude-seat from the game's
+own state, around the Room's lookup; the Room answers "taken back" only.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
