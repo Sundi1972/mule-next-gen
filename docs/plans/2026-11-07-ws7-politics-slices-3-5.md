@@ -518,7 +518,7 @@ Before suggesting merge of `ws7-s3-engine` into `ws7-politics`:
 - [ ] The slice 4 contract is exercised from the engine's index (Task S3-1.8 Step 1); WS1's moves test exercises the AiAction contract
 - [ ] `pnpm typecheck && pnpm test` green; CI 4/4 (check, e2e, e2e-regression, sim); the INV-1 literal guard green; politics-off sim rows byte-identical (S3-HC-4)
 - [ ] Owners' OKs on every named-edit SHA: WS1 (actions.ts, play.ts, moves.test.ts), WS3 (types.ts)
-- [ ] The §9 enforcement grep is empty outside diplomacy.ts and politics.ts: `git grep -nE '\.deals\s*=|deals\.push|editPolitics' -- 'packages/**/src/**' 'apps/**/src/**' ':!packages/engine/src/diplomacy.ts' ':!packages/engine/src/politics.ts' ':!packages/engine/src/observe.ts'` (observe.ts filters its own copy, #669; test fixtures may set cards)
+- [ ] The §9 enforcement grep is empty outside diplomacy.ts and politics.ts: `git grep -nE '\.deals[[:space:]]*=|deals\.push|editPolitics' -- 'packages/**/src/**' 'apps/**/src/**' ':!packages/engine/src/diplomacy.ts' ':!packages/engine/src/politics.ts' ':!packages/engine/src/observe.ts' ':!packages/engine/src/walk.ts'`. observe.ts filters its own copy (#669). walk.ts's `board.deals` is the auction board's, not `Politics.deals`. Test fixtures may set cards. `git grep -E` has no `\s`.
 - [ ] No new `@ts-ignore` / `eslint-disable` without a reason on the line
 - [ ] Rulebook chapter updated the same day and `build-index.mjs` re-run
 - [ ] One code review once CI is green
@@ -698,6 +698,15 @@ Before suggesting merge of `ws7-s3-engine` into `ws7-politics`:
 
 - [ ] **Step 1: Rulebook, same day** — the computer players' card rules (refuse below 30, offer windows, keep or break by honesty), "Designed, not in the game yet"; `node docs/rulebook/build-index.mjs`. **Commit** `docs(rulebook): how computer players use deal cards (S3-PR-4)`.
 - [ ] **Step 2: On merge, tell the PM** with the merge SHA, for WS1's S3-PR-5 (Task S3-5.1) and for Task S3-3.4.
+
+#### Task S3-4.4 — I-1: no office-vote card before the seat's run is decided (WS7; land before S3-PR-5 merges)
+
+Found by #699's PR-boundary review (7 Nov). It is unreachable until S3-PR-5's values land, because `cardWorth` is 0 until then.
+- **The defect.** `DealHand.voteForCandidate` (row a) offers in any planning month before an election and is guarded only by the candidacy already declared. VoteHand decides whether to run only `POLITICS.ai.declareLeadMonths` ahead, and its `decide` ignores the cards the seat holds. So a seat can promise its vote and then run for that office, and the card breaks (AM-8).
+
+- [ ] **Step 1: Strengthen the 60-seed row** in `packages/ai/test/deal-hand.test.ts` (WS1 named edit). Start in month 2 with two declared non-AI candidates. It must fail on 1ea5da16, because a seat holds a card for an office it later runs for.
+- [ ] **Step 2: Offer row a only once the seat's run is decided:** `next − obs.month ≤ POLITICS.ai.declareLeadMonths`, or the announcement once the seat is Done. `packages/ai/src/hands/deal.ts` only. Mutate the guard to watch Step 1 go red, then restore it from a copy.
+- [ ] **Step 3:** `pnpm --filter @mule/ai test deal-hand vote-hand council-ai` green; `pnpm typecheck`; tell the PM the SHA, so S3-PR-5 merges after it.
 
 #### S3-PR-4 merge gate
 
