@@ -31,6 +31,9 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   setBudget: true,
   callOverrule: true,
   voteOverrule: true,
+  offerDeal: true,
+  withdrawDeal: true,
+  answerDeal: true,
 };
 
 /** The text under one `## ` heading, up to the next. */

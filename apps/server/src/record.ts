@@ -191,6 +191,7 @@ export class Recorder {
         }
       },
       dispose: () => game.dispose?.(),
+      claudeStatus: (seat) => game.claudeStatus?.(seat),
       // A Claude seat's code names the game itself, never this wrapper (Room.seatForCode, C1).
       table: game.table ?? game,
     };

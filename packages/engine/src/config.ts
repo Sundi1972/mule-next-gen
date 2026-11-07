@@ -937,9 +937,25 @@ export const POLITICS = {
     /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
     taxPerVote: 300,
     taxCap: 2,
+    /** The fewest votes a player can have, whatever their reputation (slice 3, placeholder until WS1's sim row). */
+    minVotes: 1,
   },
   /** A player's reputation stays within these bounds, in whole points (START.reputation is where it starts). */
-  reputation: { min: 0, max: 100 },
+  reputation: {
+    min: 0,
+    max: 100,
+    /** Points a deal card moves a player's reputation, signed (slice 3, placeholders until WS1's sim row). */
+    moves: { kept: 3, voteBroken: -10, pactBroken: -20 },
+    /** Kept gains a player can earn from cards with one other party in one term. */
+    keptPerPartnerPerTerm: 1,
+  },
+  /** Deal cards between players (slice 3, placeholders until WS1's sim row). */
+  deals: {
+    /** A player's offers waiting for an answer at once. */
+    maxOpenOffers: 3,
+    /** The lengths a pact may run, in months. */
+    pactMonths: [1, 3, 6],
+  },
   /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
@@ -995,6 +1011,19 @@ export const POLITICS = {
     emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
   } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
+    /** The AI's deal cards (slice 3, placeholders until WS1's sim row). */
+    deals: {
+      /** Cards from a proposer below this reputation are declined. */
+      refuseBelow: 30,
+      /** Offers a seat makes in a month, at most. */
+      offersPerMonth: 2,
+      /** The card's worth to the seat, in credits, at or above which it accepts. */
+      acceptMin: { trader: 0, cautious: 20, aggressive: 10, saboteur: 0 } satisfies Record<AiPersonaId, number>,
+      /** How much a seat weighs its reputation against a gain before breaking a promise: higher keeps more. */
+      honesty: { trader: 1, cautious: 2, aggressive: 0.8, saboteur: 0.5 } satisfies Record<AiPersonaId, number>,
+      /** A Rookie's chance of accepting a card. */
+      rookieAccept: 0.5,
+    },
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
     /** A seat decides whether to run in the first planning phase at most this many months before an election month; in month 1, at the last call. */

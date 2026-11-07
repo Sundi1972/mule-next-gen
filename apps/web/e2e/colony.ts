@@ -4,8 +4,9 @@
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { callStrike, COLONY, HAPPINESS, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
-import type { ColonyView, MuleView } from '@mule/protocol';
+import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import type { ColonyProjectView, ColonyView, MuleView } from '@mule/protocol';
+import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
@@ -127,16 +128,18 @@ async function main(): Promise<void> {
     await goToThePub(phone);
     await pressDoneThroughTheAuction(phone, board);
 
-    // 2. The month end: the build site's row for the project at the server's stage, with Lena on its plaque.
+    // 2. The month end: the build site's line for the project at the server's stage. With politics on it is one line
+    // (PM ruling 7 Nov, TV-FIT): its name, stage and figure; the plaque is the phones' (B-AC-35-2 read it on Lena's).
     await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
     check(board().phase === 'upkeep', `month 1 ends in upkeep, got ${board().phase}`);
     const stage = colony().projects.find((p) => p.id === PROJECT)!.stage;
     const row = tv.getByTestId('build-site').getByTestId(`project-${PROJECT}`);
     const shown = await row.getAttribute('data-stage', { timeout: PRESS_MS });
     check(shown === stage, `B-AC-34-4: the TV's build site shows the ${PRESTIGE[PROJECT].name} at the server's stage "${stage}", got "${shown}"`);
-    const plaque = (await row.getByTestId(`plaque-${PROJECT}`).innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ');
-    check(plaque.includes('Lena'), `B-AC-34-4: the plaque names Lena, got "${plaque}"`);
-    console.log(`✓ B-AC-34-4: the month end's build site shows the ${PRESTIGE[PROJECT].name} ${stage}, Lena on its plaque`);
+    const figure = (await row.getByTestId(`figure-${PROJECT}`).innerText({ timeout: PRESS_MS })).trim();
+    const expected = figureFor(colony().projects.find((p) => p.id === PROJECT)!);
+    check(figure === expected, `B-AC-34-4: the ${PRESTIGE[PROJECT].name}'s line reads the server's "${expected}", got "${figure}"`);
+    console.log(`✓ B-AC-34-4: the month end's build site shows the ${PRESTIGE[PROJECT].name} ${stage} on one line, "${figure}"`);
 
     // Month 2, to game over.
     await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
@@ -462,6 +465,27 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await throughTheMonth();
 
     check(board().month === 2 && board().players.length === 6, `month 2's end at six seats, got month ${board().month}, ${board().players.length} seats`);
+    // The longest build site a game can have (PM ruling 7 Nov: a long game reaches five projects): all five, the most
+    // lines they can take once the standing ones fold into one. Three under way (COLONY.maxOpen), one damaged, the park
+    // standing: five lines, as many as five with none standing. Staged as the server's colony tests stage them:
+    // commissioning is planning's, and this is the month end.
+    await held(server, code, async () => {
+      const room = server.registry.get(code);
+      check(room, `room ${code} on the server`);
+      const state = (room as unknown as { game: { state: GameState } }).game.state;
+      const donors = state.players.slice(0, 3).map((p, i) => [p.id, 60 * (i + 1)] as const);
+      const staged: { id: PrestigeId; stage: 'standing' | 'building' | 'commissioned' | 'damaged'; monthsLeft: number | null }[] = [
+        { id: 'park', stage: 'standing', monthsLeft: null },
+        { id: 'hospital', stage: 'building', monthsLeft: 1 },
+        { id: 'observatory', stage: 'commissioned', monthsLeft: null },
+        { id: 'stadium', stage: 'commissioned', monthsLeft: null },
+        { id: 'spaceport', stage: 'damaged', monthsLeft: null },
+      ];
+      check(staged.filter((p) => p.stage === 'building' || p.stage === 'commissioned').length === COLONY.maxOpen, `the staging has the most projects under way, ${COLONY.maxOpen}`);
+      state.colony!.projects = staged.map(({ id, stage, monthsLeft }) => ({ id, stage, monthsLeft, since: 1, slot: null, funded: { credits: 120, goods: {} }, plaque: Object.fromEntries(donors) }));
+      room.broadcast();
+    });
+    check(board().colony?.projects.length === 5, `five projects at the build site, got ${board().colony?.projects.length}`);
     // The full ticker: the TV that has watched the game. The empty one: a TV that joins now (the server replays no chat).
     const fresh = await (await browser.newContext(TV)).newPage();
     fresh.on('pageerror', (e) => errors.push(`fresh tv: ${e.message}`));
@@ -471,8 +495,28 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       [fresh, 'ticker-empty'],
     ] as const) {
       const read = await readTheSixSeatMonthEnd(page, name);
-      console.log(`✓ B-AC-27-2: six seats, month 2's end, ${read}`);
+      const site = page.getByTestId('tv-monthend').getByTestId('build-site');
+      check((await site.locator('li').count()) === 5, `the ${name} TV's build site has five lines, the standing park folded into one`);
+      await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });
+      console.log(`✓ B-AC-27-2: six seats, month 2's end, five projects, ${read}`);
     }
+    // A late game's other end: all five standing share one line, and every name shows, wrapping rather than cut (review
+    // of #672). The fewer lines leave the room.
+    await held(server, code, async () => {
+      const room = server.registry.get(code)!;
+      const state = (room as unknown as { game: { state: GameState } }).game.state;
+      for (const p of state.colony!.projects) Object.assign(p, { stage: 'standing', monthsLeft: null });
+      room.broadcast();
+    });
+    const standing = tv.getByTestId('tv-monthend').getByTestId('projects-standing');
+    await standing.filter({ hasText: PRESTIGE.spaceport.name }).waitFor({ timeout: PRESS_MS });
+    const names = await standing.evaluate((li) => {
+      const span = li.firstElementChild as HTMLElement;
+      return { scroll: span.scrollWidth, client: span.clientWidth, lines: Math.round(span.getBoundingClientRect().height / parseFloat(getComputedStyle(span).lineHeight)) };
+    });
+    check(names.scroll <= names.client, `all five standing names show whole on the TV, ${names.scroll} px in ${names.client}`);
+    check((await tv.getByTestId('tv-monthend').getByTestId('build-site').locator('li').count()) === 1, 'all five standing take one line');
+    console.log(`✓ PM ruling 7 Nov: all five standing on one line, every name whole (${names.lines} text lines), scale ${await theTvScaleHolds(tv, 'six-seat month end, five standing')}`);
     console.log(`✓ TV-FIT floor ${TV_SCALE_FLOOR}, every screen at six seats over two months: ${await theTvScalesHeld(tv, 'six seats')}`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -485,6 +529,18 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await browser.close();
     await server.close();
   }
+}
+
+/**
+ * What the TV month end's line should read for a project, from the server's view of it (RULE-21): collecting, the share
+ * of its credits paid, then the goods it still waits for; building, when it stands, the upkeep having counted this month.
+ */
+function figureFor(p: ColonyProjectView): string {
+  if (p.stage === 'building') return p.monthsLeft === 1 ? 'stands next month' : `stands in ${p.monthsLeft} months`;
+  if (p.stage !== 'commissioned') return `+${p.prestige} prestige`;
+  if (p.funded.credits < p.cost.credits) return `${Math.round((100 * p.funded.credits) / p.cost.credits)}% paid`;
+  const short = GOODS.filter((g) => (p.cost.goods[g] ?? 0) > (p.funded.goods[g] ?? 0)).map((g) => `${p.cost.goods[g]! - (p.funded.goods[g] ?? 0)} ${GOOD_NAME[g]}`);
+  return short.length > 0 ? `needs ${short.join(' · ')}` : '100% paid';
 }
 
 /**

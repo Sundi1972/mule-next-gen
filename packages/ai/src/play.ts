@@ -1,6 +1,7 @@
 import {
   advanceGrant,
   advancePhase,
+  answerDeal,
   AI_HANDS,
   analysePlot,
   auctionDone,
@@ -25,6 +26,7 @@ import {
   litPlot,
   lotDone,
   MS_PER_SECOND,
+  offerDeal,
   orderGeoDrone,
   outfitMule,
   RuleError,
@@ -49,6 +51,7 @@ import {
   visitPub,
   voteOverrule,
   walkSeconds,
+  withdrawDeal,
   WALK,
   type AiLevelId,
   type AiPersonaId,
@@ -263,6 +266,15 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         break;
       case 'voteOverrule':
         voteOverrule(state, id, action.yes);
+        break;
+      case 'offerDeal':
+        offerDeal(state, id, action.offer);
+        break;
+      case 'withdrawDeal':
+        withdrawDeal(state, id, action.id);
+        break;
+      case 'answerDeal':
+        answerDeal(state, id, action.id, action.accept);
         break;
       case 'done':
         if (state.phase === 'landGrant') grantPass(state, id);

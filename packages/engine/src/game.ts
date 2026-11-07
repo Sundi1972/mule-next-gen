@@ -7,6 +7,7 @@ import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from '.
 import { generateMap, tileIndex } from './map.js';
 import { colonyPrestige, colonyWealth, keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
+import { closePlanningDeals, monthEndDeals } from './diplomacy.js';
 import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
@@ -519,6 +520,8 @@ export function advancePhase(state: GameState): void {
   if (state.phase === 'planning') {
     keepPromise(state);
     closeVotes(state);
+    // Offers nobody answered expire with planning, and so do vote cards whose ballot has passed.
+    closePlanningDeals(state);
   }
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
@@ -601,6 +604,8 @@ export function advancePhase(state: GameState): void {
       // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
       if (!state.whatIf) report.events = [...state.monthEvents];
     }
+    // Pacts whose last month this is settle kept; at the game's end every card still running settles.
+    monthEndDeals(state, isGameOver(state));
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {

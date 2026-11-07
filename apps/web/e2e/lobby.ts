@@ -4,7 +4,7 @@
  * link. Every removed phone lands on the start screen with the reason. B-AC-13: the "make your colonist" lobby at a
  * phone's and a laptop's size. B-AC-8 (lobby): a phone takes an AI's colour and the other phone is refused it; smoke.ts
  * plays a picked colour into the game. B-AC-1 (Claude seat, C1): the host makes a computer seat Claude's and alone
- * sees its seat code and Copy invite. Run with `pnpm --filter @mule/web e2e`.
+ * sees its seat code and Copy invite; B-AC-2 (lobby): once its chat is connected, every screen says so. Run with `pnpm --filter @mule/web e2e`.
  */
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
@@ -428,6 +428,17 @@ async function aClaudeSeatInTheLobby(): Promise<void> {
   }
   check(await gone(mia.getByTestId(`seat-${ai.id}-open`)), `${id} (negative): Mia has no control to change ${ai.name}'s kind`);
   console.log(`✓ ${id}: the host made ${ai.name} Claude's; the host's phone alone shows ${seatCode} and Copy invite; Mia and the TV show WAITING FOR CLAUDE`);
+
+  // B-AC-2: a chat calls with the code. Until WS2's status from calls lands, the test plays that part: the game it
+  // hosts says the seat is connected, and the room sends every screen its view.
+  const b2 = 'B-AC-2 (Claude seat)';
+  const game = (held as { table: { claudeStatus?: (seatId: string) => string | undefined } }).table;
+  game.claudeStatus = (seatId) => (seatId === ai.id ? 'connected' : undefined);
+  room.broadcast();
+  for (const [who, page, chip] of [['the host', heiko, `chip-${ai.id}`], ['Mia', mia, `chip-${ai.id}`], ['the TV', tv, `tv-chip-${ai.id}`]] as const)
+    check(await shows(page.getByTestId(chip).filter({ hasText: 'CLAUDE · CONNECTED' })), `${b2}: ${who} shows ${ai.name} as CLAUDE · CONNECTED`);
+  check(await gone(heiko.getByText('Plays its built-in plan until Claude joins')), `${b2}: once Claude is connected the host's row no longer says it plays built-in`);
+  console.log(`✓ ${b2}: once the game says ${ai.name}'s chat is connected, the host, Mia and the TV all show CLAUDE · CONNECTED`);
   for (const page of [heiko, mia, tv]) await page.context().close();
 }
 

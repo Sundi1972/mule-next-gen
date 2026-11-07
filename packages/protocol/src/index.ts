@@ -1,4 +1,4 @@
-import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, BudgetLine, DealCard, DealOffer, DevPlace, Election, InquiryRecord, Overrule, OverruleTarget, OverruleWhy, SabotageOrder, SabotageTarget, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, BudgetLine, DealCard, DealOffer, DevPlace, Election, InquiryRecord, Overrule, OverruleTarget, OverruleWhy, SabotageOrder, SabotageTarget, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PlayerId, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -315,6 +315,16 @@ export interface MyView {
   deals?: MyDealsView | null;
 }
 
+/**
+ * One news line and the seats it names: one id for each name in the words, in their order, repeats kept ("Ossa broke a
+ * promise to Brix: a vote for Brix" names ossa, brix, brix), so a screen can mark each name where it stands. A screen
+ * that wants only who is named dedupes.
+ */
+export interface NewsLine {
+  text: string;
+  who: PlayerId[];
+}
+
 /** A player's own deal cards (slice 3). */
 export interface MyDealsView {
   /** Every card this player is a party to, newest first (partyTo). Never a card between two others unless broken. */
@@ -603,6 +613,12 @@ export interface AuctionView {
   upNext: Good | null;
   /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
   receipt: GoodReceipt | null;
+  /**
+   * At the first good's side pick, each Claude seat it waits for, with the server time (epoch ms) the wait ends. A seat
+   * whose plan comes in time leaves the list; one whose wait ends without a plan stays with `builtin` for the rest of
+   * that side pick. Absent when nobody is listed.
+   */
+  waitingForClaude?: { seatId: string; until: number; builtin?: true }[];
   /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
   tally: number | null;
 }
@@ -832,6 +848,8 @@ export interface MuleView {
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
   news: string[];
+  /** The same lines as `news`, in the same order, each with the seats it names in the words' order, so a screen can mark a computer seat. Optional only for older fixtures. */
+  newsLines?: NewsLine[];
   /** At game over; `parts` only on the viewer's own entry, never in the board view (goods are private). */
   scores: { id: string; score: number; parts?: ScorePartsView }[] | null;
   /** The live goods auction while it runs. */
