@@ -416,7 +416,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
-  /** C7: the Claude seats the first good's side pick still waits for, that good, and when its side pick opened. */
   /**
    * The first good's side pick's wait for Claude seats (C7): `seats` still waited for, `builtin` those whose wait ended
    * without a plan. Kept until that side pick ends or the phase changes, so every screen can say a seat plays its
