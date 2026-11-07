@@ -48,6 +48,9 @@ export type IntentType =
   | 'repair'
   | 'propose'
   | 'voteLaw'
+  | 'offerDeal'
+  | 'withdrawDeal'
+  | 'answerDeal'
   | 'continue'
   | 'steer'
   | 'act';
@@ -443,5 +446,61 @@ export const MOVES: MoveTable = {
     legalWhen: () => [refused('the law ballot is open', 'The law ballot is not open')],
     cost: null,
     args: [{ name: 'yes', kind: 'boolean' }],
+  },
+  offerDeal: {
+    type: 'offerDeal',
+    command: 'offerDeal',
+    phases: ['planning'],
+    does: () =>
+      'Offers another player a deal card: a pact for a few months, or a promise to vote for a candidate or on the next law; nothing binds until they accept.',
+    legalWhen: () => [
+      refused('the game plays with deals', 'This game plays without deals'),
+      refused('it is planning', 'Cards are offered in planning'),
+      refused('it names another player', 'Pick another player'),
+      refused(`you have fewer than ${POLITICS.deals.maxOpenOffers} cards waiting for an answer`, 'You have <count> cards waiting for an answer'),
+      refused('they have answered your last card', '<name> has not answered your last card'),
+      refused(`a pact runs ${POLITICS.deals.pactMonths.join(', ')} months`, `A pact runs ${POLITICS.deals.pactMonths.slice(0, -1).join(', ')} or ${POLITICS.deals.pactMonths.at(-1)} months`),
+      refused('you have no pact with them yet', 'You already have a pact with <name>'),
+      refused('a vote for an office names an elected office', 'The <office> is not elected yet'),
+      refused('an election is left this game', 'No election is left this game'),
+      refused('you promise your vote to someone other than yourself', 'Promise your vote to someone else'),
+      refused('the candidate is running for that office', '<name> is not running for <office>'),
+      refused('a vote on a law has a law up for a vote', 'No law is up for a vote'),
+      refused('you have not promised your vote on this ballot', 'You already promised your vote on this ballot'),
+    ],
+    cost: null,
+    args: [
+      { name: 'to', kind: 'player' },
+      { name: 'terms', kind: 'enum', values: ["{ kind: 'pact' }", "{ kind: 'vote', office, candidate }", "{ kind: 'vote', law: true, yes }"] },
+      { name: 'months', kind: 'number', values: POLITICS.deals.pactMonths.map(String) },
+    ],
+  },
+  withdrawDeal: {
+    type: 'withdrawDeal',
+    command: 'withdrawDeal',
+    phases: ['planning'],
+    does: () => 'Takes back a card this seat offered and the other player has not answered.',
+    legalWhen: () => [
+      refused('the game plays with deals', 'This game plays without deals'),
+      refused('the card is yours and still waiting for an answer', 'That card is no longer open'),
+    ],
+    cost: null,
+    args: [{ name: 'id', kind: 'enum', values: ["the card's id, 'deal-…'"] }],
+  },
+  answerDeal: {
+    type: 'answerDeal',
+    command: 'answerDeal',
+    phases: ['planning'],
+    does: () => 'Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.',
+    legalWhen: () => [
+      refused('it is planning', 'Cards are answered in planning'),
+      refused('the card was offered to you and is still waiting for an answer', 'That card is no longer open'),
+      refused('a pact accepted is your only pact with them', 'You already have a pact with <name>'),
+    ],
+    cost: null,
+    args: [
+      { name: 'id', kind: 'enum', values: ["the card's id, 'deal-…'"] },
+      { name: 'accept', kind: 'boolean' },
+    ],
   },
 };
