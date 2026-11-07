@@ -1786,8 +1786,8 @@ export const STRATEGIST = {
   },
   /**
    * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
-   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 10 (PM ruling,
-   * 7 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
+   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 12 (PM rulings,
+   * 7 and 8 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
    */
   energyFirst: true as boolean,
   /**
