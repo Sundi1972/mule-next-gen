@@ -391,7 +391,7 @@ describe("price C6: the colony's Energy demand counts the MULEs it will add", ()
 });
 
 describe('price B-AC-6: a corral sold out month after month stops raising the MULE price at the cap', () => {
-  it('price B-AC-6: after many sold-out months the factor is at most 2.0 and Smithore at most its ceiling', () => {
+  it('price B-AC-6: after many sold-out months the factor is at most 4.0 and Smithore at most its ceiling', () => {
     const state = game();
     const smithoreCeiling = PRICE.ceiling * GOOD_CONFIG.smithore.refPrice;
     const cap = (MULE.labour + MULE.smithorePerMule * smithoreCeiling) * MULE.maxFactor;
@@ -402,9 +402,11 @@ describe('price B-AC-6: a corral sold out month after month stops raising the MU
       expect(state.store.muleFactor, `month ${month}`).toBeLessThanOrEqual(MULE.maxFactor);
       expect(state.store.posted.smithore, `month ${month}`).toBeLessThanOrEqual(smithoreCeiling);
       expect(mulePrice(state), `month ${month}`).toBeLessThanOrEqual(cap);
+      // Each sold-out month adds a quarter, compounding (AM-8): 1.25 after the first.
+      if (month === 1) expect(state.store.muleFactor, 'one sold-out month').toBeCloseTo(1.25, 9);
     }
     expect(state.store.muleFactor, 'the premise: ten sold-out months reached the cap').toBe(MULE.maxFactor);
-    expect(state.store.muleFactor, "the spec's cap").toBeLessThanOrEqual(2.0);
+    expect(state.store.muleFactor, "the spec's cap (AM-8)").toBe(4.0);
     expect(mulePrice(state), 'labour and Smithore at the posted price, times the capped factor').toBe(
       Math.round((MULE.labour + MULE.smithorePerMule * state.store.posted.smithore) * MULE.maxFactor),
     );
