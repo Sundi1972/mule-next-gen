@@ -20,7 +20,7 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import frame, kits, props  # noqa: E402
+from lib import core, frame, kits, props  # noqa: E402
 from lib.core import (T, ZT, block, bounds, box_uv, bx, coll, cyl, flat, light, link, load, mat, math_, mdims,  # noqa: E402
                       mesh_obj, mix, new_mat, node, pbr, place, recentre, shadow_see_through, sock, tex, unlink)
 
@@ -300,7 +300,9 @@ def wilt(m, rgb):
 # ---------- the pieces ----------
 
 def rim():
-    """The slab: a paved rim cut by the four paths, stone sides."""
+    """The slab: a paved rim cut by the four paths, stone sides. Flush: none, the plate draws the place's edge."""
+    if core.FLUSH:
+        return
     stone = mat("stone")
     zb = -SPEC["slab"]["thickness"]
     for y0, y1 in [(INNER, HALF), (-HALF, -INNER)]:  # north and south strips run the full width

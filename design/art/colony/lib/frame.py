@@ -52,6 +52,18 @@ def where(p):
     return round(v.x * w, 1), round((1 - v.y) * h, 1)
 
 
+def shadow_catcher(places=1):
+    """A ground ring at z = 0 from inside the place's rim to one place beyond it all round: it renders transparent
+    except for the shadows falling on it, so the picture lays its cast shadow over the plate's edge and neighbours."""
+    h = core.SL * (places + 2) / 2
+    i = core.HALF * places - core.RIM  # open over the place's own ground, which may sink below z = 0 (the pond)
+    v = [(-h, -h, 0), (h, -h, 0), (h, h, 0), (-h, h, 0), (-i, -i, 0), (i, -i, 0), (i, i, 0), (-i, i, 0)]
+    f = [(0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    o = core.mesh_obj("shadow_catcher", v, f, core.flat("catcher", (0.5, 0.5, 0.5), 0.9))
+    o.is_shadow_catcher = True
+    return o
+
+
 def setup(samples, pct=100, fr=None):
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
@@ -96,6 +108,12 @@ def run(kind, stages, build, glowless=("closed",), fr=None, dress=None):
     want = argv[2].split(",") if len(argv) > 2 and argv[2] not in ("", "all") else list(stages)
     lights = argv[3].split(",") if len(argv) > 3 and argv[3] else list(LIGHTS_ALL)
     pct = int(argv[4]) if len(argv) > 4 else 100
+    if core.FLUSH:  # flush layers for the grounds plate (no raised slab, a shadow catcher round the place)
+        out = os.path.join(out, "flush")
+        # the day sun (35 deg, from the WSW) throws a 10 m building's shadow ~14 m east-north-east, off the right of a
+        # 1600 frame: widen to the right only, same centre pixel and scale, so the shadow comes along whole
+        fr = dict(fr or DEFAULT)
+        fr["width"] += 800 * fr.get("places", 1)
     if props.on():  # kit-dressed pictures go to out/kit; publish.sh ships them only with SRC=out/kit (spec AM-5)
         out = os.path.join(out, "kit")
         print(f"COLONY KITS_DIR is set: kit props ON, writing to {out}", flush=True)
@@ -107,6 +125,8 @@ def run(kind, stages, build, glowless=("closed",), fr=None, dress=None):
         build(stage)
         if dress and props.on():
             dress(stage)
+        if core.FLUSH:
+            shadow_catcher((fr or DEFAULT).get("places", 1))
         light.rig()
         camera(fr)
         setup(samples, pct, fr)

@@ -15,6 +15,9 @@ T = os.path.join(A, "tex")
 SL = 12.0  # one grounds place
 HALF = SL / 2
 RIM = 0.7  # the sandstone rim round every place
+# flush layers (spec: the grounds plate carries the ground): no raised slab, the ground cover at z = 0, and a
+# shadow catcher round the place so the picture carries its cast shadow onto whatever the plate shows there
+FLUSH = os.environ.get("COLONY_FLUSH") == "1"
 ZT = 0.02  # top of a place's paving
 
 IMAGES, MATS = {}, {}

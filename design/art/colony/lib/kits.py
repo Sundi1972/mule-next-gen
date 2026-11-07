@@ -12,6 +12,7 @@ import bmesh
 import bpy
 from mathutils import Vector, noise
 
+from . import core
 from .core import HALF, RIM, ZT, accent, box_uv, bx, cyl, flat, light, link, mat, math_, mesh_obj, mix, new_mat, node
 
 
@@ -19,7 +20,8 @@ def slab(cx=0.0, cy=0.0, top="pavers", n=1):
     """A grounds place, or n x n of them as one: sandstone sides and rim, paved inside (top=None leaves the inside
     to the caller)."""
     h = HALF * n
-    bx(cx - h, cx + h, cy - h, cy + h, -0.6, 0.0, mat("stone"), 0.02, "slab")
+    if not core.FLUSH:  # flush: the plate draws the place's stone edge
+        bx(cx - h, cx + h, cy - h, cy + h, -0.6, 0.0, mat("stone"), 0.02, "slab")
     if top:
         bx(cx - h + RIM, cx + h - RIM, cy - h + RIM, cy + h - RIM, -0.02, ZT, mat(top), 0.004, "forecourt")
 
