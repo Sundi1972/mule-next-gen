@@ -804,12 +804,19 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 
   it('T-AC-17: a decider that throws is called 0 times on the playbook path', () => {
+    const SPARE_FOOD = 30; // literal-ok: well past any seat's need, so selling some is a live choice
     const run = (adopt: boolean) => {
       const asked: string[] = [];
       const first = once();
+      const stocked = new Set<number>();
       const t = playTable({
         seat: (id) => (id === ME ? { decider: countingDecider(asked, 'throw') } : {}),
         before: (seat, state, point) => {
+          // Today's path: Food to spare at the auction gives the seat a choice (sell or pass) to ask its decider about.
+          if (!adopt && seat.id === ME && point === 'auction' && !stocked.has(state.month)) {
+            stocked.add(state.month);
+            state.players.find((p) => p.id === ME)!.stock.food = SPARE_FOOD;
+          }
           if (!adopt || seat.id !== ME || point === 'planning' || !first(seat, state, point)) return;
           seat.adopt({ ...seat.draft(state, point), by: 'llm' });
         },
