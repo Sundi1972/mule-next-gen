@@ -286,7 +286,7 @@ describe('RULE-4: what an unneeded unit is worth', () => {
     const mind = mindOf();
     const target = wholeNextMonth(obs, 'ai0', 'food');
     // Past the target every unit the farm makes is surplus: the next one adds what it sells for.
-    const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, water: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
+    const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
 
     expect(unitValues(obs, o, 'food', mind).keep[target], 'the first unit past the target').toBeCloseTo(31.28, 6);
     expect(farmMaking(target + 1) - farmMaking(target)).toBeCloseTo(31.28, 6);
@@ -440,17 +440,16 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
   });
 
   it("T-AC-12 (C8): a seat with a farm counts a well's own-use units up to its Water target, spoilage cover included, not the screen need", () => {
-    // A farm makes the seat drink 2 a month and drinks 2 itself (AM-18). The well makes 4 and pays its own 1 from them:
-    // the other 3 are the seat's own use, each at S − price.
+    // A farm makes the seat drink 2 a month; holding 5 keeps it whole after spoilage. The well makes 4: all four are
+    // its own use, each at S − price.
     const farm: Plot = { outfit: 'food', x: 0, ground: { food: 1 } };
     const { obs, o, mind } = seatOf([farm]);
     const target = unitNeed(obs, mind, 'water').target;
-    const y = yieldOf(obs, obs.tiles[6]!, 'water', 'ai0');
-    const net = y.made - y.water;
+    const made = yieldOf(obs, obs.tiles[6]!, 'water', 'ai0').made;
     expect(target, 'the premise: the target covers spoilage over the screen need').toBeGreaterThan(monthNeeds(obs, 'ai0').water);
-    expect(net, 'the premise: what the well nets is all needed').toBeLessThanOrEqual(target);
+    expect(made, 'the premise: the well makes more than the screen need').toBeGreaterThan(monthNeeds(obs, 'ai0').water);
     const [S = 0] = shortCosts(obs, o, 'water', mind, 1);
-    const own = Math.min(net, target);
+    const own = Math.min(made, target);
 
     const gain = netOf([farm], 'water') - netOf([farm], 'water', { water: 0 });
     // With the store selling none, S has no floor; the damage alone is what its farm loses.

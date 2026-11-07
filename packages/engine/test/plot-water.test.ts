@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createGame,
   energyOffOrder,
@@ -24,6 +24,15 @@ import {
  * off, and take the other good last. Observed where the owner receives it: stock after production and the lines.
  * Month 1, no special field, plots two tiles apart (no cluster, no feeder saving).
  */
+
+/** AM-18 is off by default (farm Water 0, PM ruling 8 Nov); this file pins it on at Heiko's 2 and restores it after. */
+const farmWater = UPKEEP.waterUse.food;
+beforeAll(() => {
+  UPKEEP.waterUse.food = 2;
+});
+afterAll(() => {
+  UPKEEP.waterUse.food = farmWater;
+});
 
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
 
@@ -64,9 +73,11 @@ function produce(plots: { good: Outfit; out?: number }[], spare: number, stock: 
 }
 
 describe('AM-18: every plot uses Water at production, and turns off without it', () => {
-  it('the numbers are config: a farm 2, every other raw plot 1, a factory its recipe', () => {
+  it('the numbers are config: a farm 2 (the switch, pinned on here), every other raw plot 1, a factory 1', () => {
     expect(UPKEEP.waterUse).toEqual({ food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 });
-    expect([RECIPES.alloy.inputs.water, RECIPES.electronics.inputs.water, RECIPES.medicine.inputs.water]).toEqual([1, 1, 1]);
+    expect(UPKEEP.factoryWaterUse).toEqual({ alloy: 1, electronics: 1, medicine: 1 });
+    // Medicine's 1 Water is in its recipe: with AM-18 on it is the factory's use, not an input taken twice.
+    expect(RECIPES.medicine.inputs.water).toBe(UPKEEP.factoryWaterUse.medicine);
   });
 
   it('a farm with Water takes 2 and makes its full output', () => {

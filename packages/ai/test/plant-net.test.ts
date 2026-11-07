@@ -61,7 +61,7 @@ describe('AM-17, ruling A: the AI counts a plant net', () => {
     const { state, seat } = grant(1);
     const obs = observe(state, 'ai0');
     const o = outlook(obs, 'ai0', { lookAhead: true });
-    const y = (made: number, energy: number): Yield => ({ made, energy, water: 0, inputs: {}, air: 0, crew: 1 });
+    const y = (made: number, energy: number): Yield => ({ made, energy, inputs: {}, air: 0, crew: 1 });
 
     expect(monthlyNet(obs, o, y(3, 1), 'energy', seat.mind)).toBeCloseTo(monthlyNet(obs, o, y(2, 0), 'energy', seat.mind), 6);
   });

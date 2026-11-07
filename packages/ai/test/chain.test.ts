@@ -294,11 +294,7 @@ describe('a factory chain (AM-33)', () => {
     // ground, one a month, half the Alloy works' run, the chain wins only from about 3500: the share halves the works.)
     const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], DEAR);
     for (const t of state.tiles) if (!t.owner && t.terrain !== 'store') t.owner = 'ai1';
-    // No corners: under AM-18 a well or a farm costs Water, so Energy is the best use of enough plots here to be a monopoly
-    // target, and the plan kind would follow it. This row is about the chain, RULE-4's own money-maker.
-    const mind = seatOf().mind;
-    const noCorners = { ...mind, level: { ...mind.level, corners: false } };
-    expect(draftStrategyOf({ state, seat: ME, mind: noCorners, seed: 11, phase: 'development' }).moneyMaker).toBe('electronics');
+    expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).toBe('electronics');
   }));
 
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => withChains(() => {

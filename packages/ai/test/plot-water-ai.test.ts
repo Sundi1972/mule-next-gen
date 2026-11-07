@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, GROWN_BASE, monthNeeds, needsOf, observe, runProduction, runUpkeep, type GameState, type Outfit, type Tile } from '@mule/engine';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { advancePhase, createGame, GROWN_BASE, monthNeeds, needsOf, observe, runProduction, runUpkeep, UPKEEP, type GameState, type Outfit, type Tile } from '@mule/engine';
 import { canFeed, keptUnits, unfedInputs, wholeNextMonth } from '../src/value.js';
 
 /**
@@ -9,6 +9,15 @@ import { canFeed, keptUnits, unfedInputs, wholeNextMonth } from '../src/value.js
  * making 4, the stock runs dry by the second month and the farm goes off. (An Alloy works, not a Medicine works: canFeed
  * lets a Medicine works through whatever its inputs, STRATEGIST.medicineDespiteInputs.)
  */
+
+/** AM-18 is off by default (farm Water 0, PM ruling 8 Nov); this file pins it on at Heiko's 2 and restores it after. */
+const farmWater = UPKEEP.waterUse.food;
+beforeAll(() => {
+  UPKEEP.waterUse.food = 2;
+});
+afterAll(() => {
+  UPKEEP.waterUse.food = farmWater;
+});
 
 const ME = 'ai0';
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };

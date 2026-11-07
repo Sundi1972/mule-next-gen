@@ -21,7 +21,6 @@ import {
   rawOutput,
   runProduction,
   RuleError,
-  UPKEEP,
   type GameState,
   type Good,
   type Tile,
@@ -206,7 +205,7 @@ describe('production', () => {
     expect(rawOutput(state, a)).toBe(alone + 1);
   });
 
-  it('turns a Food farm off when its owner is short of Water (AM-18)', () => {
+  it('halves Food farms whose owner is short of Water', () => {
     const state = newGame();
     const tile = plainTile(state, 0, 0, 'river');
     tile.owner = 'p0';
@@ -215,7 +214,7 @@ describe('production', () => {
     p0.stock.energy = 5;
     const full = rawOutput(state, tile);
     p0.stock.water = 0;
-    expect(runProduction(state).produced.p0!.food).toBe(Math.round(full * UPKEEP.offOutputShare));
+    expect(runProduction(state).produced.p0!.food).toBe(Math.floor(full / 2));
     p0.stock.water = 5;
     expect(runProduction(state).produced.p0!.food).toBe(full);
   });

@@ -270,15 +270,14 @@ describe('several events in one production', () => {
         { why: 'event', delta: 0, event: 'acidRain' },
       ]);
 
-      // A farm growing 4 with no Water is turned off to 1 first (AM-18); then the drought takes it to 0 and acid rain
-      // finds nothing to take.
+      // A dry farm growing 4 halves to 2 first; then the drought takes it to 1 and acid rain to 0.
       const dry = loneFarm({ grown: 4, water: 0 });
       const dryLine = lineOf(produce(dry.state), dry.farm);
       expect(dryLine.parts).toEqual([
         { why: 'ground', delta: 4 },
-        { why: 'waterOff', delta: -3 },
+        { why: 'noWater', delta: -2 },
         { why: 'event', delta: -1, event: 'drought' },
-        { why: 'event', delta: 0, event: 'acidRain' },
+        { why: 'event', delta: -1, event: 'acidRain' },
       ]);
       expect(dryLine.made).toBe(0);
     });

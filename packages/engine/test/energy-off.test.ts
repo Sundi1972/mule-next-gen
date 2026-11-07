@@ -131,15 +131,13 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
       energyAfter: 0,
     },
     {
-      name: 'two short: both mines go off and the farm stays on; the well, never turned off, takes its Energy last (AM-18)',
+      name: 'two short: both mines go off, the farm and the well stay on',
       plots: [{ good: 'food', out: 3 }, { good: 'smithore', out: 4 }, { good: 'water', out: 3 }, { good: 'crystite', out: 5 }],
       energy: 2,
       posted: { crystite: 100, smithore: 50 },
       made: [3, 1, 3, 1],
       off: [false, true, false, true],
       energyAfter: 0,
-      // 50 + the well's 3, less its own 1 and the farm's 2 (AM-18); the mines, off, drink none.
-      stockAfter: { water: 50 },
     },
     {
       name: 'output 3 and 4 turned off make 1 each (rounded half up)',
@@ -440,7 +438,7 @@ describe('AM-17: invariants over generated owners', () => {
         const left = { ...pl.stock };
         for (const good of ['alloy', 'electronics', 'medicine'] as const) {
           for (const t of state.tiles.filter((x) => x.owner === pl.id && x.outfit === good)) {
-            const feed = Object.entries(RECIPES[good].inputs).filter(([g]) => g !== 'energy' && g !== 'water') as [Good, number][];
+            const feed = Object.entries(RECIPES[good].inputs).filter(([g]) => g !== 'energy') as [Good, number][];
             if (!feed.every(([g, q]) => left[g] >= q)) continue;
             for (const [g, q] of feed) left[g] -= q;
             fed.set(t, true);
@@ -457,17 +455,14 @@ describe('AM-17: invariants over generated owners', () => {
       for (const pl of state.players) {
         const own = state.tiles.filter((t) => t.owner === pl.id && t.outfit);
         const plants = own.filter((t) => t.outfit === 'energy');
-        // A well takes its Energy last, from what the rest left (AM-18 W5): never in the list, and paid apart.
-        const wells = own.filter((t) => t.outfit === 'water');
         const net = plants.reduce((n, t) => n + Math.max(0, lineOf(run, state, t)!.made - uses.get(t)!), 0);
         const available = before.get(pl.id)! + net;
         expect(pl.stock.energy, `seed ${seed} ${pl.id}: never negative`).toBeGreaterThanOrEqual(0);
         expect(plants.some((t) => isOff(run, state, t)), `seed ${seed}: an Energy plot is never off`).toBe(false);
 
-        // The list: every other working plot but the wells, biggest use first, then least worth (posted × full output),
-        // then tile order.
+        // The list: every other working plot, biggest use first, then least worth (posted × full output), then tile order.
         const list = own
-          .filter((t) => t.outfit !== 'energy' && t.outfit !== 'water' && fed.get(t))
+          .filter((t) => t.outfit !== 'energy' && fed.get(t))
           .map((t) => ({ t, use: uses.get(t)!, worth: state.store.posted[t.outfit as Good] * fullBefore.get(t)!, at: state.tiles.indexOf(t) }))
           .sort((a, b) => b.use - a.use || a.worth - b.worth || a.at - b.at);
         // energyOffOrder, as the AI and WS9 read it, is this very list: the off plots are exactly its turned-off prefix.
@@ -484,8 +479,7 @@ describe('AM-17: invariants over generated owners', () => {
         // What was paid is the uses of the plots left on that ran (a factory without its inputs runs not and pays not).
         const late = own.filter((t) => !fed.get(t) && lineOf(run, state, t) && !isOff(run, state, t));
         const paid = list.slice(k).filter((e) => lineOf(run, state, e.t)).reduce((n, e) => n + e.use, 0) + late.reduce((n, t) => n + uses.get(t)!, 0);
-        const wellsPaid = Math.min(available - paid, wells.reduce((n, t) => n + uses.get(t)!, 0));
-        expect(available - pl.stock.energy, `seed ${seed} ${pl.id}: paid`).toBe(paid + wellsPaid);
+        expect(available - pl.stock.energy, `seed ${seed} ${pl.id}: paid`).toBe(paid);
       }
 
       expect(runProduction(replay)).toEqual(run);

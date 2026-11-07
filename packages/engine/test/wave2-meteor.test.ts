@@ -16,14 +16,14 @@ function meteorAt(chance: number) {
   }
 }
 
-/** Month 2, every non-store plot owned and outfitted for Smithore, every player with Energy and Water to spare; in development. */
+/** Month 2, every non-store plot owned and outfitted for Smithore, every player with Energy to spare; in development. */
 function fullColony(seed: number): GameState {
   const state = createGame({ seed, players: [0, 1, 2].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
   state.month = EVENTS.firstMonth;
   state.tiles
     .filter((t) => t.terrain !== 'store')
     .forEach((t, i) => Object.assign(t, { owner: `p${i % 3}`, outfit: 'smithore' }));
-  for (const p of state.players) Object.assign(p.stock, { energy: 1000, water: 1000 });
+  for (const p of state.players) p.stock.energy = 1000;
   state.phase = 'development';
   return state;
 }
