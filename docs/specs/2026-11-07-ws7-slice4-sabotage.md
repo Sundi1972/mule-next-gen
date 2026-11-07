@@ -180,14 +180,16 @@ S4-HC-10 Crew costs, fines, restitution and the Sheriff's pay move money: sim ro
 
 ## What the table sees `[handoff]`
 
-Places only; WS6 mocks every layout (S4-HC-8). "The laptop" is a player's own screen in the wide shell (the
+Places only; WS6 mocks every layout (S4-HC-8). The frame is **politics layout P0 option A (Heiko, 7 Nov,
+11:02Z)**: no new tab; at most five sections per phone; the Sheriff gets a desk shaped like the Governor's; an
+action starts where its target is. WS6 records the frame in the rulebook. "The laptop" is a player's own screen in the wide shell (the
 hub's `@min-[1100px]/shell` layout): it shows exactly what that player's phone shows. A laptop opened as the
 table view shows what the TV shows.
 
 | Moment | The saboteur's phone (Lena) | The Sheriff's phone (Brix) | Every other phone | TV |
 |---|---|---|---|---|
-| **Planning: order (P6)** | The **Secret desk** (locked, eye-slash): two orders with cost, works % and caught %, "Pick the target on the map…" (the **Target** map tool); a warning if the target holds a pact with her (slice 3's data); her order, replaceable or withdrawn until planning ends; "Paid at the month end: 120 cr" | Nothing of Lena's order | Nothing | Nothing |
-| **Planning: the Sheriff (P7, P8)** | — | The **Sheriff's desk** (only the Sheriff): "Guards · 1 of 2 placed" and the **Guard** map tool, guard marks on their own map only (P8); "Investigate · 1 this month" listing unsolved incidents; "Fine" on each revealed case with a step picker (50…300, "×2 under the sabotage ban") | The public **incidents list** (month, victim's plot or the good, "culprit unknown" or the name, fined or not), on the Colony desk or where WS6 places it | The incidents list; an investigation's result as a moment: "Solved by the Sheriff: it was Lena" or "The trail went cold" |
+| **Planning: order (P6)** | **A power cut starts from the target plot:** she taps Brix's plot on the map, and the plot card offers **"Sabotage…"** (secret, eye-slash), showing cost, works % and caught %, and a warning if Brix holds a pact with her (slice 3's data). **A market rumour starts from the good:** its line at the market, in the Market desk, offers "Spread a rumour…" (up or down, secret). Her one order this month shows on that plot card or good line, replaceable or withdrawn until planning ends; "Paid at the month end: 120 cr" | Nothing of Lena's order | Nothing | Nothing |
+| **Planning: the Sheriff (P7, P8)** | — | The **Sheriff's desk**, shaped like the Governor's (only the Sheriff; no new tab): "Guards · 1 of 2 placed", **guards picked on the map** (P8: tap a plot to post or lift a guard; the marks on the Sheriff's own map only); "Investigate · 1 this month" listing unsolved incidents; "Fine" on each revealed case with a step picker (50…300, "×2 under the sabotage ban") | The public **incidents list** (month, victim's plot or the good, "culprit unknown" or the name, fined or not), on the Colony desk or where WS6 places it | The incidents list; an investigation's result as a moment: "Solved by the Sheriff: it was Lena" or "The trail went cold" |
 | **Election day (P9)** | Two offices: run for Governor (with a promise) or Sheriff (one tap, no promise), two ballot papers, the ceremony reveals Governor then Sheriff | same | same | The ceremony, two offices; the Sheriff's job line ("guards plots, investigates sabotage, fines the culprits") |
 | **Council (P11)** | The **sabotage ban** in the Governor's law picker (settings ×2, ×3) and on the ballot with "For you: …" | same | same | The TV council panel names it; laws in force show "Sabotage ban ×2" |
 | **Production (P10)** | Her own result if it failed unseen: "Your crew failed; nobody saw" (private) | — | — | **Worked, not caught:** the plot goes dark (the map's `OFF` flag) with "Sabotage: someone cut the power to Brix's Food plot". **Caught:** the **"Caught!"** headline with the culprit's name, the plot dark or (guarded) not. **Rumour:** "A rumour: Food opens 25% higher at the auction". Every phone's production screen shows the same public events |
@@ -514,16 +516,22 @@ depends_on   S4-C20 (contract)
 ```
 
 ```
-S4-C14 · ADDED · P6, the Secret desk and the Target tool
+S4-C14 · ADDED · P6, ordering sabotage where the target is
 
-today        the hub's slot API names a Secret desk and Target tool for WS7 to add; the mock has a
-             placeholder SecretDesk listing five orders.
-             anchors: apps/web/src/phone/hub/slots.ts, design/mocks/ws6-ux/src/screens/PlanningHub.tsx::SecretDesk
+today        the hub's slot API names a Secret desk and a Target tool for WS7 to add, and the mock has a
+             placeholder SecretDesk listing five orders. Politics layout P0 option A (Heiko, 7 Nov) replaces
+             that: no new tab or desk for sabotage; an action starts where its target is.
+             anchors: apps/web/src/phone/hub/slots.ts, design/mocks/ws6-ux/src/screens/PlanningHub.tsx::SecretDesk,
+             apps/web/src/phone/hub/tools.tsx (the hub map's plot card), apps/web/src/phone/hub/desks.tsx (MarketDesk)
              verified_by: read
-tomorrow     MUST render WS6's approved slice-4 mock: two orders with the public terms, the target picked on the
-             map, the pact warning (slice 3's data), the order's state, "paid at month end".
-ux           mock: WS6, to come · GRAFT TARGET: new apps/web/src/phone/hub/politics/Secret.tsx; the desk,
-             agenda item and tool entries in hub/today.tsx (WS6's file, WS7 named edit as in PR-4)
+tomorrow     MUST offer "Sabotage…" (secret) on another player's working plot's card when tapped on the hub
+             map, for the power cut; MUST offer "Spread a rumour…" (up or down, secret) on a good's line in the
+             Market desk, for the rumour. Each shows the public terms, the pact warning (slice 3's data), the
+             player's one order this month and "paid at month end". No Secret desk, no new tab.
+ux           mock: WS6, to come (politics layout P0 option A) · GRAFT TARGET: a new
+             apps/web/src/phone/hub/politics/Sabotage.tsx (the secret order sheet both doors open), with one
+             door each in the hub map's plot card (hub/tools.tsx) and the Market desk's good line
+             (hub/desks.tsx); WS6's hub files, WS7 named edits, owner per SEAMS to confirm
 mechanism    fill_scaffold
 depends_on   S4-C13 (contract), WS6's approved mock
 ```
@@ -531,12 +539,13 @@ depends_on   S4-C13 (contract), WS6's approved mock
 ```
 S4-C15 · ADDED · P7 and P8, the Sheriff's desk and guard marks
 
-ux           mock: WS6, to come (start: PlanningHub.tsx::SheriffDesk) · GRAFT TARGET: new
-             apps/web/src/phone/hub/politics/Sheriff.tsx; Guard tool and the Sheriff-only marks on the hub
-             map (hub/today.tsx entries, WS6's; the map's mark through packages/ui HoloMap's existing flag
-             prop, WS4 reviews)
-tomorrow     MUST render the approved mock: guards placed of max, the Guard tool, investigations left and
-             the open incidents, the fine picker on each fineable case with the multiplier.
+ux           mock: WS6, to come (politics layout P0 option A: a desk shaped like the Governor's; start:
+             PlanningHub.tsx::SheriffDesk) · GRAFT TARGET: new apps/web/src/phone/hub/politics/Sheriff.tsx,
+             shown only to the Sheriff like Governor.tsx; guards picked on the hub map with Sheriff-only marks
+             (hub/today.tsx's desk and map-tool entries, WS6's; the mark through packages/ui HoloMap's
+             existing flag prop, WS4 reviews)
+tomorrow     MUST render the approved mock: guards placed of max, picked on the map; investigations left and
+             the open incidents; the fine picker on each fineable case with the multiplier. No new tab.
 mechanism    fill_scaffold
 depends_on   S4-C13, WS6's approved mock
 ```
@@ -1155,7 +1164,7 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-B-AC-7 | Given month 1 · When the election ends · Then a Governor and a Sheriff hold office, the ceremony showed both, and the Sheriff is paid 30 at upkeep | S4-C6 S4-C16 | the views and money (engine + server tests; the politics e2e's month 1) | one player never holds both offices |
 | S4-B-AC-8 | Given the ban at 2 in force · When a case is revealed and fined 150 · Then the culprit owes 300 and loses 20 reputation (a fine levied before the ban passed was ×1) | S4-C7 S4-C4 | engine state | — |
 | S4-B-AC-9 | Given only Classic AI seats and no API key · When a game is simulated · Then S4-UBER-AC-3 holds | S4-C10 S4-C11 S4-C12 | `pnpm sim` | Rookie and Trader personas never order |
-| S4-B-AC-10 | Given two phones and AI seats, Brix the Sheriff and Lena not · When the e2e step of S4-UBER-AC-2 runs · Then Lena's Secret desk shows her order, Brix's Sheriff desk his guard on the map, the TV the "Caught!" story with Lena's name, and after Brix's fine the month end shows it; the ban shows in the law picker and on the TV council panel | S4-C14 S4-C15 S4-C17 S4-C18 S4-C19 | the phone and TV DOM in apps/web/e2e/politics.ts | Brix's phone never shows Lena's order before production |
+| S4-B-AC-10 | Given two phones and AI seats, Brix the Sheriff and Lena not · When the e2e step of S4-UBER-AC-2 runs · Then Lena's order shows on Brix's plot card (where she ordered it), Brix's Sheriff desk and map his guard, the TV the "Caught!" story with Lena's name, and after Brix's fine the month end shows it; the ban shows in the law picker and on the TV council panel | S4-C14 S4-C15 S4-C17 S4-C18 S4-C19 | the phone and TV DOM in apps/web/e2e/politics.ts | Brix's phone never shows Lena's order before production |
 | S4-T-AC-1 (serves S4-B-AC-6) | S4-RULE-2's eight rows, each verdict and message | S4-C1 | engine test | — |
 | S4-T-AC-2 (serves S4-B-AC-1, S4-B-AC-2) | S4-RULE-3's six rows; both draws are made for every non-void order whatever the guard | S4-C2 | engine test, seeded | — |
 | S4-T-AC-3 (serves S4-B-AC-2) | the cut's part is the plot line's last (why 'event', event 'powerCut'); the plot's runMonths still counts | S4-C2 | the production line | — |
@@ -1309,8 +1318,9 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 | packages/ai/src/value.ts | WS1 | — | sabotageGain, captureCost, guardValue, investigateValue; the ban in lawWorth (S4-C11) |
 | packages/ai/src/actions.ts, play.ts, sim.ts | WS1 | — | four actions, applyAction, the sabotage row, the event budget excludes 'sabotage' (S4-C12) |
 | design/mocks/ws6-ux/** | WS6 | — | P6-P11 mocks for Heiko |
-| apps/web/src/phone/hub/politics/{Secret,Sheriff}.tsx (new), ElectionDay.tsx, words.ts, LawPicker.tsx | WS7 | — | S4-C14..C16, C18 |
-| apps/web/src/phone/hub/today.tsx | WS6 | yes | the Secret and Sheriff desks, agenda items, Guard and Target tools |
+| apps/web/src/phone/hub/politics/{Sabotage,Sheriff}.tsx (new), ElectionDay.tsx, words.ts, LawPicker.tsx | WS7 | — | S4-C14..C16, C18 |
+| apps/web/src/phone/hub/today.tsx | WS6 | yes | the Sheriff desk (Sheriff only, like the Governor's), its agenda item, the guard map tool; no new tab |
+| apps/web/src/phone/hub/tools.tsx, hub/desks.tsx | WS6 (to confirm in SEAMS) | yes | the plot card's "Sabotage…" door; the Market desk good line's "Spread a rumour…" door |
 | apps/web/src/table/TvElection.tsx, TvCouncil.tsx | WS7 | — | two offices; the ban's words |
 | packages/ui/src/events/**, apps/web/src/events/** | WS8 | — | kind 'sabotage' stories, "Caught!" |
 | apps/web/src/table/TvProduction.tsx, apps/web/src/phone/Production.tsx | WS6 | yes | the dark plot (HoloMap's 'sabotage' flag) |
