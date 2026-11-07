@@ -176,15 +176,21 @@ describe('deep3 fix 1: the Water production checks for the Food plots', () => {
       `Water in units: you hold ${keep - 2}. To keep your Food plot whole next month, end this auction holding ${keep}: upkeep drinks ${need}, ` +
         `${pct(GOOD_CONFIG.water.spoilage)} of the rest spoils, rounded down, and the next production checks you still hold ${need}: short by 2, or your Food plot makes ${SHORT} of its output next month.`,
     );
-    const grows = text.match(/If next month's MULEs add (\d+) crew or more \(([^)]*)\), production checks (\d+): hold (\d+)\./);
+    const grows = text.match(
+      /If next month's MULEs add (\d+) to (\d+) crew \(([^)]*)\), production checks (\d+): hold (\d+); every (\d+) crew past that add one more to the check\./,
+    );
     expect(grows, text).not.toBeNull();
-    const [, crew, rule, next, keepNext] = grows!;
-    expect([rule, Number(next)]).toEqual([CREW_RULE, need + 1]);
-    const mules = Math.ceil(Number(crew) / UPKEEP.crew.raw);
+    const [, low, high, rule, next, keepNext, every] = grows!;
+    expect([rule, Number(next), Number(high) - Number(low) + 1, Number(every)]).toEqual([CREW_RULE, need + 1, UPKEEP.crewPerWater, UPKEEP.crewPerWater]);
+    const mules = (crew: number) => Math.ceil(crew / UPKEEP.crew.raw);
     expect(waterCut(nextMonth(state, keep, 0))).toEqual([false]);
     expect(waterCut(nextMonth(state, keep - 1, 0))).toEqual([true]);
-    expect(waterCut(nextMonth(state, Number(keepNext), mules))).toEqual([false]);
-    expect(waterCut(nextMonth(state, Number(keepNext) - 1, mules))).toEqual([true]);
+    // The stated holding keeps the Food plot whole across the whole stated range, and one past it the check rises again.
+    for (const crew of [Number(low), Number(high)]) {
+      expect(waterCut(nextMonth(state, Number(keepNext), mules(crew)))).toEqual([false]);
+      expect(waterCut(nextMonth(state, Number(keepNext) - 1, mules(crew)))).toEqual([true]);
+    }
+    expect(waterCut(nextMonth(state, Number(keepNext), mules(Number(high) + 1)))).toEqual([true]);
   });
 
   it('deep3 fix 1: with no Food plot yet, the auction brief gives the holding that keeps one installed next month whole; upkeep then production agree', () => {
