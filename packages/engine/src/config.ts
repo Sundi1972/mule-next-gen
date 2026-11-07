@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { BudgetLine, Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 import type { Strategy } from './playbook.js';
 
 /**
@@ -976,6 +976,29 @@ export const POLITICS = {
     /** Months a failed proposal waits before it may be put again. */
     retryMonths: 2,
   },
+  /**
+   * The Governor's standing budget: whole-percent shares of the fund above COLONY.reserve (slice 5, S5-RULE-1). Every
+   * number is a placeholder until the sim tunes it and Heiko OKs it.
+   */
+  budget: {
+    /** Shares are whole multiples of this, in percent. */
+    step: 5,
+    /** The shares in force while the Governor has set none: exactly the colony's funding before the budget existed. */
+    default: { projects: 100, welfare: 0, security: 0 } satisfies Record<BudgetLine, number>,
+    /** Buildings take whatever their open projects still need, so only the share is bounded. */
+    projects: { maxShare: 100 },
+    /** Welfare: cash to the player in last place. Most percent of the spare fund, and most credits a month. */
+    welfare: { maxShare: 20, maxCredits: 200 },
+    /** Security (after the first release): the same two bounds. */
+    security: { maxShare: 30, maxCredits: 300 },
+  },
+  /** The overrule vote on the Governor's tax (slice 5, S5-RULE-7). Placeholders. */
+  overrule: {
+    /** Ms the result is shown before it takes effect: a presentation clock only. */
+    revealMs: 4_000,
+    /** Passed overrules in one term that call a snap election (after the first release). */
+    snapAfter: 2,
+  },
   /** The colony's book of laws, each with its settings. */
   laws: {
     /** Per cent of each unit a player sells to the export ship. */
@@ -1025,6 +1048,34 @@ export const POLITICS = {
       capPlotCost: 40,
       /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
       rookieYes: 0.5,
+    },
+    /** The AI Governor's budget split (slice 5, S5-RULE-11). Placeholders until the sim tunes them. */
+    budget: {
+      /** Where each persona's Welfare and Security shares start, in percent, before any fill. */
+      base: {
+        trader: { welfare: 5, security: 0 },
+        cautious: { welfare: 10, security: 0 },
+        aggressive: { welfare: 0, security: 0 },
+        saboteur: { welfare: 0, security: 0 },
+      } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+      /** What a persona makes of the worth a line adds when it weighs a step against Projects: 1 is neutral. */
+      tilt: {
+        trader: { welfare: 1, security: 1 },
+        cautious: { welfare: 1.5, security: 1.5 },
+        aggressive: { welfare: 0.5, security: 1 },
+        saboteur: { welfare: 0.5, security: 0.5 },
+      } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+    },
+    /** How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them. */
+    overrule: {
+      /** Credits a month a change must cost the seat before it calls an overrule. */
+      minGain: 20,
+      /** Chance a persona calls an overrule that cannot win, as a protest. */
+      longShot: { trader: 0.1, cautious: 0.05, aggressive: 0.3, saboteur: 0.2 } satisfies Record<AiPersonaId, number>,
+      /** A Rookie's chance of a yes: a coin from the overrule's own stream. */
+      rookieYes: 0.5,
+      /** Credits a month an unhappy colony makes a seat more willing to vote yes. */
+      unhappyTilt: 30,
     },
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
@@ -1101,6 +1152,10 @@ export const HAPPINESS = {
     gap: 2,
     gapUnit: 1_000,
     gapCap: 10,
+    /** Onto the target for each `welfareUnit` credits of Welfare paid this upkeep, up to `welfareCap` units (slice 5, S5-RULE-5). Placeholders. */
+    welfare: 1,
+    welfareUnit: 50,
+    welfareCap: 4,
   },
 };
 
