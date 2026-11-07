@@ -295,13 +295,17 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
     check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);
     if (p === left) continue;
-    const title = (await planning(p).getByTestId('now-title').innerText()).trim();
-    check(title === "You're ready", `B-AC-19: once Ready, ${p.name}'s Now title is "You're ready", short enough to fold, got "${title}"`);
-    // Folded it is its title alone; a tap opens it, and its detail names who the table waits for.
+    // Pressing Ready is a new step, so the Now card re-mounts folded: its title alone, then a tap opens it.
     const folded = planning(p).locator('button[data-testid=now][aria-expanded=false]');
-    if (await folded.count()) await folded.click();
+    await folded.waitFor({ timeout });
+    const title = (await folded.getByTestId('now-title').innerText()).trim();
+    check(title === "You're ready", `B-AC-19: once Ready, ${p.name}'s folded Now reads exactly "You're ready", no names in it, got "${title}"`);
+    await folded.click();
     const now = (await planning(p).getByTestId('now').innerText()).trim();
     check(now.includes(`Waiting for ${left.name}.`), `B-AC-19: once Ready, ${p.name}'s Now, opened, names ${left.name} as who the table waits for, got "${now}"`);
+    // Folded again, so the step's shots show the card as the table sees it.
+    await planning(p).getByTestId('now-fold').click();
+    await folded.waitFor({ timeout });
   }
   // The TV's side column at its fullest: the three news lines the server keeps, beside the waiting band.
   busyNews(room);
