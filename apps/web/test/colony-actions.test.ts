@@ -334,20 +334,35 @@ describe('C35: anyone donates through the chips (B-AC-35-2)', () => {
     expect(sent).toEqual([{ type: 'donate', id: 'park', credits: 100, goods: { alloy: 1 } }]);
   });
 
-  it('B-AC-35-2: "Other…" opens the steppers, each capped: credits at the rest, a good at the least of held and missing', () => {
-    mount(game(colonyOf([park()]), { money: 1000, held: { alloy: 1 } }));
-    tap('donate-park');
+  /** The observatory collecting: 100 of its credits in, none of its crystite yet, Lena 70 cr on its plaque. It is the
+   * one object that misses 2 of a good, so held and missing can each be the smaller (every other misses at most 1). */
+  const observatory = () => project('observatory', 'commissioned', { funded: { credits: 100, goods: {} }, plaque: [{ playerId: 's1', value: 70 }] });
+  const crystite = PRESTIGE.observatory.goods.crystite;
+
+  it('B-AC-35-2: "Other…" opens the steppers, each capped: credits at the rest, a good at what she holds when that is less than missing', () => {
+    expect(crystite, 'the case needs more crystite missing than Lena holds').toBe(2);
+    const left = PRESTIGE.observatory.credits - 100;
+    mount(game(colonyOf([observatory()]), { money: 1000, held: { crystite: 1 } }));
+    tap('donate-observatory');
     tap('chip-other');
     expect(has('donate-steppers')).toBe(true);
     for (let i = 0; i < 100 && !off('step-cr-up'); i++) tap('step-cr-up');
-    expect(text('step-cr-value')).toBe(`${rest} cr`);
-    tap('step-alloy-up');
-    expect(off('step-alloy-up'), `Lena holds 1 alloy of the ${alloy} missing`).toBe(true);
-    expect(text('step-alloy-value')).toBe('1');
-    // 70 + the rest + 1 × 120.
-    expect(text('donate-preview')).toContain(`70 → ${70 + rest + 120} cr`);
+    expect(text('step-cr-value')).toBe(`${left} cr`);
+    tap('step-crystite-up');
+    expect(off('step-crystite-up'), `Lena holds 1 crystite of the ${crystite} missing`).toBe(true);
+    expect(text('step-crystite-value')).toBe('1');
+    // 70 + the rest + 1 × 105 (the view's refPrice for crystite).
+    expect(text('donate-preview')).toContain(`70 → ${70 + left + 105} cr`);
     tap('donate-give');
-    expect(sent).toEqual([{ type: 'donate', id: 'park', credits: rest, goods: { alloy: 1 } }]);
+    expect(sent).toEqual([{ type: 'donate', id: 'observatory', credits: left, goods: { crystite: 1 } }]);
+  });
+
+  it('B-AC-35-2: a good\'s stepper caps at what is missing when she holds more', () => {
+    mount(game(colonyOf([observatory()]), { held: { crystite: 5 } }));
+    tap('donate-observatory');
+    tap('chip-other');
+    for (let i = 0; i < 10 && !off('step-crystite-up'); i++) tap('step-crystite-up');
+    expect(text('step-crystite-value'), `Lena holds 5 crystite; ${crystite} are missing`).toBe(`${crystite}`);
   });
 
   it('B-AC-35-2: Give is off with nothing picked', () => {
