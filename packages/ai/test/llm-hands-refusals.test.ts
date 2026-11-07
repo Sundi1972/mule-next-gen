@@ -92,10 +92,11 @@ describe('hands-refusals fix: a plot the floor never walks to is one no MULE can
   });
 });
 
-describe('hands-refusals fix: a sweep that spoils Energy whole', () => {
-  const saved = GOOD_CONFIG.energy.spoilage;
+describe('hands-refusals fix: a sweep that spoils Energy or Water whole', () => {
+  const saved = { energy: GOOD_CONFIG.energy.spoilage, water: GOOD_CONFIG.water.spoilage };
   afterEach(() => {
-    GOOD_CONFIG.energy.spoilage = saved;
+    GOOD_CONFIG.energy.spoilage = saved.energy;
+    GOOD_CONFIG.water.spoilage = saved.water;
   });
 
   it("hands-refusals fix: FM-energy-spoils-whole: with GOOD_CONFIG.energy.spoilage at 1 the auction brief comes back, and its Energy line says no holding covers next month's use", () => {
@@ -115,5 +116,25 @@ describe('hands-refusals fix: a sweep that spoils Energy whole', () => {
     };
     const text = phaseBrief(state, mind, PERSONAS.trader, draft, 'auction', []).text;
     expect(text.match(/Energy — [^\n]*/)?.[0]).toMatch(/100% of what you hold spoils at upkeep.*no holding covers it/);
+  });
+
+  it("hands-refusals fix: FM-water-spoils-whole: with GOOD_CONFIG.water.spoilage at 1 the auction brief comes back, and its Water line says it all spoils at upkeep, not that the depot is too small", () => {
+    const state = game(7);
+    // A Food plot, so next production checks Water.
+    const plot = state.tiles.findIndex((t) => t.terrain === 'plains');
+    Object.assign(state.tiles[plot]!, { owner: 'p0', outfit: 'food' });
+    GOOD_CONFIG.water.spoilage = 1;
+    const draft: Playbook = {
+      v: 1,
+      seat: 'p0',
+      month: 1,
+      phase: 'auction',
+      strategy: STRATEGY,
+      auction: { water: { role: 'buyer', hold: 3, walkAway: 70, start: 40, concedeCrPerS: 3, bluff: false, vsRival: 'hold' } },
+      by: 'engine',
+    };
+    const line = phaseBrief(state, mind, PERSONAS.trader, draft, 'auction', []).text.match(/Water in units: [^\n]*/)?.[0];
+    expect(line).toMatch(/100% of what is left after it spoils at upkeep, so no holding keeps your Food plot whole next month\.$/);
+    expect(line).not.toMatch(/depot/);
   });
 });
