@@ -242,7 +242,10 @@ export class DealHand {
   /** Row a: an election ahead for an office it does not run for, its vote to the candidate ownVote names. */
   private voteForCandidate(obs: GameState, office: Office): Draft | null {
     const politics = obs.politics!;
-    const ahead = politics.election?.stage === 'announce' || nextElectionMonth(obs) !== null;
+    // An election within VoteHand's declare window has had its run decided (VoteHand acts on the window's first tick, before
+    // this hand's pause ends), and the announce is offered only once the seat is Done; a vote card earlier could break on a later run.
+    const next = nextElectionMonth(obs);
+    const ahead = politics.election?.stage === 'announce' || (next !== null && next - obs.month <= POLITICS.ai.declareLeadMonths);
     const candidates = politics.candidates[office];
     // literal-ok: an office is contested only with two or more candidates, a definition
     if (!ahead || candidates.length < 2 || this.runsFor(obs, { kind: 'vote', office, candidate: this.mind.me })) return null;

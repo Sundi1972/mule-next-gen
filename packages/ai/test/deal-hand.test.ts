@@ -337,6 +337,45 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
     expect(cards, 'the table did offer vote cards in announce').toBeGreaterThan(0);
   });
 
+  it('S3-T-AC-8 AM-8 offer row a (I-1): a seat offers no vote card before its run is decided, so a seat that then runs holds none for that office', () => {
+    // Month 2, the election in month 4: two other players are declared, and the AI seats have not yet rolled their own run.
+    let cards = 0;
+    let ran = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const state = newGame(seed);
+      const free = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null);
+      for (const [id, n] of Object.entries({ ai0: 2, ai1: 3, ai2: 1, ai3: 2 })) for (let i = 0; i < n; i++) free.shift()!.owner = id;
+      state.month = 2;
+      state.politics!.election = null;
+      runFor(state, 'ai0', 'governor', { kind: 'hold' });
+      runFor(state, 'ai1', 'governor', { kind: 'hold' });
+      const ais = ['ai2', 'ai3'];
+      const personas = ['aggressive', 'trader'] as const;
+      const votes = ais.map((id, i) => new VoteHand(mindOf(id, personas[i]!, 'trader', seed + i), createSeeded(seed * 10 + i)));
+      const deals = ais.map((id, i) => new DealHand(mindOf(id, personas[i]!, 'trader', seed + i)));
+      worth.mockReturnValue(3);
+      const offered: { from: string; office: string }[] = [];
+      for (const month of [2, 3]) {
+        state.month = month;
+        // Two of the hands' longest pauses: VoteHand decides on the first tick, and every offer is due by then.
+        for (let t = 0; t < 2 * POLITICS.ai.actMs[1]; t += WALK.tickMs) {
+          ais.forEach((id, i) => {
+            votes[i]!.tick(state, WALK.tickMs, voteAct(state, id));
+            deals[i]!.tick(state, WALK.tickMs, engineAct(state, id));
+          });
+        }
+        for (const c of state.politics!.deals) if (c.terms.kind === 'vote' && 'office' in c.terms && !offered.some((o) => o.from === c.from && o.office === (c.terms as { office: string }).office)) offered.push({ from: c.from, office: (c.terms as { office: string }).office });
+      }
+      for (const id of ais) if (POLITICS.offices.some((o) => state.politics!.candidates[o].includes(id))) ran++;
+      for (const o of offered) {
+        cards++;
+        expect(state.politics!.candidates[o.office as 'governor' | 'sheriff'], `seed ${seed}: ${o.from} offered a ${o.office} vote and then ran`).not.toContain(o.from);
+      }
+    }
+    expect(ran, 'some seat did run, so the property is not vacuous').toBeGreaterThan(0);
+    expect(cards, 'the table did offer vote cards once runs were decided').toBeGreaterThan(0);
+  }, 30_000); // 60 seeds of two planning months: about 1-3 s locally, so vitest's 5 s default flakes on slow runners
+
   it('S3-T-AC-8 AM-8: a port\'s offered vote for an office its seat runs for is dropped', () => {
     const state = announceWith(['ai0', 'ai1']);
     const port: SeatPort = { answerFor: () => null, offersFor: () => [{ to: 'ai1', terms: { kind: 'vote', office: 'governor', candidate: 'ai1' } }, { to: 'ai2', terms: { kind: 'pact' }, months: 3 }] };
