@@ -21,15 +21,11 @@ import {
   type LawProposal,
   type Office,
   type PrestigeId,
-  type Project,
   type Rng,
   type TaxPromise,
 } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Mind } from '../value.js';
-
-/** A commissioned object still waiting for its plot: the colony can bid for its site (RULE-28). */
-const waitsForSite = (p: Project): boolean => p.stage === 'commissioned' && p.plot === null && PRESTIGE[p.id].needsPlot;
 
 function samePromise(a: TaxPromise | undefined, b: TaxPromise): boolean {
   return a?.kind === b.kind && (a.kind !== 'cap' || (b.kind === 'cap' && a.percent === b.percent));
@@ -264,14 +260,13 @@ export class VoteHand {
   /**
    * G-5 C25 (AM-10): the AI Governor pays the strike, mends what is damaged, the most prestige first, then commissions
    * an object whose goods are within reach (goodsInReach) and whose credits the fund holds
-   * POLITICS.ai.colony.commissionShare of (pace set C), the most prestige among those, with its site bid; and gives an
-   * object waiting for its site a bid. None in reach, it commissions nothing.
+   * POLITICS.ai.colony.commissionShare of (pace set C), the most prestige among those. It builds on the colony's own
+   * grounds once funded (C48). None in reach, it commissions nothing.
    */
   private colonyActs(obs: GameState, act: Act): void {
     const colony = obs.colony;
     if (!colony) return;
-    const { commissions, commissionShare, paysStrike, repairs, siteBid } = POLITICS.ai.colony;
-    const bid = siteBid[this.persona];
+    const { commissions, commissionShare, paysStrike, repairs } = POLITICS.ai.colony;
     const strike = colony.strike;
     let fund = obs.treasury.money;
     if (strike && strike.month === obs.month && !strike.paid && paysStrike[this.persona] && fund >= strike.cost && act({ type: 'payStrike' })) fund -= strike.cost;
@@ -279,15 +274,12 @@ export class VoteHand {
       const damaged = colony.projects.filter((p) => p.stage === 'damaged').sort((a, b) => PRESTIGE[b.id].prestige - PRESTIGE[a.id].prestige);
       for (const { id } of damaged) if (PRESTIGE[id].repairCost <= fund && act({ type: 'repair', id })) fund -= PRESTIGE[id].repairCost;
     }
-    if (bid !== null) {
-      for (const p of colony.projects) if (waitsForSite(p) && p.maxBid === null) act({ type: 'setSiteBid', id: p.id, maxBid: bid });
-    }
     if (!commissions[this.persona]) return;
     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
-      .filter((id) => (bid !== null || !PRESTIGE[id].needsPlot) && PRESTIGE[id].credits * commissionShare <= fund && goodsInReach(obs, id) && commissionRefusal(obs, id) === null)
+      .filter((id) => PRESTIGE[id].credits * commissionShare <= fund && goodsInReach(obs, id) && commissionRefusal(obs, id) === null)
       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
     const pick = choices[0];
-    if (pick && act({ type: 'commission', id: pick }) && PRESTIGE[pick].needsPlot) act({ type: 'setSiteBid', id: pick, maxBid: bid });
+    if (pick) act({ type: 'commission', id: pick });
   }
 
   private govern(obs: GameState, act: Act): void {

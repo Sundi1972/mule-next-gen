@@ -128,7 +128,7 @@ Cost: free.
 
 ### commission
 In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
-Does: The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).
+Does: The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid, on the colony's own grounds.
 Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Commission once the votes are over"); you are the Governor (else: "Only the Governor commissions for the colony"); the object is one the colony can build (else: "The colony can't build that"); the colony has none of it (else: "The colony already has a <name>"); the colony is not already building it (else: "The colony is already building the <name>").
 Cost: free.
 
@@ -148,12 +148,6 @@ Cost: free.
 In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
 Does: The Governor pays from the colony fund to mend a damaged prestige object, so it stands again and counts its prestige.
 Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Repair once the votes are over"); you are the Governor (else: "Only the Governor repairs for the colony"); the object is damaged (else: "The <name> isn't damaged"); the fund covers the repair (else: "The fund has <fund> cr; the repair costs <cost> cr").
-Cost: free.
-
-### setSiteBid
-In: planning. Args: id (park | hospital | observatory | stadium | spaceport), maxBid (number).
-Does: The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.
-Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Set the bid once the votes are over"); you are the Governor (else: "Only the Governor sets the colony's bid"); a commissioned object is waiting for a site (else: "Nothing is waiting for a site"); the object needs a plot (else: "The <name> needs no plot"); it has no site yet (else: "The <name> already has its site"); the bid is whole credits, or null (else: "Bid a whole number of credits").
 Cost: free.
 
 ### propose

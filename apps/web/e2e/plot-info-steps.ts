@@ -119,7 +119,7 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
     const others = state.players.filter((p) => p.id !== seat);
     const index = (p: Plot) => p.y * state.width + p.x;
     // Free for the drone, and no seat's geology yet, so any ground a view holds for them afterwards came from this Scan.
-    const free = mapTiles(viewOf(seat)).filter((t) => t.owner === null && !t.object && t.terrain !== 'store' && !state.players.some((p) => p.analysed.includes(index(t))));
+    const free = mapTiles(viewOf(seat)).filter((t) => t.owner === null && t.terrain !== 'store' && !state.players.some((p) => p.analysed.includes(index(t))));
     check(free.length >= DEVELOPMENT.dronePlots + 1, `${B_AC_1}: ${DEVELOPMENT.dronePlots + 1} free plots nobody has analysed, got ${free.length}`);
     const picks: Plot[] = free.slice(0, DEVELOPMENT.dronePlots).map((t) => ({ x: t.x, y: t.y }));
     const moneyBefore = me.money;
@@ -218,7 +218,7 @@ function someOfMyPlotsAnalysed(room: Room, seat: string): void {
   const index = (t: Plot) => t.y * state.width + t.x;
   const view = room.viewFor(seat).game;
   check(view, `${B_AC_2}: a view for ${seat}`);
-  const free = mapTiles(view).filter((t) => t.owner === null && !t.object && t.terrain !== 'store');
+  const free = mapTiles(view).filter((t) => t.owner === null && t.terrain !== 'store');
   const give = (t: Plot) => Object.assign(state.tiles[index(t)]!, { owner: seat, outfit: null });
   const hasGem = (t: Plot) => gemsIn(dotsOf(state.tiles[index(t)]!.ground)).length > 0;
   const owned = () => state.tiles.filter((t) => t.owner === seat);
@@ -337,7 +337,7 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
   check(view, `${B_AC_3}: a view for ${seat}`);
   // A free plot no seat has analysed, not a lake (Analyse reaches those from the shore), whose best good beats Crystite 1.
   const plot = mapTiles(view).find((t) => {
-    if (t.owner !== null || t.object || t.terrain === 'store' || t.terrain === 'lake' || state.players.some((p) => p.analysed.includes(index(t)))) return false;
+    if (t.owner !== null || t.terrain === 'store' || t.terrain === 'lake' || state.players.some((p) => p.analysed.includes(index(t)))) return false;
     const dots = dotsOf({ ...state.tiles[index(t)]!.ground, crystite: 1 });
     return bestOf(dots) !== 'crystite';
   });
