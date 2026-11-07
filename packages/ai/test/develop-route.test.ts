@@ -774,7 +774,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       return { state, lake, spare };
     }
 
-    it("T-AC-7 row 3 (AM-25): a MULE for a plot the floor's walk vetoes is replaced by its own pick, 'stale: <the veto>', and none is lost", () => {
+    it("T-AC-7 row 3 (AM-25): a MULE for a lake plot no shore reaches is replaced by its own pick, 'lake: no shore reaches plot <n>', and none is lost", () => {
       const { state, lake, spare } = lakeWithNoStand();
       const { hand } = seatAndHand();
       const price = mulePriceFor(state, ME);
@@ -791,7 +791,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const log = JSON.stringify(hand.done);
       const steps = hand.routeLog(state).steps;
       expect(steps.slice(0, 3).map((s) => s.outcome), log).toEqual(['replaced', 'replaced', 'replaced']);
-      expect(steps.slice(0, 3).every((s) => /^stale: the walk takes/.test(s.note ?? '')), log).toBe(true);
+      expect(steps.slice(0, 3).every((s) => s.note === `lake: no shore reaches plot ${indexOf(state, lake)}`), log).toBe(true);
       // The promise: no MULE paid for and lost. Every MULE bought stands on a plot, and the money went on those alone.
       const ok = (type: string) => hand.done.filter((e) => e.action.type === type && e.ok).length;
       expect(ok('buyMule'), log).toBe(ok('install'));

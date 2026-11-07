@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, tileAt, tileIndex, type GameState } from '@mule/engine';
+import { advancePhase, AI_PLANS, buildFloor, createGame, tileAt, tileIndex, type GameState } from '@mule/engine';
+import { floorDevWalk } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
-import { unreachablePlot } from '../src/hands/develop.js';
+import { routeVeto, unreachablePlot } from '../src/hands/develop.js';
+import { AiSeat } from '../src/seat.js';
 
 const ME = 'ai0';
 
@@ -52,5 +54,67 @@ describe('unreachablePlot: a lake plot no shore reaches can never get a MULE', (
     const state = development(4);
     expect(unreachablePlot(state, tileIndex(state.width, 10, 0))).toBe(true);
     expect(unreachablePlot(state, tileIndex(state.width, 10, 1))).toBe(false);
+  });
+});
+
+/** ai0's floor walk from where it stands at the start of development, with `left` seconds on the clock. */
+function walkOf(state: GameState, left: number) {
+  const cfg = simFloorConfig();
+  const c = buildFloor(state, cfg).colonists.find((x) => x.id === ME)!;
+  return floorDevWalk(state, cfg, c, left, 0);
+}
+
+const mindOf = () => new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 }).mind;
+
+/** ai0's nearest free plains plot to the store, given to it. */
+function ownPlains(state: GameState): number {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  const far = (i: number) => Math.abs(state.tiles[i]!.x - store.x) + Math.abs(state.tiles[i]!.y - store.y);
+  const free = state.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : [])).sort((a, b) => far(a) - far(b));
+  state.tiles[free[0]!]!.owner = ME;
+  return free[0]!;
+}
+
+describe("routeVeto: why the hands refuse a route MULE before it is bought, or null", () => {
+  const LONG = 1_000;
+
+  it('an own idle plot in reach, with the cash, is played', () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'food' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
+  });
+
+  it("someone else's plot is stale", () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    state.tiles[plot]!.owner = 'ai1';
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'food' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: plot ${plot}`);
+  });
+
+  it("on the floor, a lake plot no shore reaches says so, not the walk's Infinity", () => {
+    const state = development(4);
+    const plot = own(state, 10, 0);
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBe(`lake: no shore reaches plot ${plot}`);
+  });
+
+  it('where the game taps, the same lake plot is played: a tap installs on any lake', () => {
+    const state = development(4);
+    const plot = own(state, 10, 0);
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'water' })).toBeNull();
+  });
+
+  it("a walk longer than the clock is the walk's veto", () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'food' }, walkOf(state, 1), simFloorConfig())).toMatch(/^stale: the walk takes \d+ s, 1 s left$/);
+  });
+
+  it('a MULE that would take the cash under an adopted cash floor is stale', () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    const money = state.players.find((p) => p.id === ME)!.money;
+    const cashFloor = Math.min(money, AI_PLANS.bounds.cashFloorMax);
+    const mind = { ...mindOf(), adopted: { month: state.month, cashFloor, pressShare: null, monopolyTarget: null } };
+    expect(routeVeto(state, mind, { plot, outfit: 'food' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: under the cash floor of ${cashFloor} cr`);
   });
 });
