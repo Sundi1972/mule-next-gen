@@ -33,6 +33,9 @@ function edit(state: GameState): Politics {
   return state.politics;
 }
 
+/** edit() for diplomacy.ts, the only other writer of Politics (the deal cards). */
+export { edit as editPolitics };
+
 function currentElection(state: GameState): Shared<Election> | null {
   return state.politics?.election ?? null;
 }
