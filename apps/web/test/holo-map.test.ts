@@ -379,3 +379,16 @@ describe('SA-1372 (WS6 ruling, 7 Nov): the selection ring never covers a neighbo
     expect(selectionRing(20, 'tv').inside).toBe(false);
   });
 });
+
+describe('SA-1372, #640 review: no mark from a plot beside reaches a neighbour’s dots', () => {
+  it('beside a right-column special showing its dots, whose chip steps left, the selection’s ring and glow are drawn inside at any phone size', () => {
+    const tiles: MapTile[] = [];
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) tiles.push({ x, y, terrain: 'plains', owner: null, ...(x === 2 && y === 1 ? { ground: { food: 3 }, special: { kind: 'oasis' } } : {}) });
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected: { x: 1, y: 1 } }));
+    expect(tag(map, /data-testid="selected-ring"/)).toMatch(/\binset-0\b/);
+    expect(tag(map, /data-testid="selected-glow"/)).toMatch(/\binset-0\b/);
+    // Without the stepped chip beside it, the 30 px plot's ring is drawn outside as ever.
+    const plain = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: tiles.map(({ special: _, ...t }) => t), selected: { x: 1, y: 1 } }));
+    expect(tag(plain, /data-testid="selected-ring"/)).toMatch(/-inset-\[6%\]/);
+  });
+});

@@ -171,4 +171,13 @@ describe('B-AC-9 (WS6 ruling and PM ruling, 7 Nov): the map rendered at a measur
     // A free plot with nothing to share draws no strip.
     expect(r.free).toBe(false);
   });
+
+  it('SA-1372 (#640 review): on a 12.8 px plot a special without dots keeps its badge inside, 2 px in, off the next plot’s chip at its foot', async () => {
+    const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, special: { kind: 'oasis' } } : t.x === 2 && t.y === 1 ? { ...t, ground: { food: 2 } } : t));
+    const badge = await at(12.8, null, (map) => byId(map, 'special-glyph-1-1')?.findAll('span')[0]?.style, plots);
+    expect(badge?.right).toBe('2px');
+    expect(badge?.bottom).toBe('2px');
+    const big = await at(25, null, (map) => byId(map, 'special-glyph-1-1')?.findAll('span')[0]?.style, plots);
+    expect(parseFloat(big?.right ?? '')).toBeLessThan(0);
+  });
 });

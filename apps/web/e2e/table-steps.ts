@@ -396,8 +396,13 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         // (c): a plot inside the map, so its ring reaches out on every side, under a plot that can show its dots. For (d)
         // and (e) that plot's left, right and upper neighbours show their dots too; a MULE on any of them is lifted for the step.
         const around = (t: { x: number; y: number }) => [at(t.x, t.y - 1), at(t.x - 1, t.y - 1), at(t.x + 1, t.y - 1), at(t.x, t.y - 2)];
-        const selected = state.tiles.find((t) => t.x > 0 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && open(t) && around(t).every((n) => !!n && open(n)));
-        check(selected, `${id}: a plot inside the map whose upper neighbour, and that one's left, right and upper neighbours, can show their dots`);
+        // (f) also needs a special plot that shows no dots left of one that does: two left of the plot above the selection.
+        const hiddenOf = (t: { x: number; y: number }) => at(t.x - 2, t.y - 1);
+        const selected = state.tiles.find((t) => {
+          const hidden = hiddenOf(t);
+          return t.x > 1 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && open(t) && around(t).every((n) => !!n && open(n)) && !!hidden && open(hidden) && !specials.includes(hidden) && hidden !== owned;
+        });
+        check(selected, `${id}: a plot inside the map whose upper neighbour, and that one's left, right and upper neighbours, can show their dots, with a plot two left of the upper one to stage a special without dots`);
         const { x, y } = selected;
         const neighbours = around(selected) as GameState['tiles'][number][];
         for (const n of neighbours) {
@@ -406,11 +411,17 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
           n.outfit = null;
           analyse(n);
         }
-        // (h): the plot above the selection, free for the step, so the drone can flag it between two plots showing their dots.
+        // (f): a special plot nobody here has analysed, so it shows its badge and no dots, left of a plot showing its dots.
+        const hidden = hiddenOf(selected)!;
+        const hiddenWas = hidden.special;
+        undo.push(() => {
+          if (hiddenWas) hidden.special = hiddenWas;
+          else delete hidden.special;
+        });
+        hidden.special = hidden.special ?? { kind: 'oasis' };
+        me.analysed.splice(0, me.analysed.length, ...me.analysed.filter((i) => i !== index(hidden)));
+        // (h): the plot above the selection, which the drone flags between two plots showing their dots.
         const flagged = neighbours[0]!;
-        const owner = flagged.owner;
-        undo.push(() => Object.assign(flagged, { owner }));
-        flagged.owner = null;
         room.broadcast();
 
         const planning = ctx.phone.locator('[data-phase=planning]');
@@ -455,7 +466,16 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
           small = await selectionUnderDots(map, x, y, where);
           fit = await dotsFitTheirPlots(map, [...specials, owned, ...neighbours].map((t) => `${t.x}-${t.y}`), where);
           strip = await marksClearOfTheChips(map, where);
-          flag = await aFlagTakesTheChipsPlace(planning, flagged, where);
+          // Free only for (h), so the drone may pick it: (b)'s owned plot may be this one.
+          const owner = flagged.owner;
+          flagged.owner = null;
+          room.broadcast();
+          try {
+            flag = await aFlagTakesTheChipsPlace(planning, flagged, where);
+          } finally {
+            flagged.owner = owner;
+            room.broadcast();
+          }
         } finally {
           await ctx.phone.setViewportSize(PHONE.viewport);
         }
@@ -547,11 +567,12 @@ async function dotsFitTheirPlots(map: Locator, analysed: string[], id: string): 
 
 /**
  * (f) and (g) of theMarksStayClearOfTheDots, SA-1372 (WS6 ruling, 7 Nov), at the phone's size now: no mark on the map
- * (a tab, a gem, a badge, a flag, a MULE's disc, the store's sign, a building's chip) meets any dots chip, only the owner's
+ * (a tab, a gem, a badge, a flag, a MULE's disc, a building's chip) meets any dots chip, only the owner's
  * border; and every tab, gem and badge in a small plot's strip is drawn at 3 px or more. Returns the counts and the smallest.
  */
 async function marksClearOfTheChips(map: Locator, id: string): Promise<{ marks: number; strip: number; smallest: number }> {
-  const MARKS = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span', '[data-testid^=map-flag-]', '[data-testid^=installed-]', '[data-testid=map-store]', '[data-testid^=plot-object-] [data-num]'];
+  // The store's sign is not among the ruling's marks: its size on the small phone is with the PM (it reaches into its neighbours).
+  const MARKS = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span', '[data-testid^=map-flag-]', '[data-testid^=installed-]', '[data-testid^=plot-object-] [data-num]'];
   const STRIP = ['[data-testid^=owner-]', '[data-testid^=gem-]', '[data-testid^=special-glyph-] > span'].map((m) => `[data-testid^=map-strip-] ${m}`);
   const [chips = [], marks = [], strip = []] = await rectsOf(map, ['[data-testid^=map-dots-]', MARKS.join(', '), STRIP.join(', ')]);
   check(chips.length > 0 && strip.length > 0, `${id}: the map draws dots chips (${chips.length}) and a small strip's marks (${strip.length})`);
