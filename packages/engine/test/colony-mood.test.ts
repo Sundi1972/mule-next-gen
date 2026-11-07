@@ -94,9 +94,11 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
       state.colony = { ...state.colony!, welfare: { month, to: 'kai', paid: credits } };
       return moodTarget(moodInputs(state, [])) - quiet;
     };
-    expect(paid(100)).toBe(2);
-    expect(paid(200)).toBe(4);
-    expect(paid(1_000), 'the cap: no more than welfareCap units').toBe(4);
+    const worth = (credits: number): number => W.welfare * Math.min(credits / W.welfareUnit, W.welfareCap);
+    expect(paid(100)).toBe(worth(100));
+    expect(paid(2 * W.welfareUnit)).toBe(worth(2 * W.welfareUnit));
+    expect(paid(1_000), 'the cap: no more than welfareCap units').toBe(W.welfare * W.welfareCap);
+    expect(paid(1_000)).toBeGreaterThan(paid(W.welfareUnit));
     expect(paid(100, state.month - 1), 'last month\'s payment counts 0').toBe(0);
   });
 
