@@ -8,7 +8,7 @@ import type { MuleIntent, MuleView } from '@mule/protocol';
 import type { Game, SeatInfo } from '@tabletop/core';
 import { SeatCodeBook, type SeatLookup } from '../src/claude-seat/lookup.js';
 import { createMcpEndpoint } from '../src/claude-seat/mcp.js';
-import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
+import { claudeSeatAt } from '../src/claude-seat/seats.js';
 import { MuleGame, type PlaybookNote } from '../src/mule-game.js';
 import { createMuleServer } from '../src/server.js';
 import type { SdkModuleFake } from './brain-fakes.js';
@@ -18,8 +18,8 @@ import { fakeContext } from './fake-context.js';
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
 vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdkModule));
 
-/** The host, two Claude seats and a built-in one, as the Room will hand them to the game once seats carry a kind (C1). */
-const TABLE: (SeatInfo & { kind?: SeatKind })[] = [
+/** The host, two Claude seats and a built-in one, as the Room hands them to the game at Start (C1). */
+const TABLE: SeatInfo[] = [
   { id: 's1', name: 'Heiko', isAi: false, color: 0 },
   { id: 's2', name: 'Claudia', isAi: true, color: 1, kind: 'claude' },
   { id: 's3', name: 'Claude B', isAi: true, color: 2, kind: 'claude' },
@@ -159,7 +159,7 @@ describe('/mcp, stateless, the seat code on every call', () => {
     }
   });
 
-  it('T-AC-1: the game server routes POST /mcp to the endpoint, which knows no code before the Room holds codes', async () => {
+  it('T-AC-1: the game server routes POST /mcp to the endpoint; a code no room holds is no_such_seat', async () => {
     const mule = createMuleServer();
     servers.push(mule.server);
     await new Promise<void>((done) => mule.server.listen(0, '127.0.0.1', done));
@@ -423,7 +423,7 @@ describe('a keyless game', () => {
 
 describe('a late Claude seat', () => {
   /** A one-month game of `table` on its own clock, recording every playbook that takes effect. */
-  function gameOf(table: (SeatInfo & { kind?: SeatKind })[]) {
+  function gameOf(table: SeatInfo[]) {
     const fake = fakeContext({ table });
     const notes: PlaybookNote[] = [];
     const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, recordPlaybook: (note) => notes.push(note) });
