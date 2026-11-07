@@ -73,8 +73,9 @@ function table(outfits: readonly (Outfit | null)[] = ['food', 'smithore']): { st
   return { state, plots };
 }
 
-/** What upkeep leaves of `held` Water, as runUpkeep plays it: the drink, then spoilage rounded down. */
-const afterUpkeep = (state: GameState, held: number) => Math.floor(Math.max(0, held - needsOf(state, 'p0').water) * (1 - GOOD_CONFIG.water.spoilage));
+/** What upkeep leaves of `held` Water, as runUpkeep plays it: the drink, then spoilage rounded down, then the depot cap. */
+const afterUpkeep = (state: GameState, held: number) =>
+  Math.min(UPKEEP.depotCapacity, Math.floor(Math.max(0, held - needsOf(state, 'p0').water) * (1 - GOOD_CONFIG.water.spoilage)));
 
 describe('deep3 fix 1: the Water production checks for the Food plots', () => {
   it('deep3 fix 1: the land brief, asked before the next production, says the Water held against what that production checks; short, the Food plots make the short share and no Water can be bought before it', () => {
@@ -117,6 +118,22 @@ describe('deep3 fix 1: the Water production checks for the Food plots', () => {
     // The number told is the one upkeep's own arithmetic keeps whole, and one less is not.
     expect(afterUpkeep(state, keep)).toBeGreaterThanOrEqual(need);
     expect(afterUpkeep(state, keep - 1)).toBeLessThan(need);
+  });
+
+  it("deep3 fix 1: when the need is above what the depot keeps after upkeep, the auction brief names no holding: it says none keeps the Food plots whole", () => {
+    // Enough MULEs that the crew's Water passes the depot's cap.
+    const mules = UPKEEP.crewPerWater * UPKEEP.depotCapacity;
+    const { state, plots } = table(['food', ...Array<Outfit>(mules).fill('smithore')]);
+    expect(plots).toHaveLength(mules + 1);
+    const need = needsOf(state, 'p0').water;
+    expect(need).toBeGreaterThan(UPKEEP.depotCapacity);
+    p0(state).stock.water = 0;
+    const text = auction(state);
+    expect(text).toContain(
+      `Water in units: you hold 0; your household and crew drink ${need} at upkeep, and the depot keeps at most ${UPKEEP.depotCapacity} Water after it, ` +
+        `less than the ${need} the next production checks, so no holding keeps your Food plot whole next month.`,
+    );
+    expect(text).not.toContain('end this auction holding');
   });
 
   it('deep3 fix 1: a seat with no Food plot hears its household drink, and that going short of Water cuts nothing; no plot-cut words', () => {
