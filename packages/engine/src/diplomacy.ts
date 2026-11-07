@@ -20,8 +20,8 @@ export function dealsOf(state: GameState, playerId: string): readonly DealCard[]
   return (state.politics?.deals ?? []).filter((d) => d.from === playerId || d.to === playerId).reverse();
 }
 
-const BASE_36 = 36;
-const TAG_LENGTH = 6;
+const BASE_36 = 36; // literal-ok: the radix of an id tag, a definition
+const TAG_LENGTH = 6; // literal-ok: an id tag is six characters, a format not a balance number
 
 /** 'deal-' plus six base-36 characters, drawn from a stream seeded by the game and the card's number only; a clash redraws. */
 function newId(state: GameState, taken: readonly DealCard[]): string {
