@@ -9,8 +9,15 @@
  *
  * STUBS until each slice's design: every value is 0 and trust is a coin's even chance. lawWorth is real today.
  */
-import { lawImpact, type GameState, type LawProposal } from '@mule/engine';
-import type { BudgetLine, DealCard, SabotageOrder } from './politics-types.js';
+import {
+  lawImpact,
+  type BudgetLine,
+  type DealCard,
+  type GameState,
+  type LawProposal,
+  type OverruleTarget,
+  type SabotageOrder,
+} from '@mule/engine';
 
 // Slice 3: deal cards.
 
@@ -41,7 +48,10 @@ export function sabotageGain(_obs: GameState, _me: string, _order: SabotageOrder
   return 0;
 }
 
-/** What being caught at `order` costs `me`: the fine, the reputation, and the pacts a capture breaks. */
+/**
+ * What being caught at `order` costs `me`: the fine; the caught reputation hit, −10 times the sabotage ban's
+ * multiplier; and, when a pact with the victim holds, the pact's breach, −30 reputation in all under a pact.
+ */
 export function captureCost(_obs: GameState, _me: string, _order: SabotageOrder): number {
   return 0;
 }
@@ -51,8 +61,8 @@ export function guardValue(_obs: GameState, _me: string, _plot: number): number 
   return 0;
 }
 
-/** What investigating `suspect` is worth to `me` as Sheriff. */
-export function investigateValue(_obs: GameState, _me: string, _suspect: string): number {
+/** What investigating `suspect`, a public order whose culprit is hidden, is worth to `me` as Sheriff. */
+export function investigateValue(_obs: GameState, _me: string, _suspect: SabotageOrder): number {
   return 0;
 }
 
@@ -72,12 +82,18 @@ export function lawWorth(obs: GameState, me: string, proposal: LawProposal): num
 
 // Slice 5: the budget.
 
-/** What `amount` per cent of the fund on `line` this month is worth to `me`: its share of the benefit less its share of the cost. */
+/**
+ * What `amount` credits on `line` this month are worth to `me`: its share of the benefit less its share of the cost.
+ * A `budget` of null is the default, Projects 100.
+ */
 export function lineWorth(_obs: GameState, _me: string, _line: BudgetLine, _amount: number): number {
   return 0;
 }
 
-/** What overruling this month's budget back to the one planning opened with (Politics.budgetAtStart) is worth to `me`. */
-export function overruleWorth(_obs: GameState, _me: string): number {
+/**
+ * What passing an overrule of the target (by default the called overrule's, else the tax) is worth to `me`: undoing this
+ * month's tax or budget change, or no confidence in the Governor. Reads only `obs`: a hand also calls it for other seats.
+ */
+export function overruleWorth(obs: GameState, _me: string, _target: OverruleTarget = obs.politics?.overrule?.target ?? 'tax'): number {
   return 0;
 }

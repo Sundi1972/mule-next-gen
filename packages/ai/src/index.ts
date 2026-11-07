@@ -12,7 +12,6 @@ export * from './summary.js';
 export * from './utility.js';
 export * from './value.js';
 export * from './politics-value.js';
-export type * from './politics-types.js';
 export * from './hands/auction.js';
 export * from './hands/develop.js';
 export * from './hands/lot.js';
