@@ -1,4 +1,4 @@
-/** The TV opener's camera: the plate, or without one the built area, filling the canvas as look.html's colony render does (AM-7 iv). */
+/** The grounds' camera: the occupied extent on its plate, or without one the built area, filling the canvas as look.html's colony render does (AM-7 iv). */
 import { centreOf, MASSING, type GridPlace } from './layout';
 import type { GroundsManifest, PictureKind } from './pick';
 import { iso, W } from './projection';
@@ -22,6 +22,8 @@ export interface Box {
 
 /** Room left round the built area, as a share of its size. */
 const MARGIN = 0.05;
+/** Ground left round the occupied extent: a quarter place each way, on screen. */
+const ROOM = { x: W / 4, y: W / 8 };
 /** How much closer the leaned-in view is: the scaffold's month-end move (look/Living.tsx, scale 1.55). */
 const LEAN_ZOOM = 1.55;
 /** Leaning in centres this high over the places' ground, in place units, so the buildings rather than their feet sit mid-screen. */
@@ -71,11 +73,41 @@ export function cropTo({ x, y, w, h }: Box, aspect: number): Box {
 }
 
 /**
- * The viewBox for a framing: the plate's frame cropped to the canvas (its vignette has faded out by the frame's
- * edges), or without a plate the built area; eased towards the places leaned on as `lean` goes to 1.
+ * The blocks' ground and each one's top, with ROOM round them. Footprints rather than picture frames: a flush picture's
+ * frame reaches far past its building for the shadow, and would loosen the view.
  */
-export function framedBox({ aspect, leanOn = [], lean = 0 }: Framing, rings: number, tops: number[], plate: Box | null = null): Box {
-  const area = plate ? cropTo(plate, aspect) : builtArea(rings, tops, aspect);
+function occupied(blocks: GridPlace[], tops: number[]): Box {
+  const corners = blocks.flatMap((block) => {
+    const { col, row } = centreOf(block);
+    const [dc, dr] = [block.w / 2, block.h / 2];
+    return [iso(col - dc, row - dr), iso(col + dc, row - dr), iso(col + dc, row + dr), iso(col - dc, row + dr)];
+  });
+  const xs = corners.map(([x]) => x);
+  const top = Math.min(...tops, ...corners.map(([, y]) => y)) - ROOM.y;
+  const left = Math.min(...xs) - ROOM.x;
+  return { x: left, y: top, w: Math.max(...xs) + ROOM.x - left, h: Math.max(...corners.map(([, y]) => y)) + ROOM.y - top };
+}
+
+/** `box` moved inside `plate`, shrunk round its centre first only if it is larger. */
+function within(box: Box, plate: Box): Box {
+  const k = Math.min(1, plate.w / box.w, plate.h / box.h);
+  const [w, h] = [box.w * k, box.h * k];
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  return { x: clamp(box.x + (box.w - w) / 2, plate.x, plate.x + plate.w - w), y: clamp(box.y + (box.h - h) / 2, plate.y, plate.y + plate.h - h), w, h };
+}
+
+/** The view before any lean-in: the occupied extent at the canvas's aspect inside the plate, or without one the built area. */
+export function viewOf(aspect: number, rings: number, blocks: GridPlace[], tops: number[], plate: Box | null): Box {
+  return plate ? within(toAspect(occupied(blocks, tops), aspect), plate) : builtArea(rings, tops, aspect);
+}
+
+/** Whether `view` stops short of the plate's edges, where the plate's own vignette fades it out. */
+export function shortOfPlate(view: Box, plate: Box | null): boolean {
+  return !!plate && view.w < cropTo(plate, view.w / view.h).w * (1 - 1e-9);
+}
+
+/** `area` eased towards the places leaned on as `lean` goes to 1. */
+export function leaning(area: Box, { leanOn = [], lean = 0 }: Framing): Box {
   if (leanOn.length === 0 || lean <= 0) return area;
   const close = leanedIn(area, leanOn);
   const k = Math.min(1, lean);
