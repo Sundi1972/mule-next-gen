@@ -7,6 +7,7 @@ import {
   POLITICS,
   PRESTIGE,
   runColony,
+  storeQuotes,
   stableJson,
   welfareRecipient,
   type BudgetLine,
@@ -127,15 +128,37 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
     runColony(capped, []);
     expect(capped.colony!.ledger.out.welfare).toBe(200);
 
-    // Credits and goods count together against the Projects limit: 65% of 540 is 351, the Hospital's credits are 340,
-    // and its Electronics cost more than the 11 cr left of the limit though the fund could pay them.
-    const tight = governed(COLONY.reserve + 540);
-    commission(tight, 'lena', 'hospital');
-    tight.store.stock.electronics = 5;
-    withBudget(tight, shares(65, 0));
+    // Credits and goods count together against the Projects limit. The fund holds reserve + 2,000; the store sells
+    // Electronics at a price the fund could pay from its spare but the limit leaves no room for.
+    const priced = (share: number): GameState => {
+      const state = governed(COLONY.reserve + 2_000);
+      commission(state, 'lena', 'hospital');
+      state.store.stock.electronics = 5;
+      withBudget(state, shares(share, 0));
+      return state;
+    };
+    const tight = priced(70);
+    const price = storeQuotes(tight, 'electronics').sell!;
+    const hospital = PRESTIGE.hospital;
+    expect(price, 'the fund could buy it').toBeLessThan(2_000 - hospital.credits);
+    expect(price, 'the 70% limit (1,400) leaves less than that after the credits').toBeGreaterThan(Math.floor(0.7 * 2_000) - hospital.credits);
     runColony(tight, []);
-    expect(project(tight, 'hospital').funded).toEqual({ credits: 340, goods: {} });
-    expect(tight.colony!.ledger.out.project).toBe(340);
+    expect(project(tight, 'hospital').funded).toEqual({ credits: hospital.credits, goods: {} });
+    expect(tight.colony!.ledger.out.project).toBe(hospital.credits);
+
+    const roomy = priced(80);
+    runColony(roomy, []);
+    expect(project(roomy, 'hospital').funded.goods).toEqual({ electronics: 1 });
+    expect(roomy.colony!.ledger.out.project, 'the goods count in the Projects line').toBe(hospital.credits + price);
+
+    // Flooring: 545 spare is not a multiple of 20. Every line pays its floor, so the fund keeps at least the reserve.
+    const odd = commissioned(COLONY.reserve + 545, shares(80, 10));
+    runColony(odd, []);
+    expect(odd.colony!.ledger.out).toEqual({ welfare: 54, project: 436 });
+    expect(odd.treasury.money, '545 - 54 - 436 = 55 stays').toBe(COLONY.reserve + 55);
+    const thin = commissioned(COLONY.reserve + 545, shares(85, 5));
+    runColony(thin, []);
+    expect(thin.colony!.ledger.out).toEqual({ welfare: 27, project: 463 });
 
     const poor = commissioned(90, shares(80, 10));
     runColony(poor, []);

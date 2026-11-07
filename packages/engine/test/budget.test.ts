@@ -42,6 +42,7 @@ describe('S5-C1: the Governor sets a standing budget', () => {
         says: 'Set the budget once the votes are over',
       },
       { row: 3, make: governed, by: 'kai', shares: fine, says: 'Only the Governor sets the budget' },
+      { row: 3, make: governed, by: 'kai', shares: shares(80, B.welfare.maxShare + B.step), says: 'Only the Governor sets the budget' },
       // RC offers no Security whatever POLITICS.offices holds (AM-3), so a Security share is row 5.
       { row: 5, make: governed, by: 'lena', shares: shares(90, 0, 10), says: 'The colony has no security line yet' },
       { row: 6, make: governed, by: 'lena', shares: shares(80, B.welfare.maxShare + B.step), says: `Welfare is 0% to ${B.welfare.maxShare}%, in steps of ${B.step}` },
@@ -62,6 +63,18 @@ describe('S5-C1: the Governor sets a standing budget', () => {
     expect(refused(() => setBudget(state, 'lena', fine))).toBe('accepted');
     expect(state.politics!.budget).toEqual({ month: state.month, setBy: 'lena', shares: fine });
     expect(budgetShares(state)).toEqual(fine);
+
+    // Sums to exactly 100: accepted (a >= for > would refuse it).
+    const full = governed();
+    const exact = shares(100 - B.welfare.maxShare, B.welfare.maxShare);
+    expect(refused(() => setBudget(full, 'lena', exact))).toBe('accepted');
+    expect(full.politics!.budget!.shares).toEqual(exact);
+
+    // Phone JSON may miss a line or carry extra keys: exactly the three lines are stored, a missing one as 0.
+    const raw = governed();
+    setBudget(raw, 'lena', { projects: 80, welfare: 10, junk: 5 } as unknown as Record<BudgetLine, number>);
+    expect(raw.politics!.budget!.shares).toEqual({ projects: 80, welfare: 10, security: 0 });
+    expect(Object.keys(raw.politics!.budget!.shares).sort()).toEqual(['projects', 'security', 'welfare']);
   });
 
   it('S5-T-AC-1: openPlanning copies the budget in force to budgetAtStart, and budgetShares reads null as POLITICS.budget.default', () => {
