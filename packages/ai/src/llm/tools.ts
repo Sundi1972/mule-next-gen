@@ -2,6 +2,7 @@ import {
   allPrices,
   BRAIN,
   buyMule,
+  DEV_STEER,
   floorConfig,
   installMule,
   observe,
@@ -121,7 +122,8 @@ const MULE_STEPS = 3; // literal-ok: buyMule, outfit, install
 function handsRefuse(at: GameState, mind: Mind, route: DevelopmentPlay['route']): NonNullable<Playbook['rejected']> {
   const refused: NonNullable<Playbook['rejected']> = [];
   const view = structuredClone(at);
-  const floor = floorConfig();
+  // With steering off a tap installs on any lake, so the lake refusal is the floor's only.
+  const floor = DEV_STEER.on ? floorConfig() : undefined;
   for (let i = 0; i < route.length; i++) {
     if (route[i]!.act !== 'buyMule') continue;
     const outfit = route[i + 1]!.outfit!;
