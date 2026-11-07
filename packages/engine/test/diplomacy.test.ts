@@ -37,6 +37,18 @@ function governed(): GameState {
   return state;
 }
 
+/** Month 4 (an election month) in announce, with the Governor's month 3 proposal waiting for its ballot until the election ends. */
+function electionMonthWithProposal(): GameState {
+  const state = governed();
+  state.month = 3;
+  proposeLaw(state, 'lena', { kind: 'enact', law: 'landTax', setting: 10 });
+  state.month = 4;
+  openPlanning(state);
+  expect(state.politics!.election!.stage).toBe('announce');
+  expect(state.politics!.council).toBeNull();
+  return state;
+}
+
 function refused(run: () => void): string {
   try {
     run();
@@ -91,7 +103,7 @@ const ROWS: { row: number; why: string; make: () => GameState; call: (s: GameSta
     const s = newGame();
     for (const to of ['brix', 'ossa', 'kai']) offerDeal(s, 'lena', PACT(to));
     return s;
-  }, call: (s) => offerDeal(s, 'lena', PACT('mia')), then: `You have ${POLITICS.deals.maxOpenOffers} cards waiting for an answer` },
+  }, call: (s) => offerDeal(s, 'lena', PACT('brix')), then: `You have ${POLITICS.deals.maxOpenOffers} cards waiting for an answer` },
   { row: 5, why: 'the last card is unanswered', make: () => {
     const s = newGame();
     offerDeal(s, 'lena', PACT('brix'));
@@ -149,8 +161,10 @@ describe('offerDeal, answerDeal and withdrawDeal', () => {
   it.each(ROWS)('S3-T-AC-1: S3-RULE-2 offer row $row ($why)', ({ make, call, then }) => {
     const state = make();
     const before = valuables(state);
+    const politics = stableJson(state.politics);
     expect(refused(() => call(state))).toBe(then);
     expect(valuables(state)).toBe(before);
+    if (then !== 'valid') expect(stableJson(state.politics), 'a refusal writes nothing').toBe(politics);
   });
 
   it('S3-T-AC-1: a refused offer writes nothing', () => {
@@ -187,7 +201,9 @@ describe('offerDeal, answerDeal and withdrawDeal', () => {
     // answer row 5: an active pact between them already
     const clash = structuredClone(state);
     clash.politics!.deals.push({ ...cards(clash)[0]!, id: 'deal-fixt00', from: 'brix', to: 'lena', status: 'active' });
+    const clashBefore = stableJson(clash.politics);
     expect(refused(() => answerDeal(clash, 'brix', id, true))).toBe('You already have a pact with Lena');
+    expect(stableJson(clash.politics), 'the refused answer leaves the card offered').toBe(clashBefore);
     // answer row 6, then a settled card is gone for both sides
     answerDeal(state, 'brix', id, true);
     expect(cards(state)[0]).toMatchObject({ status: 'active', brokenBy: null, settled: null });
@@ -203,6 +219,11 @@ describe('offerDeal, answerDeal and withdrawDeal', () => {
     closeElection(state);
     answerDeal(state, 'kai', id, true);
     expect(cards(state)[0]).toMatchObject({ status: 'expired', settled: 1 });
+    // A law card accepted before its ballot opens (an election month, a proposal from an earlier month) stays active.
+    const waiting = electionMonthWithProposal();
+    const lawId = offerDeal(waiting, 'brix', LAW('ossa'));
+    answerDeal(waiting, 'ossa', lawId, true);
+    expect(cards(waiting)[0]).toMatchObject({ status: 'active', until: 4, settled: null });
   });
 
   it('S3-T-AC-1: ids are deal- plus six base-36 characters, unique, replayable, and say nothing of the card count (AM-2)', () => {
@@ -216,6 +237,14 @@ describe('offerDeal, answerDeal and withdrawDeal', () => {
     expect(play(7)).toEqual(ids);
     expect(play(8)[0]).not.toBe(ids[0]);
     ids.forEach((id, i) => expect(id).not.toBe(`deal-${i + 1}`));
+    // A clash with an existing id redraws: learn the next id on a copy, give a card that id, offer again.
+    const state = newGame();
+    offerDeal(state, 'lena', PACT('brix'));
+    const next = offerDeal(structuredClone(state), 'lena', PACT('ossa'));
+    state.politics!.deals[0]!.id = next;
+    const redrawn = offerDeal(state, 'lena', PACT('ossa'));
+    expect(redrawn).not.toBe(next);
+    expect(redrawn).toMatch(/^deal-[0-9a-z]{6}$/);
   });
 });
 
@@ -264,6 +293,13 @@ describe('dealUntil', () => {
     expect(dealUntil(state, 'brix', LAW('ossa'))).toBe(3);
     const id = offerDeal(state, 'brix', LAW('ossa'));
     expect(cards(state).find((c) => c.id === id)!.until).toBe(3);
+    // In an election month the ballot waits for the election, yet the card binds this month and an accepted one stays active.
+    const election = electionMonthWithProposal();
+    expect(dealUntil(election, 'brix', LAW('ossa'))).toBe(4);
+    const lawId = offerDeal(election, 'brix', LAW('ossa'));
+    expect(cards(election).find((c) => c.id === lawId)!.until).toBe(4);
+    answerDeal(election, 'ossa', lawId, true);
+    expect(cards(election).find((c) => c.id === lawId)!.status).toBe('active');
   });
 
   it('S3-T-AC-2: with no election left there is a refusal, never an until', () => {
