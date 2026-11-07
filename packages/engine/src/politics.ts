@@ -728,9 +728,12 @@ function enactImpact(state: GameState, law: LawId, setting: number, playerId: st
       const blocksNow = state.air > setting;
       return { cost: blocksNow ? plots * POLITICS.ai.council.capPlotCost : 0, capped: { blocksNow, plots } };
     }
-    // S4-C20's stand-in; Task S4-1.9 replaces it with S4-RULE-10's preview from revealed cases.
-    case 'sabotageBan':
-      return { cost: 0 };
+    // S4-RULE-10: the player's record of revealed cases, as a share of the months played (planning, where laws are voted, has played month - 1), times the standard fine and the extra the setting adds.
+    case 'sabotageBan': {
+      const attributed = (state.politics?.sabotage ?? []).filter((o) => o.by === playerId && o.culpritPublic).length;
+      const monthsPlayed = Math.max(1, state.month - 1);
+      return { cost: Math.round((attributed / monthsPlayed) * POLITICS.sheriff.fine.standard * (setting - 1)) };
+    }
   }
 }
 
