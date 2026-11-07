@@ -120,6 +120,19 @@
 <p class="code-ref">In the code: <code>packages/ui/src/components/HoloMap.tsx::MapGem</code> · <code>packages/ui/src/ground-dots.ts::gemsIn</code> · checked by <code>apps/web/test/holo-map.test.ts</code> (T-AC-3 gem)</p>
 <p class="owner">Responsible: the Table team (WS4) for the map, the UX team (WS6) for the rule · Status: Heiko chose option B (5 Nov); the corner and size ruled by the programme manager, 5 Nov; spec #397; WS6 rulings on #558, 7 Nov (none on a colony building, the gem in the label); PM ruling X, 7 Nov: dots stay centred (real 25–30 px plots beat the mock); PM rulings (a) and (c) on #562, 7 Nov; in the game (WS4, 7 Nov)</p>
 
+<h2 id="map-small-phone">The small phone's map: no mark covers the dots <span class="pill designed">Designed, not in the game yet, WS4</span></h2>
+<p>On a small phone (667 × 375) the hub's map draws plots only 13 to 15 px wide, and the marks on a plot (the owner's tab, the gem, a special's badge, the selection ring and the SALE, SCAN and OFF flags) used to cover part of its dots. Under 16 px, on a plot that shows its dots:</p>
+<ul>
+<li><strong>The dots sit at the plot's foot.</strong> On bigger plots they stay centred.</li>
+<li><strong>The other marks share the strip above them</strong>: the owner's tab, the gem and a special's badge, each at least as big as a dot (3 px), none touching the dots. If they don't all fit, the badge goes first, then the gem. The owner's coloured border always stays.</li>
+<li><strong>A flag takes the dots' place while it shows</strong> (SALE, SCAN, OFF). The dots come back when it goes.</li>
+<li><strong>The selection ring is drawn inside the plot you selected.</strong> It may cover that plot's own dots, which the rail beside the map shows in full (Look, My plots), but never a neighbour's.</li>
+</ul>
+<p>A plot without dots keeps every mark as before.</p>
+<div class="box why"><h4>Why it is like this</h4><p>No mark may hide a rating (PM, 7 Nov). A bigger map on the small phone was turned down: the roadmap, needs and agenda above it are what planning is for, and a full-height map is still too narrow for 16 px plots on the biggest map. Hiding the tab or the gem outright was turned down too: they answer whose plot it is and where the Crystite is. WS6 ruling on Jira SA-1372, 7 Nov.</p></div>
+<p class="code-ref">In the code: <code>packages/ui/src/components/HoloMap.tsx</code> · checked by <code>apps/web/e2e/table-steps.ts::theMarksStayClearOfTheDots</code>, to be extended at 667 × 375</p>
+<p class="owner">Designed, not in the game yet, WS4 (HoloMap) · the rule: the UX team (WS6) · Spec: <code>docs/specs/2026-11-05-ws6-plot-info.md</code> §8, 7 Nov.</p>
+
 <h2 id="phone-shell">The phone: always sideways <span class="pill built">In the game</span></h2>
 <p>The phone is played held sideways for the whole game. Held upright it shows only "turn your phone"; the game stays loaded underneath, so nothing is lost while you turn it. The screens are drawn for a phone of 844 × 390 and still fit a small one of 667 × 375.</p>
 <p>Every phone screen has the same frame. The <strong>stage</strong> on the left holds the phase's content: the map, the board, the hall. The <strong>rail</strong> on the right holds, from the top:</p>
