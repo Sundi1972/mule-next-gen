@@ -131,6 +131,12 @@ export function investigate(state: GameState, playerId: string, orderId: string)
 }
 
 /** The Sheriff fines an order's culprit `base` credits, before the ban's multiplier (S4-RULE-8). */
+/** S4-RULE-8's refusal for a fine off the steps, built from POLITICS.sheriff.fine.steps so the moves' text can't drift from config. */
+export function fineStepsWords(): string {
+  const { steps } = POLITICS.sheriff.fine;
+  return `A fine is ${steps[0]} to ${steps.at(-1)} cr, in steps of ${steps[1]! - steps[0]!}`;
+}
+
 export function fineCulprit(state: GameState, playerId: string, orderId: string, base: number): void {
   const refused = refusal(state, playerId, { votes: 'Fines are levied once the votes are over', sheriff: 'Only the Sheriff fines' });
   if (refused) throw refused;
@@ -138,8 +144,7 @@ export function fineCulprit(state: GameState, playerId: string, orderId: string,
   if (!order || !order.culpritPublic) throw new RuleError('Only a revealed culprit is fined');
   if (order.fine) throw new RuleError('Already fined');
   if (order.by === playerId) throw new RuleError("You can't fine yourself");
-  const { steps } = POLITICS.sheriff.fine;
-  if (!steps.includes(base)) throw new RuleError(`A fine is ${steps[0]} to ${steps.at(-1)} cr, in steps of ${steps[1]! - steps[0]!}`);
+  if (!POLITICS.sheriff.fine.steps.includes(base)) throw new RuleError(fineStepsWords());
   levy(state, orderId, base, 'sheriff');
 }
 
