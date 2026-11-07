@@ -200,6 +200,8 @@ async function main(): Promise<void> {
 
     // TV-FIT at six seats: the floor holds on the screen this PR adds; every other screen is reported, not failed, because
     // TvMonthEnd's fit is WS4's, per the PM ruling of 7 Nov.
+    // The month end's scale counts once it has stood settled, so the report carries it.
+    await tv.waitForFunction("window.__tvScaleLows && 'upkeep (tv-monthend)' in window.__tvScaleLows()", undefined, { timeout: PRESS_MS });
     const lows = (await tv.evaluate('window.__tvScaleLows ? window.__tvScaleLows() : null')) as Record<string, number> | null;
     check(lows !== null, 'TV-FIT: the six-seat TV was watched from its first frame');
     const scales = Object.entries(lows).map(([screen, scale]) => `${screen} ${scale.toFixed(3)}`).join(', ');
