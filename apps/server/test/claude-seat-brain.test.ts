@@ -1,35 +1,45 @@
 import fs from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MuleIntent, MuleView } from '@mule/protocol';
-import type { Game, SeatInfo } from '@tabletop/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WriterBrief } from '@mule/ai';
 import type { Spoken } from '../src/brain/chat.js';
 import { createBrain, type BrainSeat } from '../src/brain/index.js';
-import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
+import type { SeatKind } from '../src/claude-seat/seats.js';
 import { ClaudeSeatWriter } from '../src/claude-seat/writer.js';
-import { DEFAULT_AI_LEVEL, MuleGame, type PlaybookNote } from '../src/mule-game.js';
-import type { SdkModuleFake } from './brain-fakes.js';
-import { fakeContext } from './fake-context.js';
-import { runTable } from './playbook-fakes.js';
+import { DEFAULT_AI_LEVEL } from '../src/mule-game.js';
+import { readLedger, type SdkModuleFake } from './brain-fakes.js';
 
-/** The SDK module's constructor: records every client built, so a seat that builds one fails. */
+/** The SDK module's constructor and its create, each counted, so a seat that calls the model fails. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
 vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdkModule));
+let modelCalls = 0;
+
+const KEYED = { ANTHROPIC_API_KEY: 'test-key-not-real' };
+const OFFER = '/auction/food/limit';
 
 const seat = (id: string, kind?: SeatKind): BrainSeat => ({ id, persona: 'trader', level: DEFAULT_AI_LEVEL, ...(kind ? { kind } : {}) });
 
-/** A table as the Room will hand it to the game once seats carry their kind (C1): the host, a Claude seat, a built-in one. */
-const TABLE: (SeatInfo & { kind?: SeatKind })[] = [
-  { id: 's1', name: 'Heiko', isAi: false, color: 0 },
-  { id: 's2', name: 'Claudia', isAi: true, color: 1, kind: 'claude' },
-  { id: 's3', name: 'The Accountant', isAi: true, color: 2, kind: 'builtin' },
-];
+const brief = (): WriterBrief => ({
+  text: 'The auction opens on food.',
+  plans: [],
+  corners: false,
+  strategy: { kind: 'builder', moneyMaker: null, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 4, byMonth: 12 }, stances: {}, reason: 'draft' },
+  offers: [{ path: OFFER, to: { type: 'number' } }],
+  strategyOffered: false,
+});
+
+const ledgerLines = (game: string) => {
+  const file = process.env.MULE_BRAIN_LOG!;
+  return fs.existsSync(file) ? readLedger(file).filter((line) => line.game === game) : [];
+};
 
 beforeEach(() => {
   sdkModule.built = [];
-  sdkModule.create = null;
-  vi.useFakeTimers();
+  modelCalls = 0;
+  sdkModule.create = () => {
+    modelCalls += 1;
+    return Promise.reject(new Error('no model call in these tests'));
+  };
 });
-afterEach(() => vi.useRealTimers());
 
 describe('a Claude seat in the brain', () => {
   it('T-AC-3: keyless writerFor(claude seat) is a ClaudeSeatWriter; deciderFor null', () => {
@@ -48,14 +58,29 @@ describe('a Claude seat in the brain', () => {
   });
 
   it('T-AC-3: a keyed brain gives a claude seat the same writer and no decider; its builtin seats stay Smart', () => {
-    const brain = createBrain({ gameId: 'g-tac3-keyed', env: { ANTHROPIC_API_KEY: 'test-key-not-real' } });
+    const brain = createBrain({ gameId: 'g-tac3-keyed', env: KEYED });
 
     expect(brain.writerFor(seat('s2', 'claude'))).toBeInstanceOf(ClaudeSeatWriter);
     expect(brain.deciderFor(seat('s2', 'claude'))).toBeNull();
     expect(brain.writerFor(seat('s3'))).not.toBeInstanceOf(ClaudeSeatWriter);
     expect(brain.deciderFor(seat('s3'))).not.toBeNull();
     brain.finish();
-    expect(sdkModule.create).toBeNull();
+  });
+
+  it("T-AC-3: a keyed brain's Claude seat writes a plan with no model call and no ledger line", async () => {
+    const gameId = 'g-tac3-keyed-write';
+    const brain = createBrain({ gameId, env: KEYED });
+    const writer = brain.writerFor(seat('s2', 'claude')) as ClaudeSeatWriter;
+
+    const written = writer.write('playbook', { brief: brief(), system: 'rules', waitMs: 30_000, signal: new AbortController().signal });
+    const result = await writer.submit(writer.openAsk()!.id, { edits: [{ path: OFFER, to: 40, reason: 'cheap' }], line: 'Food for all.' });
+    brain.finish();
+
+    expect(result.kind).toBe('accepted');
+    expect((await written).reply.edits).toEqual([{ path: OFFER, to: 40, reason: 'cheap' }]);
+    expect(sdkModule.built).toHaveLength(1);
+    expect(modelCalls).toBe(0);
+    expect(ledgerLines(gameId)).toEqual([]);
   });
 
   it('T-AC-3: a Claude seat speaks with the same voice on a keyed host as on a keyless one', () => {
@@ -75,33 +100,6 @@ describe('a Claude seat in the brain', () => {
     const keyless = heard({});
 
     expect(keyless).toEqual(['I take the river plot.', 'Ore for sale.']);
-    expect(heard({ ANTHROPIC_API_KEY: 'test-key-not-real' })).toEqual(keyless);
-  });
-
-  it('B-AC-9: a keyless game with a Claude seat writes plans and no paid ledger line', async () => {
-    const ledger = process.env.MULE_BRAIN_LOG!;
-    const ledgerBefore = fs.existsSync(ledger) ? fs.readFileSync(ledger, 'utf8') : '';
-    const fake = fakeContext({ table: TABLE });
-    const notes: PlaybookNote[] = [];
-    const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, recordPlaybook: (note) => notes.push(note) });
-    game.start(TABLE);
-
-    const claude = claudeSeatAt(game, 's2');
-    expect(claude?.name).toBe('Claudia');
-    const ask = claude!.writer.openAsk();
-    expect(ask?.phase).toBe('land');
-    expect(claudeSeatAt(game, 's3')).toBeNull();
-    const result = await claude!.writer.submit(ask!.id, { edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'The best plan.' }], line: 'Mine, all mine.' });
-    expect(result.kind).toBe('accepted');
-
-    await runTable(game as Game<MuleIntent, MuleView>, fake, () => false);
-
-    expect(game.viewFor(null).phase).toBe('gameOver');
-    expect(notes.filter((n) => n.seat === 's2' && n.playbook.by === 'llm').map((n) => n.phase)).toEqual(['landGrant']);
-    expect((game as unknown as { away: Set<string> }).away.has('s2')).toBe(false);
-    expect(claude!.writer.over).toBe(true);
-    const ledgerAfter = fs.existsSync(ledger) ? fs.readFileSync(ledger, 'utf8') : '';
-    expect(ledgerAfter).toBe(ledgerBefore);
-    expect(sdkModule.built).toEqual([]);
+    expect(heard(KEYED)).toEqual(keyless);
   });
 });

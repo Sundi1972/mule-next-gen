@@ -1,4 +1,5 @@
-import { createServer, type Server } from 'node:http';
+import fs from 'node:fs';
+import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN, GOODS } from '@mule/engine';
@@ -10,7 +11,12 @@ import { createMcpEndpoint } from '../src/claude-seat/mcp.js';
 import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
 import { MuleGame, type PlaybookNote } from '../src/mule-game.js';
 import { createMuleServer } from '../src/server.js';
+import type { SdkModuleFake } from './brain-fakes.js';
 import { fakeContext } from './fake-context.js';
+
+/** The SDK module's constructor: records every client built, so a keyless game that builds one fails. */
+const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
+vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdkModule));
 
 /** The host, two Claude seats and a built-in one, as the Room will hand them to the game once seats carry a kind (C1). */
 const TABLE: (SeatInfo & { kind?: SeatKind })[] = [
@@ -85,6 +91,20 @@ async function serve(codes: SeatCodeBook, clock = { now: 0 }, options: { holdMs?
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}/mcp`;
 }
 
+/** POSTs `bytes` of body in chunks with no content-length, as a streaming client would; resolves the status. */
+function chunkedPost(url: string, bytes: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = request(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' } }, (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+    });
+    req.on('error', reject);
+    const chunk = 'x'.repeat(4_096);
+    for (let sent = 0; sent < bytes; sent += chunk.length) req.write(chunk);
+    req.end();
+  });
+}
+
 /** A started one-month game with its Claude seats' codes issued. */
 function startedGame(codes: SeatCodeBook) {
   const fake = fakeContext({ table: TABLE });
@@ -151,7 +171,9 @@ describe('/mcp, stateless, the seat code on every call', () => {
     expect(await client.call('wait_for_my_turn', { code: 'K7QM-42' })).toMatchObject({ kind: 'no_such_seat' });
     expect(listed.headers.get('mcp-session-id')).toBeNull();
     // No session means no GET stream to open: refused, never the web client's page.
-    expect((await fetch(url)).status).toBe(405);
+    const get = await fetch(url);
+    expect(get.status).toBe(405);
+    expect(await get.json()).toMatchObject({ jsonrpc: '2.0', error: { code: -32600 } });
     await mule.close();
     servers.pop();
   });
@@ -356,6 +378,7 @@ describe('/mcp, stateless, the seat code on every call', () => {
 
     const big = await client.post(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: { pad: 'x'.repeat(BRAIN.claudeSeat.maxRequestBytes) } }));
     expect(big.status).toBe(413);
+    expect(await chunkedPost(url, BRAIN.claudeSeat.maxRequestBytes + 1)).toBe(413);
     expect(logged.filter((line) => line.includes(codeA) || line.includes(takenBack))).toEqual([]);
   });
 
@@ -375,6 +398,26 @@ describe('/mcp, stateless, the seat code on every call', () => {
     for (let i = 0; i < limit - 1; i++) expect(await client.call('join', { code: `WRNG-${String(i).padStart(2, '0')}` })).toMatchObject({ kind: 'no_such_seat' });
 
     expect(await client.call('join', { code: other.codeA })).toMatchObject({ kind: 'joined', seat: 's2' });
+  });
+});
+
+describe('a keyless game', () => {
+  it('B-AC-9: a keyless game with a Claude seat writes plans and no paid ledger line', async () => {
+    sdkModule.built = [];
+    const ledger = process.env.MULE_BRAIN_LOG!;
+    const ledgerBefore = fs.existsSync(ledger) ? fs.readFileSync(ledger, 'utf8') : '';
+    const codes = new SeatCodeBook();
+    const { game, fake, notes, codeA } = startedGame(codes);
+    const client = mcpClient(await serve(codes));
+
+    const ask = await client.call('wait_for_my_turn', { code: codeA });
+    expect(await client.call('submit_plan', { code: codeA, ask_id: ask.ask_id, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'The best plan.' }], line: 'Mine, all mine.' })).toMatchObject({ kind: 'accepted' });
+    await playUntil(game, fake);
+
+    expect(game.viewFor(null).phase).toBe('gameOver');
+    expect(notes.filter((n) => n.seat === 's2' && n.playbook.by === 'llm').map((n) => n.phase)).toEqual(['landGrant']);
+    expect(fs.existsSync(ledger) ? fs.readFileSync(ledger, 'utf8') : '').toBe(ledgerBefore);
+    expect(sdkModule.built).toEqual([]);
   });
 });
 
