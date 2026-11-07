@@ -494,13 +494,13 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Colony score</th><th>Verdict</th><th>Setting</th></tr></thead>
 <tbody>
-<tr><td><span class="num">100,000</span> cr or more</td><td>A colony to be proud of</td><td><code>COLONY_SCORE.verdict.proud</code></td></tr>
-<tr><td><span class="num">60,000</span> to <span class="num">99,999</span> cr</td><td>A colony that held together</td><td><code>COLONY_SCORE.verdict.held</code></td></tr>
-<tr><td>below <span class="num">60,000</span> cr</td><td>A colony in ruins</td><td></td></tr>
+<tr><td><span class="num">63,000</span> cr or more</td><td>A colony to be proud of</td><td><code>COLONY_SCORE.verdict.proud</code></td></tr>
+<tr><td><span class="num">50,000</span> to <span class="num">62,999</span> cr</td><td>A colony that held together</td><td><code>COLONY_SCORE.verdict.held</code></td></tr>
+<tr><td>below <span class="num">50,000</span> cr</td><td>A colony in ruins</td><td></td></tr>
 </tbody>
 </table></div>
 <p>The colony in the example above, at <span class="num">36,960</span>, reads "A colony in ruins". These two settings live in <code>config.ts::COLONY_SCORE.verdict</code> (PR #392, on trunk with the colony batch #413). They replaced the old placeholders inside the end screen (100 and 50), under which every colony not in Collapse read "A colony to be proud of".</p>
-<div class="box why"><h4>Why it is like this</h4><p>The old thresholds were set before the score was in credits. The new ones come from 100 computer games (seeds 1 to 100, four Trader seats, politics on): half the colonies scored under 73,565, a quarter under 60,650 and a quarter over 99,193. "Held together" sits near the bottom quarter and "proud" near the top. They are named placeholders, tuned at the end (HC-25); WS7, which owns the score's settings, has been asked to OK them.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The old thresholds were set before the score was in credits. They come from 100 computer games (seeds 1 to 100, four Trader seats, politics on). First set on 5 Nov at 60,000 and 100,000, when a quarter of colonies scored under 60,650 and a quarter over 99,193. Milestone A (the store's price bands, the free meal, the 200 cr grant, the colony's own grounds and the MULE's dearer scarcity) roughly halved the scores, so under the old bars no colony was proud and two in three were in ruins. Re-set the same way on A's final settings (PM ruling, 7 Nov): half the colonies score under 55,654, a quarter under 49,925 and a quarter over 63,105. "Held together" sits at the bottom quarter and "proud" at the top. They are named placeholders, tuned at the end (HC-25); WS7, which owns the score's settings, has been asked to OK them.</p></div>
 <div class="box next"><h4>What is changing</h4><p>Known gap: the thresholds fit full-length games, so a shortened game (such as the two-month test game) reads "A colony in ruins". Owner: WS7 at the final tuning.</p><p>The score also shows at every month end, without the verdict: see <a href="#colony-score-monthly">The colony score at every month end</a>.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/game.ts::colonyScoreOf</code> · <code>::colonyScore</code> · <code>::playerStanding</code> · <code>config.ts::COLONY_SCORE.verdict</code> · <code>apps/web/src/game/colony.ts::scoreVerdict</code> · <code>apps/web/src/components/Colony.tsx</code> · G-5 RULE-25</p>
 <p class="owner">Kept current by: WS7 (the rule), WS3 (the score in the engine and the replay), WS8 (the end screen).</p>

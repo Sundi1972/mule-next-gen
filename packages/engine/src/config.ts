@@ -1115,10 +1115,11 @@ export const COLONY_SCORE = {
   /**
    * The score's verdict at game over, in credits like the total: from `proud` "A colony to be proud of", from `held` "A
    * colony that held together", below it "A colony in ruins". Set from 100 politics-on 4-seat trader games (seeds
-   * 1–100): a quarter score under 60,650 and a quarter over 99,193, so held sits near the bottom quartile and proud
-   * near the top one.
+   * 1–100) on milestone A's final config (store bands, the free meal, pace set C with grant 200, the colony's own
+   * grounds, MULE scarcityUp 0.25 and maxFactor 4): a quarter score under 49,925 and a quarter over 63,105, so held
+   * sits at the bottom quartile and proud at the top one (PM ruling, 7 Nov; was 60,000 and 100,000 before A).
    */
-  verdict: { proud: 100_000, held: 60_000 },
+  verdict: { proud: 63_000, held: 50_000 },
 };
 
 /**
