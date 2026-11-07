@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, buildFloor, createGame, tileAt, tileIndex, type GameState } from '@mule/engine';
+import { advancePhase, AI_PLANS, buildFloor, createGame, mulePriceFor, outfitCostFor, tileAt, tileIndex, type GameState } from '@mule/engine';
 import { floorDevWalk } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { routeVeto, unreachablePlot } from '../src/hands/develop.js';
@@ -116,5 +116,56 @@ describe("routeVeto: why the hands refuse a route MULE before it is bought, or n
     const cashFloor = Math.min(money, AI_PLANS.bounds.cashFloorMax);
     const mind = { ...mindOf(), adopted: { month: state.month, cashFloor, pressShare: null, monopolyTarget: null } };
     expect(routeVeto(state, mind, { plot, outfit: 'food' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: under the cash floor of ${cashFloor} cr`);
+  });
+});
+
+describe('routeVeto on an own plot that has a MULE: a different outfit is a swap, the same is stale', () => {
+  const LONG = 1_000;
+  /** ai0's money as a cash floor: any spend at all goes under it. */
+  const floored = (state: GameState) => {
+    const money = state.players.find((p) => p.id === ME)!.money;
+    return { ...mindOf(), adopted: { month: state.month, cashFloor: money, pressShare: null, monopolyTarget: null } };
+  };
+
+  it('a MULE of another outfit is played, as a swap', () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    state.tiles[plot]!.outfit = 'food';
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'energy' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
+  });
+
+  it('a MULE of the same outfit is stale: nothing to swap', () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    state.tiles[plot]!.outfit = 'food';
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'food' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: plot ${plot}`);
+  });
+
+  it('a swap is priced as a new MULE and its outfit: the old MULE pays nothing back', () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    state.tiles[plot]!.outfit = 'food';
+    const me = state.players.find((p) => p.id === ME)!;
+    const cost = mulePriceFor(state, ME) + outfitCostFor(state, ME, 'energy');
+    const mind = { ...mindOf(), adopted: { month: state.month, cashFloor: me.money - cost, pressShare: null, monopolyTarget: null } };
+    expect(routeVeto(state, mind, { plot, outfit: 'energy' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
+    expect(routeVeto(state, floored(state), { plot, outfit: 'energy' }, walkOf(state, LONG), simFloorConfig())).toMatch(/^stale: under the cash floor/);
+  });
+
+  it('the MULE a swap put on the lead costs nothing more on an idle plot: it keeps its outfit', () => {
+    const state = development(4);
+    const [off, idle] = [ownPlains(state), ownPlains(state)];
+    const me = state.players.find((p) => p.id === ME)!;
+    const at = state.tiles[off]!;
+    Object.assign(me, { carriedMule: 'food', takenMule: { x: at.x, y: at.y, outfit: 'food', runMonths: 0, swapped: true } });
+    expect(routeVeto(state, floored(state), { plot: idle!, outfit: 'water' }, walkOf(state, LONG), simFloorConfig())).toBeNull();
+  });
+
+  it("a swap while the seat leads a MULE fitted for another outfit is stale: the hand can't fit a led MULE again", () => {
+    const state = development(4);
+    const plot = ownPlains(state);
+    state.tiles[plot]!.outfit = 'food';
+    state.players.find((p) => p.id === ME)!.carriedMule = 'water';
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'energy' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: plot ${plot}`);
   });
 });
