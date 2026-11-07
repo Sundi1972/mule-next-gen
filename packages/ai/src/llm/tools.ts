@@ -149,6 +149,11 @@ function handsRefuse(at: GameState, mind: Mind, route: DevelopmentPlay['route'])
   return refused;
 }
 
+/** Whether `kept` is the sent route or the part of it the validator kept (its first steps). */
+function keptFrom(sent: unknown, kept: DevelopmentPlay['route']): boolean {
+  return Array.isArray(sent) && kept.length <= sent.length && kept.every((step, i) => JSON.stringify(step) === JSON.stringify(sent[i]));
+}
+
 export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): Promise<ToolResult> } {
   const obs = observe(state, seat);
   // The seat's plots as the tools were made, when the write was asked: a route's "granted" plot is one gained since.
@@ -192,7 +197,10 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
         const checked = s.validator()(at, seat, draft, resolved);
         atDevelopment.push(...checked.rejected);
         // The route the edits make, as the hands would play it: each MULE they would refuse is named (hands fix 1).
-        if (resolved.some((e) => e.path === ROUTE_PATH)) atDevelopment.push(...handsRefuse(at, s.mind, checked.playbook.development?.route ?? []));
+        // Only the sent route's kept steps are judged: a route refused outright leaves the draft's, which the model never sent.
+        const sent = resolved.find((e) => e.path === ROUTE_PATH)?.to;
+        const kept = checked.playbook.development?.route ?? [];
+        if (keptFrom(sent, kept)) atDevelopment.push(...handsRefuse(at, s.mind, kept));
         return resolved;
       };
       // observe() zeroes the seed: the month's dice are none of the live game's.
