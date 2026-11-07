@@ -318,8 +318,12 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   return { line: `Walk down to ${name(best)}’s bid at ${best.price}.`, how };
 }
 
-/** The hint's box: `lit` while your units change hands, `ok` once a choice at a line is done. */
-export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string }) {
+/**
+ * A rail hint: its line, and how to act on it under; `lit` while your units change hands, `ok` once a choice at a line is
+ * done. `howTall` shows the how only where the rail has a row to spare (430 px of height, as the sides caption): on a
+ * phone held sideways a button already says it.
+ */
+export function Hint({ line, how, tone = 'quiet', testid = 'hint', howTall = false }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string; howTall?: boolean }) {
   return (
     <div
       className={cx(
@@ -332,7 +336,7 @@ export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: Rea
         {line}
       </span>
       {how && (
-        <span className="text-ink-2" data-testid="hint-how">
+        <span className={cx('text-ink-2', howTall && 'hidden [@media(min-height:430px)]:block')} data-testid="hint-how">
           {how}
         </span>
       )}

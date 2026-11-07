@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import { GoodIcon } from './GoodIcon';
 import { Landscape } from './Landscape';
 import { PlayerMark } from './PlayerMark';
-import { objectLabel, PlotObjectMark, type MapObject } from './ObjectGlyph';
 import { SPECIAL_HANG, SpecialBadge, specialBadgeBox } from './SpecialIcon';
 import { useTheme } from './theme';
 import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
@@ -25,8 +24,6 @@ export interface MapTile {
   pollution?: number;
   /** The plot's special field, public on every map: drawn as a badge on the plot's lower-right corner. */
   special?: MapSpecial;
-  /** The colony's object on its plot (a park, stadium or spaceport upgrade, from its site on), public on every map. */
-  object?: MapObject;
 }
 
 export interface MapAvatar {
@@ -164,8 +161,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
   const glow = selectionGlow(plot, density);
   const small = smallDots(plot, density);
   const groundOf = (t: MapTile) => (!hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : []);
-  /** Whether the plot draws its dots chip: an installed good or a colony building shows instead. */
-  const showsDots = (t: MapTile) => !t.good && !t.object && groundOf(t).length > 0;
+  /** Whether the plot draws its dots chip: an installed good shows instead. */
+  const showsDots = (t: MapTile) => !t.good && groundOf(t).length > 0;
 
   return (
     <div
@@ -207,7 +204,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const label = [
             TERRAIN_NAME[t.terrain],
             t.special ? specialLabel(t.special) : '',
-            t.owner !== null ? `owned by player ${t.owner + 1}` : t.object ? objectLabel(t.object) : t.terrain === 'store' ? '' : 'free',
+            t.owner !== null ? `owned by player ${t.owner + 1}` : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 3`),
             ...gems.map((g) => `${GOOD_NAME[g]} here`),
@@ -232,7 +229,6 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
-              {/* An object's plot shows the object, not the ground under it (no pip, no gem): the plot's label still names the ground. */}
               {showsDots(t) && (
                 // The full chip (17 px) can stand taller than a 16 px plot: a tap on what overhangs goes to the plot beneath.
                 <span
@@ -263,7 +259,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   <PlayerMark slot={t.owner} size={size.mark} glow={false} />
                 </span>
               )}
-              {!t.object && gems.length > 0 && (
+              {gems.length > 0 && (
                 // Right of the tab, which is 46% wide at 4%; z-[4], the tab's, so a neighbour's special badge never covers it.
                 <span
                   className={cx('pointer-events-none absolute top-[4%] z-[4] flex w-full', t.owner !== null ? 'left-[54%]' : 'left-[4%]', fade)}
@@ -274,7 +270,6 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   ))}
                 </span>
               )}
-              {t.object && <PlotObjectMark object={t.object} density={density} at={`${t.x}-${t.y}`} className={fade} />}
               {t.terrain === 'store' && (
                 <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-0.5 text-[10px] tracking-tight')}>STORE</span>
               )}

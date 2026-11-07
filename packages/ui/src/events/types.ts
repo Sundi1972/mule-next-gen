@@ -54,7 +54,7 @@ export interface ShowEventView {
   playMs: number;
   /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
   player?: string;
-  /** The colony's objects it damaged (a riot), by ObjectKind (types.ts stays free of .tsx imports): one with a plot is among its hits. */
+  /** The colony's objects it damaged (a riot), by ObjectKind (types.ts stays free of .tsx imports). */
   objects?: { id: 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport'; becomes: 'damaged' }[];
 }
 

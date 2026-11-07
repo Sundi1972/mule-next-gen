@@ -377,8 +377,8 @@ const Festival: Scene = ({ ev, seg }) => {
 
 /**
  * The riot: an angry crowd at the store, and the store fire's shelf box, calmly: no fire, a third of each shelf goes
- * (one crate of three empties) and its count runs down. The damaged object's plot puffs dust as it is hit; its HIT
- * mark is the map's own (PlotObjectMark, from the live tiles).
+ * (one crate of three empties) and its count runs down. The damaged object is named on the effects card; it stands on
+ * the colony's grounds, not on a map plot (G-5 C48).
  */
 const Riot: Scene = ({ ev, seg, size }) => {
   const frame = useShow();

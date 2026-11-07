@@ -39,7 +39,7 @@ describe('C31 B-AC-27: the colony score on every screen at game over', () => {
   it("each player's standing: the view's Worth, with their plaques beside it on the projects' plaques", () => {
     const { game, state } = playToTheEnd(true);
     // A month is too short for anyone to give, so the test hangs two donors' entries on a standing park's plaque.
-    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 420, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: { s1: 120, s2: 40 }, maxBid: null });
+    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 420, goods: {} }, monthsLeft: null, since: 1, plaque: { s1: 120, s2: 40 } });
     const view = game.viewFor(null);
     expect(playerStanding(state, 's1').plaques).toBe(120);
     for (const p of view.players) {
