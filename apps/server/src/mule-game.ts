@@ -18,6 +18,9 @@ import {
   votesDone,
   votesOpen,
   proposeLaw,
+  answerDeal,
+  offerDeal,
+  withdrawDeal,
   castLawVote,
   DEV_STEER,
   buildFloor,
@@ -687,6 +690,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'voteLaw':
         castLawVote(state, seatId, intent.yes);
+        return;
+      case 'offerDeal':
+        offerDeal(state, seatId, intent.offer);
+        return;
+      case 'withdrawDeal':
+        withdrawDeal(state, seatId, intent.id);
+        return;
+      case 'answerDeal':
+        answerDeal(state, seatId, intent.id, intent.accept);
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
