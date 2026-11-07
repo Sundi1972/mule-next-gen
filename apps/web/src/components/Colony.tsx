@@ -338,8 +338,37 @@ export function ProjectRow({ p, players, size, plaque = true }: { p: ColonyProje
   );
 }
 
-/** Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. */
-export function BuildSite({ colony, players, size, action, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; className?: string }) {
+/**
+ * A project on one line, for the TV's month end with politics on: the grounds opener has just shown the colony's
+ * buildings full screen, so the month end names each with its stage and the one figure that stage turns on (how much
+ * is paid, the months left, its prestige), and leaves the funding bar, the build pips and the plaque to the phones'
+ * Colony desk (PM ruling, 7 Nov: six seats with three projects drew at 0.604).
+ */
+function ProjectLine({ p }: { p: ColonyProjectView }) {
+  const dead = p.stage === 'closed' || p.stage === 'damaged';
+  const st = STAGE[p.stage];
+  const share = p.cost.credits === 0 ? 100 : Math.round((p.funded.credits / p.cost.credits) * 100);
+  const figure =
+    p.stage === 'commissioned' ? `${share}% paid` : p.stage === 'building' ? (p.monthsLeft === 1 ? 'stands this month' : `stands in ${p.monthsLeft} months`) : `+${p.prestige} prestige`;
+  return (
+    <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid={`project-${p.id}`} data-stage={p.stage}>
+      <ObjectGlyph kind={p.id} size={24} className={cx('shrink-0', dead ? 'text-alert' : p.stage === 'standing' ? 'text-ok' : 'text-holo')} />
+      <span className="min-w-0 truncate font-display text-xl font-semibold">{p.name}</span>
+      <span className={cx('shrink-0 rounded-chip border px-1.5 font-mono text-xs font-bold uppercase', st.chip)} data-testid={`stage-${p.id}`}>
+        {st.label}
+      </span>
+      <span data-num className={cx('ml-auto shrink-0 font-mono text-lg font-bold', dead ? 'text-ink-3 line-through' : 'text-holo')} data-testid={`figure-${p.id}`}>
+        {figure}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. `compact`
+ * puts each on one line (ProjectLine).
+ */
+export function BuildSite({ colony, players, size, action, compact = false, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; compact?: boolean; className?: string }) {
   const tv = size === 'tv';
   return (
     <section className={cx('flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1.5 px-2.5 py-2', className)} aria-label="The colony's projects" data-testid="build-site">
@@ -355,12 +384,16 @@ export function BuildSite({ colony, players, size, action, className }: { colony
         </p>
       ) : (
         <ul className="flex flex-col">
-          {colony.projects.map((p) => (
-            <div key={p.id} className="flex flex-col">
-              <ProjectRow p={p} players={players} size={size} />
-              {action?.(p)}
-            </div>
-          ))}
+          {colony.projects.map((p) =>
+            compact ? (
+              <ProjectLine key={p.id} p={p} />
+            ) : (
+              <div key={p.id} className="flex flex-col">
+                <ProjectRow p={p} players={players} size={size} />
+                {action?.(p)}
+              </div>
+            ),
+          )}
         </ul>
       )}
     </section>
