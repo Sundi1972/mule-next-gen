@@ -118,19 +118,19 @@ describe('deep3 fix 4: the land brief quotes the strategy the seat set itself', 
     return t;
   }
 
-  it("deep3 fix 4: after Claude's strategy is adopted, the next land brief quotes its kind, money-maker and reason verbatim as its strategy since that month; a write that leaves it out keeps that month", async () => {
+  it("deep3 fix 4: after Claude's strategy is adopted, the next land brief quotes its kind, money-maker and reason verbatim as its strategy as set in that month; a write that leaves it out keeps that month", async () => {
     const { state, playbooks, landBriefs } = await firstMonth([{ strategy: OWN, edits: [], line: '' }, { edits: [], line: '' }]);
     expect(playbooks.playbookFor('p0', 1)?.by).toBe('llm');
 
     playbooks.ask(state, 2);
     await vi.advanceTimersByTimeAsync(10);
-    expect(landBriefs()[0]).not.toContain('Your strategy since month');
-    expect(landBriefs()[1]).toContain(`Your strategy since month 1: builder, moneyMaker Smithore. "${OWN.reason}"`);
+    expect(landBriefs()[0]).not.toContain('Your strategy as you set it in month');
+    expect(landBriefs()[1]).toContain(`Your strategy as you set it in month 1: builder, moneyMaker Smithore. "${OWN.reason}"`);
 
     nextUpkeep(state, playbooks);
     playbooks.ask(state, 3);
     await vi.advanceTimersByTimeAsync(10);
-    expect(landBriefs()[2]).toContain(`Your strategy since month 1: builder, moneyMaker Smithore. "${OWN.reason}"`);
+    expect(landBriefs()[2]).toContain(`Your strategy as you set it in month 1: builder, moneyMaker Smithore. "${OWN.reason}"`);
   });
 
   it('deep3 fix 4: a newer strategy replaces the quote, with its own month', async () => {
@@ -141,7 +141,7 @@ describe('deep3 fix 4: the land brief quotes the strategy the seat set itself', 
     nextUpkeep(state, playbooks);
     playbooks.ask(state, 3);
     await vi.advanceTimersByTimeAsync(10);
-    expect(landBriefs()[2]).toContain(`Your strategy since month 2: specialist, moneyMaker Smithore. "${later.reason}"`);
+    expect(landBriefs()[2]).toContain(`Your strategy as you set it in month 2: specialist, moneyMaker Smithore. "${later.reason}"`);
     expect(landBriefs()[2]).not.toContain(OWN.reason);
   });
 });
