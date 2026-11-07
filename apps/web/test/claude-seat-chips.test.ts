@@ -158,6 +158,12 @@ describe('HC-3: in planning a Claude seat is a label, never a wait (mock #tv-rea
     expect(part(offline, `tv-state-${JUNO}`)).toBe('CLAUDE · OFFLINE');
     expect(part(offline, `tv-ready-${JUNO}`)).toContain('plays its built-in plan');
     expect(part(offline, 'tv-ready-s4'), 'a built-in seat is as before').toContain('AI · READY');
+    // WS6 ruling (#663): a chat that never connected plays the built-in plan too, and the row says so, in the warn tone.
+    const waiting = onTv(view, 'waiting');
+    expect(part(waiting, `tv-state-${JUNO}`)).toBe('WAITING FOR CLAUDE');
+    expect(part(waiting, `tv-ready-${JUNO}`)).toContain('plays its built-in plan');
+    expect(waiting).toMatch(new RegExp(`class="[^"]*text-warn[^"]*" data-testid="tv-state-${JUNO}"`));
+    expect(part(waiting, 'ready-count'), 'and never holds the table').toBe('2 / 4 READY');
   });
 
   it("B-AC-2 (phone): the planning bar has Juno's own line with its chip, before and after Ready, never under Waiting for", () => {
@@ -169,6 +175,7 @@ describe('HC-3: in planning a Claude seat is a label, never a wait (mock #tv-rea
     const offline = onPhone(ready, 'offline', () => createElement(ReadyBar));
     expect(offline).toContain('data-testid="you-are-ready"');
     expect(words(offline)).toContain('Juno CLAUDE · OFFLINE plays its built-in plan');
+    expect(words(onPhone(ready, 'waiting', () => createElement(ReadyBar))), 'WS6 ruling (#663): never connected plays built-in too').toContain('Juno WAITING FOR CLAUDE plays its built-in plan');
   });
 });
 
