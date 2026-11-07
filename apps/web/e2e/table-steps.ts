@@ -272,9 +272,17 @@ export async function moveDialogOutlivedThePhase(ctx: GameStepContext, link: str
   check(await phone.getByTestId('move-to-phone').evaluate((el) => el === document.activeElement), "B-AC-13 (handoff, in game): focus goes back to the new phase's move-to-phone");
 }
 
-/** B-AC-9 (WS4, plot look A), held in development: the TV map shows who owns each plot and what is installed on it. */
+/**
+ * B-AC-9 (WS4, plot look A), held in development: the TV map shows who owns each plot and what is installed on it. The
+ * MULE goes in on the server just before; the TV draws it a broadcast later, so the read waits for its disc (CI read the
+ * map first once, 6 Nov, and failed "the map shows an installed good").
+ */
 export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<string> {
-  return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
+  return ctx.held(async () => {
+    const map = ctx.tv.locator('[data-phase=development]');
+    await map.locator('[data-testid^=installed-]').first().waitFor({ state: 'attached', timeout: 3_000 });
+    return checkPlotLook(map, 'TV, development', { installed: true });
+  });
 }
 
 type Rect = { left: number; top: number; right: number; bottom: number };
@@ -329,10 +337,10 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
       const undo: (() => void)[] = [];
       try {
         check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
-        const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
         const index = (t: { x: number; y: number }) => t.y * state.width + t.x;
         const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
-        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store' && !sited.has(index(t));
+        // No colony building stands on a map plot (G-5 C48): every plot but the store's is open.
+        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store';
         const known = [...me.analysed];
         undo.push(() => me.analysed.splice(0, me.analysed.length, ...known));
         const analyse = (t: { x: number; y: number }) => {

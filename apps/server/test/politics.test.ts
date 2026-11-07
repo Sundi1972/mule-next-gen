@@ -24,6 +24,22 @@ function bothOffices(): void {
   });
 }
 
+/**
+ * Tax targets that differ by persona (cautious 4, aggressive 8, saboteur 10), so the governing persona shows in the tax:
+ * the targets the tax cases were written for. Pace set C (Heiko, 6 Nov) ships 10 for every persona; each test of the
+ * calling block runs with these instead, and the config's targets come back after it.
+ */
+function personaTargets(): void {
+  let saved: typeof POLITICS.ai.taxTarget;
+  beforeEach(() => {
+    saved = { ...POLITICS.ai.taxTarget };
+    Object.assign(POLITICS.ai.taxTarget, { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 });
+  });
+  afterEach(() => {
+    Object.assign(POLITICS.ai.taxTarget, saved);
+  });
+}
+
 let running: MuleServer | null = null;
 afterEach(async () => {
   await running?.close();
@@ -906,6 +922,7 @@ const aiTable = [
 const aiIds = ['acc', 'spender', 'grudge'];
 
 describe('AI seats in the election', () => {
+  personaTargets();
   bothOffices();
 
   it.each([1, 0.1])("T-AC-6, T-AC-63 (server) · C8: AI seats run and vote in the server's election, and every one presses Done within its longest pause of the stage opening (phaseScale %s)", (phaseScale) => {

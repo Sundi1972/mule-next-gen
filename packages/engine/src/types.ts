@@ -408,7 +408,7 @@ export interface GameState {
 /** Where money comes into the colony fund from. */
 export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
 /** What the colony fund pays out for. */
-export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'siteBid';
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay';
 
 /** One month's money into and out of the colony fund. */
 export interface FundLedger {
@@ -426,15 +426,11 @@ export interface Project {
   funded: { credits: number; goods: Partial<Record<Good, number>> };
   /** Upkeeps left until it stands; null unless building. */
   monthsLeft: number | null;
-  /** The tile it stands on, for an object that needs one; null until sited. */
-  plot: number | null;
   /** The month it was commissioned. */
   since: number;
   /** Each donor's credits plus goods at reference price. */
   plaque: Record<string, number>;
-  /** The most the colony bids for this object's plot at the land auction; null, it does not bid. See G-5 RULE-28. */
-  maxBid: number | null;
-  /** Its slot on the colony's own grounds, 0..COLONY.groundsSlots−1; null or absent holds none, as one sited on a map plot before (G-5 RULE-32). */
+  /** Its place on the colony's own grounds: the anchor cell of its block, y × size + x (G-5 RULE-32b); null or absent holds none. */
   slot?: number | null;
 }
 
@@ -590,7 +586,10 @@ export interface Walker {
   since: number;
   /** A seller stopped at the amount they must hold of this good (RULE-4): they sell nothing more until a hold of ▼ frees them. Survives a side switch. */
   held?: true;
-  /** Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. */
+  /**
+   * Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. Written on every hold,
+   * read only for a held seller (RULE-4 row 2), so with WALK.needStop off nothing reads it.
+   */
   downSince?: number;
   /** A stopped seller who held ▼ for WALK.shortHoldMs: sells into shortage for the rest of this good (RULE-4 row 2). */
   sellsShort?: true;
