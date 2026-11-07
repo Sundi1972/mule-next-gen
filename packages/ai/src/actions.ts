@@ -228,6 +228,7 @@ const DESCRIBED = {
       'The tax is set in planning',
       'Wait for the election to end',
       'Only the Governor sets the tax',
+      'An overrule vote on the tax is called: it holds until it is settled',
       'The tax can be {low}% to {high}% this month',
     ],
     cost: null,
