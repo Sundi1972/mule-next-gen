@@ -66,7 +66,8 @@ export function WalkingScene({ scene, walkers, rim, blocks }: { scene: Placed[];
   const reduced = useEventReducedMotion();
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
-    if (reduced || walkers === 0) return;
+    // Where the frame clock is missing (or half-stubbed) the walkers stand still rather than throw on unmount.
+    if (reduced || walkers === 0 || typeof requestAnimationFrame !== 'function' || typeof cancelAnimationFrame !== 'function') return;
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
