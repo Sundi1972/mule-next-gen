@@ -83,6 +83,14 @@ export interface LastPhase {
   feedback?: Feedback | null;
   /** Every seat's Worth when this seat's last plan was asked, and that plan's month; absent before its first. */
   worthBefore?: WorthAt | null;
+  /** The strategy the seat's newest adopted land write set; absent until one sets it. */
+  ownStrategy?: OwnStrategy | null;
+}
+
+/** A strategy the seat set itself, and the month of the land write that set it. */
+export interface OwnStrategy {
+  month: number;
+  strategy: Strategy;
 }
 
 /** Every seat's Worth at one moment, by seat, and the month of the plan asked then. */
@@ -417,9 +425,22 @@ function refusalLines(feedback: Feedback | null | undefined): string[] {
   return parts.length > 0 ? [`Last time: ${parts.join('; ')}.`, ''] : [];
 }
 
+const strategyText = (s: Strategy) => `${s.kind}, moneyMaker ${goodText(s.moneyMaker)}`;
+
 /** The strategy's fields that play reads: no monopolyTarget or cashFloor (WS9 ruling, 6 Nov). */
 function strategyLine(s: Strategy): string {
-  return `Your strategy: ${s.kind}, moneyMaker ${goodText(s.moneyMaker)}. "${s.reason}"`;
+  return `Your strategy: ${strategyText(s)}. "${s.reason}"`;
+}
+
+/**
+ * The seat's own strategy, quoted back, in place of the draft's, whose reason is the persona's line; and, when the
+ * draft plays another kind or money-maker, what plays if the seat leaves its strategy out.
+ */
+function ownStrategyLines(drafted: Strategy, own: OwnStrategy | null | undefined): string[] {
+  if (!own) return [strategyLine(drafted)];
+  const lines = [`Your strategy since month ${own.month}: ${strategyText(own.strategy)}. "${own.strategy.reason}"`];
+  if (strategyText(drafted) !== strategyText(own.strategy)) lines.push(`This month's draft plays ${strategyText(drafted)}, unless you set your strategy again.`);
+  return lines;
 }
 
 /** The draft land grant as play reads it: its ranking only (WS9 ruling, 6 Nov). */
@@ -479,7 +500,7 @@ export function landBrief(
     muleLine(obs, mind.me),
     shipLine(obs),
     '',
-    strategyLine(draft.strategy),
+    ...ownStrategyLines(draft.strategy, last.ownStrategy),
     '',
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),

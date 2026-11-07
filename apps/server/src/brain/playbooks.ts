@@ -17,6 +17,7 @@ import {
   type AiSeat,
   type EditPhase,
   type Feedback,
+  type LastPhase,
   type PhaseFact,
   type PlaybookSource,
   type ValidatePlan,
@@ -152,6 +153,7 @@ export class Playbooks {
           outcome: seat.outcome('development', state),
           feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null),
           worthBefore: this.worthAtAsk.get(seat.id) ?? null,
+          ownStrategy: this.ownStrategy(seat.id, month),
         };
         this.worthAtAsk.set(seat.id, { month, worth: worthNow(state) });
         // The month's development rides on the land write, so its edits land every month (PM ruling, 5 Nov, option C).
@@ -358,6 +360,15 @@ export class Playbooks {
    */
   async settle(): Promise<void> {
     if (this.open.size > 0) await Promise.allSettled([...this.open]);
+  }
+
+  /** The strategy set by the seat's newest land playbook before `month` that carried Claude's strategy edits; null if none did. */
+  private ownStrategy(seat: PlayerId, month: number): LastPhase['ownStrategy'] {
+    for (let m = month - 1; m >= 1; m--) {
+      const playbook = this.playing.get(`${seat}/${m}`);
+      if (playbook?.by === 'llm' && playbook.edits?.some((e) => e.path.startsWith('/strategy/'))) return { month: m, strategy: playbook.strategy };
+    }
+    return null;
   }
 
   /** The playbook in effect for a seat's land grant in `month`; null before it starts, or with no source. */
