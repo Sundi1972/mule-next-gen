@@ -83,15 +83,10 @@ export function useEventLivingView() {
 
 /**
  * The hits that change what a plot shows and have not landed by `t`: a cavern caves in, a meteor leaves a crater, a
- * MULE is taken or destroyed, a riot damages the colony's object on the plot.
+ * MULE is taken or destroyed.
  */
-export function hitsStanding({ s, t, reduced, grid }: ShowFrame): { hit: ShowHit; damages: readonly string[] }[] {
-  return s.segments.flatMap((seg) =>
-    seg.events.flatMap((ev) => {
-      const damages = (ev.objects ?? []).map((o) => o.id);
-      return ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater' || (hit.muleLost && hit.good) || damages.length) && t < eventHitAt(seg, ev, hit, reduced, grid)).map((hit) => ({ hit, damages }));
-    }),
-  );
+export function hitsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
+  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater' || (hit.muleLost && hit.good)) && t < eventHitAt(seg, ev, hit, reduced, grid))));
 }
 
 /**
@@ -101,15 +96,14 @@ export function hitsStanding({ s, t, reduced, grid }: ShowFrame): { hit: ShowHit
  */
 export function useLiveTiles(frame: ShowFrame): MapTile[] {
   const standing = hitsStanding(frame);
-  const key = standing.map(({ hit: h, damages }) => `${h.x},${h.y},${h.was ?? ''},${h.good ?? ''},${damages.join('+')}`).join('|');
+  const key = standing.map((h) => `${h.x},${h.y},${h.was ?? ''},${h.good ?? ''}`).join('|');
   const { tiles } = frame;
   // `standing` is a new array every frame; `key` names its hits, so the map repaints only when one lands.
   return useMemo(() => {
     if (standing.length === 0) return tiles;
     return tiles.map((tile) => {
-      const found = standing.find(({ hit: h }) => h.x === tile.x && h.y === tile.y);
-      if (!found) return tile;
-      const { hit, damages } = found;
+      const hit = standing.find((h) => h.x === tile.x && h.y === tile.y);
+      if (!hit) return tile;
       let before = tile;
       if (hit.was) before = { ...before, special: { kind: hit.was } };
       else if (hit.becomes === 'crater') {
@@ -117,8 +111,6 @@ export function useLiveTiles(frame: ShowFrame): MapTile[] {
         before = rest;
       }
       if (hit.muleLost && hit.good) before = { ...before, good: hit.good };
-      // The object this event damages still stands until its hit lands; one damaged before keeps its mark.
-      if (before.object?.stage === 'damaged' && damages.includes(before.object.kind)) before = { ...before, object: { ...before.object, stage: 'standing' } };
       return before;
     });
   }, [key, tiles]);

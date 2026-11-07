@@ -274,7 +274,7 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     for (const band of BANDS) {
       // A stadium standing and Food dear raise what they raise; a hard zero stays 0.
       const raised = (s: GameState) => {
-        s.colony!.projects.push({ id: 'stadium', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+        s.colony!.projects.push({ id: 'stadium', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
         s.store.posted.food = GOOD_CONFIG.food.refPrice * 2;
       };
       const chance = chanceIn(key, band, raised);
@@ -297,10 +297,10 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     const at = (key: string, tweak?: (s: GameState) => void) => BANDS.map((b) => chanceIn(key, b, tweak));
     const close = (xs: number[]) => xs.map((x) => expect.closeTo(x));
     expect(at('festival')).toEqual(close([0.06, 0.02, 0.01, 0, 0]));
-    const stadium = (s: GameState) => s.colony!.projects.push({ id: 'stadium', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+    const stadium = (s: GameState) => s.colony!.projects.push({ id: 'stadium', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
     expect(at('festival', stadium)).toEqual(close([0.11, 0.07, 0.06, 0, 0]));
     // Only a standing stadium raises it: one still commissioned adds 0.
-    const commissioned = (s: GameState) => s.colony!.projects.push({ id: 'stadium', stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+    const commissioned = (s: GameState) => s.colony!.projects.push({ id: 'stadium', stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
     expect(at('festival', commissioned)).toEqual(close([0.06, 0.02, 0.01, 0, 0]));
     expect(at('generalStrike')).toEqual(close([0, 0, 0.02, 0.05, 0.1]));
     const dearFood = (s: GameState) => (s.store.posted.food = GOOD_CONFIG.food.refPrice * 1.5 + 1);

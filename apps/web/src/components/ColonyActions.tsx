@@ -1,4 +1,4 @@
-import { GOODS, PRESTIGE, type Good } from '@mule/engine';
+import { GOODS, type Good } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodIcon, ObjectGlyph } from '@mule/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -73,14 +73,11 @@ const Line = ({ children, tone = 'text-ink-2', testid }: { children: ReactNode; 
 export function ProjectActions({ p }: { p: ColonyProjectView }) {
   const { view, self } = usePhoneGame();
   const gov = view.politics?.governor === self.id;
-  const plotless = PRESTIGE[p.id].needsPlot && p.plot === null;
   switch (p.stage) {
     case 'commissioned':
       return (
         <div className="flex flex-col gap-1 pb-1.5" data-testid={`actions-${p.id}`}>
           <Donate p={p} />
-          {gov && plotless && <SiteBid p={p} />}
-          {!gov && plotless && <Line testid={`bid-line-${p.id}`}>{p.maxBid ? `Bids up to ${fmt(p.maxBid)} cr at the land auction` : 'Waits for a plot: the Governor sets the colony’s bid'}</Line>}
         </div>
       );
     case 'damaged':
@@ -230,86 +227,6 @@ function Donate({ p }: { p: ColonyProjectView }) {
   );
 }
 
-// --- The site bid ------------------------------------------------------------------------------------
-
-function SiteBid({ p }: { p: ColonyProjectView }) {
-  const client = useClient();
-  const [open, setOpen] = useState(false);
-  const [bid, setBid] = useState<number | null>(p.maxBid ?? 300);
-  const [other, setOther] = useState(false);
-  if (!open) {
-    return (
-      <span className="flex flex-wrap items-center gap-x-2 gap-y-1" data-testid={`bid-${p.id}`}>
-        <Line tone={p.maxBid ? 'text-ink' : 'text-warn'} testid={`bid-line-${p.id}`}>
-          {p.maxBid ? `Bids up to ${fmt(p.maxBid)} cr at the land auction` : 'No plot yet, and the colony doesn’t bid for one'}
-        </Line>
-        <Button size="md" variant="outline" className="h-8! shrink-0 whitespace-nowrap px-3 text-xs" onClick={() => setOpen(true)} data-testid={`bid-open-${p.id}`}>
-          {p.maxBid ? 'Change' : 'Set a bid'}
-        </Button>
-      </span>
-    );
-  }
-  return (
-    <Sheet testid={`bid-sheet-${p.id}`}>
-      <span className="label-caps text-[10px]!">The colony’s top bid for the {p.name}’s plot</span>
-      <span className="flex flex-wrap gap-1" data-testid="bid-chips">
-        {[100, 200, 300].map((b) => (
-          <Chip
-            key={b}
-            on={!other && bid === b}
-            onClick={() => {
-              setOther(false);
-              setBid(b);
-            }}
-            testid={`bid-chip-${b}`}
-          >
-            {b} cr
-          </Chip>
-        ))}
-        <Chip
-          on={other}
-          onClick={() => {
-            setOther(true);
-            setBid((b) => b ?? 300);
-          }}
-          testid="bid-chip-other"
-        >
-          Other…
-        </Chip>
-        <Chip
-          on={bid === null}
-          onClick={() => {
-            setOther(false);
-            setBid(null);
-          }}
-          testid="bid-chip-none"
-        >
-          No bid
-        </Chip>
-      </span>
-      {other && <Stepper value={bid ?? 0} max={2_000} step={25} onChange={setBid} label="Up to" unit="cr" testid="bid-step" />}
-      <Line testid="bid-explain">At the land auction the colony bids up to this from the fund.</Line>
-      <span className="flex gap-1.5">
-        <Button
-          size="md"
-          variant="holo"
-          className="h-9! flex-1 px-2 text-sm"
-          onClick={() => {
-            client.intent({ type: 'setSiteBid', id: p.id, maxBid: bid });
-            setOpen(false);
-          }}
-          data-testid="bid-set"
-        >
-          {bid === null ? 'Don’t bid' : `Bid up to ${fmt(bid)} cr`}
-        </Button>
-        <Button size="md" variant="ghost" className="h-9! px-3 text-sm" onClick={() => setOpen(false)} data-testid="bid-cancel">
-          Cancel
-        </Button>
-      </span>
-    </Sheet>
-  );
-}
-
 // --- Repair ------------------------------------------------------------------------------------------
 
 function Repair({ p }: { p: ColonyProjectView }) {
@@ -413,7 +330,7 @@ export function Commission() {
                   </span>
                 </span>
                 <span className="text-[11px] text-ink-2">
-                  {c.needsPlot ? 'Needs a plot · ' : ''}upkeep {c.upkeep} cr a month
+                  upkeep {c.upkeep} cr a month
                 </span>
                 {c.why && (
                   <span className="text-[11px] font-semibold text-warn" data-testid={`cat-why-${c.id}`}>

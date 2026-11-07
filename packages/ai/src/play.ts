@@ -31,7 +31,6 @@ import {
   setLotWalk,
   payStrike,
   repair,
-  setSiteBid,
   proposeLaw,
   setSalesTax,
   votesDone,
@@ -246,9 +245,6 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         break;
       case 'repair':
         repair(state, id, action.id);
-        break;
-      case 'setSiteBid':
-        setSiteBid(state, id, action.id, action.maxBid);
         break;
       case 'propose':
         proposeLaw(state, id, action.proposal);
