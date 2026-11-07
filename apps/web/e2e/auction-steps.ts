@@ -1121,9 +1121,9 @@ async function readTheReceipt(cast: { seller: Phone; buyer: Phone }, tv: Page, t
   });
 }
 
-/** The best price a walker on `side` can meet, the store and the ship counted, and who holds it, as the TV names them. */
+/** The best price a walker on `side` can meet, the store and the ship counted, and who holds it, as the TV's readout names them: a house by its own word. */
 function bestOffer(a: AuctionView, side: 'seller' | 'buyer', name: (id: string) => string, houses: string[], without?: string): { price: number; who: string; id: string } {
-  const named = (id: string) => (id === 'store' ? 'the store' : id === 'ship' ? 'the ship' : name(id));
+  const named = (id: string) => (id === 'store' ? 'store' : id === 'ship' ? 'ship' : name(id));
   const housePays: Record<string, number | null> = { store: a.storeBuys, ship: a.shipPays };
   const list =
     side === 'seller'

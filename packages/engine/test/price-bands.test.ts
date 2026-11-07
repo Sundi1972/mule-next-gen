@@ -228,6 +228,19 @@ describe('price B-AC-8: never below normal, from the opening posting on, and a c
     expect(post(state), 'the premise: normal').toBe(30);
     expect(normalAfter(state, 'normal', 36)).toBe(32);
   });
+
+  it('price B-AC-8: a trade at the falling price, a month after a severe 120 (posted 90, normal band), leaves N at 30', () => {
+    // The band already reads normal while the mid is still three times N: the trade is evidence about the price the
+    // store posted, not about N. Measured in 20 games before this: Food's N crept to a median of 47.
+    const state = foodMonth(4, [5, 1]);
+    expect(post(state), 'the premise: severe').toBe(120);
+    hold(state, 10, 20);
+    farms(state, [5, 5]);
+    nextMonth(state);
+    hold(state, 10, 20, 7);
+    expect(post(state), 'the premise: a quarter down').toBe(90);
+    expect(normalAfter(state, 'normal', 90)).toBe(30);
+  });
 });
 
 describe('price B-AC-9: a high trade between players pulls the store halfway towards it', () => {
