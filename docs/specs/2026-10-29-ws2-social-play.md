@@ -360,8 +360,10 @@ call sites   VoteHand.vote (election ballot, per contested office) and VoteHand.
 pin          null port → VoteHand's intents and draws identical to today (the election and council streams never
              move, slice 2a HC-41); ws7's vote tests unchanged
 depends_on   C3 (the writer may edit the field); WS1's clamps (contract, stubbable); WS7's port (contract, stubbable)
-atomicity    the Playbook field and validatePlan's clamps ship together (WS1); the VoteHand argument with its null pin
-             (WS7)
+atomicity    none forced: the Playbook field lands first (WS3's #683, a named edit in WS1's engine playbook.ts), WS9's
+             validatorFor clamps after it on that SHA; until both are in, an edit to `/politics/...` is refused "no such
+             field" and the seat votes by the keyless rule (RULE-B6 row 1). The VoteHand argument ships with its null pin
+             (WS7). WS2's votePortFor and the writer's `/politics/...` edits merge only after the clamps
 
 C13 · ADDED · the Claude Code seat plays the social core too (AM-B5; separable: may move after the RC alone)
 today        a Claude Code seat (a player's own Claude Code over MCP) answers the same land and phase asks a Smart seat's
