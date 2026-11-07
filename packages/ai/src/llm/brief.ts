@@ -36,7 +36,6 @@ import {
   UPKEEP,
 } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
-import { unreachablePlot } from '../hands/develop.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
 import type { Mind } from '../value.js';
@@ -47,6 +46,7 @@ import type { LandDraft } from '../playbook/index.js';
 import type { Feedback } from './writer.js';
 import { GRANTED } from './granted.js';
 import { energyAt, energyToKeep, useRule } from './energy.js';
+import { cutOffAs, noWalkTo } from './reach.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -198,16 +198,20 @@ const GOOD_FIELDS: readonly { field: keyof GoodPlay; to: object }[] = [
   { field: 'concedeCrPerS', to: { type: 'number' } },
 ];
 
-/** A lake plot no MULE can be walked to (unreachablePlot): the brief marks it wherever the seat might claim or install on it. */
-const LAKE_MARK = 'lake: no MULE can be installed';
-/** The same lake with a MULE already on it (its shore was the seat's once): only another MULE is barred. */
-const FITTED_LAKE_MARK = 'lake: no other MULE can be installed';
-// With steering off a tap installs on any lake, so only the floor has unreachable lakes (as whatIf judges them).
-const unreachable = (obs: GameState, plot: number) => DEV_STEER.on && unreachablePlot(obs, plot);
+/**
+ * A plot no MULE can be walked to (noWalkTo: a lake with no shore to stand on, or a plot the floor's walk never reaches):
+ * the brief marks it wherever the seat might claim or install on it, "lake: no MULE can be installed", or "cut off: …"
+ * for land.
+ */
+const markOf = (obs: GameState, plot: number) => `${cutOffAs(obs, plot)}: no MULE can be installed`;
+/** The same plot with a MULE already on it (its shore was the seat's once): only another MULE is barred. */
+const fittedMarkOf = (obs: GameState, plot: number) => `${cutOffAs(obs, plot)}: no other MULE can be installed`;
+// With steering off a tap installs anywhere, so only the floor has unreachable plots (as whatIf judges them).
+const unreachable = (obs: GameState, plot: number) => DEV_STEER.on && noWalkTo(obs, plot) !== null;
 
 /** A ranked plot and its value, marked when no MULE can be installed on it: "plot N lake: no MULE can be installed (V cr)". */
 const plotText = (obs: GameState) => (r: { plot: number; value: number }) =>
-  `plot ${r.plot}${unreachable(obs, r.plot) ? ` ${LAKE_MARK}` : ''} (${r.value} cr)`;
+  `plot ${r.plot}${unreachable(obs, r.plot) ? ` ${markOf(obs, r.plot)}` : ''} (${r.value} cr)`;
 const goodText = (g: Strategy['moneyMaker']) => (g === null ? 'none' : GOOD_NAME[g]);
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -224,11 +228,11 @@ function ownership(obs: GameState, me: string): string[] {
     const plots = obs.tiles.flatMap((t, i) => (t.owner === p.id ? [{ i, outfit: t.outfit }] : []));
     const who = p.id === me ? `${p.name} (you)` : p.name;
     if (plots.length === 0) return `${who}: no plots`;
-    // The seat's own lake plot no MULE can reach is marked in place of idle (or after its MULE).
+    // The seat's own plot no MULE can reach is marked in place of idle (or after its MULE).
     const status = (t: { i: number; outfit: Outfit | null }) => {
-      const mark = p.id === me && unreachable(obs, t.i) ? LAKE_MARK : null;
-      if (!t.outfit) return mark ?? 'idle';
-      return mark ? `${outfitName(t.outfit)}, ${FITTED_LAKE_MARK}` : outfitName(t.outfit);
+      const marked = p.id === me && unreachable(obs, t.i);
+      if (!t.outfit) return marked ? markOf(obs, t.i) : 'idle';
+      return marked ? `${outfitName(t.outfit)}, ${fittedMarkOf(obs, t.i)}` : outfitName(t.outfit);
     };
     const named = capped(plots, BRAIN.brief.plotsPerPlayer, (t) => `plot ${t.i} ${status(t)}`);
     return `${who}: ${plural(plots.length, 'plot')} — ${named}`;
@@ -629,7 +633,7 @@ const ACT_TEXT = (obs: GameState, granted: number | null) => (s: DevelopmentPlay
     case 'outfit':
       return s.outfit ? `outfit it for ${s.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[s.outfit]}` : 'outfit it';
     case 'install':
-      return `install it on ${plot(s.plot)}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${LAKE_MARK})` : ''}`;
+      return `install it on ${plot(s.plot)}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${markOf(obs, s.plot)})` : ''}`;
     case 'analyse':
       return `analyse ${plot(s.plot)}`;
     case 'filter':

@@ -2,6 +2,7 @@ import { BRAIN, GAME, GOODS, type GameState, type Playbook, type PlayerId, type 
 import { OPTION_IDS } from '../decider.js';
 import { LAND_OFFERS, LAND_PATHS, type EditOffer, type WriterBrief } from './brief.js';
 import { cleanLine } from './reply.js';
+import { capCodePoints } from '../text.js';
 import type { PlanEdit, ValidatePlan } from '../playbook/index.js';
 
 /**
@@ -18,6 +19,7 @@ export const CAUSES = [
   // No writer refuses for it since cashFloor is not offered (WS9 ruling, 6 Nov); kept for the strategy spike's replies
   // and for records written before.
   'bad_cash_floor',
+  // No writer refuses for it since an over-long why is cut instead (whyOf); kept for the strategy spike and old records.
   'reason_too_long',
   'plan_not_offered',
   'bad_line',
@@ -158,6 +160,12 @@ interface Proposed extends PlanEdit {
   fromStrategy: boolean;
 }
 
+/**
+ * An edit's why, cut to its first BRAIN.writeReasonChars code points, as the brief's cap counts them (PM ruling, 8 Nov:
+ * a why past the cap is cut, and its edit kept; only the why, never a value). No writer refuses 'reason_too_long' since.
+ */
+const whyOf = (reason: string) => capCodePoints(reason, BRAIN.writeReasonChars);
+
 /** The reply's parts, or the first cause that makes the whole reply unusable. */
 function readReply(text: string, stopReason: string | null): { edits: Proposed[]; line: string } | { cause: Cause } {
   if (stopReason === 'refusal') return { cause: 'refused' };
@@ -177,10 +185,12 @@ function readReply(text: string, stopReason: string | null): { edits: Proposed[]
   if ('strategy' in reply) {
     // Every level's schema requires the same fields: a strategy with another (monopolyTarget, cashFloor) is not its shape.
     if (!isObject(strategy) || !onlyKeys(strategy, STRATEGY_FIELDS, STRATEGY_FIELDS) || typeof strategy.reason !== 'string') return { cause: 'bad_shape' };
-    for (const f of STRATEGY_FIELDS) if (f in strategy) proposed.push({ path: strategyPath(f), to: strategy[f], reason: strategy.reason, fromStrategy: true });
+    // The strategy's reason is its why, so it is cut as every edit's is (whyOf), the reason field's value with it.
+    const why = whyOf(strategy.reason);
+    for (const f of STRATEGY_FIELDS) if (f in strategy) proposed.push({ path: strategyPath(f), to: f === 'reason' ? why : strategy[f], reason: why, fromStrategy: true });
   }
   if (typeof line !== 'string') return { cause: 'bad_line' };
-  for (const e of edits) proposed.push({ path: e.path, to: e.to, reason: e.reason, fromStrategy: false });
+  for (const e of edits) proposed.push({ path: e.path, to: e.to, reason: whyOf(e.reason), fromStrategy: false });
   return { edits: proposed, line };
 }
 
@@ -192,7 +202,6 @@ function judgeEdit(e: Proposed, brief: WriterBrief, seen: Set<string>): { edit: 
   if (!offered.includes(e.path)) return { cause: 'path_not_offered' };
   if (seen.has(e.path)) return { cause: 'path_repeated' };
   seen.add(e.path);
-  if ([...e.reason].length > BRAIN.writeReasonChars) return { cause: 'reason_too_long' };
   const edit = { path: e.path, to: e.to, reason: e.reason };
   switch (e.path) {
     case strategyPath('kind'):

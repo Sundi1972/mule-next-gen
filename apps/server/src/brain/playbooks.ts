@@ -297,7 +297,8 @@ export class Playbooks {
    * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
    * is applied to the phase's draft as it starts (AM-A17); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
-   * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
+   * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief; the last time's is dropped,
+   * so a phase with no reply, or no edits for it, briefs no refusal of a month before.
    *
    * A seat in `keep` with this month's ask is left asking (C7): its ask stays open, it is drafted now, and takeSeat takes
    * it later on that draft. Returns the seats kept.
@@ -306,6 +307,8 @@ export class Playbooks {
     const kept: PlayerId[] = [];
     for (const seat of this.options.seats) {
       const key = `${seat.id}/${phase}`;
+      // The last time's feedback has been briefed by now: this phase's take sets its own, and with no take there is none.
+      this.phaseFeedback.delete(key);
       const ask = this.phaseAsks.get(key);
       if (!ask || ask.month !== state.month) continue;
       if (keep.has(seat.id)) {
