@@ -2,6 +2,7 @@ import {
   AI_HANDS,
   analysisSeconds,
   doorOutside,
+  floorConfig,
   HALL_DOORS,
   reachOf,
   speedOf,
@@ -9,6 +10,7 @@ import {
   IDLE_INPUT,
   isAssaying,
   isStunned,
+  justSwappedOff,
   MS_PER_SECOND,
   mulePriceFor,
   observe,
@@ -31,6 +33,7 @@ import {
   type Good,
   type HallPlace,
   type Outfit,
+  type Player,
   type Rng,
   type WolfFightLevel,
   type WolfPlay,
@@ -132,6 +135,61 @@ function rivalMayGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorC
 /** Whether Reach offers this seat a press below GRAB where it stands: what a GRAB pressed now becomes if the glint is gone. */
 function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorConfig, secondsLeft: number): boolean {
   return reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, me, cfg, { secondsLeft }).enabled;
+}
+
+/**
+ * Whether lake plot `plot` can never get a MULE on the floor: no spot on its shore offers its install (installable,
+ * the walk the hands price by). Judged for its owner; a plot nobody holds, as if each seat held it in turn.
+ */
+export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig()): boolean {
+  const tile = state.tiles[plot]!;
+  if (tile.terrain !== 'lake') return false;
+  if (tile.owner !== null) return !installable(state, cfg, tile.owner, plot);
+  return state.players.every((p) => {
+    const held = { ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: p.id } : t)) };
+    return !installable(held, cfg, p.id, plot);
+  });
+}
+
+/** One route MULE: the plot it is installed on and the outfit it is fitted with. */
+export interface RouteMule {
+  plot: number;
+  outfit: Outfit | null;
+}
+
+/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the hand can't fit a led MULE again. */
+const ledOffSwap = (p: Player): boolean => !!p.takenMule?.swapped && p.carriedMule === p.takenMule.outfit;
+
+/**
+ * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's, or has a
+ * MULE it can't swap; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take
+ * the cash under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without
+ * `floor` the game taps, which installs on any lake. See RULE-9 row 3.
+ *
+ * A MULE of another outfit on the plot is swapped (AM-35): the new one goes in and the seat leads the old one, which
+ * the route's next MULE can be, or which goes back to the corral at the turn's end. It pays nothing back, so a swap
+ * costs what any MULE does.
+ */
+export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: DevWalk, floor?: FloorConfig): string | null {
+  const { plot, outfit } = mule;
+  const tile = state.tiles[plot]!;
+  const me = state.players.find((p) => p.id === mind.me)!;
+  const led = me.carriedMule;
+  // The MULE installed is the one the seat leads if fitted already, so a swap needs it fitted for the route's outfit.
+  const swaps = outfit !== null && tile.outfit !== outfit && (led === null || led === 'empty' || led === outfit) && !justSwappedOff(me, tile.x, tile.y);
+  if (tile.owner !== mind.me || (tile.outfit !== null && !swaps)) return `stale: plot ${plot}`;
+  if (floor && unreachablePlot(state, plot, floor)) return `lake: no shore reaches plot ${plot}`;
+  // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
+  const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
+  if (cashFloor !== null && outfit !== null) {
+    const fits = led !== outfit && !ledOffSwap(me);
+    const cost = (led === null ? mulePriceFor(state, me.id) : 0) + (fits ? outfitCostFor(state, me.id, outfit) : 0);
+    if (me.money - cost < cashFloor) return `stale: under the cash floor of ${cashFloor} cr`;
+  }
+  // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
+  const legs = outfit === null ? undefined : walk?.floor?.(plot, outfit);
+  const veto = legs && walkVeto(walk!, legs.there, legs.pub);
+  return veto ? `stale: ${veto}` : null;
 }
 
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
@@ -967,7 +1025,14 @@ export class DevelopHand {
       }
     }
     // A MULE it already leads (won at the land auction) is this MULE: not bought, nor outfitted again as it is.
-    const led = state.players.find((p) => p.id === me)!.carriedMule;
+    const self = state.players.find((p) => p.id === me)!;
+    const led = self.carriedMule;
+    // One a swap put on the lead keeps its outfit: the route's MULE for an idle plot is that one, as it is (AM-35).
+    if (a.type === 'outfit' && this.ledGroup === head.group && a.outfit !== led && ledOffSwap(self)) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'swapped MULE kept its outfit');
+      return false;
+    }
     if (led !== null && (a.type === 'buyMule' || (a.type === 'outfit' && a.outfit === led && this.ledGroup === head.group))) {
       if (a.type === 'buyMule') this.ledGroup = head.group;
       this.queue.shift();
@@ -997,10 +1062,7 @@ export class DevelopHand {
     return true;
   }
 
-  /**
-   * Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, the floor's walk vetoes it
-   * (AM-25), or it would take the cash under the cash floor an adopted playbook set.
-   */
+  /** Why the route MULE of `group`, about to be bought, would be refused (routeVeto), or null. */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -1009,20 +1071,7 @@ export class DevelopHand {
       if (g === group && a.type === 'outfit') outfit = a.outfit;
     }
     if (plot < 0) return null;
-    const tile = state.tiles[plot]!;
-    if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
-    // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
-    const floor = adoptedNow(state, this.brain.mind)?.cashFloor != null ? cashReserve(state, this.brain.mind) : null;
-    if (floor !== null && outfit !== null) {
-      const me = state.players.find((p) => p.id === this.brain.mind.me)!;
-      const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
-      if (me.money - cost < floor) return `stale: under the cash floor of ${floor} cr`;
-    }
-    // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
-    const w = walk?.();
-    const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);
-    const veto = legs && walkVeto(w!, legs.there, legs.pub);
-    return veto ? `stale: ${veto}` : null;
+    return routeVeto(state, this.brain.mind, { plot, outfit }, walk?.(), this.onFloor ? (this.floorCfg ?? undefined) : undefined);
   }
 
   /** What the route's own MULE picks are drafted from: the playbook's seed and the plan mind. See RULE-9 row 3, RULE-14. */
