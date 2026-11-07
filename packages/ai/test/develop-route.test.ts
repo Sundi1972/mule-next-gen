@@ -310,8 +310,10 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds three other idle
       // plots, so the replacement is a pick between them (with two, the picks for the first MULE and the second fall
       // alike).
+      // Built on with the outfit the route fits there: nothing to swap. Another outfit would be a swap (AM-35).
+      const draftedOutfit = play0.part.route.find((s) => s.act === 'outfit')!.outfit!;
       if (how !== 'built on') drafted0.owner = RIVAL;
-      else drafted0.outfit = 'food';
+      else drafted0.outfit = draftedOutfit;
       for (const t of spares) t.owner = ME;
       // What a fresh draft on the changed state holds for that MULE, the route's first.
       const fresh = drafted(seat, state).part.route;
@@ -334,7 +336,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       // The promise: the MULE went onto a plot it does hold, idle, as the fresh draft puts it, and none onto the stale one.
       expect(spares.map((t) => indexOf(state, t)), log).toContain(freshPlot);
       expect(state.tiles[freshPlot]!.outfit, log).toBe(outfit);
-      expect(drafted0.outfit).toBe(how === 'sold' ? null : 'food');
+      expect(drafted0.outfit).toBe(how === 'sold' ? null : draftedOutfit);
       expect(me(state).doneDeveloping).toBe(true);
     });
 
@@ -611,6 +613,76 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     }
 
     // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
+    /** ai0 holds `n` plains plots, the first with a Food MULE on it. */
+    function foodOnFirst(n: number): { state: GameState; plots: Tile[] } {
+      const { state, plots } = development(n);
+      for (const t of plots) t.owner = ME;
+      plots[0]!.outfit = 'food';
+      return { state, plots };
+    }
+
+    const swapTo = (state: GameState, t: Tile, outfit: Outfit): DevelopmentPlay['route'] => [{ act: 'buyMule' }, { act: 'outfit', outfit }, { act: 'install', plot: indexOf(state, t) }];
+
+    it('AM-35 swap: a route MULE of another outfit for an own plot with a MULE swaps it in, and the old MULE, with no idle plot, goes back to the corral', () => {
+      const { state, plots } = foodOnFirst(1);
+      const [a] = plots as [Tile];
+      const corral = state.store.mules;
+      const { hand } = seatAndHand();
+      hand.follow(state.month, routeOf([...swapTo(state, a, 'energy'), { act: 'pub' }]));
+      play(runner, state, hand);
+      const log = JSON.stringify(hand.done);
+      expect(hand.routeLog(state).steps, log).toEqual([0, 1, 2, 3].map((route) => ({ route, outcome: 'done' })));
+      // The promise: the plot makes Energy now, and the Food MULE swapped off is the corral's again, not lost on the lead.
+      expect(a.outfit, log).toBe('energy');
+      expect(me(state).carriedMule).toBeNull();
+      expect(state.store.mules).toBe(corral);
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    it("AM-35 swap: a route MULE of the plot's own outfit is stale, 'stale: plot <n>', and the plot keeps its MULE", () => {
+      const { state, plots } = foodOnFirst(1);
+      const [a] = plots as [Tile];
+      const money = me(state).money;
+      const { hand } = seatAndHand();
+      hand.follow(state.month, routeOf([...swapTo(state, a, 'food'), { act: 'pub' }]));
+      play(runner, state, hand);
+      const log = JSON.stringify(hand.done);
+      const steps = hand.routeLog(state).steps.slice(0, 3);
+      expect(steps.map((s) => s.note), log).toEqual(Array(3).fill(`stale: plot ${indexOf(state, a)}`));
+      expect(a.outfit).toBe('food');
+      expect(me(state).money - money, 'no MULE bought: only the pub paid').toBeGreaterThanOrEqual(0);
+    });
+
+    it("AM-35 swap: the old MULE goes on the idle plot the route's next MULE is for, 'led', and only one MULE is bought", () => {
+      const { state, plots } = foodOnFirst(2);
+      const [a, b] = plots as [Tile, Tile];
+      const corral = state.store.mules;
+      const { hand } = seatAndHand();
+      hand.follow(state.month, routeOf([...swapTo(state, a, 'energy'), ...swapTo(state, b, 'food'), { act: 'pub' }]));
+      play(runner, state, hand);
+      const steps = byIndex(hand, state);
+      const log = JSON.stringify(hand.done);
+      expect(steps.get(3), log).toEqual({ route: 3, outcome: 'done', note: 'led' });
+      expect(steps.get(5), log).toEqual({ route: 5, outcome: 'done' });
+      // The promise: Energy on the swapped plot, the Food MULE taken off it on the idle one, one MULE paid for.
+      expect([a.outfit, b.outfit], log).toEqual(['energy', 'food']);
+      expect(state.store.mules).toBe(corral - 1);
+      expect(me(state).carriedMule).toBeNull();
+    });
+
+    it("AM-35 swap: the old MULE keeps its outfit on the idle plot the route fits for another, 'swapped MULE kept its outfit'", () => {
+      const { state, plots } = foodOnFirst(2);
+      const [a, b] = plots as [Tile, Tile];
+      const { hand } = seatAndHand();
+      hand.follow(state.month, routeOf([...swapTo(state, a, 'energy'), ...swapTo(state, b, 'water'), { act: 'pub' }]));
+      play(runner, state, hand);
+      const steps = byIndex(hand, state);
+      const log = JSON.stringify(hand.done);
+      expect(steps.get(4), log).toEqual({ route: 4, outcome: 'skipped', note: 'swapped MULE kept its outfit' });
+      expect([a.outfit, b.outfit], log).toEqual(['energy', 'food']);
+      expect(me(state).carriedMule).toBeNull();
+    });
+
     it("HC-9: an own re-pick after the analyses whose draft throws is logged with the seat and plays as 'stop'; no MULE is added", () => {
       const { result, logged } = throwingDraft(() => smithoreRoute(true));
       const { state, plots, hand, log } = result;
@@ -775,7 +847,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       return { state, lake, spare };
     }
 
-    it("T-AC-7 row 3 (AM-25): a MULE for a plot the floor's walk vetoes is replaced by its own pick, 'stale: <the veto>', and none is lost", () => {
+    it("T-AC-7 row 3 (AM-25): a MULE for a lake plot no shore reaches is replaced by its own pick, 'lake: no shore reaches plot <n>', and none is lost", () => {
       const { state, lake, spare } = lakeWithNoStand();
       const { hand } = seatAndHand();
       const price = mulePriceFor(state, ME);
@@ -792,7 +864,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const log = JSON.stringify(hand.done);
       const steps = hand.routeLog(state).steps;
       expect(steps.slice(0, 3).map((s) => s.outcome), log).toEqual(['replaced', 'replaced', 'replaced']);
-      expect(steps.slice(0, 3).every((s) => /^stale: the walk takes/.test(s.note ?? '')), log).toBe(true);
+      expect(steps.slice(0, 3).every((s) => s.note === `lake: no shore reaches plot ${indexOf(state, lake)}`), log).toBe(true);
       // The promise: no MULE paid for and lost. Every MULE bought stands on a plot, and the money went on those alone.
       const ok = (type: string) => hand.done.filter((e) => e.action.type === type && e.ok).length;
       expect(ok('buyMule'), log).toBe(ok('install'));

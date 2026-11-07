@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>aefa27c809e7</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>ef6ac1e63984</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1189,8 +1189,8 @@
 <tr><td><code>COLONY.maxOpen</code></td><td class="n">3</td><td>Projects commissioned or building at the same time: 3 (pace set C, Heiko, 6 Nov).</td></tr>
 <tr><td><code>COLONY.reserve</code></td><td class="n">100</td><td>Credits the fund keeps back from a project&#39;s funding, so next month&#39;s office pay is there.</td></tr>
 <tr><td><code>COLONY.fundBuysGoods</code></td><td class="n">true</td><td>The fund buys an object&#39;s missing goods from the store at the store&#39;s price; off, only donors&#39; goods fund it.</td></tr>
-<tr><td><code>COLONY.grant</code></td><td class="n"></td><td>The Federation&#39;s grant into the fund at each upkeep, in credits: 250 a month (pace set C, Heiko, 6 Nov); flat until a scaling rule is tuned.</td></tr>
-<tr><td><code>COLONY.grant.perMonth</code></td><td class="n">250</td><td>See the note on <code>COLONY.grant</code>.</td></tr>
+<tr><td><code>COLONY.grant</code></td><td class="n"></td><td>The Federation&#39;s grant into the fund at each upkeep, in credits: 200 a month (Heiko, 7 Nov; was 250 in pace set C, 6 Nov), so taxes stay the fund&#39;s largest income; flat until a scaling rule is tuned.</td></tr>
+<tr><td><code>COLONY.grant.perMonth</code></td><td class="n">200</td><td>See the note on <code>COLONY.grant</code>.</td></tr>
 <tr><td><code>COLONY.strike</code></td><td class="n"></td><td>A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).</td></tr>
 <tr><td><code>COLONY.strike.cost</code></td><td class="n">250</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
 <tr><td><code>COLONY.strike.output</code></td><td class="n">0.2</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
