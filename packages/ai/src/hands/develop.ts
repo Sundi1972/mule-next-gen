@@ -10,6 +10,7 @@ import {
   IDLE_INPUT,
   isAssaying,
   isStunned,
+  justSwappedOff,
   MS_PER_SECOND,
   mulePriceFor,
   observe,
@@ -32,6 +33,7 @@ import {
   type Good,
   type HallPlace,
   type Outfit,
+  type Player,
   type Rng,
   type WolfFightLevel,
   type WolfPlay,
@@ -155,22 +157,33 @@ export interface RouteMule {
   outfit: Outfit | null;
 }
 
+/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the hand can't fit a led MULE again. */
+const ledOffSwap = (p: Player): boolean => !!p.takenMule?.swapped && p.carriedMule === p.takenMule.outfit;
+
 /**
- * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's idle
- * plot; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take the cash
- * under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without `floor`
- * the game taps, which installs on any lake. See RULE-9 row 3.
+ * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's, or has a
+ * MULE it can't swap; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take
+ * the cash under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without
+ * `floor` the game taps, which installs on any lake. See RULE-9 row 3.
+ *
+ * A MULE of another outfit on the plot is swapped (AM-35): the new one goes in and the seat leads the old one, which
+ * the route's next MULE can be, or which goes back to the corral at the turn's end. It pays nothing back, so a swap
+ * costs what any MULE does.
  */
 export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: DevWalk, floor?: FloorConfig): string | null {
   const { plot, outfit } = mule;
   const tile = state.tiles[plot]!;
-  if (tile.owner !== mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
+  const me = state.players.find((p) => p.id === mind.me)!;
+  const led = me.carriedMule;
+  // The MULE installed is the one the seat leads if fitted already, so a swap needs it fitted for the route's outfit.
+  const swaps = outfit !== null && tile.outfit !== outfit && (led === null || led === 'empty' || led === outfit) && !justSwappedOff(me, tile.x, tile.y);
+  if (tile.owner !== mind.me || (tile.outfit !== null && !swaps)) return `stale: plot ${plot}`;
   if (floor && unreachablePlot(state, plot, floor)) return `lake: no shore reaches plot ${plot}`;
   // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
   const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
   if (cashFloor !== null && outfit !== null) {
-    const me = state.players.find((p) => p.id === mind.me)!;
-    const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
+    const fits = led !== outfit && !ledOffSwap(me);
+    const cost = (led === null ? mulePriceFor(state, me.id) : 0) + (fits ? outfitCostFor(state, me.id, outfit) : 0);
     if (me.money - cost < cashFloor) return `stale: under the cash floor of ${cashFloor} cr`;
   }
   // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
@@ -1012,7 +1025,14 @@ export class DevelopHand {
       }
     }
     // A MULE it already leads (won at the land auction) is this MULE: not bought, nor outfitted again as it is.
-    const led = state.players.find((p) => p.id === me)!.carriedMule;
+    const self = state.players.find((p) => p.id === me)!;
+    const led = self.carriedMule;
+    // One a swap put on the lead keeps its outfit: the route's MULE for an idle plot is that one, as it is (AM-35).
+    if (a.type === 'outfit' && this.ledGroup === head.group && a.outfit !== led && ledOffSwap(self)) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'swapped MULE kept its outfit');
+      return false;
+    }
     if (led !== null && (a.type === 'buyMule' || (a.type === 'outfit' && a.outfit === led && this.ledGroup === head.group))) {
       if (a.type === 'buyMule') this.ledGroup = head.group;
       this.queue.shift();
