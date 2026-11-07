@@ -279,7 +279,7 @@ function turnedOff(order: readonly EnergyOffPlot[], stock: number): Set<Tile> {
 }
 
 /** The part a turned-off plot files: for want of Energy (AM-17) or of Water (AM-18; the part the old dry farm filed). */
-type OffWhy = 'energyOff' | 'noWater';
+type OffWhy = 'energyOff' | 'waterOff';
 
 /** `n` cut to UPKEEP.offOutputShare, rounded half up: a plot making 3 or 4 still gives 1. */
 const offShare = (n: number) => Math.round(n * UPKEEP.offOutputShare);
@@ -412,7 +412,7 @@ export function runProduction(state: GameState): {
     for (const { tile } of energyOrder) listed.add(tile);
     const noEnergy = turnedOff(energyOrder, owner.stock.energy);
     for (const tile of noEnergy) off.set(tile, 'energyOff');
-    for (const tile of turnedOff(baseOffOrder(state, owner.id, 'water', cold, noEnergy), spare(owner))) off.set(tile, 'noWater');
+    for (const tile of turnedOff(baseOffOrder(state, owner.id, 'water', cold, noEnergy), spare(owner))) off.set(tile, 'waterOff');
   }
 
   for (const tile of working.filter((t) => !isBaseProducer(t) && isRaw(t.outfit!))) {
@@ -436,7 +436,7 @@ export function runProduction(state: GameState): {
       const owner = playerById.get(tile.owner!)!;
       if (!hasStock(owner.stock, feedOf(good))) continue;
       const noEnergy = owner.stock.energy < factoryFit(state, tile, good, owner.id).energy * cold;
-      const why: OffWhy | undefined = noEnergy ? 'energyOff' : spare(owner) < waterUseOf(tile) ? 'noWater' : undefined;
+      const why: OffWhy | undefined = noEnergy ? 'energyOff' : spare(owner) < waterUseOf(tile) ? 'waterOff' : undefined;
       if (why) off.set(tile, why);
       runFactory(tile, good, why);
     }
