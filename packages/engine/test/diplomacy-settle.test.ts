@@ -8,8 +8,11 @@ import {
   councilDone,
   createGame,
   electionDone,
+  monthEndDeals,
   offerDeal,
   openPlanning,
+  pactBetween,
+  pactBreach,
   POLITICS,
   proposeLaw,
   runFor,
@@ -299,5 +302,93 @@ describe('S3-RULE-3 vote card moves', () => {
     finishCeremony(state);
     expect(state.politics!.termStart).toBe(4);
     expect(rep(state, 'lena')).toBe(50 + POLITICS.reputation.moves.kept);
+  });
+});
+
+/** Month 3: Lena offers Brix a 3-month pact and he accepts, through the engine's own calls: it binds months 3 to 5. */
+function pactInMonth3(): { state: GameState; id: string } {
+  const state = newGame();
+  state.month = 3;
+  state.politics = { ...state.politics!, election: null };
+  return { state, id: deal(state, 'lena', PACT('brix', 3)) };
+}
+
+describe('pacts', () => {
+  it('S3-T-AC-14: monthEndDeals settles a pact kept at the upkeep of its until, and pays both parties only where sabotage is possible', () => {
+    for (const possible of [false, true]) {
+      const { state, id } = pactInMonth3();
+      expect(cardOf(state, id)).toMatchObject({ status: 'active', until: 5 });
+      state.month = 4;
+      monthEndDeals(state, false, possible);
+      expect(cardOf(state, id), 'before its until').toMatchObject({ status: 'active', settled: null });
+      state.month = 5;
+      monthEndDeals(state, false, possible);
+      expect(cardOf(state, id)).toMatchObject({ status: 'kept', brokenBy: null, settled: 5 });
+      const gain = possible ? POLITICS.reputation.moves.kept : 0;
+      expect([rep(state, 'lena'), rep(state, 'brix')], `possible ${possible}`).toEqual([50 + gain, 50 + gain]);
+    }
+  });
+
+  it('S3-T-AC-14: the kept limit holds for pacts too — a kept vote card with the partner this term leaves only the other party a gain', () => {
+    const { state, id } = pactInMonth3();
+    state.politics!.deals.push({ id: 'deal-vote00', from: 'lena', to: 'brix', terms: { kind: 'vote', office: 'governor', candidate: 'ossa' }, offered: 1, until: 3, status: 'kept', brokenBy: null, settled: 3 });
+    state.month = 5;
+    monthEndDeals(state, false, true);
+    expect(cardOf(state, id).status).toBe('kept');
+    expect([rep(state, 'lena'), rep(state, 'brix')]).toEqual([50, 50 + POLITICS.reputation.moves.kept]);
+  });
+
+  it('S3-T-AC-14: pactBreach rows 1-3 — outside the pact false and nothing changes; inside, once per card; a kept pact turns broken without a second gain', () => {
+    const { state, id } = pactInMonth3();
+    const before = JSON.stringify([state.politics, state.players.map((p) => p.reputation)]);
+    expect(pactBreach(state, 'lena', 'brix', 2, true), 'before the pact').toBe(false);
+    expect(pactBreach(state, 'lena', 'brix', 6, true), 'after the pact').toBe(false);
+    expect(pactBreach(state, 'lena', 'ossa', 4, true), 'another pair').toBe(false);
+    expect(JSON.stringify([state.politics, state.players.map((p) => p.reputation)])).toBe(before);
+    const off = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
+    expect(pactBreach(off, 'lena', 'brix', 4, true)).toBe(false);
+    // The pact ended kept at month 5 (both gained); an investigation then reveals month 4's sabotage.
+    state.month = 5;
+    monthEndDeals(state, false, true);
+    expect(cardOf(state, id).status).toBe('kept');
+    state.month = 8;
+    expect(pactBreach(state, 'lena', 'brix', 4, true)).toBe(true);
+    expect(cardOf(state, id)).toMatchObject({ status: 'broken', brokenBy: 'lena', settled: 8 });
+    expect(rep(state, 'lena'), 'the earlier gain stays, the breach costs').toBe(50 + POLITICS.reputation.moves.kept + POLITICS.reputation.moves.pactBroken);
+    expect(rep(state, 'brix'), 'the victim is not paid twice').toBe(50 + POLITICS.reputation.moves.kept);
+    expect(pactBreach(state, 'lena', 'brix', 4, true), 'once per card').toBe(false);
+    expect(rep(state, 'lena')).toBe(50 + POLITICS.reputation.moves.kept + POLITICS.reputation.moves.pactBroken);
+  });
+
+  it('S3-T-AC-15: pactBreach in month 4 of a 3-5 pact breaks it with the saboteur named, costs them pactBroken and pays the victim where sabotage is possible', () => {
+    for (const possible of [false, true]) {
+      const { state, id } = pactInMonth3();
+      state.month = 4;
+      expect(pactBetween(state, 'brix', 'lena')).toBe(cardOf(state, id));
+      expect(pactBreach(state, 'lena', 'brix', 4, possible)).toBe(true);
+      expect(cardOf(state, id)).toMatchObject({ status: 'broken', brokenBy: 'lena', settled: 4 });
+      expect(rep(state, 'lena')).toBe(50 + POLITICS.reputation.moves.pactBroken);
+      expect(rep(state, 'brix'), `possible ${possible}`).toBe(50 + (possible ? POLITICS.reputation.moves.kept : 0));
+      expect(pactBetween(state, 'lena', 'brix'), 'a broken pact binds no one').toBeNull();
+    }
+    const low = pactInMonth3();
+    low.state.month = 4;
+    setRep(low.state, 'lena', 15);
+    pactBreach(low.state, 'lena', 'brix', 4, true);
+    expect(rep(low.state, 'lena'), 'clamped at the floor').toBe(POLITICS.reputation.min);
+  });
+
+  it('S3-T-AC-2: monthEndDeals at game over settles active pacts kept as at their end and expires active vote cards', () => {
+    const state = newGame();
+    declare(state, 'brix', 'ossa');
+    const pact = deal(state, 'lena', PACT('brix', 6));
+    const vote = deal(state, 'kai', GOV('mia', 'brix'));
+    const declined = offerDeal(state, 'ossa', PACT('kai'));
+    answerDeal(state, 'kai', declined, false);
+    monthEndDeals(state, true, true);
+    expect(cardOf(state, pact)).toMatchObject({ status: 'kept', settled: 1 });
+    expect(cardOf(state, vote)).toMatchObject({ status: 'expired', brokenBy: null, settled: 1 });
+    expect(cardOf(state, declined).status).toBe('declined');
+    expect([rep(state, 'lena'), rep(state, 'brix'), rep(state, 'kai')]).toEqual([53, 53, 50]);
   });
 });

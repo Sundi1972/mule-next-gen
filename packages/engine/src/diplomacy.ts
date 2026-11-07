@@ -188,26 +188,26 @@ function judge(state: GameState, card: DealCard): Verdict {
  * Whether `playerId` still gains from a kept card with `otherId` this term: the cards between them settled kept since
  * politics.termStart, that paid the player, are fewer than the limit (S3-RULE-3). A pact pays only where sabotage can happen.
  */
-function earnsKept(state: GameState, politics: Politics, playerId: string, otherId: string): boolean {
+function earnsKept(possible: boolean, politics: Politics, playerId: string, otherId: string): boolean {
   const paid = politics.deals.filter(
     (d) =>
       d.status === 'kept' &&
       d.settled !== null &&
       d.settled >= politics.termStart &&
       sameParties(d, playerId, otherId) &&
-      (d.terms.kind === 'pact' ? sabotagePossible(state) : d.from === playerId),
+      (d.terms.kind === 'pact' ? possible : d.from === playerId),
   );
   return paid.length < POLITICS.reputation.keptPerPartnerPerTerm;
 }
 
 /** A player's gain from a card kept with `other`, within the limit. Call before the card itself is marked kept. */
-function rewardKept(state: GameState, politics: Politics, playerId: string, otherId: string): void {
-  if (earnsKept(state, politics, playerId, otherId)) reputationShift(state, playerId, POLITICS.reputation.moves.kept);
+function rewardKept(state: GameState, politics: Politics, playerId: string, otherId: string, possible: boolean): void {
+  if (earnsKept(possible, politics, playerId, otherId)) reputationShift(state, playerId, POLITICS.reputation.moves.kept);
 }
 
 /** Settles a vote card on the editable politics, and moves the promiser's reputation. */
 function settleCard(state: GameState, politics: Politics, card: DealCard, verdict: Verdict): void {
-  if (verdict === 'kept') rewardKept(state, politics, card.from, card.to);
+  if (verdict === 'kept') rewardKept(state, politics, card.from, card.to, sabotagePossible(state));
   if (verdict === 'broken') reputationShift(state, card.from, POLITICS.reputation.moves.voteBroken);
   Object.assign(card, { status: verdict, brokenBy: verdict === 'broken' ? card.from : null, settled: state.month });
 }
@@ -236,4 +236,16 @@ export function closePlanningDeals(state: GameState): void {
 /** Whether a sabotage can happen in this game, so a pact can be broken: false until slice 4 replaces this body. */
 export function sabotagePossible(_state: GameState): boolean {
   return false;
+}
+
+export function pactBetween(_state: GameState, _a: string, _b: string, _month: number = _state.month): DealCard | null {
+  throw new Error('NotImplemented: pactBetween');
+}
+
+export function pactBreach(_state: GameState, _saboteurId: string, _victimId: string, _sabotageMonth: number, _possible: boolean = sabotagePossible(_state)): boolean {
+  throw new Error('NotImplemented: pactBreach');
+}
+
+export function monthEndDeals(_state: GameState, _gameOver: boolean, _possible: boolean = sabotagePossible(_state)): void {
+  throw new Error('NotImplemented: monthEndDeals');
 }
