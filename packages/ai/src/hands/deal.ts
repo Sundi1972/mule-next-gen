@@ -106,6 +106,7 @@ export class DealHand {
 
   /** S3-RULE-9 answer rows: whether to accept `card`, offered to this seat. */
   answer(obs: GameState, card: DealCard): boolean {
+    this.enter(obs);
     if (this.reputationOf(obs, card.from) < POLITICS.ai.deals.refuseBelow) return false;
     // The engine refuses a second pact between the same two, so a decline is the only answer that can be sent.
     if (card.terms.kind === 'pact' && obs.politics!.deals.some((d) => d.terms.kind === 'pact' && d.status === 'active' && this.between(d, card))) return false;
@@ -168,10 +169,13 @@ export class DealHand {
     return obs.players.find((p) => p.id === id)?.reputation ?? 0;
   }
 
-  /** The offer windows: an election's announce, and planning proper once the election is over or none is held. */
+  /**
+   * The offer windows: an election's announce once the seat is Done (VoteHand presses it after its last call, so the seat's
+   * candidacy is settled and AM-8 cannot break what it offers), and planning proper once the election is over or none is held.
+   */
   private windowKey(obs: GameState): string | null {
     const stage = obs.politics!.election?.stage ?? 'none';
-    if (stage === 'announce') return `${obs.month}:announce`;
+    if (stage === 'announce') return obs.politics!.election!.done.includes(this.mind.me) ? `${obs.month}:announce` : null;
     const council = obs.politics!.council;
     return stage === 'over' || stage === 'none' ? (council && council.stage !== 'over' ? null : `${obs.month}:planning`) : null;
   }
@@ -189,9 +193,7 @@ export class DealHand {
     const mine = obs.politics!.deals.filter((d) => d.from === me && (d.status === 'offered' || d.status === 'active'));
     const usable = this.drafts(obs)
       .map((d) => ({ ...d, worth: cardWorth(obs, me, d.card) }))
-      .filter((d) => d.worth > 0 && cardWorth(obs, d.card.to, d.card) >= 0)
-      .filter((d) => this.reputationOf(obs, d.card.to) >= POLITICS.ai.deals.refuseBelow)
-      .filter((d) => !obs.politics!.deals.some((c) => c.from === me && c.to === d.card.to && c.status === 'declined' && c.settled === obs.month && sameTerms(c.terms, d.card.terms)))
+      .filter((d) => d.worth > 0 && this.acceptable(obs, d))
       .sort((a, b) => b.worth - a.worth);
     const takenPartners = new Set(mine.filter((d) => d.status === 'offered').map((d) => d.to));
     const takenBallots = new Set(mine.filter((d) => d.terms.kind === 'vote').map((d) => `${d.until}:${ballotOf(d.terms)}`));
@@ -205,6 +207,16 @@ export class DealHand {
       picked.push(d);
     }
     return picked;
+  }
+
+  /** The offer tests about the partner: worth to it at least 0, its reputation, and the same card not declined this month. */
+  private acceptable(obs: GameState, d: Draft): boolean {
+    const me = this.mind.me;
+    return (
+      cardWorth(obs, d.card.to, d.card) >= 0 &&
+      this.reputationOf(obs, d.card.to) >= POLITICS.ai.deals.refuseBelow &&
+      !obs.politics!.deals.some((c) => c.from === me && c.to === d.card.to && c.status === 'declined' && c.settled === obs.month && sameTerms(c.terms, d.card.terms))
+    );
   }
 
   /** Rows a, b and c as cards not yet sent. */
@@ -251,7 +263,7 @@ export class DealHand {
 
   /** The other player the proposal costs most a month; the first in seat order on a tie. */
   private dearestTo(obs: GameState, proposal: LawProposal): string | null {
-    const cost = (id: string): number => (proposal.kind === 'enact' ? -lawWorth(obs, id, proposal) : lawWorth(obs, id, proposal));
+    const cost = (id: string): number => -lawWorth(obs, id, proposal);
     return obs.players.filter((p) => p.id !== this.mind.me).reduce<string | null>((best, p) => (best === null || cost(p.id) > cost(best) ? p.id : best), null);
   }
 
@@ -261,11 +273,13 @@ export class DealHand {
     const { pactMonths } = POLITICS.deals;
     const months = pactMonths[Math.floor(pactMonths.length / 2)]!;
     const open = obs.politics!.deals.filter((d) => d.terms.kind === 'pact' && (d.status === 'offered' || d.status === 'active'));
-    const options = obs.players
-      .filter((p) => p.id !== this.mind.me && !open.some((d) => (d.from === p.id && d.to === this.mind.me) || (d.from === this.mind.me && d.to === p.id)))
-      .map((p) => this.draft(obs, { to: p.id, terms: { kind: 'pact' }, months }))
-      .filter((d): d is Draft => d !== null && cardWorth(obs, d.card.to, d.card) >= 0 && this.reputationOf(obs, d.card.to) >= POLITICS.ai.deals.refuseBelow);
+    // every offer test comes before the pick, so a best partner that fails one gives way to the next best
+    const holding = new Set(obs.politics!.deals.filter((d) => d.from === this.mind.me && d.status === 'offered').map((d) => d.to));
     const worth = (d: Draft): number => cardWorth(obs, this.mind.me, d.card);
+    const options = obs.players
+      .filter((p) => p.id !== this.mind.me && !holding.has(p.id) && !open.some((d) => (d.from === p.id && d.to === this.mind.me) || (d.from === this.mind.me && d.to === p.id)))
+      .map((p) => this.draft(obs, { to: p.id, terms: { kind: 'pact' }, months }))
+      .filter((d): d is Draft => d !== null && worth(d) > 0 && this.acceptable(obs, d));
     return options.reduce<Draft | null>((best, d) => (best === null || worth(d) > worth(best) ? d : best), null);
   }
 }

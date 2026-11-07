@@ -247,6 +247,7 @@ describe('S3-T-AC-8: DealHand answers in planning', () => {
     const state = newGame();
     state.month = 2;
     withDeals(state, [card('ai2', 'ai3', PACT, { id: 'deal-hidden' })]);
+    state.politics = { ...state.politics!, election: null };
     sabotage.possible = true; // the pact row is the one that values cards
     const named: AiAction[] = [];
     const hand = new DealHand(mindOf('ai0'), { answerFor: () => expect.unreachable(), offersFor: () => null });
@@ -529,7 +530,11 @@ describe('S3-T-AC-8 (S3-HC-3): DealHand\'s draws leave the election and council 
     const deals = SEATS.map((id, i) => new DealHand(mindOf(id, (['trader', 'cautious', 'aggressive', 'saboteur'] as const)[i]!, 'trader', seed + i)));
     const sent: Record<string, AiAction[]> = Object.fromEntries(SEATS.map((id) => [id, []]));
     worth.mockReturnValue(withDeals ? 3 : 0);
-    for (let t = 0; t < 120_000 && state.politics!.election!.stage !== 'over'; t += WALK.tickMs) {
+    sabotage.possible = true; // a pact is the card the planning that follows the election offers
+    // the election's ballot, then the planning window after it, where the DealHands offer their pacts
+    let overFor = 0;
+    for (let t = 0; t < 120_000 && overFor < PAUSE_MS; t += WALK.tickMs) {
+      if (state.politics!.election!.stage === 'over') overFor += WALK.tickMs;
       SEATS.forEach((id, i) => {
         const record: Act = (a) => (sent[id]!.push(a), voteAct(state, id)(a));
         votes[i]!.tick(state, WALK.tickMs, record);
