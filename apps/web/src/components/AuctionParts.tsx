@@ -1,6 +1,6 @@
 import { COLONY_SELLER, GOOD_CONFIG, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
-import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { bestOffers, Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
@@ -30,15 +30,68 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
   });
 }
 
+/**
+ * The store's selling line and the rest zones, as the board takes them. Once the store is sold out, the line the server
+ * sends is the highest bid (flagged) or the store's old price: never a price it sells at, so the board draws it as the
+ * sold-out line.
+ */
+export function storeLines(auction: AuctionView): {
+  storeSells: number | null;
+  soldOutAt: { price: number; bid: boolean } | null;
+  zones: { buyersTop: number; sellersBottom: number } | null;
+} {
+  const soldOut = auction.storeForSale === 0 && auction.storeSells !== null;
+  return {
+    storeSells: soldOut ? null : auction.storeSells,
+    soldOutAt: soldOut ? { price: auction.storeSells!, bid: auction.storeSellsBid === true } : null,
+    zones: auction.zones ?? null,
+  };
+}
+
+/** What the store charges, as a price box shows it: "out" once it has none to sell, whatever line the board draws. */
+export const storeSellsWord = (auction: AuctionView): number | 'out' => (auction.storeForSale > 0 ? (auction.storeSells ?? 'out') : 'out');
+
+/** In the phone's rail while the store is sold out: nobody buys from it, what it still pays, and the highest bid once one passes its old price. */
+export function SoldOutNote({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
+  return (
+    <p className="rounded-control border border-rise/50 bg-void px-2.5 py-1.5 text-[11px] leading-snug text-ink-2" data-testid="sold-out-note">
+      <strong className="text-rise">Store sold out.</strong> Nobody can buy from it{auction.storeBuys !== null ? `; it still buys at ${auction.storeBuys}` : ''}.
+      {soldOutAt?.bid && ` Highest bid ${soldOutAt.price}.`}
+    </p>
+  );
+}
+
+/** On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has. */
+export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
+  // The old price is the sellers' zone's floor; without zones, the sold-out line until a bid passes it. Never the bid.
+  const old = auction.zones?.sellersBottom ?? (soldOutAt && !soldOutAt.bid ? soldOutAt.price : null);
+  const bid = soldOutAt?.bid ? soldOutAt.price : null;
+  return (
+    <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
+      <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
+      <span className="text-lg leading-snug text-ink-2">
+        {old !== null ? `Bids can go past its old ${old}.` : 'No store price yet: bids set it.'}
+        {bid !== null && ' '}
+        {bid !== null && (
+          <>
+            Highest bid{' '}
+            <strong data-num className="font-mono text-ink">
+              {bid}
+            </strong>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
 export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
   return w?.side === 'seller' && w.held === true;
 }
 
-/**
- * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
- * how to sell on.
- */
 /**
  * Why the auction asks you to hold more of `good`, true for that good (auctionNeed): upkeep eats Food and Water, the
  * month end spoils what has spoilage in config, and what neither touches is held for next month's use alone.
@@ -48,6 +101,10 @@ export function holdReason(good: Good): string {
   return GOOD_CONFIG[good].spoilage > 0 ? 'next month uses it, and some spoils first' : 'next month uses it';
 }
 
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
+ * how to sell on.
+ */
 export function heldWords(good: Good, need: number): { line: string; how: string } {
   return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
@@ -82,18 +139,6 @@ function pricesOn(auction: AuctionView, side: 'seller' | 'buyer', without?: stri
 }
 
 /**
- * How far the closest pair that could trade stands apart: a player's ask against the best bid, or the best ask against
- * a player's bid. Zero or less, they meet; null when no player has a price facing one. The ship and the store crossing
- * each other is no pair: every deal has a player on one side.
- */
-function playerGap(asks: Offer[], bids: Offer[]): number | null {
-  const ask = asks.find((o) => !o.house);
-  const bid = bids.find((o) => !o.house);
-  const gaps = [ask && bids[0] ? ask.price - bids[0].price : null, bid && asks[0] ? asks[0].price - bid.price : null].filter((g): g is number => g !== null);
-  return gaps.length > 0 ? Math.min(...gaps) : null;
-}
-
-/**
  * The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the nearest trade a
  * player faces. TRADING is one word: NEAREST TRADE widens the label column, and a two-line value pushed the second deal row
  * out of the TV's list (TV-FIT).
@@ -103,7 +148,9 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
   const bids = pricesOn(auction, 'buyer');
   const ask = asks[0];
   const bid = bids[0];
-  const gap = playerGap(asks, bids);
+  // The chart's gap chip measures the same pair (SWEEP-C1): every deal has a player on one side.
+  const pair = bestOffers({ walkers: boardWalkers(view, auction), storeSells: storeLines(auction).storeSells, storeStock: auction.storeForSale, storeBuys: auction.storeBuys, shipPays: auction.shipPays });
+  const gap = pair.ask !== null && pair.bid !== null ? pair.ask - pair.bid : null;
   const trading = auction.deals.length > 0;
   return (
     <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
@@ -179,7 +226,7 @@ export function StoreBox({ auction }: { auction: AuctionView; tv?: true }) {
     <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono text-2xl" data-testid="status-store">
       {(
         [
-          ['STORE SELLS', auction.storeSells ?? 'out', 'text-rise'],
+          ['STORE SELLS', storeSellsWord(auction), 'text-rise'],
           ['STORE BUYS', auction.storeBuys ?? '—', 'text-fall'],
           ['IN STOCK', stock, stock === 0 ? 'text-alert' : 'text-ink'],
         ] as const
@@ -271,8 +318,12 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   return { line: `Walk down to ${name(best)}’s bid at ${best.price}.`, how };
 }
 
-/** The hint's box: `lit` while your units change hands, `ok` once a choice at a line is done. */
-export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string }) {
+/**
+ * A rail hint: its line, and how to act on it under; `lit` while your units change hands, `ok` once a choice at a line is
+ * done. `howTall` shows the how only where the rail has a row to spare (430 px of height, as the sides caption): on a
+ * phone held sideways a button already says it.
+ */
+export function Hint({ line, how, tone = 'quiet', testid = 'hint', howTall = false }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string; howTall?: boolean }) {
   return (
     <div
       className={cx(
@@ -285,7 +336,7 @@ export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: Rea
         {line}
       </span>
       {how && (
-        <span className="text-ink-2" data-testid="hint-how">
+        <span className={cx('text-ink-2', howTall && 'hidden [@media(min-height:430px)]:block')} data-testid="hint-how">
           {how}
         </span>
       )}

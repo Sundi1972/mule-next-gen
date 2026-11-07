@@ -18,10 +18,12 @@ import {
   type Council,
   type GameState,
   type LawProposal,
+  type Good,
+  type PrestigeId,
   type Rng,
 } from '@mule/engine';
 import type { Act, AiAction } from '../src/actions.js';
-import { VoteHand } from '../src/hands/vote.js';
+import { goodsInReach, VoteHand } from '../src/hands/vote.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import type { Mind } from '../src/value.js';
@@ -57,6 +59,8 @@ function governed(seed = 7): GameState {
   state.month = 2;
   state.politics = { ...state.politics!, governor: 'ai0', election: null, baron: null };
   state.treasury.money = 5_000;
+  // Every good any object needs is on the store's shelf, so goods in reach decide nothing unless a case says so.
+  for (const row of Object.values(PRESTIGE)) for (const [good, need] of Object.entries(row.goods) as [Good, number][]) state.store.stock[good] = Math.max(state.store.stock[good], need);
   return state;
 }
 
@@ -72,6 +76,14 @@ function tick(hand: VoteHand, state: GameState): AiAction[] {
   hand.tick(state, 0, (action) => (sent.push(action), applyAction(state, hand.mind.me, action)));
   return sent;
 }
+
+/** The fund an AI Governor needs before it commissions this object: POLITICS.ai.colony.commissionShare of its credits. */
+function atShare(id: PrestigeId): number {
+  return Math.ceil(PRESTIGE[id].credits * POLITICS.ai.colony.commissionShare);
+}
+
+/** The colony acts a tick sent, without the tax its Governor steers. */
+const colonyActs = (sent: AiAction[]) => sent.filter((a) => a.type !== 'setTax');
 
 function ballot(state: GameState, proposal: LawProposal, proposer = 'ai0'): void {
   const council: Council = { stage: 'ballot', clockMs: 0, proposal, proposer, ballots: { [proposer]: true }, done: [], result: null };
@@ -257,59 +269,84 @@ describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
 });
 
 describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () => {
-  it('T-AC-36: an AI Governor whose persona builds commissions the most prestige the fund can pay for, once the votes are over', () => {
+  it('T-AC-36: an AI Governor whose persona builds commissions the most prestige the fund holds its commission share of, once the votes are over', () => {
     POLITICS.ai.colony.commissions.trader = true;
     const state = governed();
-    state.treasury.money = 700;
+    state.treasury.money = atShare('stadium') - 1;
+    expect(state.treasury.money, 'the case: the Hospital and Observatory are in reach, the Stadium is not').toBeGreaterThanOrEqual(atShare('observatory'));
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.projects.map((p) => p.id), 'the Hospital (3) over the Park (2); the Observatory ties it and costs more').toEqual(['hospital']);
     const exact = governed();
-    exact.treasury.money = PRESTIGE.hospital.credits;
+    exact.treasury.money = atShare('hospital');
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), exact);
-    expect(exact.colony!.projects.map((p) => p.id), 'a fund of exactly its price pays for it').toEqual(['hospital']);
+    expect(exact.colony!.projects.map((p) => p.id), 'a fund of exactly its share commissions it (pace set C)').toEqual(['hospital']);
+    const short = governed();
+    short.treasury.money = atShare('hospital') - 1;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), short);
+    expect(short.colony!.projects.map((p) => p.id), 'one credit short of its share, the Park is the most it reaches').toEqual(['park']);
   });
 
-  it('T-AC-36 (C25, AM-10): with a site budget it commissions an object that needs a plot, and at once sets the colony\'s top bid for its site', () => {
-    POLITICS.ai.colony.commissions.trader = true;
-    POLITICS.ai.colony.siteBid.trader = 400;
-    const state = governed();
-    state.treasury.money = 1_500;
-    const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
-    expect(state.colony!.projects.map((p) => [p.id, p.maxBid]), 'the Spaceport upgrade (5), its bid the persona\'s').toEqual([['spaceport', 400]]);
-    expect(sent.map((a) => a.type)).toEqual(['commission', 'setSiteBid']);
-  });
-
-  it('T-AC-36 (C25, AM-10): with no site budget it commissions only objects that need no plot', () => {
-    POLITICS.ai.colony.commissions.saboteur = true;
-    POLITICS.ai.colony.siteBid.saboteur = null;
-    const state = governed();
-    state.treasury.money = 1_500;
-    tick(new VoteHand(mindOf('ai0', 'saboteur'), createRng(1)), state);
-    expect(state.colony!.projects.map((p) => [p.id, p.maxBid])).toEqual([['hospital', null]]);
-  });
-
-  it('T-AC-36 (C25, AM-10): an object waiting for its site with no bid gets the persona\'s; a bid already set is left alone; no budget, no bid', () => {
-    POLITICS.ai.colony.siteBid.cautious = 300;
-    POLITICS.ai.colony.siteBid.saboteur = null;
-    for (const [persona, given, then] of [['cautious', null, 300], ['cautious', 250, 250], ['cautious', 0, 0], ['saboteur', null, null]] as const) {
-      const state = governed();
-      commission(state, 'ai0', 'park');
-      state.colony!.projects[0]!.maxBid = given;
-      const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
-      expect(state.colony!.projects[0]!.maxBid, `${persona}, bid ${given}`).toBe(then);
-      expect(sent.some((a) => a.type === 'setSiteBid'), `${persona}, bid ${given}: it only sends a bid it means to set`).toBe(given === null && then !== null);
+  /** No unit of `goods` anywhere the Governor can see: not with a player, not in the store, not made last month. */
+  function without(state: GameState, goods: Good[]): void {
+    for (const good of goods) {
+      state.store.stock[good] = 0;
+      for (const p of state.players) p.stock[good] = 0;
+      for (const report of state.history) for (const row of Object.values(report.produced)) row[good] = 0;
     }
-    const plotFree = governed();
-    commission(plotFree, 'ai0', 'hospital');
-    const sent = tick(new VoteHand(mindOf('ai0', 'cautious'), createRng(1)), plotFree);
-    expect(sent.filter((a) => a.type === 'setSiteBid'), 'an object that needs no plot never gets a site bid').toEqual([]);
+  }
+
+  it('T-AC-36 (PM ruling, 6 Nov): it commissions only an object whose goods are within reach; with no Electronics anywhere and 28 Crystite held, the Observatory over the Spaceport', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    const state = governed();
+    without(state, ['electronics', 'crystite']);
+    state.players.find((p) => p.id === 'ai0')!.stock.crystite = 28;
+    expect(goodsInReach(state, 'spaceport'), 'the case: no Electronics anywhere').toBe(false);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Observatory (3, Crystite in reach) over the Spaceport (5, no Electronics)').toEqual(['observatory']);
+
+    const none = governed();
+    without(none, ['alloy', 'electronics', 'crystite']);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), none);
+    expect(none.colony!.projects, 'nothing in reach: it commissions nothing').toEqual([]);
+  });
+
+  it('T-AC-36 (PM ruling, 6 Nov): with every object\'s goods in reach, prestige decides', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    const state = governed();
+    without(state, ['electronics', 'crystite']);
+    state.players.find((p) => p.id === 'ai0')!.stock.crystite = 28;
+    state.store.stock.electronics = PRESTIGE.spaceport.goods.electronics;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Spaceport upgrade (5) over the Observatory (3)').toEqual(['spaceport']);
+  });
+
+  it('T-AC-36 (PM ruling, 6 Nov): units made last month count toward reach', () => {
+    const state = governed();
+    without(state, ['electronics']);
+    expect(goodsInReach(state, 'hospital')).toBe(false);
+    state.history = [{ ...structuredClone(state.history.at(-1) ?? ({} as GameState['history'][number])), produced: { ai0: { ...state.players[0]!.stock, electronics: PRESTIGE.hospital.goods.electronics } } }];
+    expect(goodsInReach(state, 'hospital'), 'the Governor made the Electronics last month').toBe(true);
+  });
+
+  it('T-AC-36 (C48): every persona that builds commissions by prestige alone, the Spaceport upgrade included, and sends nothing after the commission', () => {
+    for (const persona of ['trader', 'saboteur'] as const) {
+      POLITICS.ai.colony.commissions[persona] = true;
+      const state = governed();
+      state.treasury.money = 1_500;
+      const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
+      expect(state.colony!.projects.map((p) => p.id), `${persona}: the Spaceport upgrade (5) builds on the colony's grounds, no plot to wait for`).toEqual(['spaceport']);
+      // Its other planning moves (the tax, a law) are its own business; of the colony's acts it sends the commission only.
+      expect(sent.map((a) => a.type).filter((t) => !['setTax', 'propose'].includes(t)), persona).toEqual(['commission']);
+    }
   });
 
   it('T-AC-36: a strike paid this tick leaves less to build with — the Governor commissions only from the fund that is left', () => {
     POLITICS.ai.colony.commissions.trader = true;
     POLITICS.ai.colony.paysStrike.trader = true;
     const state = governed();
-    state.treasury.money = 900; // the Hospital's 680 is within it, but not once the strike's 250 is paid: the Park's 420 is
+    // Every object's share is within it, but once the strike is paid only the Park's is.
+    state.treasury.money = COLONY.strike.cost + atShare('park');
+    expect(state.treasury.money - COLONY.strike.cost, 'the case: after the strike the Hospital is out of reach').toBeLessThan(atShare('hospital'));
     callStrike(state, 'food');
     const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.strike!.paid).toBe(true);
@@ -322,7 +359,7 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
     const state = governed();
     state.treasury.money = COLONY.strike.cost + PRESTIGE.park.repairCost - 1;
     callStrike(state, 'food');
-    state.colony!.projects.push({ id: 'park', stage: 'damaged', funded: { credits: PRESTIGE.park.credits, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+    state.colony!.projects.push({ id: 'park', stage: 'damaged', funded: { credits: PRESTIGE.park.credits, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
     const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.strike!.paid, 'the strikers are paid').toBe(true);
     expect(sent.some((a) => a.type === 'repair'), 'no repair the fund can no longer pay').toBe(false);
@@ -335,7 +372,7 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
     POLITICS.ai.colony.commissions.trader = true;
     const damaged = (state: GameState) => {
       for (const id of ['park', 'stadium'] as const) {
-        state.colony!.projects.push({ id, stage: 'damaged', funded: { credits: PRESTIGE[id].credits, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+        state.colony!.projects.push({ id, stage: 'damaged', funded: { credits: PRESTIGE[id].credits, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
       }
     };
     const stadium = PRESTIGE.stadium.repairCost;
@@ -364,14 +401,15 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
 
     POLITICS.ai.colony.commissions.trader = true;
     const poor = governed();
-    poor.treasury.money = PRESTIGE.park.credits - 1;
+    poor.treasury.money = atShare('park') - 1;
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), poor);
     expect(poor.colony!.projects).toEqual([]);
 
     const busy = governed();
-    commission(busy, 'ai0', 'observatory');
+    const open = (['observatory', 'hospital', 'park', 'stadium', 'spaceport'] as const).slice(0, COLONY.maxOpen);
+    for (const id of open) commission(busy, 'ai0', id);
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), busy);
-    expect(busy.colony!.projects.map((p) => p.id)).toEqual(['observatory']);
+    expect(busy.colony!.projects.map((p) => p.id), `COLONY.maxOpen (${COLONY.maxOpen}) objects open: no more`).toEqual([...open]);
   });
 
   it('INV-41: a VoteHand whose mind has no seat salt refuses to draw the council\'s coin rather than share a stream', () => {

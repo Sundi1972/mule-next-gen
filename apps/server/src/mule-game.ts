@@ -10,9 +10,9 @@ import {
   colonyFailed,
   cover,
   createGame,
-  defaultSpecies,
   createRng,
   declareRole,
+  defaultSpecies,
   leaveBoard,
   electionDone,
   votesDone,
@@ -67,12 +67,12 @@ import {
   repair,
   payStrike,
   goodWords,
-  setSiteBid,
   setWalk,
   shipAnnounced,
   shipInPort,
   shipLine,
   shipPrice,
+  shownSellLine,
   sickPace,
   SPECIES,
   type Species,
@@ -500,7 +500,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.recordPlaybook = options.recordPlaybook ?? (() => {});
   }
 
-  /** What the lobby shows an unpicked seat: the species createGame will give it at this seat count. */
+  /**
+   * The species the lobby shows each seat, picked or not: what createGame gives it at this seat count if it never picks.
+   */
   defaultPick(seat: number, seats: number): Species {
     return defaultSpecies(seat, seats, this.seed);
   }
@@ -659,9 +661,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'repair':
         repair(state, seatId, intent.id);
-        return;
-      case 'setSiteBid':
-        setSiteBid(state, seatId, intent.id, intent.maxBid);
         return;
       case 'payStrike': {
         payStrike(state, seatId);
@@ -1743,6 +1742,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const market = goodsMarket(state);
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
+    // RULE-7: once the store is sold out, its line shows the highest bid a buyer can pay, flagged so a screen labels it.
+    const selling = shownSellLine(state);
     return {
       good: a.good,
       stage: a.stage,
@@ -1752,7 +1753,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),
-      storeSells: storeSellLine(state),
+      storeSells: selling?.price ?? null,
+      ...(selling?.bid ? { storeSellsBid: true as const } : {}),
+      zones: { ...a.zones },
       storeForSale: storeForSale(state, a.good),
       shipPays: shipLine(state),
       shipQuote: shipQuote(state, a.good),

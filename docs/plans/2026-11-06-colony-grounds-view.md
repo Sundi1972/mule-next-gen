@@ -50,8 +50,8 @@ ground, vitest with `renderToStaticMarkup` (packages/ui, apps/web), Playwright f
 | PR-1 | `ws10-grounds-pr1` (code, PR #542) + art commits on `ws10-visual` | Tasks 1.1–1.7 (C1 Park + hall + Hospital, C2, C7) | B-AC-1, B-AC-4 (for its kinds), T-AC-1, T-AC-2 (its kinds), T-AC-5 (TV) | manifest.json | ColonyProjectView.place (C6, WS7 engine PR) | Yes |
 | PR-2 | `ws10-grounds-pr2` | Tasks 2.1–2.4 (C4, C8) | B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4, T-AC-5 (phone) | — | manifest.json, place | Yes |
 | PR-3 | `ws10-grounds-pr3` | Tasks 3.1–3.3 (C1 remaining kinds) | B-AC-4, T-AC-2 (all kinds) | — | manifest.json | No (static art) |
-| PR-4 | `ws10-grounds-pr4` | Tasks 4.1–4.3 (C3) | — (look; §4 worker row) | — | — | Yes |
-| PR-5 | `ws10-grounds-pr5` | Tasks 5.1–5.3 (C5) | T-AC-7 | — | — | Yes |
+| PR-4 | `ws10-grounds-pr4` | Tasks 4.1–4.4 (C1, C2, C3; AM-7) | T-AC-2 (plate) | — | — | Yes |
+| PR-5 | `ws10-grounds-pr5` | Tasks 5.1–5.5 (C5, C7, C9; AM-6) | T-AC-7, T-AC-8, T-AC-9, B-AC-6 | — | — | Yes |
 | WS7 | its engine PR | C6 | T-AC-6 | ColonyProjectView.place | — | No |
 
 ### Per-PR authority
@@ -61,8 +61,8 @@ ground, vitest with `renderToStaticMarkup` (packages/ui, apps/web), Playwright f
 | PR-1 | `packages/ui/src/grounds/**`, `packages/ui/test/grounds-*.test.tsx`, `apps/web/public/art/colony/**`, `design/art/colony/**`, one export line in `packages/ui/src/index.ts` | `design/mocks/colony-grounds/src/Scene.tsx`, `layout.ts` (the approved scaffold: graft, don't redesign) | `apps/web/src/table/TableApp.tsx` (WS4: the mount is a named edit, WS4's OK), `packages/protocol/**`, `apps/server/**` (C6 is WS7's), `packages/ui/src/terrain/**` (HC-4) |
 | PR-2 | `packages/ui/src/grounds/**`, its tests | `design/mocks/colony-grounds/src/look/Living.tsx` (scaffold) | `apps/web/src/phone/hub/politics/Colony.tsx` (WS7: named edit, WS7's OK), `packages/ui/src/terrain/**` |
 | PR-3 | `design/art/colony/**`, `apps/web/public/art/colony/**` | — | `packages/ui/**` |
-| PR-4 | `packages/ui/src/grounds/ground*.ts` | — | `packages/ui/src/terrain/**` (import only) |
-| PR-5 | `packages/ui/src/grounds/useGroundsChange.ts`, `ColonyGrounds.tsx` | — | everything outside grounds/ |
+| PR-4 | `packages/ui/src/grounds/**`, its tests, `design/art/colony/**`, `apps/web/public/art/colony/**` | `design/mocks/colony-grounds/tv-beat.html` (scaffold) | `packages/ui/src/terrain/**`, `apps/**/src` (no screen changes in PR-4) |
+| PR-5 | `packages/ui/src/grounds/**` (useGroundsChange.ts, opener.ts, GroundsOpener.tsx, ColonyGrounds.tsx), their tests, `apps/web/test/colony-screens.test.ts`, `apps/web/e2e/` (its own test file) | `design/mocks/colony-grounds/tv-beat.html` + `src/look/Living.tsx` (scaffold) | `apps/web/src/table/TableApp.tsx` beyond TvGame's upkeep route, and `apps/web/src/components/Colony.tsx` beyond useMonthEndDrift (WS4: both named edits, WS4's OK); `TvMonthEnd` itself (must stay unchanged); `packages/protocol/**`, `apps/server/**` |
 
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
@@ -169,7 +169,7 @@ Plan-drift corrections (as built):
 - [ ] **Step 1:** Extend `colony-screens.test.ts` with `B-AC-1 (TV): the month end shows colony-grounds` and `T-AC-5: politics off, no colony-grounds`. Run: FAIL.
 - [ ] **Step 2:** Add the mount line. Run: PASS. Commit: `feat(C7): TV month end shows the colony grounds (verifies B-AC-1, T-AC-5)`. Send the SHA to the PM to get WS4's OK on the named edit.
 - [ ] **Step 3:** Implement C7's planning mount: in `TableApp.tsx::TvGame` the planning screen gains the colony panel beside the map, as in the mock's `index.html` "TV · planning" (`design/mocks/colony-grounds/src/screens.tsx::TvPlanning`, `may_edit_content`). Extend `colony-screens.test.ts` with `B-AC-1 (TV planning): planning shows colony-grounds, politics on`. FAIL → implement → PASS. Commit. This is a layout change in WS4's file, so send the SHA to the PM for WS4's OK.
-- [ ] **Step 4:** Browser test (front to back), also covering review findings: a picture that fails to load shows the SVG shape (B-AC-4's negative case: block one `/art/colony/` URL in the test), and the pictures sit in back-to-front order in the DOM.
+- [ ] **Step 4:** Browser test (front to back), also covering review findings: a picture that fails to load shows the SVG shape (B-AC-4's negative case: block one `/art/colony/` URL in the test) and its glow goes with it; the pictures sit in back-to-front order in the DOM; with reduced motion emulated the walkers do not move (PR-2 review at b12f388c: no DOM in @mule/ui tests).
   Original step: browser test (front to back): in `apps/web/e2e/` the test command starts its own stack, plays to the first month end with a Park commissioned and funded, and asserts `[data-testid=colony-grounds] image[href*="park/"]` is visible. It never targets the integration rig.
 
 ### Task 1.6: the Hospital, polished, with kit props (AM-5)
@@ -210,6 +210,14 @@ Plan-drift corrections (as built):
 
 **Spec:** §1 C4. **Scaffold:** `design/mocks/colony-grounds/src/look/Living.tsx`. **Files:** `packages/ui/src/grounds/LiveLayer.tsx`, wired into `ColonyGrounds`.
 - [ ] Write `B-AC-2: lights dim to full by wealth; closed stays dark; none by day` and `B-AC-3: a strike empties the paths`, at the rendered SVG (glow `<image>` opacity; walker count). Run: FAIL. Implement. Respect `useEventReducedMotion` from `@mule/ui`. Run: PASS. Commit.
+
+### Task 2.2b: C4 — smoke over a damaged building, haze by air
+
+**Plan gap found at PR-2 build:** spec C4 lists smoke and haze; Tasks 2.1–2.2 built glow and walkers only.
+**Scaffold:** `Living.tsx` (smoke). **Files:** `packages/ui/src/grounds/LiveLayer.tsx`.
+- [ ] Test first at the rendered SVG: smoke drawn over a `damaged` place only; haze opacity rises as `gauges.environment` worsens, none at a clean colony; reduced motion → still. Then implement. Commit.
+
+Built in 2.1–2.2 (ws10-grounds-pr2 @ b12f388c): RULE-2 glow on every stage by its factor (the hall counts as standing), RULE-3 walkers along the gaps between places, a paid strike counts as over (G-5 RULE-26), null mood → 0 walkers.
 
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
@@ -262,45 +270,68 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 
 ---
 
-## PR-4 — the ground, painted the map's way (C3)
+## PR-4 — the base plate and the seamless composite (C1, C2, C3; spec AM-7)
 
-### Task 4.1: C3 — ground painter
+**Gate first:** the 13:30Z proof (plate + flush shadow-catcher Hospital and Park, side by side with look.html's render) —
+if it does not read the same, stop and re-plan with the PM. Every long render run has a progress check (pictures done /
+total) that the lead reads; a 15-min stall is reported to the PM.
 
-**Spec:** §1 C3, HC-4, §4 worker row. **Files:** `packages/ui/src/grounds/ground.ts`, `ground.worker.ts`; reuse `packages/ui/src/terrain/noise.ts` and `picture-cache.ts::PictureCache` by import.
-- [ ] Implement C3: port the painter from `design/art/colony/spike-park/procedural/park.ts` (lawn, gravel, setts, room-to-grow ground, skirt fade) and use the ART-DIRECTION sun. Paint off the main thread, cached.
+### Task 4.1: C1 — the base plate
 
-### Task 4.2: §4 — the worker is unavailable
+- [ ] Render the plate in the shared camera (lib/frame scale and sun): ground, grass/dirt, paths, kit vegetation, unbuilt places as graded ground, vignette; day / dusk / glow; plus the hall-centre pixel. Publish to `apps/web/public/art/colony/plate/` and the manifest (`plate`). Look at it beside look.html.
 
-- [ ] Write `grounds ground: no Worker → painted once on the main thread; until then the flat ground`. Altitude: unit; the boundary can't remove Worker. Run: FAIL. Implement. Run: PASS. Commit.
+### Task 4.2: C1 — flush layers with shadow catchers, every kind (incl. the Observatory), kit-dressed
 
-### Task 4.3: Wire it into ColonyGrounds and run a look round
+- [ ] Re-render every kind × stage × light with no raised slab and a shadow-catcher plane; publish @800/@400 plus @1600 for the TV; T-AC-2 green on the new manifest.
 
-- [ ] Mount the painted ground under the pictures. Check the look page at TV and phone sizes. The PM asks Heiko.
+### Task 4.3: C2 — the compositor draws the plate and drops the SVG ground
+
+- [ ] C3 is superseded by the plate (AM-7): no painter worker is built for the grounds. Test first at the rendered SVG: the plate `<image>` is drawn first and positioned by the hall-centre pixel; no SVG ground polygons or edge trees remain when the manifest has a plate; without a plate, today's shapes (HC-3). Implement. Commit.
+
+### Task 4.4: the measured side-by-side
+
+- [ ] Stills of the full month-12 colony, day and dusk, at 1280×720 and 1920×1080, beside look.html's render — to the PM first; then the phone (@400) still. Nothing goes to Heiko before the PM has looked.
 
 ### PR-4 merge gate
 
-- [ ] The §4 test is green. `git diff -- packages/ui/src/terrain` is empty (HC-4). The look round is recorded. Typecheck and tests exit 0. Review: APPROVE.
+- [ ] T-AC-2 and the Task 4.3 tests green; the side-by-side stills accepted by the PM; typecheck and tests exit 0; Review: APPROVE.
 
 ---
 
-## PR-5 — the month-end lean-in (C5)
+## PR-5 — the month-end grounds opener on the TV (C5, C7, C9; spec AM-6)
+
+**Branch:** `ws10-grounds-pr5` off `ws10-visual` once PR-2 (#603) is in. **Scaffold:** `design/mocks/colony-grounds/tv-beat.html`
+(the full-screen canvas, header, caption) + `src/look/Living.tsx` (the lean-in). **Named edits:** `TableApp.tsx::TvGame`'s
+upkeep route and `components/Colony.tsx::useMonthEndDrift` (WS4's OK by SHA). WS4 measures TV-FIT ≥ 0.7, six seats.
 
 ### Task 5.1: T-AC-7 — RULE-5
 
 **Altitude:** unit (hook logic over two views). **Files:** `packages/ui/test/grounds-change.test.ts`, `packages/ui/src/grounds/useGroundsChange.ts`.
-- [ ] Implement C5 test-first: write `T-AC-7: a stage change between month ends leans in on that place; a first view leans in on none`. Run: FAIL. Implement. Run: PASS. Commit.
+- [ ] Implement C5's change detection test-first: write `T-AC-7: a stage change between month ends leans in on that place; a first view leans in on none`. Run: FAIL. Implement. Run: PASS. Commit.
 
-### Task 5.2: The lean-in in ColonyGrounds
+### Task 5.2: T-AC-8 — RULE-6
 
-- [ ] On the month end at size `tv`: dusk, then the lean-in on the changed places, then their lights coming on and the lean-out, about 5 s, played once. Scaffold: `Living.tsx`'s month-end move. With reduced motion, show the end frame only.
+**Altitude:** unit (pure: change found? reduced motion? politics? → full / still / none, and its length). **Files:** `packages/ui/test/grounds-opener.test.ts`, `packages/ui/src/grounds/opener.ts`.
+- [ ] Write `T-AC-8: <example>` per RULE-6 example. FAIL → implement → PASS. Commit.
 
-### Task 5.3: Browser check
+### Task 5.3: C5 — the opener
 
-- [ ] Extend the PR-1 browser test so that at the second month end, with the Park just standing, the grounds element plays the lean-in once (watch a `data-leaning` attribute appear and clear).
+**Files:** `packages/ui/src/grounds/GroundsOpener.tsx` (full-screen ColonyGrounds at dusk + header + caption from RULE-5's changes, the lean-in from `Living.tsx`, reduced motion → still).
+- [ ] Test at the rendered markup: a changed month carries the caption naming the change and `data-leaning`; a quiet month renders the still with no lean. FAIL → implement → PASS. Commit.
+
+### Task 5.4: C7 + C9 — on the TV (named edits, WS4)
+
+**Files:** `apps/web/src/table/TableApp.tsx::TvGame` (upkeep route: event show → opener → TvMonthEnd), `apps/web/src/components/Colony.tsx::useMonthEndDrift`; tests in `apps/web/test/colony-screens.test.ts`.
+- [ ] `T-AC-9: the gauges' count starts when TvMonthEnd mounts`. FAIL → C9 → PASS. Commit.
+- [ ] `T-AC-5`: politics off, no opener. Then route the opener; TvMonthEnd unchanged (`git diff` of TvMonthEnd empty). Commit. Send both SHAs to the PM for WS4's OK.
+
+### Task 5.5: B-AC-6 — browser test (front to back)
+
+- [ ] In `apps/web/e2e/`, the test command owns its stack: at the month end after the Park comes to stand, the TV shows `tv-grounds-opener` after the event show, then `tv-monthend`; everyone Ready during the opener → planning at once; reduced motion → the still. Also Task 1.5 Step 4's checks (failed picture → shape and its glow gone; back-to-front order). TV-FIT ≥ 0.7 at six seats on the opener and the month end (`theTvScalesHeld`).
 
 ### PR-5 merge gate
 
-- [ ] T-AC-7 and the browser check are green. Typecheck and tests exit 0. Review: APPROVE. Rulebook section updated.
+- [ ] T-AC-7, T-AC-8, T-AC-9, T-AC-5 and B-AC-6 green and named. WS4's OK on the two named edits by SHA; WS4's TV-FIT measure ≥ 0.7. Typecheck and tests exit 0. Review: APPROVE. Rulebook: WS6's "Designed, not in the game yet, WS10" lines (table-and-phones month end, events "Who waits") moved to built.
 
 ---
 

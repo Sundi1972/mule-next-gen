@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -48,8 +48,6 @@ export type MuleIntent =
   | { type: 'repair'; id: PrestigeId }
   /** Planning, after the votes: the Governor pays this month's general strikers from the fund. */
   | { type: 'payStrike' }
-  /** Planning, after the votes: the Governor's top bid for a waiting object's plot; null, the colony does not bid. */
-  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
   /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
@@ -276,10 +274,10 @@ export interface MyView {
   /** What this player pays for a MULE and for each outfit. */
   mulePrice: number;
   outfitCosts: Record<Outfit, number>;
-  /** Free plots chosen for the geo drone this month. */
+  /** Free or listed plots the geo drone flew over this month; set until the land grant frees the drone. */
   droneOrder: { x: number; y: number }[];
   /**
-   * The plots this month's drone surveyed, from the land grant until the month ends: the land grant's rail says
+   * The plots this month's drone surveyed, from the moment it is sent until the month ends: the land grant's rail says
    * "Your drone: …" while one is lit (H-3). Only on this player's own view; absent reads as none.
    */
   droneFound?: { x: number; y: number }[];
@@ -435,9 +433,18 @@ export interface AuctionView {
   slowed: boolean;
   /** Goods still to come after this one. */
   next: Good[];
-  /** What the store pays and charges, or null while it doesn't trade at that line. */
+  /** What the store pays, or null while it doesn't buy. */
   storeBuys: number | null;
+  /**
+   * The store's selling line: what it charges while it has units to sell. Once it is sold out (`storeForSale` 0), the
+   * highest bid a buyer can pay, flagged by `storeSellsBid`, or its old price while no bid is above it; the store sells
+   * nothing there. Null when it is sold out and the line is off.
+   */
   storeSells: number | null;
+  /** Present, as true, while `storeSells` is the highest bid on a sold-out store's line, not a price it sells at. */
+  storeSellsBid?: true;
+  /** The board's rest zones and hard edges, fixed as the good comes up: buyers rest below `buyersTop`, sellers above `sellersBottom`. */
+  zones?: BoardZones;
   /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
@@ -600,7 +607,7 @@ export interface EventView {
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
-  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  /** The colony's objects it damaged (a riot). */
   objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
@@ -715,8 +722,11 @@ export interface ColonyProjectView {
   buildMonths: number;
   /** Upkeeps left until it stands; null unless building. */
   monthsLeft: number | null;
-  /** Its tile index, for an object that needs one; null until sited. */
-  plot: number | null;
+  /**
+   * Its block on the colony's own grounds, in cells: the top-left cell (x right, y down, the town hall on the centre
+   * cell) and its footprint, w × h; null holds none (G-5 RULE-32b).
+   */
+  place: { x: number; y: number; w: number; h: number } | null;
   prestige: number;
   /** Credits a month while it stands. */
   upkeep: number;
@@ -724,8 +734,6 @@ export interface ColonyProjectView {
   repairCost: number | null;
   /** Donors, largest first: credits plus goods at reference price. */
   plaque: { playerId: string; value: number }[];
-  /** The colony's top bid for this object's plot at the land auction; null, it does not bid. Optional, so views built before it still type. */
-  maxBid?: number | null;
 }
 
 /** One object the Governor could commission, and why not when they can't now. */
@@ -735,7 +743,6 @@ export interface ColonyCatalogueView {
   credits: number;
   goods: Partial<Record<Good, number>>;
   buildMonths: number;
-  needsPlot: boolean;
   prestige: number;
   upkeep: number;
   commissionable: boolean;

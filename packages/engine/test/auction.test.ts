@@ -17,6 +17,7 @@ import {
   PRICE,
   RuleError,
   setWalk,
+  shipPrice,
   startAuction,
   stepAuction,
   tradeInterval,
@@ -564,21 +565,7 @@ describe('the store and the ship on the board', () => {
     expect(state.store.stock.food).toBe(reserve);
   });
 
-  it('has no ceiling when it is sold out: buyers keep walking up and the board grows', () => {
-    const state = newGame();
-    state.store.stock.energy = 0;
-    state.players[0]!.stock.energy = 5;
-    startAuction(state, ['energy']);
-    toWalk(state, { p1: 'buyer' });
-    setWalk(state, 'p1', 1);
-    // p0 the seller stands far above; p1 walks past where the store would sell.
-    walker(state, 'p0').price = 10_000;
-    stepAuction(state, 60_000 / 4);
-    expect(walker(state, 'p1').price).toBeGreaterThan(a(state).storeSell);
-    expect(walker(state, 'p1').price).toBeGreaterThan(a(state).hi);
-  });
-
-  it('buys from sellers at its buy line within its budget, and the line goes once the budget is spent', () => {
+  it('B-AC-D2: buys from sellers at its buy line within its budget; once the budget is spent the line still holds sellers up', () => {
     const state = newGame();
     state.players[0]!.stock.smithore = 10;
     startAuction(state, ['smithore']);
@@ -589,11 +576,57 @@ describe('the store and the ship on the board', () => {
     const store = trades.filter((t) => t.buyer === 'store');
     expect(store).toHaveLength(4);
     expect(store.every((t) => t.price === a(state).storeBuy)).toBe(true);
-    // Then the seller walks on down, but the buyers standing at the bottom edge never trade (C2's pin).
+    // Then the seller holds ▼ on, but the buying line it was fixed at still holds it, so the buyers resting in their
+    // zone never trade.
     setWalk(state, 'p0', -1);
     trades.push(...run(state, 7_000));
     expect(trades).toHaveLength(4);
-    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
+    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).storeBuy);
+  });
+
+  it('B-AC-D2: once the store has spent its budget, the walk closes when no buyer can pay the buying line it was fixed at, and runs on while one can', () => {
+    // [the other seats' money, measured from the buying line; whether the walk is still up after the store's units]
+    const rows: [number, boolean][] = [
+      [-1, false],
+      [0, true],
+    ];
+    for (const [over, open] of rows) {
+      const state = newGame();
+      state.players[0]!.stock.smithore = 10;
+      startAuction(state, ['smithore']);
+      a(state).storeBudget = 2;
+      for (const p of state.players.slice(1)) p.money = a(state).storeBuy + over;
+      toWalk(state, { p0: 'seller' });
+      const trades = walkToLines(state, ['p0'], 10_000);
+      const at = `buyers hold the buying line ${over === 0 ? 'exactly' : `and ${over}`}`;
+      expect(trades.filter((t) => t.buyer === 'store'), at).toHaveLength(2);
+      expect(a(state).stage, at).toBe(open ? 'walk' : 'close');
+    }
+  });
+
+  it('B-AC-D2: a ship in port paying under the buying line keeps no walk open, as no seller walks under that line to it; one paying the line does', () => {
+    // [the ship's price, measured from the store's buying line; whether the walk opens]
+    const rows: [number, boolean][] = [
+      [-1, false],
+      [0, true],
+    ];
+    for (const [under, opens] of rows) {
+      const state = newGame();
+      state.ship = { arrives: state.month, goods: ['crystite'], hold: { crystite: 3 }, bought: {} };
+      state.players[0]!.stock.crystite = 5;
+      // Only the ship buys: the store's shelf is full and no other seat has money.
+      state.store.stock.crystite = 999;
+      for (const p of state.players.slice(1)) p.money = 0;
+      startAuction(state, ['crystite']);
+      const target = a(state).storeBuy + under;
+      for (state.store.offWorld.crystite = target; shipPrice(state, 'crystite')! > target; ) state.store.offWorld.crystite--;
+      const at = `ship pays ${shipPrice(state, 'crystite')}, buying line ${a(state).storeBuy}`;
+      expect(shipPrice(state, 'crystite'), `${at}: the premise`).toBe(target);
+      expect(a(state).storeBudget, `${at}: the premise, the store buys none`).toBe(0);
+      endStatus(state, { p0: 'seller' });
+      if (opens) expect(a(state).stage, at).toBe('walk');
+      else expect(a(state).skipped, at).toEqual([{ good: 'crystite', reason: 'nobody trading' }]);
+    }
   });
 
   it('lets the export ship in port buy from sellers at or under its price, paying a little less per unit', () => {
@@ -674,9 +707,11 @@ describe('changing sides and ending early', () => {
     state.players[3]!.money = 0;
     startAuction(state, ['food']);
     toWalk(state);
-    state.players[1]!.money = 100;
-    walker(state, 'p0').price = 50;
-    walker(state, 'p1').price = 50;
+    // Met at the buying line, the lowest a seller stands (rule D): two units' money there, and then none.
+    const line = a(state).storeBuy;
+    state.players[1]!.money = 2 * line;
+    walker(state, 'p0').price = line;
+    walker(state, 'p1').price = line;
     expect(run(state, 5_000)).toHaveLength(2);
     expect(a(state).stage).toBe('close');
   });

@@ -942,8 +942,8 @@ export const POLITICS = {
     runGovernor: { trader: 0.5, cautious: 0.3, aggressive: 0.8, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
     /** Chance it runs for Sheriff when it does not run for Governor. */
     runSheriff: { trader: 0.3, cautious: 0.4, aggressive: 0.3, saboteur: 0.7 } satisfies Record<AiPersonaId, number>,
-    /** The sales tax in whole percent a persona steers toward as Governor. */
-    taxTarget: { trader: 5, cautious: 4, aggressive: 8, saboteur: 10 } satisfies Record<AiPersonaId, number>,
+    /** The sales tax in whole percent a persona steers toward as Governor: 10 for every persona (pace set C, Heiko, 6 Nov). */
+    taxTarget: { trader: 10, cautious: 10, aggressive: 10, saboteur: 10 } satisfies Record<AiPersonaId, number>,
     /** Whole percent a Governor adds when the colony fund is low. */
     taxFundBump: 2,
     /** The fund is low under this many months of the elected offices' pay. */
@@ -961,17 +961,17 @@ export const POLITICS = {
     },
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
-      /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
+      /** Whether an AI Governor of each persona commissions a prestige object once the fund holds `commissionShare` of its credits. */
       commissions: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
+      /**
+       * The share of an object's credits the fund must hold before an AI Governor commissions it: 0.1 (pace set C,
+       * Heiko, 6 Nov). The fund then pays it off month by month, and donations help.
+       */
+      commissionShare: 0.1,
       /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
       paysStrike: ({ trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10). */
       repairs: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
-      /**
-       * An AI Governor's top bid, in credits, for an object's site at the land auction (RULE-28, AM-10); null, it never
-       * bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.
-       */
-      siteBid: ({ trader: 400, cautious: 300, aggressive: 500, saboteur: null } satisfies Record<AiPersonaId, number | null>) as Record<AiPersonaId, number | null>,
       /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
       leanIn: ['unhappy', 'unrest'] as MoodBand[],
       /** What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25). */
@@ -990,15 +990,18 @@ export const POLITICS = {
 /**
  * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
  * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
- * their reference prices; upkeep and repair are in credits.
+ * their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every
+ * old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and
+ * repairCost are unchanged. Its footprint is the block of cells it takes on the colony's grounds, w × h (G-5 AM-18,
+ * RULE-32b: Heiko, 6 Nov, "a Stadium is much bigger than the Hospital").
  */
 export const PRESTIGE = {
-  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, needsPlot: true, prestige: 2, upkeep: 30, repairCost: 150 },
-  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 45, repairCost: 225 },
-  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 50, repairCost: 250 },
-  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, needsPlot: true, prestige: 4, upkeep: 70, repairCost: 350 },
-  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
-} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
+  park: { name: 'Park', credits: 210, goods: { alloy: 1 }, buildMonths: 1, prestige: 2, upkeep: 15, repairCost: 150, footprint: { w: 1, h: 1 } },
+  hospital: { name: 'Hospital', credits: 340, goods: { electronics: 1 }, buildMonths: 2, prestige: 3, upkeep: 23, repairCost: 225, footprint: { w: 1, h: 1 } },
+  observatory: { name: 'Observatory', credits: 350, goods: { crystite: 2 }, buildMonths: 2, prestige: 3, upkeep: 25, repairCost: 250, footprint: { w: 1, h: 1 } },
+  stadium: { name: 'Stadium', credits: 500, goods: { alloy: 1, electronics: 1 }, buildMonths: 3, prestige: 4, upkeep: 35, repairCost: 350, footprint: { w: 2, h: 2 } },
+  spaceport: { name: 'Spaceport upgrade', credits: 690, goods: { alloy: 1, electronics: 1 }, buildMonths: 3, prestige: 5, upkeep: 50, repairCost: 500, footprint: { w: 2, h: 2 } },
+} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; prestige: number; upkeep: number; repairCost: number; footprint: { w: number; h: number } }>;
 
 /**
  * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
@@ -1036,24 +1039,24 @@ export const HAPPINESS = {
 
 /** The colony fund's own rules. Placeholders until the colony's sim tuning. */
 export const COLONY = {
-  /** Projects commissioned or building at the same time. */
-  maxOpen: 1,
+  /** Projects commissioned or building at the same time: 3 (pace set C, Heiko, 6 Nov). */
+  maxOpen: 3,
   /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
   reserve: 100,
   /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
   fundBuysGoods: true,
-  /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
-  grant: { perMonth: 150 },
+  /** The Federation's grant into the fund at each upkeep, in credits: 250 a month (pace set C, Heiko, 6 Nov); flat until a scaling rule is tuned. */
+  grant: { perMonth: 250 },
   /**
    * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
    */
   strike: { cost: 250, output: 0.2 },
   /**
-   * Places on the colony's own grounds, filled in growth order (index 0 next to the town hall, then outward ring by
-   * ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).
+   * The colony's own grounds (G-5 AM-16 A, RULE-32b): a size × size square of cells with the town hall on the centre
+   * cell. Each building takes a block of its PRESTIGE footprint, the first free block nearest the hall.
    */
-  groundsSlots: 24,
+  grounds: { size: 5 },
 };
 
 /**
@@ -1126,6 +1129,12 @@ export const WALK = {
   needStop: true,
   /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
   shortHoldMs: 1_000,
+  /**
+   * While the store has none of the good left to sell, buyers may bid above its old selling line, up to one step under
+   * the board's top, stopping one step short of any seller resting above that line; the line then shows the highest bid
+   * and a seller walks down onto it to trade. false: buyers walk as before, into a resting seller. For sweeps.
+   */
+  soldOutBidding: true,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -1853,6 +1862,15 @@ export const AI_PLANS = {
     weight: 1,
     /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
     otherScore: 0.8,
+  },
+  /** A factory good the seat can't feed yet, scored with the plots that would make its inputs. See AM-33. */
+  chain: {
+    /**
+     * A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-33. Above 0, the chain's
+     * MULEs, at the level's MULEs a month, must all be bought within this many months, from cash on hand. Switching
+     * on (at 3, as tested) is Heiko's decision, once the economy lets a chain pay.
+     */
+    months: 0,
   },
   monopoly: {
     /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */

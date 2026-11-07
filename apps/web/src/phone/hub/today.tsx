@@ -4,7 +4,7 @@ import { ChatBadge, MarketDesk, MarketStrip, TalkDesk } from './desks';
 import { ColonyWithFacts } from './politics/Colony';
 import { COUNCIL_DESK, COUNCIL_STAGE, councilNow, councilReadyWords, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, GOVERNOR_DESK, LAW_AGENDA, OFFICES_BANNER } from './politics/slots';
 import type { HubSlots } from './slots';
-import { DroneMap, DronePanel, DroneSend, ListAction, LookMap, LookPanel, SellPlotMap } from './tools';
+import { DroneMap, DronePanel, DroneSend, ListAction, LookMap, LookPanel, MyPlotsMap, MyPlotsPanel, SellPlotMap } from './tools';
 
 /** The hub's parts that exist today (C17). WS7 adds its politics to these lists; see ./slots.ts. */
 export const HUB_SLOTS: HubSlots = {
@@ -17,7 +17,7 @@ export const HUB_SLOTS: HubSlots = {
     {
       key: 'drone',
       title: () => 'Geo drone',
-      sub: ({ me }) => (me.droneOrder.length > 0 ? 'On its way · read at the land grant' : `${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`),
+      sub: ({ me }) => (me.droneOrder.length > 0 ? 'Used this month' : `${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`),
       locked: true,
       opens: { tool: 'drone' },
     },
@@ -26,6 +26,7 @@ export const HUB_SLOTS: HubSlots = {
   ],
   tools: [
     { id: 'look', label: 'Look', hint: () => 'Tap a plot to see what it can make and who owns it.', Map: LookMap, Panel: LookPanel },
+    { id: 'plots', label: 'My plots', locked: true, hint: () => 'Every plot you own and what it can make. Tap one to find it on the map.', Map: MyPlotsMap, Panel: MyPlotsPanel },
     {
       id: 'drone',
       label: 'Geo drone',

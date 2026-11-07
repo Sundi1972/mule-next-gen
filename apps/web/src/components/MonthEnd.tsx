@@ -1,9 +1,9 @@
 import { GAME, POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
-import { collapseCutWords, colonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
+import { collapseCutWords, colonyReport, type ColonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
 
 /**
  * The month end's parts (C20), grafted from WS6's approved mock (ws6-ux 3a6a5d2d, design/mocks/ws6-ux/src/screens/
@@ -192,16 +192,18 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
   const top = lg.rows[0];
   if (!top) return null;
   const line = winnerWords(view, lg);
-  // Everyone level at the top shares the win: each gets a mark, smaller when there are several.
+  // Everyone level at the top shares the win: each gets a mark, smaller when there are several. The TV's card is about
+  // 418 px inside (TvGameOver's 2fr column of 1,200 less its gap, padding and border): four 80 px marks fit a row, five
+  // do not, so a tie of five or six draws them at 48 (as TvWinner's), and the row wraps rather than run past the card.
   const winners = lg.rows.filter((r) => r.rank === 1);
   if (density === 'tv')
     return (
       <div className="relative flex flex-col items-center justify-center gap-3 rounded-panel border-2 border-holo bg-holo-soft p-6 text-center shadow-glow animate-pulse-glow" data-testid="tv-winner">
         <span className="label-caps text-lg!">The game goes to</span>
-        <ul className="flex items-center justify-center gap-4" data-testid="winner-marks">
+        <ul className="flex flex-wrap items-center justify-center gap-4" data-testid="winner-marks">
           {winners.map((w) => (
             <li key={w.player.id}>
-              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 1 ? 80 : 112} label={w.player.name} />
+              <PlayerMark slot={w.slot} species={w.player.species} size={winners.length > 4 ? 48 : winners.length > 1 ? 80 : 112} label={w.player.name} />
             </li>
           ))}
         </ul>
@@ -276,6 +278,72 @@ function Block({ label, children, testid, tv, className }: { label: string; chil
   );
 }
 
+/**
+ * The TV's hunger, on one line (PM ruling 6 Nov: a line per player pushed a full table's month end under TV-FIT's floor).
+ * One player reads as the sentence: "Kai went hungry: ate 1 of 3 Food". Several who ate the same of the same need name
+ * the numbers once: "Went hungry: Lena, Kai, Ossa · ate 0 of 3 Food". Otherwise each group of names keeps its own,
+ * true numbers: "Went hungry: Lena ate 0 of 3 · Kai, Ossa ate 1 of 3 Food". Seat order, grouped by first appearance.
+ */
+function TvHungryLine({ view, hungry }: { view: MuleView; hungry: ColonyReport['hungry'] }) {
+  const groups: { ate: number; need: number; ids: string[] }[] = [];
+  for (const h of hungry) {
+    const g = groups.find((x) => x.ate === h.ate && x.need === h.need);
+    if (g) g.ids.push(h.id);
+    else groups.push({ ate: h.ate, need: h.need, ids: [h.id] });
+  }
+  const one = hungry.length === 1;
+  const each = groups.length > 1;
+  const name = (id: string, comma: boolean) => {
+    const p = view.players.find((x) => x.id === id)!;
+    return (
+      <span key={id} className="whitespace-nowrap" data-testid={`hungry-${id}`}>
+        <PlayerMark slot={toSlot(p.slot)} species={p.species} size={one ? 24 : 20} label={p.name} className="mr-1.5 inline-block align-[-0.15em]" />
+        {p.name}
+        {comma ? ',' : ''}
+      </span>
+    );
+  };
+  const food = (
+    <>
+      <GoodIcon good="food" size={one ? 20 : 18} className="inline align-[-0.1em]" /> Food
+    </>
+  );
+  return (
+    // Several names take a size down, so a full table's line wraps less: the floor is read at six seats.
+    <span className={cx('leading-snug font-semibold text-alert', one ? 'text-2xl' : 'text-xl')} data-testid="hungry-line">
+      {one ? (
+        <>
+          {name(hungry[0]!.id, false)} went hungry: ate {hungry[0]!.ate} of {hungry[0]!.need} {food}
+        </>
+      ) : (
+        <>
+          {'Went hungry: '}
+          {groups.map((g, gi) => (
+            <span key={g.ids[0]}>
+              {g.ids.map((id, i) => (
+                <Fragment key={id}>
+                  {i > 0 && ' '}
+                  {name(id, i < g.ids.length - 1)}
+                </Fragment>
+              ))}
+              {each && <span className="whitespace-nowrap">{` ate ${g.ate} of ${g.need}${gi < groups.length - 1 ? ' ·' : ''}`}</span>}
+              {gi < groups.length - 1 ? ' ' : ''}
+            </span>
+          ))}
+          {each ? (
+            <> {food}</>
+          ) : (
+            <span className="whitespace-nowrap">
+              {` · ate ${groups[0]!.ate} of ${groups[0]!.need} `}
+              {food}
+            </span>
+          )}
+        </>
+      )}
+    </span>
+  );
+}
+
 /** The phone with no TV names this many of the hungry; the rest are counted in one line. */
 const HUNGRY_LINES_COMPACT = 2;
 
@@ -293,8 +361,9 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
   const big = tv ? 'text-3xl' : 'text-base';
   const line = tv ? 'text-lg leading-snug' : 'text-[11px] leading-tight';
   const trend = r.air.trend;
-  const shownHungry = tv ? r.hungry : r.hungry.slice(0, HUNGRY_LINES_COMPACT);
-  const moreHungry = r.hungry.length - shownHungry.length;
+  // The TV puts everyone who went hungry on one line (TvHungryLine); the phone with no TV names a few and counts the rest.
+  const shownHungry = r.hungry.slice(0, HUNGRY_LINES_COMPACT);
+  const moreHungry = tv ? 0 : r.hungry.length - shownHungry.length;
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1 px-2.5 py-1.5')} aria-label="How the colony is doing" data-testid="colony-panel">
       <header className={cx('flex flex-wrap items-baseline', tv ? 'gap-x-4' : 'gap-x-2')} {...(verdict ? { 'data-testid': 'tv-verdict' } : {})}>
@@ -337,36 +406,26 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
               <span className={cx('font-display font-semibold text-ok', tv ? 'text-2xl' : 'text-xs')} data-testid="nobody-hungry">
                 ✓ Nobody went hungry
               </span>
+            ) : tv ? (
+              <TvHungryLine view={view} hungry={r.hungry} />
             ) : (
               shownHungry.map((h) => {
                 const p = view.players.find((x) => x.id === h.id)!;
                 const full = `${p.name} went hungry: ate ${h.ate} of ${h.need} Food`;
-                if (!tv) {
-                  // On a phone: one short line, the full sentence from 1100 px. Only the name gives way; the numbers never do.
-                  return (
-                    <span key={h.id} className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-tight text-alert" data-testid={`hungry-${h.id}`}>
-                      <PlayerMark slot={toSlot(p.slot)} species={p.species} size={12} label={p.name} />
-                      <span className="flex min-w-0 items-center @min-[1100px]/shell:hidden" title={full} data-testid={`hungry-short-${h.id}`}>
-                        <span className="min-w-0 truncate" data-testid={`hungry-name-${h.id}`}>
-                          {p.name}
-                        </span>
-                        <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap" data-testid={`hungry-ate-${h.id}`}>
-                          : ate {h.ate} of {h.need} <GoodIcon good="food" size={11} />
-                        </span>
-                      </span>
-                      <span className="hidden @min-[1100px]/shell:inline" data-testid={`hungry-full-${h.id}`}>
-                        {full}
-                      </span>
-                    </span>
-                  );
-                }
+                // On a phone: one short line, the full sentence from 1100 px. Only the name gives way; the numbers never do.
                 return (
-                  <span key={h.id} className="flex items-start gap-2 text-2xl font-semibold leading-snug text-alert" data-testid={`hungry-${h.id}`}>
-                    <span className="pt-1">
-                      <PlayerMark slot={toSlot(p.slot)} species={p.species} size={26} label={p.name} />
+                  <span key={h.id} className="flex min-w-0 items-center gap-1 text-[11px] font-semibold leading-tight text-alert" data-testid={`hungry-${h.id}`}>
+                    <PlayerMark slot={toSlot(p.slot)} species={p.species} size={12} label={p.name} />
+                    <span className="flex min-w-0 items-center @min-[1100px]/shell:hidden" title={full} data-testid={`hungry-short-${h.id}`}>
+                      <span className="min-w-0 truncate" data-testid={`hungry-name-${h.id}`}>
+                        {p.name}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap" data-testid={`hungry-ate-${h.id}`}>
+                        : ate {h.ate} of {h.need} <GoodIcon good="food" size={11} />
+                      </span>
                     </span>
-                    <span>
-                      {p.name} went hungry: ate {h.ate} of {h.need} <GoodIcon good="food" size={20} className="inline align-[-0.1em]" /> Food
+                    <span className="hidden @min-[1100px]/shell:inline" data-testid={`hungry-full-${h.id}`}>
+                      {full}
                     </span>
                   </span>
                 );

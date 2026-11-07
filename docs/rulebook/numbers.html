@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1240 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1261 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>4d93e8085efa</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>44acac7219a7</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -980,10 +980,10 @@
 <tr><td><code>POLITICS.ai.runSheriff.cautious</code></td><td class="n">0.4</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
 <tr><td><code>POLITICS.ai.runSheriff.aggressive</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
 <tr><td><code>POLITICS.ai.runSheriff.saboteur</code></td><td class="n">0.7</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
-<tr><td><code>POLITICS.ai.taxTarget</code></td><td class="n"></td><td>The sales tax in whole percent a persona steers toward as Governor.</td></tr>
-<tr><td><code>POLITICS.ai.taxTarget.trader</code></td><td class="n">5</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
-<tr><td><code>POLITICS.ai.taxTarget.cautious</code></td><td class="n">4</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
-<tr><td><code>POLITICS.ai.taxTarget.aggressive</code></td><td class="n">8</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
+<tr><td><code>POLITICS.ai.taxTarget</code></td><td class="n"></td><td>The sales tax in whole percent a persona steers toward as Governor: 10 for every persona (pace set C, Heiko, 6 Nov).</td></tr>
+<tr><td><code>POLITICS.ai.taxTarget.trader</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
+<tr><td><code>POLITICS.ai.taxTarget.cautious</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
+<tr><td><code>POLITICS.ai.taxTarget.aggressive</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
 <tr><td><code>POLITICS.ai.taxTarget.saboteur</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
 <tr><td><code>POLITICS.ai.taxFundBump</code></td><td class="n">2</td><td>Whole percent a Governor adds when the colony fund is low.</td></tr>
 <tr><td><code>POLITICS.ai.fundMonths</code></td><td class="n">3</td><td>The fund is low under this many months of the elected offices&#39; pay.</td></tr>
@@ -997,16 +997,12 @@
 <tr><td><code>POLITICS.ai.council.capPlotCost</code></td><td class="n">40</td><td>Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting.</td></tr>
 <tr><td><code>POLITICS.ai.council.rookieYes</code></td><td class="n">0.5</td><td>A Rookie&#39;s chance of a yes on a law ballot: a coin from the council&#39;s own stream.</td></tr>
 <tr><td><code>POLITICS.ai.colony</code></td><td class="n"></td><td>The AI Governor&#39;s colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them.</td></tr>
-<tr><td><code>POLITICS.ai.colony.commissions</code></td><td class="n"></td><td>Whether an AI Governor of each persona commissions a prestige object the fund can pay for.</td></tr>
+<tr><td><code>POLITICS.ai.colony.commissions</code></td><td class="n"></td><td>Whether an AI Governor of each persona commissions a prestige object once the fund holds <code>commissionShare</code> of its credits.</td></tr>
 <tr><td><code>POLITICS.ai.colony.commissions.trader</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.commissions</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.commissions.cautious</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.commissions</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.commissions.aggressive</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.commissions</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.commissions.saboteur</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.commissions</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.paysStrike</code></td><td class="n"></td><td>Whether an AI Governor of each persona pays general strikers the fund can pay.</td></tr>
-<tr><td><code>POLITICS.ai.colony.paysStrike.trader</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.paysStrike.cautious</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.paysStrike.aggressive</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.paysStrike.saboteur</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.commissionShare</code></td><td class="n">0.1</td><td>The share of an object&#39;s credits the fund must hold before an AI Governor commissions it: 0.1 (pace set C, Heiko, 6 Nov). The fund then pays it off month by month, and donations help.</td></tr>
 </tbody>
 </table></div>
 
@@ -1014,16 +1010,16 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
+<tr><td><code>POLITICS.ai.colony.paysStrike</code></td><td class="n"></td><td>Whether an AI Governor of each persona pays general strikers the fund can pay.</td></tr>
+<tr><td><code>POLITICS.ai.colony.paysStrike.trader</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.paysStrike.cautious</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.paysStrike.aggressive</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.paysStrike.saboteur</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.paysStrike</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs</code></td><td class="n"></td><td>Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10).</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs.trader</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs.cautious</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs.aggressive</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs.saboteur</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid</code></td><td class="n"></td><td>An AI Governor&#39;s top bid, in credits, for an object&#39;s site at the land auction (RULE-28, AM-10); null, it never bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.trader</code></td><td class="n">400</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.cautious</code></td><td class="n">300</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.aggressive</code></td><td class="n">500</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.saboteur</code></td><td class="n">null</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.leanIn</code></td><td class="n">[&quot;unhappy&quot;, &quot;unrest&quot;]</td><td>In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs.</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate</code></td><td class="n"></td><td>What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25).</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate.share</code></td><td class="n"></td><td>The share of its cash above its reserve each persona gives.</td></tr>
@@ -1039,20 +1035,21 @@
 </table></div>
 
 <h2 id="prestige"><code>PRESTIGE</code> <span class="pill built">In the game</span></h2>
-<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits.</p>
+<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and repairCost are unchanged. Its footprint is the block of cells it takes on the colony&#39;s grounds, w × h (G-5 AM-18, RULE-32b: Heiko, 6 Nov, &quot;a Stadium is much bigger than the Hospital&quot;).</p>
 
 <h3 id="prestige-park"><code>PRESTIGE.park</code></h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>PRESTIGE.park.name</code></td><td class="n">&quot;Park&quot;</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.park.credits</code></td><td class="n">420</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.park.goods.alloy</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.credits</code></td><td class="n">210</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.goods.alloy</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.buildMonths</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.park.needsPlot</code></td><td class="n">true</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.prestige</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.park.upkeep</code></td><td class="n">30</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.upkeep</code></td><td class="n">15</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.repairCost</code></td><td class="n">150</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1061,13 +1058,14 @@
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>PRESTIGE.hospital.name</code></td><td class="n">&quot;Hospital&quot;</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.hospital.credits</code></td><td class="n">680</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.credits</code></td><td class="n">340</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.goods.electronics</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.buildMonths</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.hospital.needsPlot</code></td><td class="n">false</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.prestige</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.hospital.upkeep</code></td><td class="n">45</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.upkeep</code></td><td class="n">23</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.repairCost</code></td><td class="n">225</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1076,13 +1074,14 @@
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>PRESTIGE.observatory.name</code></td><td class="n">&quot;Observatory&quot;</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.observatory.credits</code></td><td class="n">700</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.observatory.goods.crystite</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.credits</code></td><td class="n">350</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.goods.crystite</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.buildMonths</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.observatory.needsPlot</code></td><td class="n">false</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.prestige</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.observatory.upkeep</code></td><td class="n">50</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.upkeep</code></td><td class="n">25</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.repairCost</code></td><td class="n">250</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1091,14 +1090,15 @@
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>PRESTIGE.stadium.name</code></td><td class="n">&quot;Stadium&quot;</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.stadium.credits</code></td><td class="n">1000</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.stadium.goods.alloy</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.credits</code></td><td class="n">500</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.goods.alloy</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.goods.electronics</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.buildMonths</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.stadium.needsPlot</code></td><td class="n">true</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.prestige</code></td><td class="n">4</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.stadium.upkeep</code></td><td class="n">70</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.upkeep</code></td><td class="n">35</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.repairCost</code></td><td class="n">350</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.footprint.w</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.footprint.h</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1107,14 +1107,15 @@
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>PRESTIGE.spaceport.name</code></td><td class="n">&quot;Spaceport upgrade&quot;</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.spaceport.credits</code></td><td class="n">1380</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.spaceport.goods.alloy</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.spaceport.goods.electronics</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.credits</code></td><td class="n">690</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.goods.alloy</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.goods.electronics</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.buildMonths</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.spaceport.needsPlot</code></td><td class="n">true</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.prestige</code></td><td class="n">5</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.spaceport.upkeep</code></td><td class="n">100</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.upkeep</code></td><td class="n">50</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.repairCost</code></td><td class="n">500</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.footprint.w</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.footprint.h</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1157,14 +1158,16 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>COLONY.maxOpen</code></td><td class="n">1</td><td>Projects commissioned or building at the same time.</td></tr>
+<tr><td><code>COLONY.maxOpen</code></td><td class="n">3</td><td>Projects commissioned or building at the same time: 3 (pace set C, Heiko, 6 Nov).</td></tr>
 <tr><td><code>COLONY.reserve</code></td><td class="n">100</td><td>Credits the fund keeps back from a project&#39;s funding, so next month&#39;s office pay is there.</td></tr>
 <tr><td><code>COLONY.fundBuysGoods</code></td><td class="n">true</td><td>The fund buys an object&#39;s missing goods from the store at the store&#39;s price; off, only donors&#39; goods fund it.</td></tr>
-<tr><td><code>COLONY.grant</code></td><td class="n"></td><td>The Federation&#39;s grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned.</td></tr>
-<tr><td><code>COLONY.grant.perMonth</code></td><td class="n">150</td><td>See the note on <code>COLONY.grant</code>.</td></tr>
+<tr><td><code>COLONY.grant</code></td><td class="n"></td><td>The Federation&#39;s grant into the fund at each upkeep, in credits: 250 a month (pace set C, Heiko, 6 Nov); flat until a scaling rule is tuned.</td></tr>
+<tr><td><code>COLONY.grant.perMonth</code></td><td class="n">250</td><td>See the note on <code>COLONY.grant</code>.</td></tr>
 <tr><td><code>COLONY.strike</code></td><td class="n"></td><td>A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).</td></tr>
 <tr><td><code>COLONY.strike.cost</code></td><td class="n">250</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
 <tr><td><code>COLONY.strike.output</code></td><td class="n">0.2</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
+<tr><td><code>COLONY.grounds</code></td><td class="n"></td><td>The colony&#39;s own grounds (G-5 AM-16 A, RULE-32b): a size × size square of cells with the town hall on the centre cell. Each building takes a block of its PRESTIGE footprint, the first free block nearest the hall.</td></tr>
+<tr><td><code>COLONY.grounds.size</code></td><td class="n">5</td><td>See the note on <code>COLONY.grounds</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1203,6 +1206,7 @@
 <tr><td><code>WALK.boardPostedMargin</code></td><td class="n">0.1</td><td>And this share of the posted price more, so a board whose price lines sit close together still has room to walk.</td></tr>
 <tr><td><code>WALK.needStop</code></td><td class="n">true</td><td>RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.</td></tr>
 <tr><td><code>WALK.shortHoldMs</code></td><td class="n">1000</td><td>Board ms a stopped seller holds ▼ to sell on into shortage (Heiko&#39;s choice A, 5 Nov). A tap or a shorter hold moves nothing.</td></tr>
+<tr><td><code>WALK.soldOutBidding</code></td><td class="n">true</td><td>While the store has none of the good left to sell, buyers may bid above its old selling line, up to one step under the board&#39;s top, stopping one step short of any seller resting above that line; the line then shows the highest bid and a seller walks down onto it to trade. false: buyers walk as before, into a resting seller. For sweeps.</td></tr>
 <tr><td><code>WALK.tickMs</code></td><td class="n">100</td><td>How often the server steps the auction.</td></tr>
 </tbody>
 </table></div>
@@ -1998,10 +2002,17 @@
 <tbody>
 <tr><td><code>AI_PLANS.on</code></td><td class="n">true</td><td>Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks.</td></tr>
 <tr><td><code>AI_PLANS.ownPhases</code></td><td class="n">false</td><td>A feature switch, not a balance value: a seat&#39;s own path plays its drafted development and auction parts; false, today&#39;s. See AM-26.</td></tr>
+<tr><td><code>AI_PLANS.replan</code></td><td class="n"></td><td>When a kept plan is drafted again: each threshold is against the plan&#39;s anchor, set when it was drafted.</td></tr>
+<tr><td><code>AI_PLANS.replan.keyPlots</code></td><td class="n">2</td><td>The plan&#39;s key plots: the first this many of its month&#39;s land ranking. One taken by a rival re-plans.</td></tr>
+<tr><td><code>AI_PLANS.replan.rivalPlots</code></td><td class="n">1</td><td>Rival plots making the monopoly target, this many more than at the anchor, re-plan.</td></tr>
+<tr><td><code>AI_PLANS.replan.priceShock</code></td><td class="n">0.4</td><td>The money-maker&#39;s or the target&#39;s posted price moving by this share of its anchor price re-plans.</td></tr>
+<tr><td><code>AI_PLANS.replan.eventPlots</code></td><td class="n">1</td><td>A production event cutting the output of this many of the seat&#39;s money-maker plots re-plans.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.plots</code></td><td class="n">3</td><td>A good&#39;s score sums its install gain over this many of the seat&#39;s best plots for it (own idle and free).</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.rivalDiscount</code></td><td class="n">0.15</td><td>Each rival plot already making the good cuts its score by this share.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.weight</code></td><td class="n">1</td><td>Weight of the &quot;My money-maker&quot; consideration in a development pick.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.otherScore</code></td><td class="n">0.8</td><td>That consideration&#39;s score, 0 to 1, for an outfit that makes another good (the money-maker scores 1).</td></tr>
+<tr><td><code>AI_PLANS.chain</code></td><td class="n"></td><td>A factory good the seat can&#39;t feed yet, scored with the plots that would make its inputs. See AM-33.</td></tr>
+<tr><td><code>AI_PLANS.chain.months</code></td><td class="n">0</td><td>A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-33. Above 0, the chain&#39;s MULEs, at the level&#39;s MULEs a month, must all be bought within this many months, from cash on hand. Switching on (at 3, as tested) is Heiko&#39;s decision, once the economy lets a chain pay.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage).</td></tr>
 <tr><td><code>AI_PLANS.monopoly.maxRivalPlots</code></td><td class="n">1</td><td>A good is cornered only while at most this many rival plots make it.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.minPlots</code></td><td class="n">2</td><td>And only with at least this many of its own idle or free plots whose best outfit is the good.</td></tr>
@@ -2045,6 +2056,26 @@
 <tr><td><code>AI_PLANS.leaning.saboteur.landBaron</code></td><td class="n">0.4</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
 <tr><td><code>AI_PLANS.leaning.saboteur.politician</code></td><td class="n">0.3</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
 <tr><td><code>AI_PLANS.leaning.saboteur.spoiler</code></td><td class="n">1</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="ai-plans-kinds"><code>AI_PLANS.kinds</code></h3>
+<p>What a plan kind multiplies the persona&#39;s weights by while the seat plays it; a weight not named is × 1.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>AI_PLANS.kinds.builder.reserve</code></td><td class="n">1.2</td><td>Multiplies the cash and the Food and Energy it keeps back for next month.</td></tr>
+<tr><td><code>AI_PLANS.kinds.builder.speculate</code></td><td class="n">0.5</td><td>Willingness to buy now to sell next month. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.builder.corner</code></td><td class="n">0</td><td>Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.specialist.greed</code></td><td class="n">1.2</td><td>Weight on money made. Higher chases bigger but less certain gains.</td></tr>
+<tr><td><code>AI_PLANS.kinds.specialist.risk</code></td><td class="n">0.9</td><td>Dislike of uncertain bets (unanalysed ground, thin markets). 1 is neutral; higher avoids risk.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.corner</code></td><td class="n">2.5</td><td>Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.speculate</code></td><td class="n">1.2</td><td>Willingness to buy now to sell next month. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.patience</code></td><td class="n">1.2</td><td>Auction patience: higher waits longer for the other side to come to it.</td></tr>
+<tr><td><code>AI_PLANS.kinds.landBaron.greed</code></td><td class="n">1.1</td><td>Weight on money made. Higher chases bigger but less certain gains.</td></tr>
+<tr><td><code>AI_PLANS.kinds.landBaron.reserve</code></td><td class="n">0.8</td><td>Multiplies the cash and the Food and Energy it keeps back for next month.</td></tr>
+<tr><td><code>AI_PLANS.kinds.politician</code></td><td class="n">{}</td><td>See the note on <code>AI_PLANS.kinds</code>.</td></tr>
+<tr><td><code>AI_PLANS.kinds.spoiler.spite</code></td><td class="n">1.5</td><td>Weight on hurting the leader: blocking their land, outbidding them for what they need. 0 never.</td></tr>
 </tbody>
 </table></div>
 

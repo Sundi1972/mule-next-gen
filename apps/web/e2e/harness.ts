@@ -258,6 +258,11 @@ const STEER_WAYPOINT = 0.2;
 /** Within this many STEER_WITHINs of the target, an axis is held every other look, so a full-speed stride cannot carry it past. */
 const STEER_EASE = 3;
 const STEER_TIMEOUT_MS = 30_000;
+/**
+ * How long a step waits for the server's floor to tick: development's start may wait for its event show (RULE-4), a
+ * sick seat's bulletin or a month event, before the first tick, and the phones show development meanwhile.
+ */
+export const FLOOR_STARTS_MS = 15_000;
 /** How long the step lets the one button take to be pressable, as a player waits for it to light. */
 const ACT_PRESS_MS = 2_000;
 
@@ -344,6 +349,7 @@ export async function steerTo(
 ): Promise<void> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
+  await floorTicks(phone, room, seatId, 'steerTo');
   const from = steeredAt(room, seatId);
   check(from.space === target.space, `steerTo: ${seatId} is in the ${from.space}, the target is in the ${target.space}`);
   const deadline = Date.now() + timeoutMs;
@@ -355,6 +361,19 @@ export async function steerTo(
 }
 
 type StepRoom = NonNullable<ReturnType<MuleServer['registry']['get']>>;
+
+/**
+ * Waits up to FLOOR_STARTS_MS for the room's server to steer its floor. A phone already shows development while the
+ * phase's event show holds it, and until the floor's first tick no seat has a colonist to steer (RCA, 7 Nov: a seat
+ * sick at development's start, seed 1, failed screens.ts's first step at once).
+ */
+async function floorTicks(phone: Page, room: StepRoom, seatId: string, step: string): Promise<void> {
+  // The game keeps its steering private; the step reads it as store-steps' arcadeTable does.
+  const game = (room as unknown as { game: { steering: unknown; state: GameState } }).game;
+  const end = Date.now() + FLOOR_STARTS_MS;
+  while (!game.steering && Date.now() < end) await phone.waitForTimeout(STEER_LOOK_MS * 2);
+  check(game.steering, `${step}: the server's floor ticks within ${FLOOR_STARTS_MS / 1_000} s, so ${seatId} has a colonist to steer (phase ${game.state.phase})`);
+}
 
 /** Where a seat's colonist stands, from the room's shared view. */
 function steeredAt(room: StepRoom, seatId: string): SteerTarget {
@@ -431,6 +450,7 @@ export async function throughDoor(
 ): Promise<void> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
+  await floorTicks(phone, room, seatId, 'throughDoor');
   const from = steeredAt(room, seatId);
   const cfg = floorConfig();
   const state = (room as unknown as { game: { state: GameState } }).game.state;

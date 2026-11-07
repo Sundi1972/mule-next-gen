@@ -56,9 +56,10 @@ export function readyNow(others: readonly Seat[], isHost: boolean): { title: str
   const who = namesOf(others, null);
   const away = others.filter((s) => s.away);
   const awayLine = away.length > 0 ? ` ${namesOf(away, null)} ${away.length === 1 ? 'is' : 'are'} away.` : '';
+  // The title stays short enough for the folded card at any name's length; the ready bar names them too.
   return isHost
-    ? { title: `You're ready. Waiting for ${who}`, detail: `Planning has no clock: it ends when everyone is ready. As the host, you can continue without them.${awayLine}` }
-    : { title: `You're ready. Waiting for ${who}`, detail: `Planning has no clock: it ends when everyone is ready, or when the host continues.${awayLine}` };
+    ? { title: "You're ready", detail: `Waiting for ${who}. Planning has no clock: it ends when everyone is ready. As the host, you can continue without them.${awayLine}` }
+    : { title: "You're ready", detail: `Waiting for ${who}. Planning has no clock: it ends when everyone is ready, or when the host continues.${awayLine}` };
 }
 
 /**

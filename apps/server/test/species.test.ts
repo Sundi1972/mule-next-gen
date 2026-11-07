@@ -76,9 +76,11 @@ it('T-AC-3: a species picked over the socket reaches the game; a seat that never
   }
 });
 
+// Three seeds, three rotations of the defaults at three seats (43, 42, -5 put a different species first), so a
+// lobby that showed the base order, or one rotation for every seed, can't pass.
 it.each([
   { seed: 43, recorded: false },
-  { seed: 7, recorded: false },
+  { seed: 42, recorded: false },
   { seed: -5, recorded: true },
 ])(
   'T-AC-LS1: at seed $seed (recorded: $recorded) the lobby tells each seat the species it will play if it never picks, and Start gives it exactly that',

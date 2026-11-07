@@ -13,6 +13,7 @@ import type { MuleServer } from '../../server/src/server.js';
 import { check, held as holding, PHONE, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
 import { LAPTOP, railFits } from './shell-steps';
+import { fitSettled, theTvScaleHolds } from './tv-fit-steps';
 
 /** The human sits in seat 1. */
 const SEAT = 's1';
@@ -26,7 +27,7 @@ const TODAYS_DESKS = ['colony', 'talk', 'council', 'market'];
 const OFFICE_DESKS = ['governor', 'sheriff'] as const;
 /** C17: the office desks built today; the Sheriff's is not, so a Sheriff sees no desk for it. */
 const BUILT_OFFICE_DESKS: readonly string[] = ['governor'];
-const TODAYS_TOOLS = ['look', 'drone', 'list'];
+const TODAYS_TOOLS = ['look', 'plots', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
 
@@ -294,8 +295,17 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
     check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);
     if (p === left) continue;
-    const now = (await planning(p).getByTestId('now-title').innerText()).trim();
-    check(now.includes(left.name), `B-AC-19: once Ready, ${p.name}'s Now names ${left.name} as who the table waits for, got "${now}"`);
+    // Pressing Ready is a new step, so the Now card re-mounts folded: its title alone, then a tap opens it.
+    const folded = planning(p).locator('button[data-testid=now][aria-expanded=false]');
+    await folded.waitFor({ timeout });
+    const title = (await folded.getByTestId('now-title').innerText()).trim();
+    check(title === "You're ready", `B-AC-19: once Ready, ${p.name}'s folded Now reads exactly "You're ready", no names in it, got "${title}"`);
+    await folded.click();
+    const now = (await planning(p).getByTestId('now').innerText()).trim();
+    check(now.includes(`Waiting for ${left.name}.`), `B-AC-19: once Ready, ${p.name}'s Now, opened, names ${left.name} as who the table waits for, got "${now}"`);
+    // Folded again, so the step's shots show the card as the table sees it.
+    await planning(p).getByTestId('now-fold').click();
+    await folded.waitFor({ timeout });
   }
   // The TV's side column at its fullest: the three news lines the server keeps, beside the waiting band.
   busyNews(room);
@@ -362,10 +372,15 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
     await board.getByTestId('tv-ready-list').waitFor({ timeout });
     busyNews(server.registry.get(code));
     const newest = board.getByTestId('tv-news').locator('li').first();
+    // The election's own line was already newest: wait for a line only busyNews adds, so the busy month is on the TV.
+    await board.getByTestId('tv-news').locator('li').filter({ hasText: 'listed plot 3·4' }).waitFor({ state: 'attached', timeout });
     await newest.filter({ hasText: 'is Governor' }).waitFor({ state: 'attached', timeout });
 
     // The column is checked twice: as it stands, then with the TV's chat ticker showing a line above it (C20).
     const fits = async (when: string) => {
+      // The body measures the news it renders up to REFIT_MS later: read before that, the new news sits at the old scale
+      // and the ready list covers the newest line's foot (3 runs in 4). Read once the scale has settled.
+      await fitSettled(tv);
       const canvas = await board.evaluate((e) => e.getBoundingClientRect().bottom);
       const list = await board.getByTestId('tv-ready-list').evaluate((e) => e.getBoundingClientRect().bottom);
       check(list <= canvas + 1, `B-AC-19 (six seats${when}): the TV's ready list stays on the canvas, got its bottom at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`);
@@ -379,7 +394,9 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
         return { top, bottom, height: r.height };
       });
       check(shown.height > 0 && shown.top && shown.bottom, `B-AC-19 (six seats${when}): the election result shows whole in the TV's news, got ${JSON.stringify(shown)}`);
-      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`;
+      // TV-FIT's floor holds at the fullest table (PM ruling 6 Nov).
+      const scale = await theTvScaleHolds(tv, `six-seat planning${when}`);
+      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}`;
     };
     const quiet = await fits('');
     const room = server.registry.get(code) as unknown as { seats: { id: string }[]; chat: (from: string, text: string) => void };
