@@ -1058,6 +1058,13 @@ export class DevelopHand {
       this.log(head, false, 'skipped', 'already analysed');
       return false;
     }
+    // Nor, on the floor, an analysis of an own plot while it leads a fitted MULE (one a swap put on the lead): Reach
+    // offers INSTALL there first, so the walk would end refused.
+    if (a.type === 'analyse' && this.onFloor && led !== null && led !== 'empty' && state.tiles[plotOf(a)]!.owner === me) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'leading');
+      return false;
+    }
     return true;
   }
 
