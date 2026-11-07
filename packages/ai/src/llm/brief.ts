@@ -47,6 +47,7 @@ import type { Feedback } from './writer.js';
 import { GRANTED } from './granted.js';
 import { energyAt, energyToKeep, useRule } from './energy.js';
 import { cutOffAs, noWalkTo } from './reach.js';
+import type { HandsDevelopment } from './kept.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -88,6 +89,8 @@ export interface LastPhase {
   worthBefore?: WorthAt | null;
   /** The strategy the seat's newest adopted land write set; absent until one sets it. */
   ownStrategy?: OwnStrategy | null;
+  /** What the seat's own hands did in last month's development, when no route was adopted for it (unbought-mules fix). */
+  hands?: HandsDevelopment | null;
 }
 
 /** A strategy the seat set itself, and the month of the land write that set it. */
@@ -519,6 +522,25 @@ function refusalLines(feedback: Feedback | null | undefined): string[] {
   return parts.length > 0 ? [`Last time: ${parts.join('; ')}.`, ''] : [];
 }
 
+/**
+ * Last month's development as the seat's own hands played it, when no route was adopted for it, so no route outcome
+ * exists (unbought-mules fix, deep4): what they bought, what they installed where, and each buy the corral refused.
+ */
+function handsLines(hands: HandsDevelopment | null | undefined): string[] {
+  if (!hands) return [];
+  const parts = [hands.bought === 0 ? 'bought no MULE' : `bought ${plural(hands.bought, 'MULE')}`];
+  if (hands.installed.length > 0) parts.push(`installed ${hands.installed.map((i) => `a ${i.outfit ? outfitName(i.outfit) : 'MULE'} on plot ${i.plot}`).join(', ')}`);
+  for (const why of hands.refused) parts.push(`a buy refused: ${why}`);
+  return [`Last time (month ${hands.month}) you kept the draft development, so your hands developed on their own: ${parts.join('; ')}.`, ''];
+}
+
+/**
+ * Under the land brief's draft development, for a seat whose kept draft plays today's path (keptDevelopmentPlaysToday):
+ * the draft is shown, but only an edit makes it play (unbought-mules fix, deep4: 26 of 29 Sonnet unbought MULEs).
+ */
+const KEPT_DRAFT =
+  'Kept as is, this route does not play: on the day your hands pick each MULE themselves, and may keep the cash or run short of time. To have it played, send it as /development/route.';
+
 const strategyText = (s: Strategy) => `${s.kind}, moneyMaker ${goodText(s.moneyMaker)}`;
 
 /** The strategy's fields that play reads: no monopolyTarget or cashFloor (WS9 ruling, 6 Nov). */
@@ -565,6 +587,8 @@ export function landBrief(
   development: DevelopmentPlay | null = null,
   /** The plot the development was drafted as granted (route fix, afterGrant): its steps on it read as "granted". */
   granted: number | null = null,
+  /** Whether the draft development, kept, plays today's path instead (keptDevelopmentPlaysToday): the brief says so. */
+  keptPlaysToday = false,
 ): LandBrief {
   const obs = observe(state, mind.me);
   const me = obs.players.find((p) => p.id === mind.me)!;
@@ -599,6 +623,7 @@ export function landBrief(
     ...ownStrategyLines(draft.strategy, last.ownStrategy),
     '',
     ...outcomeLines(last.outcome, mind.me, names),
+    ...handsLines(last.outcome ? null : last.hands),
     ...refusalLines(last.feedback),
     'Land plans for this month, best first:',
     ...options.map((o, i) => `${plotsCounted(mind, optionLine(o))}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText(obs))}`),
@@ -606,7 +631,7 @@ export function landBrief(
     'Your draft land grant:',
     ...draftLines(obs, draft.landGrant),
     '',
-    ...(development ? ['Your draft development:', ...developmentLines(obs, development, granted), ''] : []),
+    ...(development ? ['Your draft development:', ...developmentLines(obs, development, granted), ...(keptPlaysToday ? [KEPT_DRAFT] : []), ''] : []),
     'What you may change:',
     ...changeLines(),
     ...(development ? DEV_CHANGES : []),
