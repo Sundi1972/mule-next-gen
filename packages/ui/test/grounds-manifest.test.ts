@@ -18,11 +18,13 @@ const named = Object.entries(manifest.pictures).flatMap(([kind, pictures]) =>
     .filter(([key]) => key !== 'frame')
     .flatMap(([stage, entry]) => [entry as ManifestEntry].flatMap(({ day, dusk, glow }) => [day, dusk, glow]).flatMap((src) => (src ? [{ kind, stage, src }] : []))),
 );
+/** The base plates (AM-7), when the manifest carries them: sized like the pictures. */
+const plates = Object.values(manifest.plate ?? {}).flatMap(({ day, dusk, glow }) => [day, dusk, glow]).flatMap((src) => (src ? [{ src }] : []));
 
 describe('the colony art manifest (T-AC-2)', () => {
-  it('T-AC-2: every picture the manifest names exists at every size it declares', () => {
+  it('T-AC-2: every picture and plate the manifest names exists at every size it declares', () => {
     expect(named.length).toBeGreaterThan(0);
-    const missing = named.flatMap(({ src }) =>
+    const missing = [...named, ...plates].flatMap(({ src }) =>
       manifest.sizes.map((w) => src.replace(/@\d+(\.\w+)$/, `@${w}$1`)).filter((file) => !existsSync(join(ART, file))),
     );
     expect(missing).toEqual([]);
