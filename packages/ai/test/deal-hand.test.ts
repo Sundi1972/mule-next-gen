@@ -228,7 +228,7 @@ describe('S3-T-AC-8: DealHand answers in planning', () => {
     }
   });
 
-  it('S3-HC-2: a card between two other seats is never named, asked about or valued, and never shows in what the hand reads', () => {
+  it('S3-T-AC-8 (S3-HC-2): a card between two other seats is never named, asked about or valued, and never shows in what the hand reads', () => {
     const state = newGame();
     state.month = 2;
     withDeals(state, [card('ai2', 'ai3', PACT, { id: 'deal-hidden' })]);
@@ -412,7 +412,7 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
   });
 });
 
-describe('S3-HC-3: DealHand\'s draws leave the election and council fixtures unchanged', () => {
+describe('S3-T-AC-8 (S3-HC-3): DealHand\'s draws leave the election and council fixtures unchanged', () => {
   function ballotTable(seed: number, withDeals: boolean) {
     const state = newGame(seed);
     const free = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null);
@@ -433,7 +433,7 @@ describe('S3-HC-3: DealHand\'s draws leave the election and council fixtures unc
     return { ballots: structuredClone(state.politics!.election!.ballots), sent, governor: state.politics!.governor, cards: state.politics!.deals.length };
   }
 
-  it('S3-HC-3: the same table with DealHands ticking beside the VoteHands casts the same ballots and sends the same moves', () => {
+  it('S3-T-AC-8 (S3-HC-3): the same table with DealHands ticking beside the VoteHands casts the same ballots and sends the same moves', () => {
     let cards = 0;
     for (const seed of [3, 7, 11]) {
       const alone = ballotTable(seed, false);
@@ -446,7 +446,7 @@ describe('S3-HC-3: DealHand\'s draws leave the election and council fixtures unc
     expect(cards, 'the DealHands offered cards beside the VoteHands').toBeGreaterThan(0);
   });
 
-  it('S3-HC-3: a council ballot with DealHands beside it votes as it does alone', () => {
+  it('S3-T-AC-8 (S3-HC-3): a council ballot with DealHands beside it votes as it does alone', () => {
     const lawVotes = (withDeals: boolean): AiAction[] => {
       const state = newGame();
       state.month = 2;
