@@ -365,7 +365,9 @@ function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk
  * On the floor (`floor`, its config; null where the game taps), `list` with every install on a lake no shore reaches
  * vetoed, as the hand's live legs price it (no stand, an endless walk) and as RULE-1 P8 refuses it (AM-36). The list
  * as it was when it holds none; developDecision's stop (`decided`'s) when no pick is left, as keepOutfit falls back to it
- * (a led MULE's list holds no stop). floor-time's installable: the hands' module reaches brain.ts (INV-2).
+ * (a led MULE's list holds no stop). When no reachable Energy install is left, Energy first's vetoes (ENERGY_FIRST) are
+ * lifted before the lakes are judged, the fallback stop's too: the rule holds only while a reachable plant exists.
+ * floor-time's installable: the hands' module reaches brain.ts (INV-2).
  */
 function shoreless(obs: GameState, mind: Mind, list: Shortlist<DevAction>, floor: FloorConfig | null, decided: Shortlist<DevAction>): Shortlist<DevAction> {
   if (!floor) return list;
