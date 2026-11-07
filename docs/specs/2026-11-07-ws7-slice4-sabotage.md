@@ -734,7 +734,7 @@ on every attribution (guarded, caught on the spot, or revealed by an investigati
   2  moveReputation(state, culprit, POLITICS.reputation.moves.caught × multiplier, 'caught', victim)
      (slice 3's only writer; multiplier = the ban's setting in force now, else 1)
   3  victim ≠ null → pactBreach(state, culprit, victim, order.month)  (slice 3, S3-RULE-5: breaks a pact
-     that bound in the order's month, once per card; −20 pactBroken on top)
+     that bound in the order's month, once per card; −20 pactBroken on top, so −30 in all)
   4  the case is open for a fine (S4-RULE-8)
 sabotagePossible   this slice replaces slice 3's diplomacy.ts sabotagePossible's body with:
                    state.politics !== null && POLITICS.sabotage.on   (and, if Heiko picks D-S4-2 B, the
@@ -742,7 +742,7 @@ sabotagePossible   this slice replaces slice 3's diplomacy.ts sabotagePossible's
 unknown   no ban in force → multiplier 1. Politics off never reaches here (no orders). A rumour has no
           victim: no pactBreach.
 examples  a power cut caught, no ban, no pact: reputation 50 → 40 · under ban ×2 → 30 · caught against a pact
-          partner, no ban: −10 caught, then −20 pactBroken → 20 · a rumour caught under ×3: −30, no pact check
+          partner, no ban: −10 caught, then −20 pactBroken, −30 in all → 20 · a rumour caught under ×3: −30, no pact check
 ```
 
 ```
@@ -790,7 +790,7 @@ first match wins
 public    the result, solved (with the name) or cold, is public at once (news, the incidents list, a notice)
 odds      D-S4-1: 0.5 recommended; design 05 says the culprit is always revealed (1.0)
 examples  month 4: Brix investigates "month 3, Kai's Food plot, culprit unknown" → drawn 0.22 → solved,
-          Lena named, her reputation −10 (and −20 if she held a pact with Kai in month 3) · a second one in
+          Lena named, her reputation −10 (−30 if she held a pact with Kai in month 3) · a second one in
           month 4 → row 2
 ```
 
@@ -981,12 +981,14 @@ export interface SabotageOrder {
 // Politics.sabotage: SabotageOrder[] (the whole game). Politics.guards: number[] (this month's guarded tiles).
 ```
 
-**Requested additions to the frozen types (all additive and optional, so WS1's stubs still compile; raised with
-WS7 on 7 Nov):**
+**Additions to the frozen types (all additive, so WS1's stubs still compile; OK'd by WS7, 7 Nov):**
 
 ```ts
 export interface SabotageOrder {
-  // … the frozen fields, plus:
+  /** The orderer. Invariant: engine state ALWAYS holds a string. null appears only in observe()'s output, on
+   *  another seat's public order whose culprit is not public (S4-RULE-12). */
+  by: string | null;
+  // … the other frozen fields, plus:
   /** Set when it resolves: the tile's owner then; null for a rumour, and while pending. Needed later: a plot
    *  changes hands, and an investigation months on must still name the victim for pactBreach and the fine. */
   victim?: string | null;
@@ -999,9 +1001,8 @@ export interface SabotageOrder {
 }
 export interface SabotageFine { base: number; due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard'; month: number }
 // observe() (and only observe) sets `by` to null on another seat's public order whose culprit is not public.
-// Requested: `by: string | null` on SabotageOrder for that. Fallback if WS7 keeps `by: string`: observe drops
-// those orders, and the hands read the public incidents from the view-shaped list politicsIncidents(obs) instead.
-// Politics gains (requested): rumoured: { good: Good; from: number }[] — worked rumours live in this auction and
+// Every engine function may assume `by` is a string; a test asserts no order in GameState has by === null.
+// Politics gains: rumoured: { good: Good; from: number }[] — worked rumours live in this auction and
 // the posted price before each shift, so endRumours restores it exactly (a ratio cannot invert the rounding).
 // A void order is removed from Politics.sabotage, so no 'void' outcome is needed.
 
@@ -1143,7 +1144,7 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 
 | id | Given / When / Then | changes | observed_at | negative case |
 |---|---|---|---|---|
-| S4-B-AC-1 | Given Brix is Sheriff and guards his Food plot · When Lena's power cut on it resolves · Then it fails, the plot makes its normal output, and every screen's production events carry "Caught!" with Lena's name; her reputation falls by 10 on every screen | S4-C2 S4-C4 S4-C5 S4-C13 S4-C17 | the views every phone and the TV receive in production (server test; e2e step S4-UBER-AC-2) | an unguarded order with seen = no names nobody |
+| S4-B-AC-1 | Given Brix is Sheriff and guards his Food plot · When Lena's power cut on it resolves · Then it fails, the plot makes its normal output, and every screen's production events carry "Caught!" with Lena's name; her reputation falls by 10 on every screen (by 30 if she holds a pact with Brix) | S4-C2 S4-C4 S4-C5 S4-C13 S4-C17 | the views every phone and the TV receive in production (server test; e2e step S4-UBER-AC-2) | an unguarded order with seen = no names nobody |
 | S4-B-AC-2 | Given an unguarded order whose seeded draws work and are not seen · When production runs · Then the plot makes 0, the TV shows it dark with "someone", and no view but Lena's names her | S4-C2 S4-C9 S4-C13 | the plot's production line and every view's JSON | a failed, unseen order files no event and changes no output |
 | S4-B-AC-3 | Given a revealed case · When the Sheriff fines 150 · Then the culprit pays 150, the victim gets 75, the fund keeps 75, the ledger shows fine 150 and restitution 75; a case left unfined pays 150 when the next planning ends | S4-C5 S4-C8 | players' money and the month report's ledger (engine test) | a fine on an unrevealed case is refused |
 | S4-B-AC-4 | Given an unsolved public incident · When the Sheriff investigates · Then every screen shows "solved, it was Lena" or "the trail went cold" at once, and the incident cannot be investigated again | S4-C5 S4-C13 | the views after the intent (server test) | a second investigation that month is refused |
@@ -1184,9 +1185,8 @@ offices; no order and no guard in any view but its owner's or the Sheriff's.
   accepted for vote totals.
 - **Slice 3's engine PR or slice 5's Security spend lands after this slice's.** Mitigation: stubs in PR-0
   (pactBreach false, securitySpend 0); slice 3's names are adopted as written.
-- **A caught saboteur under a pact loses 30, not 20.** Slice 3's moment table (§0, "Lena is caught sabotaging
-  Brix during a pact ... her chip −20") predates the 'caught' move; this spec stacks −10 caught and −20
-  pactBroken. WS7 settles the merged wording.
+- **A caught saboteur under a pact loses 30** (−10 caught, −20 pactBroken; WS7, 7 Nov). Slice 3's moment table
+  said −20 before the 'caught' move existed; WS7 fixes it at the merge.
 - **Restoring the Sheriff moves WS1's politics rows** (pay 30 a month from the fund; the AI Governor's
   low-fund bump now counts 80). Mitigation: rows re-measured in PR-3, to Heiko with the sabotage rows (D3).
 - **Election months get longer** (two offices in the ceremony). Mitigation: the ceremony's beats are config
@@ -1325,7 +1325,7 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 
 | PR | Owner | Days | Starts after | Contents |
 |---|---|---|---|---|
-| PR-0 contract | WS3 + WS7 | 0.5 | — | S4-C20: types (frozen + §3's requested fields), protocol, isIntent, NoticeEntry, config, sabotage.ts stubs; stubs for slice 3's pactBreach / pactBetween / moveReputation and slice 5's securitySpend under their own names, only where those slices have not landed |
+| PR-0 contract | WS3 + WS7 | 0.5 | — | S4-C20: types (frozen + §3's additions), protocol, isIntent, NoticeEntry, config, sabotage.ts stubs; stubs for slice 3's pactBreach / pactBetween / moveReputation and slice 5's securitySpend under their own names, only where those slices have not landed |
 | PR-1 engine | WS7 (+ WS3/WS1 named edits) | 2 | PR-0 | S4-C1..C8 + game.ts, production.ts, events.ts lines |
 | PR-2 observe | WS1 | 0.5 | PR-0 | S4-C9 |
 | PR-3 values + sim | WS1 | 2 | PR-0 (rows need PR-1, PR-4) | S4-C11, S4-C12 |
