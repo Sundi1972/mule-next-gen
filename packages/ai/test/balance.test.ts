@@ -31,6 +31,7 @@ import { simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotsAhead, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
+import { rulesOff } from './rule-switches.js';
 
 /**
  * The species these cases were built with, picked per seat: the default turns with the seed (FM-species-by-chair), and
@@ -368,6 +369,8 @@ describe('cash reserve', () => {
 });
 
 describe('walking', () => {
+  // The walk veto is read on installs Energy first would rule out.
+  rulesOff('energyFirst');
   it('T-AC-19: a walk-aware seat vetoes a MULE whose walk to the corral and on to the plot is longer than its time left', () => {
     // ai0, rich and fed, holds one idle plot well away from the store and stands in the store.
     const state = developmentWithWater(40);
@@ -395,6 +398,8 @@ describe('walking', () => {
 });
 
 describe('factories', () => {
+  // T-AC-4 pins canFeed's block, which S2's lever B lifts for a Medicine works (medicine-despite-inputs.test.ts).
+  rulesOff('energyFirst', 'medicineDespiteInputs');
   it('T-AC-4: in month 1 with start stock and no farms, no factory needing Food or Water is a live option', () => {
     const arrange = (farms: boolean) => {
       const state = fourSeats(3);
