@@ -1,5 +1,5 @@
 /**
- * theWalkSideFitsAtItsWorst (PM ruling 7 Nov): at 1920×1080 and six seats, the goods auction's walk with the most running
+ * theWalkSideFitsAtItsWorst: at 1920×1080 and six seats, the goods auction's walk with the most running
  * deals and held sellers six seats can have. TV-FIT's floor holds: the body, the side column inside it, at
  * TV_SCALE_FLOOR or more; every running deal has its row (standing ruling: every running deal stays in sight, the older
  * ones one row each); nothing runs past the foot; the held card's words show whole. A real six-seat game is played to a
@@ -9,13 +9,14 @@
  * at 0.687 on seed 1352431318 and 0.849 on another); a whole-game run grades the worst case only by luck.
  *
  * The worst case, from the engine:
- * - a player is in at most one deal: stepBoard (packages/engine/src/walk.ts:255-289) pairs the best seller with one
+ * - a player is in at most one deal: stepBoard (packages/engine/src/walk.ts:254-300) pairs the best seller with one
  *   buyer, and marks both busy so no house takes them;
- * - one pair of players trades at a time (walk.ts:258-265), the store sells to one player at a time (walk.ts:276-281),
- *   and of the houses that buy (the ship and the store, auction.ts:103-106) only the one that pays most has a deal: a
- *   seller at or under both prices sells to the higher (walk.ts:283-289), so every seller at a line goes to the same one;
+ * - one pair of players trades at a time, the lowest ask with the highest bid that reaches it (walk.ts:254-266); the
+ *   store sells to one player at a time (walk.ts:276-281); of the houses that buy (the ship and the store,
+ *   auction.ts:122-125) only the one that pays most has a deal: a seller at or under both prices sells to the higher
+ *   (walk.ts:282-289), so every seller at a line goes to the same one;
  * - the store sells nothing once sold out (storeSellLine, packages/engine/src/auction.ts:45-48): no store deal then;
- * - a held seller (RULE-4, walk.ts:156-163) rests above the line, so trades with nobody.
+ * - a held seller (RULE-4, stopAtNeed, walk.ts:158-169) rests above the line, so trades with nobody.
  * So the walk runs at most three deals (a pair, the store selling, one house buying), two when the store is sold out,
  * and the players in deals plus the held sellers are at most six. MIXES are the candidates; the reachable ones are
  * asserted, the ones past the engine only measured, for the headroom.
@@ -43,6 +44,8 @@ interface Mix {
   ship: boolean;
   deals: DealKind[];
   held: number;
+  /** Drawn at full size: the readout is read where the column is narrowest for its words. */
+  fullSize?: true;
 }
 
 const MIXES: Mix[] = [
@@ -50,6 +53,8 @@ const MIXES: Mix[] = [
   { name: 'in stock, the ship buying: a pair, the store selling and the ship, 2 held', reachable: true, soldOut: false, ship: true, deals: ['pair', 'storeSells', 'shipBuys'], held: 2 },
   { name: 'in stock, no ship: a pair, the store selling and the store buying, 2 held', reachable: true, soldOut: false, ship: false, deals: ['pair', 'storeSells', 'storeBuys'], held: 2 },
   { name: 'sold out, no ship: a pair and the store buying, 3 held', reachable: true, soldOut: true, ship: false, deals: ['pair', 'storeBuys'], held: 3 },
+  // A quiet walk, as most are: the side at full size, the ship the highest bid, so the readout shows a house's word.
+  { name: 'in stock, the ship buying from one seller, nobody held', reachable: true, soldOut: false, ship: true, deals: ['shipBuys'], held: 0, fullSize: true },
   // The estimate the ruling started from was four deals beside two held cards, sold out with the ship buying: seven
   // players, as a pair is two. The nearest six seats can draw, each past the engine: two houses buying at once, a store
   // deal while sold out, two pairs at once.
@@ -62,8 +67,13 @@ const MIXES: Mix[] = [
 const GOOD: Good = 'electronics';
 /** A typed name is at most 16 characters (ROOM_LIMITS.nameChars); the AI seats' longest is 18 (AI_NAMES). */
 const HUMAN = 'Wilhelmina Moore';
-/** Three-digit prices and two-digit counts: the longest words a deal row, the readout and the boxes say. */
-const PRICE = { storeBuys: 104, ship: 126, pair: 119, bid: 131, storeSells: 142, held: 158, idle: 92 };
+/**
+ * Three-digit prices and two-digit counts: the longest words a deal row, the readout and the boxes say. As the engine
+ * has them: no seller asks under the store's buying line (zones.buyersTop), the pair's ask is the lowest of any seller
+ * trading, and while the store sells no buyer bids over its selling line; sold out, the pair's buyer bids past its old
+ * line, so the store's line shows that bid.
+ */
+const PRICE = { storeBuys: 104, ship: 126, pair: 119, bid: 131, soldOutBid: 145, storeSells: 142, held: 158, idle: 92 };
 const UNITS = { deal: 12, held: 14, seller: 9 };
 
 /**
@@ -92,6 +102,35 @@ const SIDE_PARTS = String.raw`(() => {
   [inner.style.width, inner.style.height] = saved;
   return { scale: Number(box.getAttribute('data-fit')), room: box.clientHeight, natural, best: best.toFixed(3), parts };
 })()`;
+
+/**
+ * Kept a string, as SIDE_PARTS: the readout's ask and bid as the couch sees them. Each value's words, its line count, its
+ * price (whole: inside the value), a house's word (whole: not cut, inside the value) and a player's mark (drawn, inside
+ * the value) with its label and the name beside it.
+ */
+const READOUT = String.raw`(() => {
+  const dl = document.querySelector('[data-testid=tv-readout]');
+  if (!dl) return null;
+  return [...dl.querySelectorAll('dd')].slice(0, 2).map((dd) => {
+    const r = dd.getBoundingClientRect();
+    const inside = (el) => { if (!el) return false; const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.left >= r.left - 1 && b.right <= r.right + 1 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1; };
+    const price = dd.firstElementChild;
+    const house = dd.querySelector('[data-testid=readout-house]');
+    const mark = dd.querySelector('[role=img]');
+    const name = dd.querySelector('[data-testid=readout-name]');
+    return {
+      text: dd.innerText.replace(/\s+/g, ' ').trim(),
+      lines: Math.round((dd.offsetHeight / parseFloat(getComputedStyle(dd).lineHeight)) * 10) / 10,
+      price: price ? { text: price.textContent, whole: inside(price) && price.scrollWidth <= price.clientWidth + 1 } : null,
+      house: house ? { text: house.textContent, whole: inside(house) && house.scrollWidth <= house.clientWidth + 1 && dd.scrollWidth <= dd.clientWidth + 1 } : null,
+      mark: mark ? { label: mark.getAttribute('aria-label'), shown: inside(mark) && mark.checkVisibility({ opacityProperty: true, visibilityProperty: true }) } : null,
+      name: name ? name.getAttribute('title') : null,
+      nameShown: name ? Math.round(name.clientWidth) + ' of ' + Math.round(name.scrollWidth) + ' px' : null,
+    };
+  });
+})()`;
+
+type ReadoutValue = { text: string; lines: number; price: { text: string; whole: boolean } | null; house: { text: string; whole: boolean } | null; mark: { label: string; shown: boolean } | null; name: string | null; nameShown: string | null };
 
 const started = Date.now();
 const { server, base } = await startServer({ politics: false, phaseScale: 0.05, seed: () => 7 });
@@ -207,12 +246,16 @@ function stage(mix: Mix, ids: string[]): Pick<Auction, 'deals' | 'walkers' | 'st
   // The newest held seller has the card: the longest name, so its words are the likeliest cut.
   const heldIds = mix.held > 0 ? [take()] : [];
   const deals: Deal[] = [];
+  // With the store buying, its seller stands at its line, which is also the lowest any seller may ask: the pair's seller
+  // asks the same and got there first, so the engine pairs it (a tie goes to whoever reached the price first).
+  const ask = mix.deals.includes('storeBuys') ? PRICE.storeBuys : PRICE.pair;
+  const bid = mix.soldOut ? PRICE.soldOutBid : PRICE.bid;
   for (const kind of mix.deals) {
     if (kind === 'pair' || kind === 'pair2') {
       const [seller, buyer] = [take(), take()];
-      walker(seller, 'seller', PRICE.pair);
-      walker(buyer, 'buyer', PRICE.bid);
-      deals.push({ buyer, seller, price: PRICE.pair, units: UNITS.deal });
+      walker(seller, 'seller', ask);
+      walker(buyer, 'buyer', bid);
+      deals.push({ buyer, seller, price: ask, units: UNITS.deal });
     } else if (kind === 'storeSells') {
       const buyer = take();
       walker(buyer, 'buyer', PRICE.storeSells, { line: 'store' });
@@ -229,14 +272,16 @@ function stage(mix: Mix, ids: string[]): Pick<Auction, 'deals' | 'walkers' | 'st
   check(heldIds.length === mix.held, `${mix.name}: six seats hold ${mix.held} sellers beside ${mix.deals.length} deals`);
   for (const id of heldIds) walker(id, 'seller', PRICE.held, { held: true, units: UNITS.held });
   for (const id of free) walker(id, 'buyer', PRICE.idle);
+  // Sold out, the store's line is the highest bid a buyer makes once one passes its old price (shownSellLine).
+  const topBid = Math.max(...[...walkers.values()].filter((w) => w.side === 'buyer').map((w) => w.price));
   return {
     deals,
-    // In seat order, as the server sends them; the held card goes to the first held seller.
+    // The held sellers first, the newest (the card's) at their head, then everyone else longest name first: the TV's
+    // held list puts sellers new to it on top in the order they come.
     walkers: [...heldIds, ...ids.filter((id) => !heldIds.includes(id))].map((id) => walkers.get(id)!),
     storeForSale: mix.soldOut ? 0 : 3,
-    // Sold out: the highest bid on the store's old line, the longest the sold-out box says.
-    storeSells: mix.soldOut ? PRICE.storeSells + 1 : PRICE.storeSells,
-    storeSellsBid: mix.soldOut ? true : undefined,
+    storeSells: mix.soldOut && topBid > PRICE.storeSells ? topBid : PRICE.storeSells,
+    storeSellsBid: mix.soldOut && topBid > PRICE.storeSells ? true : undefined,
     storeBuys: PRICE.storeBuys,
     shipPays: mix.ship ? PRICE.ship : null,
     slowed: true,
@@ -268,7 +313,26 @@ async function measure(tv: Page, mix: Mix, staged: ReturnType<typeof stage>, pla
     const words = await tv.locator(`[data-testid=tv-held-${card.id}] [data-testid=held-words]`).evaluate((e) => ({ text: (e as HTMLElement).innerText, cut: e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 }));
     check(words.text === `${name(card.id)} keeps ${UNITS.held} Electronics` && !words.cut, `TV-FIT: the held card says "${name(card.id)} keeps ${UNITS.held} Electronics" uncut, got "${words.text}"${words.cut ? ' cut' : ''}`);
   }
+  const readout = await theReadoutReads(tv, screen);
   const foot = await nothingPastTheFoot(tv, screen);
   const scale = await theTvScaleHolds(tv, screen);
-  return `${mix.reachable ? '' : '(measured only) '}${log}; drawn at ${scale} (floor ${TV_SCALE_FLOOR}), the foot at y ${foot.toFixed(0)}`;
+  if (mix.fullSize) check(scale.split(', ').every((x) => Number(x) === 1), `TV-FIT: the ${screen} side is drawn at full size, so its readout is read at its narrowest, got ${scale}`);
+  return `${mix.reachable ? '' : '(measured only) '}${log}; drawn at ${scale} (floor ${TV_SCALE_FLOOR}), the foot at y ${foot.toFixed(0)}; the readout ${readout}`;
+}
+
+/**
+ * The readout as the couch reads it: each value on one line, its price whole; a house's word, "store" or "ship", whole;
+ * a player's mark drawn inside the value, labelled with the name beside it, however short the column cuts the name.
+ */
+async function theReadoutReads(tv: Page, screen: string): Promise<string> {
+  const values = (await tv.evaluate(READOUT)) as ReadoutValue[] | null;
+  check(values && values.length === 2, `TV-FIT: the ${screen} TV shows its readout's ask and bid`);
+  for (const [i, v] of values.entries()) {
+    const what = `the ${screen} readout's ${i === 0 ? 'lowest ask' : 'highest bid'} ("${v.text}")`;
+    check(v.lines < 1.5, `TV-FIT: ${what} takes one line, got ${v.lines} lines`);
+    check(v.price && /^\d+ · $/.test(v.price.text) && v.price.whole, `TV-FIT: ${what} shows its price whole, got ${JSON.stringify(v.price)}`);
+    if (v.house) check(['store', 'ship'].includes(v.house.text) && v.house.whole && !v.mark, `TV-FIT: ${what} says the house's word whole and no mark, got ${JSON.stringify(v.house)}`);
+    else check(v.mark && v.mark.shown && v.mark.label === v.name, `TV-FIT: ${what} shows the player's mark, labelled with their name ${v.name}, got ${JSON.stringify(v.mark)}`);
+  }
+  return values.map((v) => (v.house ? `"${v.text}"` : `"${v.text}" with ${v.name}'s mark, the name ${v.nameShown}`)).join(', ');
 }

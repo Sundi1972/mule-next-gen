@@ -567,7 +567,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               go. Size-contained, it takes the row's height and never sets it. */}
           <FitHeight className="w-[300px] shrink-0 [contain:size]" innerClassName={status ? 'gap-4' : 'gap-2'} gives>
             {/* On the walk the header already names the good, its glyph first, so the box keeps the stage and the units
-                traded: one row when both fit, else two short lines (PM ruling 7 Nov, the walk side at six seats). */}
+                traded: one row when both fit, else two short lines. */}
             <div className={cx('rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow', status ? 'flex flex-col gap-1' : 'flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1')} data-testid="tv-stage-box">
               {status && <GoodTag good={auction.good} name className="text-2xl" />}
               <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')} data-testid="tv-stage">

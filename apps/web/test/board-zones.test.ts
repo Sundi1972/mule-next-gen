@@ -290,7 +290,7 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     const tv = tvScreen(game.viewFor(null));
     expect(textOf(tv, 'tv-sold-out')).toBe(`Store sold out Bids can go past its old ${S}. Highest bid ${bid}`);
     expect(textOf(tv, 'tv-store'), "the TV's store box: it sells none").toMatch(/^Sells out /);
-    // Folded into the store box (PM ruling 7 Nov, the walk side at six seats): a row under Sells, Buys and Stock, the
+    // Folded into the store box: a row under Sells, Buys and Stock, the
     // same words, not a box of its own.
     expect(textOf(tv, 'tv-store'), 'the sold-out words are a row of the store box').toMatch(new RegExp(`^Sells out Buys \\d+ Stock 0 Store sold out Bids can go past its old ${S}\\. Highest bid ${bid}$`));
     expect(tv.match(/data-testid="tv-sold-out"/g), 'said once on the TV').toHaveLength(1);
@@ -314,7 +314,7 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out No store price yet: bids set it.');
   });
 
-  it("TV-FIT (PM ruling 7 Nov): on the walk the side's first box keeps the stage and the units traded; the header names the good, so the box doesn't; the side pick's box still does", () => {
+  it("TV-FIT: on the walk the side's first box keeps the stage and the units traded; the header names the good, so the box doesn't; the side pick's box still does", () => {
     const { game } = toWalk();
     const view = game.viewFor(null);
     const good = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore', crystite: 'Crystite', rareEarth: 'Rare earth', alloy: 'Alloy', electronics: 'Electronics', medicine: 'Medicine' }[view.auction!.good];
