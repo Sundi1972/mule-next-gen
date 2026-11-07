@@ -10,6 +10,16 @@
   },
   "pictures": {
     "hall": {
+      "frame": {
+        "width": 2400,
+        "height": 1600,
+        "place": 1293,
+        "centre": [
+          800,
+          1000
+        ],
+        "places": 1
+      },
       "standing": {
         "day": "hall/standing-day@800.webp",
         "dusk": "hall/standing-dusk@800.webp",
@@ -17,6 +27,16 @@
       }
     },
     "park": {
+      "frame": {
+        "width": 2400,
+        "height": 1600,
+        "place": 1293,
+        "centre": [
+          800,
+          1000
+        ],
+        "places": 1
+      },
       "site": {
         "day": "park/site-day@800.webp",
         "dusk": "park/site-dusk@800.webp",
@@ -44,6 +64,16 @@
       }
     },
     "hospital": {
+      "frame": {
+        "width": 2400,
+        "height": 1600,
+        "place": 1293,
+        "centre": [
+          800,
+          1000
+        ],
+        "places": 1
+      },
       "site": {
         "day": "hospital/site-day@800.webp",
         "dusk": "hospital/site-dusk@800.webp",
@@ -70,9 +100,46 @@
         "glow": "hospital/damaged-glow@800.webp"
       }
     },
+    "observatory": {
+      "frame": {
+        "width": 2400,
+        "height": 1600,
+        "place": 1293,
+        "centre": [
+          800,
+          1000
+        ],
+        "places": 1
+      },
+      "site": {
+        "day": "observatory/site-day@800.webp",
+        "dusk": "observatory/site-dusk@800.webp",
+        "glow": "observatory/site-glow@800.webp"
+      },
+      "build1": {
+        "day": "observatory/build1-day@800.webp",
+        "dusk": "observatory/build1-dusk@800.webp",
+        "glow": "observatory/build1-glow@800.webp"
+      },
+      "standing": {
+        "day": "observatory/standing-day@800.webp",
+        "dusk": "observatory/standing-dusk@800.webp",
+        "glow": "observatory/standing-glow@800.webp"
+      },
+      "closed": {
+        "day": "observatory/closed-day@800.webp",
+        "dusk": "observatory/closed-dusk@800.webp",
+        "glow": null
+      },
+      "damaged": {
+        "day": "observatory/damaged-day@800.webp",
+        "dusk": "observatory/damaged-dusk@800.webp",
+        "glow": "observatory/damaged-glow@800.webp"
+      }
+    },
     "stadium": {
       "frame": {
-        "width": 3200,
+        "width": 4800,
         "height": 2600,
         "place": 1293,
         "centre": [
@@ -114,7 +181,7 @@
     },
     "spaceport": {
       "frame": {
-        "width": 3200,
+        "width": 4800,
         "height": 3500,
         "place": 1293,
         "centre": [
@@ -158,5 +225,33 @@
   "sizes": [
     800,
     400
-  ]
+  ],
+  "plate": {
+    "3": {
+      "day": "plate/3-day@800.webp",
+      "dusk": "plate/3-dusk@800.webp",
+      "glow": "plate/3-glow@800.webp",
+      "frame": {
+        "width": 6464,
+        "height": 3636,
+        "hall": [
+          3232,
+          2350
+        ]
+      }
+    },
+    "5": {
+      "day": "plate/5-day@800.webp",
+      "dusk": "plate/5-dusk@800.webp",
+      "glow": "plate/5-glow@800.webp",
+      "frame": {
+        "width": 10240,
+        "height": 5760,
+        "hall": [
+          5120,
+          3853
+        ]
+      }
+    }
+  }
 }
