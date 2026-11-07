@@ -213,6 +213,23 @@ describe('/mcp, stateless, the seat code on every call', () => {
     expect(await waiting).toMatchObject({ kind: 'ask', phase: 'land', ask_id: claudeSeatAt(game, 's2')!.writer.openAsk()!.id });
   });
 
+  it('T-AC-1: every result opens with its sentence, not only the refusals', async () => {
+    const codes = new SeatCodeBook();
+    const { game, fake, codeA, codeB } = startedGame(codes);
+    const lobby = codes.issue(new MuleGame(fakeContext({ table: TABLE }).ctx, 10), 's2');
+    const client = mcpClient(await serve(codes));
+    const opening = async (tool: string, args: Record<string, unknown>) => (await client.text(tool, args)).split('\n')[0]!.toLowerCase();
+
+    expect(await opening('wait_for_my_turn', { code: lobby })).toContain('still waiting, call again now');
+    expect(await opening('submit_plan', { code: codeA, ask_id: 'no-such-ask', edits: [], line: 'Hm.' })).toContain('unknown or closed ask');
+    const askA = await client.call('wait_for_my_turn', { code: codeA });
+    await client.call('submit_plan', { code: codeA, ask_id: askA.ask_id, edits: [], line: 'Once.' });
+    expect(await opening('submit_plan', { code: codeA, ask_id: askA.ask_id, edits: [], line: 'Twice.' })).toContain('one answer per ask');
+    const askB = await client.call('wait_for_my_turn', { code: codeB });
+    await playUntil(game, fake, () => game.viewFor(null).phase === 'landGrant');
+    expect(await opening('submit_plan', { code: codeB, ask_id: askB.ask_id, edits: [], line: 'Late.' })).toContain('too late, played the built-in plan');
+  });
+
   it('B-AC-6: a new client with the same code carries on and gets the open ask', async () => {
     const codes = new SeatCodeBook();
     const { game, codeA } = startedGame(codes);
