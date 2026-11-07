@@ -1777,6 +1777,12 @@ export const STRATEGIST = {
     /** "Hurts the leader": what the plan that fences in the leader scores. */
     hurtsLeader: 0.7,
   },
+  /**
+   * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
+   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 10 (PM ruling,
+   * 7 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
+   */
+  energyFirst: true as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
     /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
