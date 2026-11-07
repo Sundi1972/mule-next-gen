@@ -268,7 +268,7 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         if (state.phase === 'landGrant') grantPass(state, id);
         else if (state.phase === 'landAuction') lotDone(state, id, action.done);
         // The election's, the law ballot's or the overrule ballot's Done, through the one votes facade, as the server's.
-        else if (state.phase === 'planning' && (state.politics?.election || state.politics?.council || state.politics?.overrule?.stage === 'ballot')) votesDone(state, id, action.done);
+        else if (votesOpen(state)) votesDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
       case 'drone':
