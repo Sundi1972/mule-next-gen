@@ -238,14 +238,46 @@ export function sabotagePossible(_state: GameState): boolean {
   return false;
 }
 
-export function pactBetween(_state: GameState, _a: string, _b: string, _month: number = _state.month): DealCard | null {
-  throw new Error('NotImplemented: pactBetween');
+/** The pact that binds these two players in a month (default: this one), active or already ended kept; null when none. */
+export function pactBetween(state: GameState, a: string, b: string, month: number = state.month): DealCard | null {
+  const found = state.politics?.deals.find((d) => d.terms.kind === 'pact' && (d.status === 'active' || d.status === 'kept') && sameParties(d, a, b) && d.offered <= month && month <= d.until);
+  return found ?? null;
 }
 
-export function pactBreach(_state: GameState, _saboteurId: string, _victimId: string, _sabotageMonth: number, _possible: boolean = sabotagePossible(_state)): boolean {
-  throw new Error('NotImplemented: pactBreach');
+/**
+ * Slice 4 calls this when a sabotage's culprit becomes public: the pact that bound the two in the sabotage's month
+ * breaks, once per card (S3-RULE-5). The saboteur loses pactBroken; the victim gains kept where sabotage was possible
+ * and the pact was still running, since a pact that ended kept already paid. `possible` is the seam for sabotagePossible.
+ */
+export function pactBreach(state: GameState, saboteurId: string, victimId: string, sabotageMonth: number, possible: boolean = sabotagePossible(state)): boolean {
+  const pact = pactBetween(state, saboteurId, victimId, sabotageMonth);
+  if (!pact) return false;
+  const running = pact.status === 'active';
+  const politics = editPolitics(state);
+  const card = politics.deals.find((d) => d.id === pact.id)!;
+  reputationShift(state, saboteurId, POLITICS.reputation.moves.pactBroken);
+  if (running && possible) rewardKept(state, politics, victimId, saboteurId, possible);
+  Object.assign(card, { status: 'broken', brokenBy: saboteurId, settled: state.month });
+  return true;
 }
 
-export function monthEndDeals(_state: GameState, _gameOver: boolean, _possible: boolean = sabotagePossible(_state)): void {
-  throw new Error('NotImplemented: monthEndDeals');
+/**
+ * The upkeep: a pact whose until has come settles kept, and pays both parties only where sabotage was possible. At
+ * game over every active pact settles kept as at its end and every active vote card expires (S3-RULE-5).
+ */
+export function monthEndDeals(state: GameState, gameOver: boolean, possible: boolean = sabotagePossible(state)): void {
+  const ending = (d: DealCard): boolean => d.status === 'active' && (d.terms.kind === 'pact' ? gameOver || d.until <= state.month : gameOver);
+  if (!state.politics?.deals.some(ending)) return;
+  const politics = editPolitics(state);
+  for (const card of politics.deals.filter(ending)) {
+    if (card.terms.kind === 'vote') {
+      Object.assign(card, { status: 'expired', settled: state.month });
+      continue;
+    }
+    if (possible) {
+      rewardKept(state, politics, card.from, card.to, possible);
+      rewardKept(state, politics, card.to, card.from, possible);
+    }
+    Object.assign(card, { status: 'kept', settled: state.month });
+  }
 }
