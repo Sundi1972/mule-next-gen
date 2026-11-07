@@ -362,14 +362,16 @@ function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk
 /**
  * On the floor (`floor`, its config; null where the game taps), `list` with every install on a lake no shore reaches
  * vetoed, as the hand's live legs price it (no stand, an endless walk) and as RULE-1 P8 refuses it (AM-36). The list
- * as it was when it holds none. floor-time's installable: the hands' module reaches brain.ts (INV-2).
+ * as it was when it holds none; developDecision's stop (`decided`'s) when no pick is left, as keepOutfit falls back to it
+ * (a led MULE's list holds no stop). floor-time's installable: the hands' module reaches brain.ts (INV-2).
  */
-function shoreless(obs: GameState, mind: Mind, list: Shortlist<DevAction>, floor: FloorConfig | null): Shortlist<DevAction> {
+function shoreless(obs: GameState, mind: Mind, list: Shortlist<DevAction>, floor: FloorConfig | null, decided: Shortlist<DevAction>): Shortlist<DevAction> {
   if (!floor) return list;
   const dry = (a: DevAction): a is Extract<DevAction, { kind: 'install' }> => a.kind === 'install' && obs.tiles[a.index]!.terrain === 'lake' && !installable(obs, floor, mind.me, a.index);
   if (!list.all.some((c) => !c.veto && dry(c.action))) return list;
   const all = list.all.map((c) => (!c.veto && dry(c.action) ? candidate(c.key, c.label, c.action, c.value, c.considerations, `lake: no shore reaches plot ${c.action.index}`) : c));
-  return shortlist(all, mind.level.shortlist, mind.level.shortlistTolerance);
+  const left = all.some((c) => !c.veto) ? all : decided.all.filter((c) => c.action.kind === 'stop');
+  return shortlist(left, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
 /** Whether the fitted MULE the seat leads makes anything over the game on one of its idle plots; true when it leads none. See AM-27. */
@@ -448,7 +450,8 @@ function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | n
   const floor = DEV_STEER.on ? floorConfig() : null;
   for (let k = 0; k < mind.level.mulesPerMonth && route.length + MULE_STEPS < cap; k++) {
     const walk: DevWalk = { at, left, taps };
-    const list = shoreless(copy, mind, keepOutfit(copy, mind, developDecision(copy, mind, k, walk, moneyMaker), walk), floor);
+    const decided = developDecision(copy, mind, k, walk, moneyMaker);
+    const list = shoreless(copy, mind, keepOutfit(copy, mind, decided, walk), floor, decided);
     const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, list);
     if (mule.kind === 'stop') break;
     const led = leadOut(copy, me, mule);
