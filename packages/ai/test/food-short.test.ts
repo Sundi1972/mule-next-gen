@@ -135,7 +135,7 @@ function playOn(state: GameState, until: 'development' | 'production', through =
 }
 
 /** The seat's plots halved at next month's production for want of the good: none means it was whole. */
-function halvedFor(state: GameState, id: string, why: 'noEnergy' | 'noWater'): number {
+function halvedFor(state: GameState, id: string, why: 'noEnergy' | 'energyOff' | 'waterOff'): number {
   const report = state.history.at(-1)!;
   return (report.lines ?? []).filter((l) => state.tiles[l.tile]!.owner === id && l.parts.some((p) => p.why === why)).length;
 }
@@ -474,7 +474,7 @@ describe('B-AC-water-short: a seat short of Water buys from the store when it ca
     boughtFairly(state, trades, id!, ask, 0, MONEY);
     playOn(state, 'production', true);
 
-    expect(halvedFor(state, id!, 'noWater'), `${id}'s farms turned off for Water next month`).toBe(0);
+    expect(halvedFor(state, id!, 'waterOff'), `${id}'s farms turned off for Water next month`).toBe(0);
   });
 
   it.each(ROWS)('B-AC-water-short: %s (%s) with three farms, not short, keeps the screen need when the store buys at 3 times the reference price', (id) => {

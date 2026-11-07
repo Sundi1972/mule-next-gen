@@ -52,7 +52,7 @@ const p0 = (state: GameState) => state.players.find((x) => x.id === 'p0')!;
 const drink = (state: GameState) => needsOf(state, 'p0').water;
 const lineOf = (run: ReturnType<typeof runProduction>, state: GameState, tile: Tile) => run.lines.find((l) => l.tile === state.tiles.indexOf(tile))!;
 const offFor = (run: ReturnType<typeof runProduction>, state: GameState, tile: Tile) =>
-  lineOf(run, state, tile).parts.find((x) => x.why === 'noWater' || x.why === 'energyOff')?.why ?? null;
+  lineOf(run, state, tile).parts.find((x) => x.why === 'waterOff' || x.why === 'energyOff')?.why ?? null;
 
 /** Lays the plots, gives p0 its drink plus `spare` Water (and `stock`), runs production. */
 function produce(plots: { good: Outfit; out?: number }[], spare: number, stock: Partial<Record<Good, number>> = {}) {
@@ -80,7 +80,7 @@ describe('AM-18: every plot uses Water at production, and turns off without it',
   it('a farm short of Water (1 spare of its 2) is turned off: it makes 20% and takes no Water', () => {
     const { state, tiles, run, waterLeft } = produce([{ good: 'food', out: 5 }], 1);
 
-    expect(offFor(run, state, tiles[0]!)).toBe('noWater');
+    expect(offFor(run, state, tiles[0]!)).toBe('waterOff');
     expect(lineOf(run, state, tiles[0]!).made).toBe(Math.round(5 * UPKEEP.offOutputShare));
     expect(waterLeft).toBe(1);
   });
@@ -88,7 +88,7 @@ describe('AM-18: every plot uses Water at production, and turns off without it',
   it('the household drinks first: Water only for the drink leaves the farm off', () => {
     const { state, tiles, run, waterLeft } = produce([{ good: 'food', out: 5 }], 0);
 
-    expect(offFor(run, state, tiles[0]!)).toBe('noWater');
+    expect(offFor(run, state, tiles[0]!)).toBe('waterOff');
     expect(waterLeft).toBe(0);
   });
 
@@ -107,14 +107,14 @@ describe('AM-18: every plot uses Water at production, and turns off without it',
     expect(p0(on.state).stock.smithore).toBe(0);
 
     const off = produce([{ good: 'alloy' }], 0, { smithore: 2 });
-    expect(offFor(off.run, off.state, off.tiles[0]!)).toBe('noWater');
+    expect(offFor(off.run, off.state, off.tiles[0]!)).toBe('waterOff');
     expect(off.waterLeft).toBe(0);
   });
 
   it('biggest Water user first: with 2 spare, the farm (2) goes off and the mine (1) runs', () => {
     const { state, tiles, run, waterLeft } = produce([{ good: 'food', out: 4 }, { good: 'smithore', out: 3 }], 2);
 
-    expect(offFor(run, state, tiles[0]!)).toBe('noWater');
+    expect(offFor(run, state, tiles[0]!)).toBe('waterOff');
     expect(offFor(run, state, tiles[1]!)).toBeNull();
     expect(waterLeft).toBe(1);
   });

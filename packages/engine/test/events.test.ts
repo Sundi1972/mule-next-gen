@@ -276,7 +276,7 @@ describe('several events in one production', () => {
       const dryLine = lineOf(produce(dry.state), dry.farm);
       expect(dryLine.parts).toEqual([
         { why: 'ground', delta: 4 },
-        { why: 'noWater', delta: -3 },
+        { why: 'waterOff', delta: -3 },
         { why: 'event', delta: -1, event: 'drought' },
         { why: 'event', delta: 0, event: 'acidRain' },
       ]);

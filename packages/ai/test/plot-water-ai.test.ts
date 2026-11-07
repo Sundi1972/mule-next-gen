@@ -51,7 +51,7 @@ function farmInMonthTwo(well: number): string[] {
 
 describe('AM-18: canFeed predicts the Water turn-off the engine makes', () => {
   it("a well making 4 can't water the farm, the well and the works: the engine turns the farm off, and canFeed says no for Water", () => {
-    expect(farmInMonthTwo(4), 'the engine, month 2').toContain('noWater');
+    expect(farmInMonthTwo(4), 'the engine, month 2').toContain('waterOff');
 
     const obs = observe(colony(4), ME);
     expect(canFeed(obs, ME, 'alloy')).toBe(false);
@@ -59,7 +59,7 @@ describe('AM-18: canFeed predicts the Water turn-off the engine makes', () => {
   });
 
   it('a well making 8 waters all three: the engine turns nothing off, and canFeed says yes', () => {
-    expect(farmInMonthTwo(8), 'the engine, month 2').not.toContain('noWater');
+    expect(farmInMonthTwo(8), 'the engine, month 2').not.toContain('waterOff');
 
     const obs = observe(colony(8), ME);
     expect(canFeed(obs, ME, 'alloy')).toBe(true);
