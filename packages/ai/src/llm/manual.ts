@@ -113,15 +113,16 @@ const PHASES: Record<Exclude<Phase, 'gameOver'>, () => string> = {
   development: () =>
     `One clock of ${DEVELOPMENT.fullSeconds} s for every player. Each step from one map tile to the next takes ${DEV_WALK.tileSeconds} s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash.`,
   production: () =>
-    `Every plot with a MULE makes its good, more on better ground, plus ${ADJACENCY.neighbour} when a neighbour of yours makes the same good, or ${ADJACENCY.cluster} in a cluster of ${ADJACENCY.clusterSize} or more. A raw plot burns Energy (${rawEnergy()}) and makes ${pct(UPKEEP.shortOutputShare)} without it; a Food plot also needs Water. A factory turns inputs from your stock into its good (${(Object.keys(RECIPES) as ProcessedGood[]).map(recipe).join('; ')}) and makes nothing without them.`,
+    `Every plot with a MULE makes its good, more on better ground, plus ${ADJACENCY.neighbour} when a neighbour of yours makes the same good, or ${ADJACENCY.cluster} in a cluster of ${ADJACENCY.clusterSize} or more. A raw plot uses Energy (${uses(UPKEEP.energyUse)}) and Water (${uses(UPKEEP.waterUse)}) a month; an Energy plant and a well pay their own from what they make. A factory turns inputs from your stock into its good (${(Object.keys(RECIPES) as ProcessedGood[]).map(recipe).join('; ')}) and makes nothing without its goods. Your household's drink is kept back first. Short of Energy, then of Water, your plots that use the most are turned off, and a plot turned off makes ${pct(UPKEEP.offOutputShare)}.`,
   auction: () =>
     `Goods come up one at a time (${goodList(WALK.order)}). Each has a status screen where players pick buyer, seller or pass, ${WALK.statusMs === null ? "with no clock: it waits for every player's Done or the host's Continue" : `for ${WALK.statusMs} ms`}, then a walk of ${WALK.goodMs} ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund.`,
   upkeep: () =>
     `Each player eats ${UPKEEP.baseFood} Food and drinks ${UPKEEP.baseWater} Water, plus 1 Food per ${UPKEEP.crewPerFood} crew and 1 Water per ${UPKEEP.crewPerWater}, from their own stock. Your goods spoil (${spoiling()}, rounded down), and anything above ${UPKEEP.depotCapacity} units of a good is lost. Every ${GAME.exportShipEvery} months an export ship calls, buying the ${EXPORT_SHIP.wishlist} goods on its wishlist, announced one month before.`,
 };
 
-function rawEnergy(): string {
-  return Object.entries(UPKEEP.energyUse)
+/** What each raw plot uses a month of Energy or Water, by the good it makes. */
+function uses(use: Record<string, number>): string {
+  return Object.entries(use)
     .map(([g, n]) => `${GOOD_NAME[g as keyof typeof GOOD_NAME]} ${n}`)
     .join(', ');
 }
