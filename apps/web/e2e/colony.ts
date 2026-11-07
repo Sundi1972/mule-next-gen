@@ -463,23 +463,27 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await throughTheMonth();
 
     check(board().month === 2 && board().players.length === 6, `month 2's end at six seats, got month ${board().month}, ${board().players.length} seats`);
-    // A build site as a real game has one by month 2 (WS10 measured the TV month end at 0.604 with three, PM ruling
-    // 7 Nov): a park standing, a hospital building, an observatory commissioned, each with three donors on its plaque.
-    // Staged as the server's colony tests stage them: commissioning is planning's, and this is the month end.
+    // The longest build site a game can have (PM ruling 7 Nov: a long game reaches five projects): all five, the most
+    // lines they can take once the standing ones fold into one. Three under way (COLONY.maxOpen), one damaged, the park
+    // standing: five lines, as many as five with none standing. Staged as the server's colony tests stage them:
+    // commissioning is planning's, and this is the month end.
     await held(server, code, async () => {
       const room = server.registry.get(code);
       check(room, `room ${code} on the server`);
       const state = (room as unknown as { game: { state: GameState } }).game.state;
       const donors = state.players.slice(0, 3).map((p, i) => [p.id, 60 * (i + 1)] as const);
-      const staged: { id: PrestigeId; stage: 'standing' | 'building' | 'commissioned'; monthsLeft: number | null }[] = [
+      const staged: { id: PrestigeId; stage: 'standing' | 'building' | 'commissioned' | 'damaged'; monthsLeft: number | null }[] = [
         { id: 'park', stage: 'standing', monthsLeft: null },
         { id: 'hospital', stage: 'building', monthsLeft: 1 },
         { id: 'observatory', stage: 'commissioned', monthsLeft: null },
+        { id: 'stadium', stage: 'commissioned', monthsLeft: null },
+        { id: 'spaceport', stage: 'damaged', monthsLeft: null },
       ];
+      check(staged.filter((p) => p.stage === 'building' || p.stage === 'commissioned').length === COLONY.maxOpen, `the staging has the most projects under way, ${COLONY.maxOpen}`);
       state.colony!.projects = staged.map(({ id, stage, monthsLeft }) => ({ id, stage, monthsLeft, since: 1, slot: null, funded: { credits: 120, goods: {} }, plaque: Object.fromEntries(donors) }));
       room.broadcast();
     });
-    check(board().colony?.projects.length === 3, `three projects at the build site, got ${board().colony?.projects.length}`);
+    check(board().colony?.projects.length === 5, `five projects at the build site, got ${board().colony?.projects.length}`);
     // The full ticker: the TV that has watched the game. The empty one: a TV that joins now (the server replays no chat).
     const fresh = await (await browser.newContext(TV)).newPage();
     fresh.on('pageerror', (e) => errors.push(`fresh tv: ${e.message}`));
@@ -489,7 +493,10 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       [fresh, 'ticker-empty'],
     ] as const) {
       const read = await readTheSixSeatMonthEnd(page, name);
-      console.log(`✓ B-AC-27-2: six seats, month 2's end, ${read}`);
+      const site = page.getByTestId('tv-monthend').getByTestId('build-site');
+      check((await site.locator('li').count()) === 5, `the ${name} TV's build site has five lines, the standing park folded into one`);
+      await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });
+      console.log(`✓ B-AC-27-2: six seats, month 2's end, five projects, ${read}`);
     }
     console.log(`✓ TV-FIT floor ${TV_SCALE_FLOOR}, every screen at six seats over two months: ${await theTvScalesHeld(tv, 'six seats')}`);
 

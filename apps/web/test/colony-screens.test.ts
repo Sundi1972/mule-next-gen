@@ -370,11 +370,27 @@ describe('C34: the build site at the TV month end, one line a project (PM ruling
 
   it("B-AC-34-4: each project is one line, name, stage and the figure its stage turns on; the funding bar, build pips and plaque are the phones'", () => {
     const html = tv(MIDGAME);
-    expect([...element(html, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => m[1])).toEqual(['stadium', 'hospital', 'park', 'observatory', 'spaceport']);
+    expect([...element(html, 'build-site').matchAll(/<li[^>]*data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => m[1])).toEqual(['stadium', 'hospital', 'observatory', 'spaceport']);
     for (const id of ['stadium', 'hospital', 'park', 'observatory', 'spaceport']) expect(element(html, `project-${id}`)).not.toMatch(/data-testid="(funding|build|plaque)-/);
     expect(line(html, 'stadium')).toBe('Stadium Collecting 61% paid');
-    expect(line(html, 'park')).toBe('Park Standing +2 prestige');
     expect(element(html, 'figure-spaceport')).toMatch(/line-through/);
+  });
+
+  it('PM ruling 7 Nov (five projects): the standing projects fold into one line after the rest, "Standing: Hospital · Park, +5 prestige"; collecting, building, closed and damaged keep their own', () => {
+    const html = tv(at({ id: 'hospital', stage: 'standing', monthsLeft: null }));
+    expect([...element(html, 'build-site').matchAll(/<li[^>]*data-testid="([a-z-]+)"/g)].map((m) => m[1])).toEqual(['project-stadium', 'project-observatory', 'project-spaceport', 'projects-standing']);
+    expect(text(element(html, 'projects-standing'))).toBe('Standing: Hospital · Park +5 prestige');
+    // Each standing project still answers to its own id and stage, inside the one line.
+    for (const id of ['hospital', 'park']) expect(element(html, 'projects-standing')).toMatch(new RegExp(`data-testid="project-${id}" data-stage="standing"`));
+    expect(text(element(html, 'figure-standing'))).toBe('+5 prestige');
+  });
+
+  it('PM ruling 7 Nov: one standing project folds the same way', () => {
+    expect(text(element(tv(MIDGAME), 'projects-standing'))).toBe('Standing: Park +2 prestige');
+  });
+
+  it('PM ruling 7 Nov (negative): with nothing standing there is no standing line', () => {
+    expect(has(tv({ ...MIDGAME, projects: MIDGAME.projects.filter((p) => p.stage !== 'standing') }), 'projects-standing')).toBe(false);
   });
 
   it('B-AC-34-4: a project paid in credits but short of goods names the goods it waits for, never "100% paid"', () => {
