@@ -32,7 +32,8 @@ this spec adds nothing to them.
 - Live 3D on the TV (react-three-fiber): later, from the same models — its own spec when Heiko asks.
 - Any rule, number or data change: slots, stages, gauges are C48/RULE-32 and ColonyView as they are.
 - Weather from events, seasons, a camera the player moves: later, each its own small spec.
-- Paid assets: Heiko's call (the asset-pack answer is a separate note).
+- Paid assets: none (Heiko, 6 Nov). Buildings and the rocket are our own Blender builds, dressed with props from the
+  free KitBash3D Mission to Minerva kit (AM-5); NASA models only as a reference.
 - The town hall growing with prestige: needs a rule (tiers) from WS7; until then the hall has one picture.
 
 **Rough cost**
@@ -132,7 +133,7 @@ depends_on   —
 C4 · ADDED · the live layer
 today        none_exists in the app; the scaffold is design/mocks/colony-grounds/src/look/Living.tsx
 tomorrow     MUST fade each building's glow picture by wealth and stage, put colonists on the paths by mood (none in a
-             strike), smoke over a damaged building, a haze by air; MUST respect reduced motion (still frame, no walkers)
+             strike), smoke over a damaged building, a haze by air; MUST respect reduced motion (still frame: walkers shown still, per RULE-3)
 logic        → §2 RULE-2 (glow), RULE-3 (colonists)
 seam         packages/ui/src/grounds/LiveLayer.tsx (new), inside C2's SVG
 mechanism    fill_scaffold (Living.tsx)
@@ -140,11 +141,14 @@ depends_on   C2
 ```
 
 ```
-C5 · ADDED · the month-end lean-in
+C5 · ADDED · the month-end grounds opener (AM-6)
 today        no per-project "new this month" anywhere: useMonthEndDrift (apps/web/src/components/Colony.tsx) animates
              happiness only (verified_by: read)
-tomorrow     MUST, when the phase turns to the month end on the TV, fall to dusk, lean in on the places whose stage
-             changed since the last month end, light them, and lean back out (≈ 5 s, once); MUST NOT play on a reload
+tomorrow     MUST, on the TV at the month end, after the month end's event show (if any), show the grounds FULL-SCREEN
+             (1280 × 720 canvas, header "End of month N" + one caption line): dusk falls, the view leans in on the places
+             whose stage changed since the last month end, their lights come on, it leans back out (≈ 6 s, RULE-6); in a
+             month with no change, or with reduced motion, a 3 s still; then TvMonthEnd, unchanged. MUST NOT hold Ready
+             or the phones; MUST NOT play on a reload (RULE-5). Scaffold: design/mocks/colony-grounds/tv-beat.html.
 logic        → §2 RULE-5
 seam         packages/ui/src/grounds/useGroundsChange.ts (new): remembers stages per project at each month end
 senior       junior would: ask the server for a "changed" list · senior does: diff the two views the screen already
@@ -168,14 +172,25 @@ atomicity    must land before C7/C8 show real games (C2 renders fixtures until t
 ```
 
 ```
-C7 · MODIFIED · the TV shows the grounds   (WS4's file; mount line)
-today        apps/web/src/table/TableApp.tsx::TvMonthEnd shows ColonyGauges + BuildSite (a list); planning shows no
-             colony panel (verified_by: read)
-tomorrow     MUST mount <ColonyGrounds size="tv"> in the month end beside the BuildSite list, and in planning in the
-             colony panel the mock places beside the map (index.html "TV · planning")
-seam         TableApp.tsx::TvMonthEnd and ::TvGame — WS4
+C7 · MODIFIED · the TV shows the grounds   (WS4's file; one routing line — AM-6)
+today        apps/web/src/table/TableApp.tsx::TvGame routes upkeep to TvMonthEnd (ColonyGauges + BuildSite list);
+             planning shows no colony panel (verified_by: read)
+tomorrow     MUST, in the upkeep route, show C5's opener after the event show and before TvMonthEnd (RULE-6), politics on
+             only. TvMonthEnd and the planning screen stay unchanged (no side panel: WS4 measured 0.662 / 0.593 at six
+             seats, under the 0.7 floor)
+seam         TableApp.tsx::TvGame upkeep route — WS4
 mechanism    in_place
-depends_on   C2, C6
+depends_on   C2, C5, C6
+
+C9 · MODIFIED · the gauges count up when the month end comes on screen   (WS4's file; named edit — AM-6)
+today        apps/web/src/components/Colony.tsx::useMonthEndDrift starts its count 1.2 s after the phase turns to upkeep
+             (verified_by: read, line ~150)
+tomorrow     MUST start the count when TvMonthEnd mounts, so the gauges count up to the month's new numbers the
+             opener's lights already showed
+seam         apps/web/src/components/Colony.tsx::useMonthEndDrift — WS4
+mechanism    in_place
+pin          the existing drift tests keep passing
+depends_on   C7
 ```
 
 ```
@@ -225,18 +240,29 @@ examples happiness 72, 5 standing → 9 · strike → 0 · nothing standing, hap
 
 ```
 RULE-4 · How big the scene is: rings = 0 with no project, 1 while the highest slot ≤ 7, else 2 (design/mocks/colony-grounds/src/layout.ts::extentOf, by the highest slot)
+RULE-6 · The month-end opener's place and length (AM-6, PM ruling with WS6)
+order    1 the month end's event show (TvEventLayer, server clock) if any → 2 the opener → 3 TvMonthEnd
+length   RULE-5 finds a change (a stage started, stands or is damaged) → full ≈ 6 s; no change, or reduced motion → a
+         3 s still; politics off → no opener
+always   Ready is never refused during the opener and the phones never wait for it; the phase moving on ends it
+examples changed month → 6 s, then the month end · quiet month → 3 s still · reduced motion → 3 s still · everyone
+         Ready at 2 s → the planning screen (the opener ends) · reload mid-opener → no opener (RULE-5)
 RULE-5 · What leans in at the month end: the projects whose stage differs from the stage seen at the last month end
          on this screen; none seen before (a reload, a new screen) → no lean-in, the scene just shows
 ```
 
 ## §3 · Contracts & Data Models  [handoff]
 
-- **ColonyProjectView.slot** · ADDED · non-breaking (optional on old clients) · `number | null`, the place in growth
-  order (G-5 RULE-32), null for none · produced by C6.
+- **ColonyProjectView.place** · ADDED · non-breaking (optional on old clients) · `{ x, y, w, h } | null`, the anchor
+  and footprint on the 5×5 grounds (RULE-32b: x right, y down; the hall at (2,2)), null for none · produced by WS7's
+  engine PR (C6). Supersedes `slot` (AM-3).
 - **apps/web/public/art/colony/manifest.json** · ADDED · produced by C1, read by C2:
   `{ "frame": { "width": 1600, "height": 1600, "place": 1293, "centre": [800, 1000] },
      "pictures": { "<kind>": { "<stage>": { "day": "…@800.webp", "dusk": "…", "glow": "… | null" } } },
-     "sizes": [800, 400] }` — kind ∈ hall + PrestigeId; stage per RULE-1.
+     "sizes": [800, 400] }` — kind ∈ hall + PrestigeId; stage per RULE-1. A kind may override the frame:
+  `"pictures": { "spaceport": { "frame": { "width": 1600, "height": 3200, "place": 1293, "centre": [800, 2600] }, … } }` (AM-1).
+  A 2×2 kind's frame is **3200 wide** at the same scale, its centre on the footprint's centre (AM-2); the Spaceport,
+  2×2 and tall, carries both. Paths are relative to `/art/colony/`.
 
 ## §4 · Failure & Ops  [handoff]
 
@@ -266,6 +292,9 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-4 (serves B-AC-3) | RULE-3's examples | C4 |
 | T-AC-5 (serves HC-5) | politics off: no ColonyGrounds in the TV or phone markup | C7 C8 |
 | T-AC-6 (serves C6) | the server's colony view carries each project's slot; a project without one carries null | C6 |
+| B-AC-6 (G-1) | Given a month end where the Stadium has just come to stand | When the TV reaches upkeep | Then after the event show the TV shows the grounds full-screen with "New this month", then TvMonthEnd unchanged | observed_at the TV markup over time (browser test) | negative: Ready pressed by all during the opener → planning shows at once | C5 C7 |
+| T-AC-8 (serves C5, C7) | RULE-6's examples: order and length | C5 C7 |
+| T-AC-9 (serves C9) | the gauges' count starts when TvMonthEnd mounts, not at the phase change | C9 |
 | T-AC-7 (serves C5) | RULE-5: a stage change between two month ends leans in on that place; a first view leans in on none | C5 |
 
 Invariant: the grounds never write state (HC-1).
@@ -280,7 +309,109 @@ Invariant: the grounds never write state (HC-1).
 
 ## §8 · Amendments  [review-only]
 
-(none yet)
+```
+AM-1 · 2026-11-06 · lead · after Heiko's look-page feedback
+target    §3 manifest frame (one shared frame)
+said      every picture shares the 1600×1600 frame
+did       a kind may carry its own frame; the Spaceport's is 1600×3200 (centre 800,2600) for a ~36 m rocket
+because   Heiko: "an impressive, big rocket, not a toy" — G-2 (UBER-AC-2's TV look review)
+goal      G-2 — met more fully; HC-2 holds (one Spaceport ≈ +60 kB at 800 px; ≤ 1 MB per month-12 colony on a phone)
+folded    §3 manifest; ART-DIRECTION §2; ASSET-LIST Spaceport row; plan PR-1 Task 1.1 (lib supports a per-kind frame)
+```
+
+```
+AM-2 · 2026-11-06 · lead · after Heiko: "a Stadium is much bigger than the Hospital"
+target    §1 C2 (one place per building), §3 manifest frame
+said      every building stands on one place
+did       footprint per kind, in proportion to real size: Stadium 2×2 (Heiko); WS10 proposes Spaceport 2×2, the
+          rest 1×1. WS7 rules the numbers, how a 2×2 takes places in the growth order, and the view contract.
+          A 2×2 kind's frame is drawn at the same scale and anchored on its footprint's centre; per-kind frames (AM-1)
+          carry it. PR-1's kinds are all 1×1; the 2×2 kinds land in PR-3 after WS7's contract.
+because   G-2: the grounds must look like a real place (Heiko's TV look review)
+goal      G-2
+folded    ART-DIRECTION §2 "Tall kinds" row widened to "Large kinds"; ASSET-LIST Stadium + Spaceport rows; plan PR-3
+```
+
+```
+AM-3 · 2026-11-06 · lead · WS7's ruling, docs PR #538 @ 950e3bf0 (AM-18 / RULE-32b)
+target    §1 C6, §2 RULE-4, §3 ColonyProjectView.slot
+said      ColonyProjectView.slot (growth-order index)
+did       ColonyProjectView.place: { x, y, w, h } | null — anchor + footprint on the 5×5 grounds, the hall at (2,2),
+          derived by the server (WS7); COLONY.grounds {size 5} replaces groundsSlots. Pictures sit at the footprint's
+          centre; RULE-4's extent is the bounding box of the places in use. Sizes: Stadium, Spaceport 2×2; rest 1×1.
+because   G-2 (footprints in proportion, Heiko) — WS7 owns placement
+goal      G-2
+folded    C2 positions by place; C6 produced by WS7's engine PR (after its grounds PR-2); plan Task 1.5 waits for it
+```
+
+```
+AM-4 · 2026-11-06 · lead · PR-1 build
+target    §1 C2 tomorrow ("the next free place's outline")
+said      C2 draws the next free place's outline
+did       dropped: the grounds cannot know the next place without computing RULE-32b (the mock's order differs);
+          it returns only if WS7's view carries the next place
+because   HC-1 (the grounds compute no rule) — G-1 holds without it
+goal      G-1 — unaffected
+folded    C2; PR-1 fix round
+```
+
+```
+AM-5 · 2026-11-06 · lead · Heiko's ruling (via the PM), after the Mission to Minerva part table
+target    §0 non-goal "Paid assets: Heiko's call"
+said      no paid assets until Heiko decides
+did       Heiko ruled: no purchases. The six buildings and the rocket stay our own Blender builds, dressed with props
+          from the free KitBash3D Mission to Minerva kit (Spaceport apron, garden, rooftop dishes, construction
+          scaffolding, rubble). The kit has no rocket, observatory, hospital or stadium. NASA models only as a
+          reference unless a per-model licence check passes. Raw kit files never enter the repo; the folder path
+          comes from the PM. UNTIL Heiko answers the licence question (AI agents rendering), kit props appear in
+          local renders only, never in committed art.
+because   G-2: city-builder polish; Heiko's call by the non-goal itself
+goal      G-2
+folded    §0 non-goal; ART-DIRECTION §4; ASSET-LIST Hospital row; plan Task 1.6
+addendum  Heiko, later on 6 Nov: kit props as much as they fit at our scale — site, build and damaged stages, the
+          Spaceport apron, Park and edge plants, hall dressing; our buildings stay the base. Every picture gets a
+          kit-dressed twin rendered to a gitignored tree; the shipped manifest keeps today's pictures until the
+          licence answer; the switch is one flag (publish.sh SRC=out/kit). Measured, not used: the kit hospital is
+          141 × 104 × 58 m, ~12× too big for a 12 m place. → plan Task 3.4
+licence   **Licence confirmed by Heiko, 7 Nov** (relayed by the PM, 17:13Z by date -u): the kit-dressed rendered pictures
+          may ship in the game, rendered by our agents. Flip the flag (SRC=out/kit). Raw kit files (USD, textures)
+          still never enter the repo or anything published; only our rendered WebP ships. Rebuilding the pictures
+          needs Heiko's kit folder (KITS_DIR), so it runs on his Mac, not in CI.
+```
+
+```
+AM-6 · 2026-11-07 · lead · PM final ruling with WS6 (relayed 23:36Z by date -u)
+target    §1 C5, C7; adds C9, RULE-6, B-AC-6, T-AC-8, T-AC-9
+said      C7: the grounds beside BuildSite at the month end and as a panel beside the map in planning
+did       no TV side panel (WS4 measured six seats: planning 0.662, month end 0.593; floor 0.7; WS10 reproduced
+          0.593). The grounds get a full-screen TV moment: the month-end opener — event show → opener → TvMonthEnd
+          unchanged; ≈ 6 s only in a month the grounds changed, else a 3 s still (and with reduced motion); Ready
+          always wins, the phones never wait; no server timing change. useMonthEndDrift starts on TvMonthEnd's mount
+          (C9, WS4's named edit). WS4 measures the opener's canvas with header and caption at ≥ 0.7, six seats.
+because   G-1 / G-2: "a really nice view … showing how wealthy the colony is" — a 60–95 px strip defeats it
+goal      G-1, G-2
+folded    C5, C7, C9, RULE-6, §6; plan PR-5; the phone mount (C8) unchanged
+```
+
+```
+AM-7 · 2026-11-07 · lead · Heiko's binding target + PM approval (relayed 10:25Z by date -u)
+target    §1 C1 (pictures on raised slabs), C2 (SVG ground, cone trees), C3 (the map painter for the ground), the TV framing
+said      per-building pictures on their own slabs over a painted (C3) ground; SVG edge trees; the whole 5×5 in frame
+did       Heiko: "this is how it should look in the game" — look.html's whole-colony render (one camera, one light, one
+          scene) is the bar, by day and at dusk, any buildings and stages. Route: (i) a BASE PLATE rendered in the shared
+          camera — ground, grass/dirt, paths, kit vegetation, unbuilt places, vignette — day / dusk / glow; (ii) every
+          building × stage re-rendered FLUSH with a Cycles shadow catcher, so each layer carries its own cast shadow and
+          composites in depth order (ortho camera + directional sun ⇒ one picture serves every place; shadows onto
+          neighbouring buildings dropped, accepted); (iii) dusk and lamps stay rendered passes; (iv) the TV opener frames
+          the built area like the look.html camera, @1600 TV variants (nothing upscaled); (v) no chips on the opener.
+          Kit vegetation and props for every kind. C3's map painter is superseded for the grounds (kept for the world
+          map). Budget ≈ 10–11 MB (< 16 MB); the phone loads @400 per building in view (HC-2) and gets the plate too.
+          Gate: a proof (plate + flush Hospital and Park, side by side with look.html) before anything scales.
+because   G-2 (city-builder polish): measured causes — 2.8× smaller framing, no shared ground, raised slabs without
+          contact shadows, placeholder trees
+goal      G-2, G-1
+folded    C1, C2, C3; plan PR-3 (re-render), PR-4 (now the plate + compositor), PR-5 (framing)
+```
 
 ## §9 · Ownership Boundaries  [handoff]
 

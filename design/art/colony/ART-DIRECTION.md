@@ -2,7 +2,7 @@
 
 **Status:** Heiko ruled direction **C** on 6 Nov 2026: each building is modelled once in Blender and shown as a
 pre-rendered picture, with a live layer drawn over it; the same models become live 3D on the TV later; the world
-map's painter draws the ground. Free (CC0) assets only until Heiko decides on a paid pack.
+map's painter draws the ground. Our own builds with free (CC0) assets, dressed with props from the free KitBash3D Mission to Minerva kit (Heiko, 6 Nov, spec AM-5).
 Evidence: `design/mocks/colony-grounds/look.html` (the whole colony, the Park three ways, the live layer) and the
 spikes in `spike-park/`.
 
@@ -20,6 +20,8 @@ The grounds are the colony's portrait. A glance at the TV answers three question
 | Place | One grounds place is a **12 m square**; place (col, row) sits at Blender (x = 12·col, y = −12·row) |
 | Frame per place | **1600 × 1600**, ortho scale 21 m, the place's centre at pixel **(800, 1000)** (camera `shift_y`) ⇒ a place is **1293 px** wide and there are 1000 px (≈ 15 m at the centre, ≈ 10 m at the back corner) of height room. Every building picture shares this frame, so pictures composite by position alone. (The spike used 1600 × 1200 centred, which leaves only ≈ 9 m: enough for the Park, not the Spaceport tower.) |
 | Shipped size | Rendered at 1600 × 1600; shipped as WebP at 800 wide (the TV, 2× a place's ~400 px) and 400 wide (the phone) |
+| Large kinds | **Footprint in proportion to real size** (Heiko, 6 Nov): the Stadium and the Spaceport are **2×2 places** (WS7's ruling, #538 RULE-32b); the rest 1×1. A 2×2 frame is **3200 wide**, same scale, its centre on the footprint's centre. |
+| Tall kinds | **The Spaceport's rocket is the colony's dominant vertical (Heiko, 6 Nov: "an impressive, big rocket, not a toy").** About **36 m** (three places tall) on a gantry that reads shorter than it. Its pictures use a tall frame: **1600 × 3200**, the place centre at **(800, 2600)** — same scale, same camera, ≈ 39 m of room. The manifest carries a frame per kind, so the compositor places it like any other. It overlaps the places behind it in painter's order, as a real rocket would. |
 | Compositing | Back to front by col + row (painter's order), as `Scene.tsx` does. Shadows a building throws onto a neighbouring place are lost; each place's own slab carries its shadow. Accepted. |
 
 Never change the camera per building. One camera is what lets 70 pictures sit together as one place.
@@ -52,7 +54,15 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 | Spaceport | safety orange gantry | `--color-g-electronics` |
 
 - **Ground:** paving and lawns come from the map painter (§6), so the grounds and the planet map read as one place.
-- **Textures:** CC0 only (Poly Haven, ambientCG), ≤ 1k in renders' source, ≤ 512 px in the real-time glb.
+- **Textures:** CC0 (Poly Haven, ambientCG), ≤ 1k in renders' source, ≤ 512 px in the real-time glb.
+- **Mission to Minerva props** (Heiko's ruling, 6 Nov): Spaceport apron (landing pads, control tower, cranes, tanks,
+  haulers), garden modules, rooftop dishes, construction scaffolding, rubble. Buildings and the rocket stay our own
+  builds. The kit stays outside the repo (`KITS_DIR`, Heiko's `/Users/heiko/.kitbash3d/kits`). **Licence confirmed by
+  Heiko, 7 Nov:** kit-dressed rendered pictures ship; raw kit files (USD, textures) never enter the repo or anything
+  published. Rebuilding the pictures needs that folder. No real-time glb from kit parts without a new licence check.
+  No purchases. NASA models only as a reference unless a per-model licence check passes.
+  Heiko, later on 6 Nov: **as much kit dressing as fits at our scale**, everywhere (stages, apron, plants, hall). Every
+  picture gets a kit-dressed twin in `out/kit/`; shipping them is one flag (`SRC=out/kit publish.sh`), cleared 7 Nov.
 
 ## 5. Scale and detail
 
@@ -62,12 +72,16 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
   texture noise: at TV size a place is ~300 px wide, so a window frame is 1 px. Readable at 400 px wide or it is cut.
 - Every building must be **recognisable by silhouette alone** at the phone's 200 px place width.
 
-## 6. The ground — the world map's painter
+## 6. The ground — a rendered base plate (spec AM-7; supersedes the world map's painter)
 
-- The grounds' land (around and between the places) is painted by `packages/ui/src/terrain` with a grounds palette:
-  paved plaza, lawn, gravel paths, the planet's terrain fading out at the edge. No black void, no flat brown.
+- The grounds' land is one **base plate** rendered in this same camera and sun: ground, grass and dirt, paths, kit
+  vegetation, the unbuilt places as graded ground, a vignette at the edge; day, dusk and glow. No black void, no flat
+  brown, no SVG ground or cone trees once a plate is in the manifest.
+- Buildings are rendered **flush** (no raised slab) over a Cycles **shadow-catcher** plane, so each layer carries its
+  own contact shadow onto the plate; shadows cast onto a neighbouring building are dropped.
+- The bar is look.html's whole-colony render, framed as tightly; the TV gets @1600 variants.
 - A free place reads as **"room to grow"**: rough graded ground with a few survey stakes — never empty paving.
-- The next place in the growth order gets the live layer's faint "next" outline, as in the mock.
+- No "next place" outline: the grounds cannot know it without computing WS7's rule (spec AM-4).
 
 ## 7. The live layer (drawn by the page, over the pictures)
 
@@ -108,7 +122,8 @@ design/art/colony/<kind>/<kind>.py           the building's model + its stages (
 design/art/colony/lib/                       camera, light rig, slab, site kit, scaffold + crane generators
 apps/web/public/art/colony/<kind>/<stage>-<light>@<w>.webp
     kind  hall | park | hospital | observatory | stadium | spaceport
-    stage site | build1 | build2 | standing | closed | damaged      (hall: tier1 | tier2 | tier3)
+    stage site | build1 | build2 | standing | closed | damaged      (hall: standing — one picture until WS7 rules tiers;
+          the manifest keys only RULE-1 stages, T-AC-2 holds it)
     light day | dusk | glow
     w     800 | 400
 apps/web/public/art/colony/manifest.json     every picture, its frame and its anchor — the view reads only this
