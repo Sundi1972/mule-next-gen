@@ -108,9 +108,11 @@ export interface VotePort {
 }
 
 /**
- * The seat's own vote on a ballot, by today's rule and with no draw (slice 3 S3-C14): itself if it runs, else the
- * port's answer when it gives one, else the candidate with the fewest plots, leaning against an unloved Governor; on a law, RULE-46's rows. Null where today's
- * rule would draw: a tie, or a Rookie's guess. DealHand reads it to offer a vote, VoteHand to cast one.
+ * The seat's own vote on a ballot, by today's rule and with no draw (slice 3 S3-C14). On an election: itself if it
+ * runs (always, whatever card it holds; AM-8), else the port's answer when it gives one, else the candidate with the
+ * fewest plots, leaning against an unloved Governor. On a law: yes for the sitting Governor, who is not asked the
+ * port (AM-8); for every other seat the port's answer when it gives one, else RULE-46's rows.
+ * Null where today's rule would draw: a tie, or a Rookie's guess. DealHand reads it to offer a vote, VoteHand to cast one.
  */
 export function ownVote(obs: GameState, mind: Mind, ballot: ElectionBallot, port?: VotePort): string | null;
 export function ownVote(obs: GameState, mind: Mind, ballot: LawBallot, port?: VotePort): boolean | null;
@@ -127,13 +129,13 @@ function ownElectionVote(obs: GameState, mind: Mind, { office, candidates }: Ele
   return tied.length === 1 ? tied[0]! : null;
 }
 
-/** The port's yes or no, else RULE-46's vote rows. */
+/** The Governor's yes, else the port's yes or no, else RULE-46's vote rows (AM-8). */
 function ownLawVote(obs: GameState, mind: Mind, proposal: LawProposal, port?: VotePort): boolean | null {
-  const asked = port?.lawVote(proposal);
-  if (typeof asked === 'boolean') return asked;
   const me = mind.me;
   const politics = obs.politics!;
   if (politics.governor === me) return true;
+  const asked = port?.lawVote(proposal);
+  if (typeof asked === 'boolean') return asked;
   if (proposal.kind === 'enact' && proposal.law === 'landTax' && politics.baron === me) return false;
   if (mind.levelId === 'rookie') return null;
   const costs = obs.players.map((p) => lawCost(obs, proposal, p.id)).sort((a, b) => a - b);
@@ -248,7 +250,8 @@ export class VoteHand {
       // literal-ok: an office is contested only with two or more candidates, a definition
       if (candidates.length < 2) continue;
       const own = this.choose(obs, candidates, office);
-      const card = this.activeCard(obs, (t) => 'office' in t && t.office === office && candidates.includes(t.candidate));
+      // A candidate votes itself (AM-8), so a card for a rival on that office breaks.
+      const card = candidates.includes(this.mind.me) ? undefined : this.activeCard(obs, (t) => 'office' in t && t.office === office && candidates.includes(t.candidate));
       act({ type: 'vote', office, candidate: this.keepOrBreak(obs, card, own, card && 'office' in card.terms ? card.terms.candidate : own) });
     }
   }
