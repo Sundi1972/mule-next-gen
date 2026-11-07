@@ -30,7 +30,6 @@ import type { Mind } from '../src/value.js';
 vi.mock('../src/politics-value.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/politics-value.js')>()),
   cardWorth: vi.fn(() => 0),
-  trust: vi.fn(() => 0.5),
 }));
 // Slice 4 has not landed: a pact is offered only where sabotage can happen.
 const sabotage = vi.hoisted(() => ({ possible: false }));
@@ -146,6 +145,22 @@ describe('S3-T-AC-8: DealHand answer rows (S3-RULE-9)', () => {
     expect(worth).not.toHaveBeenCalled();
   });
 
+  it('S3-T-AC-8 answer row 2: answer() called on its own enters the month, so a Rookie draws from its own stream, not a shared one', () => {
+    POLITICS.ai.deals.rookieAccept = 0.5; // literal-ok: a coin, so the seed decides
+    const offered = card('ai1', 'ai0', PACT);
+    let differs = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const state = withDeals(newGame(seed), [offered]);
+      const direct = new DealHand(mindOf('ai0', 'trader', 'rookie', seed)).answer(obsOf(state), offered);
+      const answers: boolean[] = [];
+      new DealHand(mindOf('ai0', 'trader', 'rookie', seed)).flush(state, (a) => (a.type === 'answerDeal' && answers.push(a.accept), true));
+      expect(direct, `seed ${seed}`).toBe(answers[0]);
+      differs += direct ? 1 : 0;
+    }
+    expect(differs, 'both answers occur across seeds').toBeGreaterThan(0);
+    expect(differs).toBeLessThan(20);
+  });
+
   it('S3-T-AC-8 answer rows 2-4: a DealPort answer replaces them, row 1 still comes first, null leaves the keyless rule', () => {
     const state = newGame();
     const offered = card('ai1', 'ai0', PACT);
@@ -232,23 +247,27 @@ describe('S3-T-AC-8: DealHand answers in planning', () => {
     const state = newGame();
     state.month = 2;
     withDeals(state, [card('ai2', 'ai3', PACT, { id: 'deal-hidden' })]);
+    sabotage.possible = true; // the pact row is the one that values cards
     const named: AiAction[] = [];
     const hand = new DealHand(mindOf('ai0'), { answerFor: () => expect.unreachable(), offersFor: () => null });
     hand.tick(state, PAUSE_MS, (a) => (named.push(a), true));
     hand.flush(state, (a) => (named.push(a), true));
     expect(JSON.stringify(named)).not.toContain('deal-hidden');
+    expect(worth).toHaveBeenCalled();
     expect(worth.mock.calls.every(([obs]) => obs.politics!.deals.length === 0)).toBe(true);
     expect(state.politics!.deals[0]!.status).toBe('offered');
   });
 });
 
-/** Month 1's announce with these candidates for governor; ai1 holds the most plots and ai3 the fewest of those, so a trader's pick is the first of the rest. */
-function announceWith(candidates: string[]): GameState {
+/** Month 1's announce with these candidates for governor and these seats Done; ai1 holds the most plots and ai3 the fewest of those, so a trader's pick is the first of the rest. */
+function announceWith(candidates: string[], done: string[] = SEATS): GameState {
   const state = newGame();
   const free = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null);
   for (const [id, n] of Object.entries({ ai0: 2, ai1: 3, ai2: 1, ai3: 2 })) for (let i = 0; i < n; i++) free.shift()!.owner = id;
   for (const id of candidates) runFor(state, id, 'governor', { kind: 'hold' });
   expect(state.politics!.election!.stage).toBe('announce');
+  // a DealHand offers in announce only once its seat has pressed Done, which VoteHand does after its last call
+  state.politics!.election!.done = [...done];
   return state;
 }
 
@@ -275,6 +294,46 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
     // the contrast: a seat that stays out of the race offers on the same ballot
     const other = announceWith(['ai1', 'ai2']);
     expect(run(other, new DealHand(mindOf('ai3'))).sent.filter((a) => a.type === 'offerDeal')).toHaveLength(1);
+  });
+
+  it('S3-T-AC-8 AM-8 offer row a: in announce a seat offers only once it is Done', () => {
+    const waiting = announceWith(['ai1', 'ai2'], []);
+    worth.mockReturnValue(5);
+    const hand = new DealHand(mindOf('ai0'));
+    expect(run(waiting, hand).sent).toEqual([]);
+    waiting.politics!.election!.done = ['ai0'];
+    expect(run(waiting, hand).sent.filter((a) => a.type === 'offerDeal')).toHaveLength(1);
+  });
+
+  it('S3-T-AC-8 AM-8 offer row a: with VoteHands beside it, a seat that declares in announce never holds a card for that office', () => {
+    // VoteHand and DealHand together: whoever declares at its last call must hold no card for that office
+    let cards = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const state = newGame(seed);
+      const free = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null);
+      for (const [id, n] of Object.entries({ ai0: 2, ai1: 3, ai2: 1, ai3: 2 })) for (let i = 0; i < n; i++) free.shift()!.owner = id;
+      runFor(state, 'ai1', 'governor', { kind: 'hold' });
+      const personas = ['trader', 'cautious', 'aggressive', 'saboteur'] as const;
+      const votes = SEATS.map((id, i) => new VoteHand(mindOf(id, personas[i]!, 'trader', seed + i), createSeeded(seed * 10 + i)));
+      const deals = SEATS.map((id, i) => new DealHand(mindOf(id, personas[i]!, 'trader', seed + i)));
+      worth.mockReturnValue(3);
+      for (let t = 0; t < 120_000 && state.politics!.election!.stage === 'announce'; t += WALK.tickMs) {
+        SEATS.forEach((id, i) => {
+          votes[i]!.tick(state, WALK.tickMs, voteAct(state, id));
+          deals[i]!.tick(state, WALK.tickMs, engineAct(state, id));
+        });
+        stepElection(state, WALK.tickMs);
+      }
+      // the field the ballot opened with (the announce's candidates are copied there and cleared)
+      const { deals: held } = state.politics!;
+      const candidates = state.politics!.election!.candidates;
+      for (const c of held) {
+        if (c.terms.kind !== 'vote' || !('office' in c.terms)) continue;
+        cards++;
+        expect(candidates[c.terms.office], `seed ${seed}: ${c.from}'s card for ${c.terms.office}`).not.toContain(c.from);
+      }
+    }
+    expect(cards, 'the table did offer vote cards in announce').toBeGreaterThan(0);
   });
 
   it('S3-T-AC-8 AM-8: a port\'s offered vote for an office its seat runs for is dropped', () => {
@@ -321,6 +380,31 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
     expect(sent.filter((a) => a.type === 'offerDeal')).toEqual([{ type: 'offerDeal', offer: { to: 'ai2', terms: { kind: 'vote', law: true, yes: false } } }]);
   });
 
+  it('S3-T-AC-8 offer row b: a no on a repeal goes to the player the repeal costs most, not to the one it helps most', () => {
+    // landTax in force: the repeal saves its payers money, so the player with the most plots is the one it costs least
+    const state = lawState({ kind: 'repeal', law: 'landTax' }, 'ai3');
+    state.politics = { ...state.politics!, laws: { landTax: { setting: 10, since: 1 } } };
+    for (const t of state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null).slice(0, 10)) t.owner = 'ai1';
+    worth.mockReturnValue(5);
+    const port: SeatPort = { answerFor: () => null, offersFor: () => null, electionVote: () => null, lawVote: () => false };
+    const { sent, refused } = run(state, new DealHand(mindOf('ai0'), port));
+    // nobody loses by it, so the cost ties at nothing and the first in seat order who is not helped wins
+    expect(sent.filter((a) => a.type === 'offerDeal')).toEqual([{ type: 'offerDeal', offer: { to: 'ai2', terms: { kind: 'vote', law: true, yes: false } } }]);
+    expect(refused).toEqual([]);
+  });
+
+  it('S3-T-AC-8 offer row b: no offer on a law the seat itself proposes, however it would vote', () => {
+    const state = lawState({ kind: 'enact', law: 'landTax', setting: 10 }, 'ai0');
+    worth.mockReturnValue(5);
+    expect(run(state, new DealHand(mindOf('ai0'))).sent.filter((a) => a.type === 'offerDeal')).toEqual([]);
+  });
+
+  it('S3-T-AC-8 offer row a: no vote card where an office has fewer than two candidates', () => {
+    const state = announceWith(['ai1']);
+    worth.mockReturnValue(5);
+    expect(run(state, new DealHand(mindOf('ai0'))).sent.filter((a) => a.type === 'offerDeal')).toEqual([]);
+  });
+
   it('S3-T-AC-8 offer row c: where sabotage can happen, a pact of the middle length to the player it is worth most with', () => {
     const state = newGame();
     state.month = 2;
@@ -331,6 +415,29 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
     const months = POLITICS.deals.pactMonths[Math.floor(POLITICS.deals.pactMonths.length / 2)];
     expect(sent.filter((a) => a.type === 'offerDeal')).toEqual([{ type: 'offerDeal', offer: { to: 'ai2', terms: { kind: 'pact' }, months } }]);
     expect(refused).toEqual([]);
+    // the draft the hand valued carries the card the engine made: its id and the until the engine computed (month 2 + 3 months - 1)
+    const drafts = worth.mock.calls.map(([, , c]) => c).filter((c) => c.id === 'draft' && c.to === 'ai2');
+    expect(drafts.length).toBeGreaterThan(0);
+    for (const d of drafts) expect(d.until).toBe(4);
+    expect(state.politics!.deals[0]!.until).toBe(4);
+  });
+
+  it('S3-T-AC-8 offer row c: a partner who fails an offer test falls through to the next best, not to no pact', () => {
+    const base = (): GameState => {
+      const state = newGame();
+      state.month = 2;
+      state.politics = { ...state.politics!, election: null };
+      sabotage.possible = true;
+      return state;
+    };
+    worthTo({ ai1: 2, ai2: 9, ai3: 4 });
+    const toOf = (state: GameState): unknown[] => run(state, new DealHand(mindOf('ai0'))).sent.filter((a) => a.type === 'offerDeal').map((a) => a.type === 'offerDeal' && a.offer.to);
+    const declined = base();
+    withDeals(declined, [card('ai0', 'ai2', PACT, { id: 'deal-no-ai2', status: 'declined', settled: 2 })]);
+    expect(toOf(declined)).toEqual(['ai3']);
+    const held = base();
+    withDeals(held, [card('ai0', 'ai2', { kind: 'vote', law: true, yes: true }, { id: 'deal-open-ai2', until: 3 })]);
+    expect(toOf(held)).toEqual(['ai3']);
   });
 
   it('S3-T-AC-8 offer row c: while sabotage cannot happen, no pact is offered', () => {
@@ -426,7 +533,7 @@ describe('S3-T-AC-8 (S3-HC-3): DealHand\'s draws leave the election and council 
       SEATS.forEach((id, i) => {
         const record: Act = (a) => (sent[id]!.push(a), voteAct(state, id)(a));
         votes[i]!.tick(state, WALK.tickMs, record);
-        if (withDeals) deals[i]!.tick(state, WALK.tickMs, engineActFor(state, id));
+        if (withDeals) deals[i]!.tick(state, WALK.tickMs, engineAct(state, id));
       });
       stepElection(state, WALK.tickMs);
     }
@@ -456,7 +563,7 @@ describe('S3-T-AC-8 (S3-HC-3): DealHand\'s draws leave the election and council 
       const sent: AiAction[] = [];
       for (const [i, id] of SEATS.entries()) {
         const mind = mindOf(id, 'trader', 'rookie', 5 + i);
-        if (withDeals) new DealHand(mind).tick(state, PAUSE_MS, engineActFor(state, id));
+        if (withDeals) new DealHand(mind).tick(state, PAUSE_MS, engineAct(state, id));
         new VoteHand(mind, createSeeded(9 + i)).tick(state, 0, (a) => (sent.push(a), true));
       }
       return sent;
@@ -467,9 +574,6 @@ describe('S3-T-AC-8 (S3-HC-3): DealHand\'s draws leave the election and council 
 
 function createSeeded(seed: number) {
   return createRng((seed ^ 0x165667b1) >>> 0);
-}
-function engineActFor(state: GameState, id: string): Act {
-  return engineAct(state, id);
 }
 
 /** The moves of a VoteHand in the election, applied as a phone's intents are. */
