@@ -1000,6 +1000,8 @@ export const POLITICS = {
       honesty: { trader: 1, cautious: 2, aggressive: 0.8, saboteur: 0.5 } satisfies Record<AiPersonaId, number>,
       /** A Rookie's chance of accepting a card. */
       rookieAccept: 0.5,
+      /** The length of the pacts a seat offers, in months: one of POLITICS.deals.pactMonths. */
+      pactMonths: 3,
     },
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
