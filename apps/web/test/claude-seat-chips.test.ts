@@ -252,15 +252,33 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
 });
 
 describe('HC-3 at a full table: the TV keeps its ready list short (B-AC-19)', () => {
-  it('from five seats a Claude seat that is READY or CONNECTED folds into the AI row; THINKING, OFFLINE or WAITING keeps its own', () => {
+  it('from five seats READY or CONNECTED Claude seats fold into the AI row, and the rest share one row per status, with its count', () => {
     const view = aGame({ at: sixSeats }).viewFor(null);
-    const claude = { s3: 'thinking', s4: 'ready', s5: 'connected', s6: 'offline' } as const;
+    const claude = { s3: 'thinking', s4: 'ready', s5: 'thinking', s6: 'offline' } as const;
     const rows = readyRows(view.players, () => true, (id) => claude[id as keyof typeof claude]);
-    expect(rows.map((r) => (r.kind === 'ais' ? r.seats.map((s) => s.name) : r.seat.name))).toEqual(['Heiko', 'Kai', 'Juno', 'Brix', ['The Baron', 'Ossa']]);
+    const names = (seats: readonly { name: string }[]) => seats.map((s) => s.name).join(', ');
+    expect(rows.map((r) => (r.kind === 'seat' ? r.seat.name : r.kind === 'claude' ? `${r.status}: ${names(r.seats)}` : `AI: ${names(r.seats)}`))).toEqual([
+      'Heiko',
+      'Kai',
+      'thinking: Juno, Ossa',
+      'offline: Brix',
+      'AI: The Baron',
+    ]);
     const tv = onTv(view, claude);
-    expect(tv).toMatch(/data-testid="tv-ready-ais" data-count="2"/);
-    for (const id of ['s3', 's6']) expect(tv, id).toContain(`data-testid="tv-ready-${id}"`);
-    for (const id of ['s4', 's5']) expect(tv, id).not.toContain(`data-testid="tv-ready-${id}"`);
+    expect(tv).toMatch(/data-testid="tv-ready-claude-thinking" data-count="2"/);
+    expect(part(tv, 'tv-ready-claude-thinking')).toMatch(/Juno, Ossa 2 Claude · THINKING$/);
+    expect(part(tv, 'tv-ready-claude-offline')).toMatch(/Brix 1 Claude · OFFLINE · plays its built-in plan$/);
+    expect(tv).toMatch(/data-testid="tv-ready-ais" data-count="1"/);
+    for (const id of ['s3', 's4', 's5', 's6']) expect(tv, `${id} has no row of its own`).not.toContain(`data-testid="tv-ready-${id}"`);
+  });
+
+  it('a Claude seat whose chat never connected shares a row too, saying so; under five seats every seat keeps its own row', () => {
+    const view = aGame({ at: sixSeats }).viewFor(null);
+    const tv = onTv(view, { s3: 'waiting', s5: 'waiting' });
+    expect(part(tv, 'tv-ready-claude-waiting')).toMatch(/Juno, Ossa 2 WAITING FOR CLAUDE · plays its built-in plan$/);
+    const four = onTv(aGame().viewFor(null), 'thinking');
+    expect(four).toContain(`data-testid="tv-ready-${JUNO}"`);
+    expect(four).not.toContain('data-testid="tv-ready-claude-');
   });
 });
 

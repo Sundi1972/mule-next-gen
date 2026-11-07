@@ -3,7 +3,8 @@
  * seats in each status; and the first good's side pick with Claude seats waited for (RULE-6) and one whose wait ran out:
  * each name and countdown shows whole in the picked list and the waiting box, nothing runs past the foot, and the scale
  * holds.
- * Run with `pnpm --filter @mule/web exec tsx e2e/claude-seat-tv.ts` after `vite build`.
+ * A local fit check, kept out of CI (lean CI; shell.ts runs B-AC-19 at six seats there). Run with
+ * `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/claude-seat-tv.ts`.
  */
 import type { MuleView } from '@mule/protocol';
 import type { Page } from 'playwright';

@@ -419,9 +419,12 @@ export async function sixSeatsOnTheTv(
         const { shown, needs, text } = await name.evaluate((el) => ({ shown: el.clientWidth, needs: el.scrollWidth, text: el.textContent }));
         check(shown > 0 && needs <= shown + 1, `TV-FIT (six seats${when}): the ready list shows "${text}" whole, got ${shown} of ${needs} px`);
       }
+      // A folded Claude row names its seats when they fit, cut short when not.
+      const folded = [];
+      for (const names of await board.locator('[data-testid=tv-ready-claude-names]').all()) folded.push(await names.evaluate((el) => `"${el.textContent}" ${el.clientWidth} of ${el.scrollWidth} px`));
       // TV-FIT's floor holds at the fullest table (PM ruling 6 Nov).
       const scale = await theTvScaleHolds(tv, `six-seat planning${when}`);
-      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}`;
+      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}${folded.length ? `, folded Claude names ${folded.join('; ')}` : ''}`;
     };
     const quiet = await fits('');
     const room = server.registry.get(code) as unknown as { seats: { id: string }[]; chat: (from: string, text: string) => void };
