@@ -63,7 +63,7 @@ export interface ChatMessage {
 export type SeatKind = 'builtin' | 'claude';
 
 /** A Claude seat's state as every screen shows it on its chip (C6). */
-export type ClaudeSeatStatus = 'waiting' | 'connected' | 'thinking' | 'ready' | 'offline';
+export type ClaudeStatus = 'waiting' | 'connected' | 'thinking' | 'ready' | 'offline';
 
 export interface SeatView {
   id: string;
@@ -79,7 +79,7 @@ export interface SeatView {
   /** A computer seat's kind; absent on a human seat, and on a computer seat no one has set (it plays builtin). */
   kind?: SeatKind;
   /** A claude seat's state, on every screen. */
-  claude?: ClaudeSeatStatus;
+  claude?: ClaudeStatus;
   /** A claude seat's code, in the host's own view only: it lets whoever holds it play the seat (C1, T-AC-5). */
   seatCode?: string;
 }
