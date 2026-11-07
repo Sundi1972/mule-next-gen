@@ -315,13 +315,17 @@ export interface MyView {
   deals?: MyDealsView | null;
 }
 
-/** A player's own deal cards (slice 3). */
-/** One news line and the seats it names, in the order the words name them. */
+/**
+ * One news line and the seats it names: one id for each name in the words, in their order, repeats kept ("Ossa broke a
+ * promise to Brix: a vote for Brix" names ossa, brix, brix), so a screen can mark each name where it stands. A screen
+ * that wants only who is named dedupes.
+ */
 export interface NewsLine {
   text: string;
   who: PlayerId[];
 }
 
+/** A player's own deal cards (slice 3). */
 export interface MyDealsView {
   /** Every card this player is a party to, newest first (partyTo). Never a card between two others unless broken. */
   cards: DealCard[];

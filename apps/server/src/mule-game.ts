@@ -177,6 +177,14 @@ function andList(names: string[]): string {
 }
 
 /** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
+/** When a notice happened: its month and phase. */
+type Stamp = Pick<Notice, 'month' | 'phase'>;
+
+/** The notices every seat may know: none with parties, which are private to them (record.ts). A copy. */
+function publicNotices(notices: readonly Notice[]): Notice[] {
+  return notices.filter((n) => !('parties' in n) || n.parties === undefined);
+}
+
 export function gameOverNews(seats: readonly { id: string; name: string; score: number }[]): NewsLine {
   const best = Math.max(...seats.map((s) => s.score));
   const winners = seats.filter((s) => s.score === best);
@@ -597,12 +605,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * S3-RULE-11: what changed in the cards since the server last looked, as the record's notices and one news line per
    * break. Runs after every intent (an AI seat's too), every votes tick and every phase change: the engine settles, and
-   * the views and the news follow in the same step.
+   * the views and the news follow in the same step. `at` stamps the notices when the open phase is not the one whose rule
+   * settled the cards, as at a phase change.
    */
-  private noteDeals(): void {
+  private noteDeals(at?: Stamp): void {
     const now = this.state?.politics?.deals ?? [];
     if (now === this.dealsSeen) return;
-    for (const fact of dealNotices(this.dealsSeen, now)) this.notify(fact);
+    for (const fact of dealNotices(this.dealsSeen, now)) this.notify(fact, at);
     for (const line of dealNews(this.dealsSeen, now, (id) => this.nameOf(id))) this.addNews(line);
     this.dealsSeen = now;
   }
@@ -940,9 +949,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.notify({ kind: 'claim', seat: seatId, plot: tileIndex(state.width, x, y) });
   }
 
-  /** Keeps a fact for the open phase and hands it to the listener; a listener's fault never reaches play. */
-  private notify(fact: Without<Notice, 'month' | 'phase'>): void {
-    const { month, phase } = this.requireState();
+  /** Keeps a fact for the open phase, stamped with it unless `at` says otherwise, and hands it to the listener; a listener's fault never reaches play. */
+  private notify(fact: Without<Notice, 'month' | 'phase'>, at?: Stamp): void {
+    const { month, phase } = at ?? this.requireState();
     const notice: Notice = { ...fact, month, phase };
     this.notices.push(notice);
     try {
@@ -956,11 +965,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
     if (state.phase === 'development') this.finishDevelopment();
-    // The development's facts, read before the next phase resets them: its outcome goes into the auction's brief.
-    const developmentFacts = state.phase === 'development' ? this.notices : null;
+    // The development's public facts, copied before the phase changes: its outcome goes into the auction's brief, which
+    // every AI seat shares, so a notice private to its parties stays out, and so does whatever the change settles.
+    const developmentFacts = state.phase === 'development' ? publicNotices(this.notices) : null;
+    const closing: Stamp = { month: state.month, phase: state.phase };
     advancePhase(state);
-    // Planning's close and the upkeep settle cards.
-    this.noteDeals();
+    // Planning's close and the upkeep's opening settle cards: each notice carries the phase whose rule settled it.
+    // The game ends at an upkeep: its last settles are that upkeep's. (Read afresh: advancePhase moved the phase.)
+    const opened = this.requireState();
+    this.noteDeals(closing.phase === 'planning' ? closing : { month: opened.month, phase: opened.phase === 'gameOver' ? 'upkeep' : opened.phase });
     // The auction's edits are asked in the production show's slack, once production has run, so the draft holds this
     // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
     if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
