@@ -39,7 +39,8 @@ export function TvHeaderHealth({
   beside?: 'w-[760px]' | 'w-[950px]';
 }) {
   const crowded = seconds !== undefined || ready !== undefined || !!game.colony?.strike;
-  const ownRow = !!game.colony && gauges === true && crowded;
+  // EXTEND (A, Heiko 7 Nov): with health the gauges always take a row of their own: five cells beside the title cut text.
+  const ownRow = !!game.colony && (gauges === true || gauges === 'beside') && (crowded || (variant === 'A' && healthOf(game.colony) !== null));
   // EXTEND: the copy's ColonyGauges with health and its variant; the beside width a prop.
   const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : beside} landing={landing} health={healthOf(game.colony)} variant={variant} /> : null;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the

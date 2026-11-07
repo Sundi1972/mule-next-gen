@@ -102,11 +102,14 @@ const PLAYERS: [string, string, 'zipwing' | 'bramblet' | 'gearling' | 'mollox', 
   ['s4', 'Ruth', 'mollox', true, 5_610, 5_300],
 ];
 
+/** Six seats, the most a table has: the TV month end's tightest fit (TV-FIT, PM ruling C, 5 Nov). */
+const SIX: typeof PLAYERS = [...PLAYERS, ['s5', 'Ossa', 'bramblet', true, 5_940, 5_700], ['s6', 'Brix', 'gearling', true, 4_410, 4_650]];
+
 const AIR = { level: 38, band: 'smoggy' } as const;
 const LAST_AIR = { level: 35, band: 'smoggy' } as const;
 
 /** Month 7's end in one of the three health states, as the server would send it once health is in the view. */
-export function monthEnd(s: HealthState, { withHealth = true }: { withHealth?: boolean } = {}): MuleView {
+export function monthEnd(s: HealthState, { withHealth = true, six = false }: { withHealth?: boolean; six?: boolean } = {}): MuleView {
   const gauges: ColonyGaugesView = { wealth: 26_400, environment: AIR.level, prestige: 2, happiness: s.happiness, band: s.band };
   const lastGauges = { wealth: 24_900, prestige: 2, happiness: s.lastHappiness };
   const score = colonyScoreOf({ wealth: gauges.wealth, air: AIR.level, prestige: gauges.prestige, happiness: s.happiness });
@@ -115,7 +118,7 @@ export function monthEnd(s: HealthState, { withHealth = true }: { withHealth?: b
   // `withHealth` false: the view as the server sends it today, for the trunk baselines.
   const colony: ColonyView | ColonyViewHealth = withHealth ? { ...base, health: s.health } : base;
   return aMuleView({
-    players: PLAYERS.map(([id, name, species, isAi, worth, lastWorth], slot) => aPlayer({ id, name, slot, species, isAi, worth, lastWorth, ready: isAi })),
+    players: (six ? SIX : PLAYERS).map(([id, name, species, isAi, worth, lastWorth], slot) => aPlayer({ id, name, slot, species, isAi, worth, lastWorth, ready: isAi })),
     me: ME,
     politics: null,
     month: 7,

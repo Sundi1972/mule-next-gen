@@ -190,7 +190,12 @@ export function ColonyGauges({ colony, size, className, landing, health = null, 
         <HappinessGauge size={size} happiness={g.happiness} band={g.band} moodMove={tv ? moodMove : null} landing={landing} />
       )}
       {/* EXTEND: A's fifth cell. */}
-      {shown === 'A' && health !== null && <HealthGauge size={size} health={health} />}
+      {/* At the TV month end Health spans two columns: beside Happiness on a 3 + 2 grid, or alone on a third row of a 2-column one. */}
+      {shown === 'A' && health !== null && (
+        <div className={cx('flex min-w-0 flex-col', (className?.includes('grid-cols-2') || className?.includes('grid-cols-3')) && 'col-span-2')} data-testid="health-cell">
+          <HealthGauge size={size} health={health} />
+        </div>
+      )}
     </div>
   );
 }

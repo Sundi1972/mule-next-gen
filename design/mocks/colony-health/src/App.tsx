@@ -7,18 +7,21 @@ import { monthEnd, STATE_IDS, STATES, type StateId } from './fixture';
 import type { HealthVariant } from './gauges';
 import { TvHeaderHealth } from './header';
 import { LivePhone, TvGame } from './live';
+import { TvMonthEndHealth, type MonthEndLayout } from './monthend';
 
 // --- The screens --------------------------------------------------------------------------------------
 
-/** How the header is laid out: beside the title at trunk's 760 px or widened to 950, or on its own row under it. */
-type Layout = 'a760' | 'a950' | 'arow' | 'b760' | 'bprime' | 'today' | 'todayrow';
+/**
+ * How the header is laid out. A (chosen, Heiko 7 Nov) always puts the gauges on a row of their own: `arow` in planning
+ * (its clock and ready chip did so already), `aone` in a phase whose gauges sat beside the title until now.
+ */
+type Layout = 'arow' | 'aone' | 'b760' | 'bprime' | 'today' | 'todayrow';
 
 const LAYOUT: Record<Layout, { variant: HealthVariant; row: boolean; beside: 'w-[760px]' | 'w-[950px]'; name: string }> = {
-  a760: { variant: 'A', row: false, beside: 'w-[760px]', name: 'A · a fifth cell, beside the title at 760 px' },
-  a950: { variant: 'A', row: false, beside: 'w-[950px]', name: 'A · a fifth cell, beside the title widened to 950 px' },
-  arow: { variant: 'A', row: true, beside: 'w-[760px]', name: 'A · a fifth cell, on the gauges’ own row' },
-  b760: { variant: 'B', row: false, beside: 'w-[760px]', name: 'B · paired with Happiness, beside the title at 760 px (for the record)' },
-  bprime: { variant: 'Bp', row: false, beside: 'w-[760px]', name: 'B′ · health on the Happiness line, beside the title at 760 px (recommended)' },
+  arow: { variant: 'A', row: true, beside: 'w-[760px]', name: 'A (chosen) · planning: Health a fifth cell on the gauges’ own row' },
+  aone: { variant: 'A', row: false, beside: 'w-[760px]', name: 'A (chosen) · production, land auction, development: the gauges move to a row of their own' },
+  bprime: { variant: 'Bp', row: false, beside: 'w-[760px]', name: 'B′ · health on the Happiness line (not chosen, for the record)' },
+  b760: { variant: 'B', row: false, beside: 'w-[760px]', name: 'B · paired with Happiness (not chosen, for the record)' },
   today: { variant: 'today', row: false, beside: 'w-[760px]', name: 'Today: four gauges beside the title (trunk)' },
   todayrow: { variant: 'today', row: true, beside: 'w-[760px]', name: 'Today: four gauges on their own row (trunk)' },
 };
@@ -163,6 +166,70 @@ function PhoneMeasure({ within }: { within: string }) {
   );
 }
 
+/**
+ * The six-seat month end's fit, read as it renders (design px): the fit box's height against each column's content,
+ * and the scale FitHeight would take, about room ÷ the taller column (a first estimate: FitHeight re-measures at each
+ * scale's width, so the built screen's own number is TV-FIT's e2e to give). Health's cell, and any gauge text cut.
+ */
+function MonthEndMeasure({ within }: { within: string }) {
+  useTick();
+  const root = document.querySelector(`[data-testid="${within}"]`);
+  const inner = root?.querySelector<HTMLElement>('[data-testid="tv-frame"] > div');
+  const box = root?.querySelector<HTMLElement>('[data-testid="fit-box"]');
+  const content = root?.querySelector<HTMLElement>('[data-testid="fit-content"]');
+  const gauges = root?.querySelector<HTMLElement>('[data-testid="colony-gauges"]');
+  if (!inner || !box || !content || !gauges) return <span className="font-mono text-xs text-ink-3">measuring…</span>;
+  const k = inner.getBoundingClientRect().width / 1280;
+  const px = (n: number) => Math.round(n / k);
+  // A column's content: its first child's top to its last child's foot (the grid stretches the column itself).
+  const extent = (col: Element) => {
+    const kids = [...col.children] as HTMLElement[];
+    if (kids.length === 0) return 0;
+    return px(kids.at(-1)!.getBoundingClientRect().bottom - kids[0]!.getBoundingClientRect().top);
+  };
+  const [left, right] = [...content.children].map(extent) as [number, number];
+  const room = px(box.getBoundingClientRect().height);
+  const need = Math.max(left, right);
+  const scale = Math.min(1, room / need);
+  const cell = gauges.querySelector<HTMLElement>('[data-testid="health-cell"]');
+  const cut = [...gauges.querySelectorAll<HTMLElement>('.truncate')].filter((e) => e.scrollWidth > e.clientWidth + 0.5).map((e) => `“${e.textContent}”`);
+  return (
+    <div className="flex max-w-3xl flex-col gap-0.5 font-mono text-xs" data-testid={`${within}-measure`} data-room={room} data-left={left} data-right={right} data-scale={scale.toFixed(3)}>
+      <span>
+        fit box {room} px tall · league column {left} px · colony column {right} px · gauges {px(gauges.getBoundingClientRect().height)} px tall{cell ? ` (Health’s row ${px(cell.getBoundingClientRect().height)} px)` : ''}
+      </span>
+      <span className={scale >= 0.7 ? 'text-ok' : 'text-alert'}>
+        FitHeight would scale to about <b>{scale.toFixed(3)}</b> (TV-FIT’s floor 0.7){scale === 1 ? ': it fits at full size' : ''}
+      </span>
+      <span className={cut.length ? 'text-alert' : 'text-ok'}>{cut.length ? `cut short: ${cut.join(' · ')}` : 'no gauge text cut short'}</span>
+    </div>
+  );
+}
+
+const MONTH_END_GROUP: Record<MonthEndLayout, string> = {
+  grid: 'A (chosen) · the TV month end at six seats: 3 + 2, Health beside Happiness, as tall as today',
+  third: 'A as the card showed it · the TV month end: Health alone on a third row (under TV-FIT’s 0.7, not built)',
+  across: 'A, tried · the TV month end: five gauges on one row across the screen (under 0.7, not built)',
+};
+
+function monthEndPage(s: StateId, today = false, layout: MonthEndLayout = 'grid'): Page {
+  const id = `tv-monthend-${layout === 'grid' ? '' : `${layout}-`}${today ? 'today' : s}`;
+  return {
+    id,
+    group: today ? MONTH_END_GROUP.grid : MONTH_END_GROUP[layout],
+    title: today ? 'Today: the TV month end at six seats, four gauges (trunk)' : `A · the TV month end at six seats · ${STATES[s].name}`,
+    note: `${today ? 'The same month end with no health: trunk’s four gauges, two by two, for the fit comparison.' : `${NOTE[s]} ${layout === 'grid' ? 'The colony’s gauges sit at the top of the right column, three over two: Wealth, Environment and Prestige, then Happiness and Health, Health across two columns. Two rows, as tall as today’s two by two.' : layout === 'third' ? 'Two by two, as today, with Health alone on a third row across both columns: the colony column grows a row.' : 'The five gauges on one row across the screen, over the league and the colony column.'}`} Six seats, the most a table has. The real league table, colony score band and build site; the colony panel is this mock’s copy (no health on the TV: the gauges carry it).`,
+    render: () => (
+      <div className="relative flex flex-col gap-2" data-testid={`${id}-shot`}>
+        <MonthEndMeasure within={`${id}-shot`} />
+        <TvGame view={tvOf(monthEnd(STATES[s], { six: true, withHealth: !today }))} scale={1.5}>
+          <TvMonthEndHealth game={tvOf(monthEnd(STATES[s], { six: true, withHealth: !today }))} today={today} layout={layout} />
+        </TvGame>
+      </div>
+    ),
+  };
+}
+
 // --- The pages ----------------------------------------------------------------------------------------
 
 interface Page {
@@ -214,26 +281,31 @@ function phonePage(small: boolean, s: StateId, today = false): Page {
 }
 
 const PAGES: Page[] = [
-  ...(['bprime', 'a760', 'a950', 'arow', 'b760'] as const).flatMap((l) => STATE_IDS.map((s) => tvPage(l, s))),
-  tvPage('bprime', 'sick', true),
-  tvPage('b760', 'sick', true),
+  ...(['arow', 'aone'] as const).flatMap((l) => STATE_IDS.map((s) => tvPage(l, s))),
+  ...STATE_IDS.map((s) => monthEndPage(s)),
+  monthEndPage('sick', true),
+  monthEndPage('sick', false, 'third'),
+  monthEndPage('sick', false, 'across'),
+  tvPage('aone', 'sick', true),
   tvPage('today', 'sick', true),
   ...[false, true].flatMap((small) => STATE_IDS.map((s) => phonePage(small, s))),
   tvPage('today', 'sick'),
   tvPage('todayrow', 'sick'),
   phonePage(false, 'sick', true),
   phonePage(true, 'sick', true),
+  ...(['bprime', 'b760'] as const).map((l) => tvPage(l, 'sick')),
 ];
 
 const DECISIONS: [string, ReactNode][] = [
-  ['where', 'Recommended, B′: health is a second figure on the Happiness cell’s first line, “HAPPINESS 52 · HEALTH 78%”. The bar stays the mood’s; the bottom line keeps the mood’s band word on the left and puts health’s band word on the right in its tone, or the mood’s note while health is Well. The cell stays today’s 74 px, so the header is as tall as today’s (76 beside “Production”, 124 beside a two-line title). To fit the line at 760 at today’s type sizes, B′’s columns lean to Happiness (1 : 0.9 : 0.76 : 1.34), taken from Environment and Prestige, whose lines are short. Measured below: nothing cut or spilled in any state.'],
-  ['fallback', 'Fallback, A on the gauges’ own row: a fifth gauge after Happiness, nothing cut at 1200 px. Beside the title A does not fit: at 760 the Wealth value spills 24 px into Environment and both notes are cut; widened to 950 the title keeps 156 px, too little even for “Production”.'],
-  ['b-record', 'For the record, B (Happiness and Health as one two-row cell): nothing cut, but its cell is 117 px tall against 74, so a header beside a one-line title grows 41 px (62 px at 1920): that breaks TV-FIT, pushing the six-seat month end under its 0.7 floor.'],
+  ['chosen', 'Chosen by Heiko, 7 Nov: A, Health in its own cell. Health is a fifth gauge after Happiness: the well share (“78%”), a bar 0 to 100 with ticks at 60 and 80, its band word under the bar and the month’s move (or “4 in 10 sick” at the limit).'],
+  ['header', 'The TV header: wherever it shows the colony’s gauges, they take a row of their own under the title, five cells across 1,200 px, nothing cut. Planning already did so (its clock and ready chip); land auction, production and development now do too, since five cells beside the title cut text (measured 6 Nov: at 760 px the Wealth figure spills 24 px and both notes are cut). The cells are today’s 74 px.'],
+  ['monthend', 'The TV month end: the gauges stay at the top of the colony column, now three over two: Wealth, Environment, Prestige, then Happiness and Health, Health across two columns. Two rows, as tall as today’s two by two, so the colony column does not grow. Each cell is about 191 px wide, wider than today’s header cells (184). Health alone on a third row, as the card showed it, grows the column by 82 px (pages below, for the record).'],
+  ['fit', 'TV-FIT at six seats, measured 7 Nov in the real app (e2e/colony.ts, seed 1317659056, trunk c7f9ede4 with A patched in; trunk alone in brackets): month end 0.764 (0.764), planning ballot 0.831 (0.903), land grant 0.857 (0.994), development 0.853 (1.000), auction 0.849 (0.842), production 0.613 (0.742). Production falls under the 0.7 floor: its gauges moved off the title’s line. OPEN with the PM and Heiko; nothing here falls back to B. The month end with Health on a third row: about 0.675 from the same run’s parts (right column 623 + 82 in a 476 px box).'],
   ['bands', 'WS5 approved 6 Nov: 90 and up “Well” (ok), 61 to 89 “Sick spell” (warn), 60 “At the limit” (alert).'],
-  ['ticks', 'A and B’s Health bar fills 0 to 100 by the well share, with 1 px ticks at 60, the floor health never goes below, and at 80, below which crews start falling sick (decision 25). B′ has no health bar.'],
-  ['phone', 'The phone shows health only with no TV, on the colonists line under Hunger: “The store fed the colony’s 412 colonists · health 78% · Sick spell”, the figure toned by its band, the band word only when it is not Well. Its columns lean to Hunger (0.9 : 0.85 : 1.25) so the line wraps no more than today’s: no added scroll (667 × 375 scrolls 15 px, as today; 844 × 390 fits, as today). Beside a TV the phone has no health; the TV header carries it.'],
-  ['unchanged', 'No TV header change in phases without colony gauges: the goods auction and game over keep the air gauge alone, and with politics off there is no colony and no health.'],
-  ['seam', 'SEAM: health is not in ColonyGaugesView yet (WS5/WS7). The fixture extends the view locally with { well, lastWell, sick }.'],
+  ['ticks', 'The Health bar fills 0 to 100 by the well share, with 1 px ticks at 60, the floor health never goes below, and at 80, below which crews start falling sick (decision 25).'],
+  ['phone', 'The phone shows health only with no TV, on the colonists line under Hunger: “The store fed the colony’s 412 colonists · health 78% · Sick spell”, the figure toned by its band, the band word only when it is not Well. No added scroll (667 × 375 scrolls 15 px, as today; 844 × 390 fits, as today). Beside a TV the phones do not change.'],
+  ['unchanged', 'No change in phases without colony gauges: the goods auction and game over keep the air gauge alone. With politics off there is no colony and no health (MuleView.colonyHealth null): today’s four gauges and colonists line.'],
+  ['seam', 'SEAM: health is not in the view yet (WS5/WS7, MuleView.colonyHealth). The fixture extends the view locally with { well, lastWell, sick }. The mock’s own fit readouts are first estimates on an older trunk (0ece94ba) and a heavier fixture; the numbers above are the real app’s.'],
 ];
 
 function useHash() {
@@ -246,23 +318,23 @@ function useHash() {
   return hash;
 }
 
-/** The sick-spell header, A beside B at the same size, cut to the header's height. */
+/** The sick-spell header in a phase whose gauges sat beside the title: today, and A with the gauges on their own row. */
 function SideBySide() {
   return (
     <section className="flex flex-col gap-2" data-testid="side-by-side">
-      <h2 className="label-caps">B′ beside A · sick spell · the header beside the title at 760 px (top of the TV, 0.6 size)</h2>
+      <h2 className="label-caps">Today beside A · sick spell · “Production”’s header (top of the TV, 0.6 size)</h2>
       <div className="flex flex-wrap gap-4">
         {(
           [
-            ['Bp', 'bprime', 'B′ · health on the Happiness line (recommended)'],
-            ['A', 'a760', 'A · a fifth cell (fallback on its own row; shown here beside the title)'],
+            ['today', 'today', 'Today: four gauges beside the title'],
+            ['A', 'aone', 'A (chosen): five gauges on a row of their own'],
           ] as const
         ).map(([k, layout, label]) => (
           <div key={k} className="relative flex flex-col gap-2 rounded-panel border border-holo-line p-3" data-testid={`variant-${k}`}>
-            <a href={`#/tv-${layout}-sick`} className="text-sm font-semibold text-holo underline" data-testid={`variant-link-${k}`}>
+            <a href={`#/tv-${layout}-oneline-sick`} className="text-sm font-semibold text-holo underline" data-testid={`variant-link-${k}`}>
               {label}
             </a>
-            <TvScreen s="sick" layout={layout} scale={0.6} crop={170} />
+            <TvScreen s="sick" layout={layout} scale={0.6} crop={200} title={ONE_LINE_TITLE} />
             <TitleProbes />
             <TvMeasure within={`variant-${k}`} />
           </div>
@@ -272,24 +344,24 @@ function SideBySide() {
   );
 }
 
-/** B′ against today, measured live: the Happiness cell's height, the header's height and any text cut or spilled. */
-function BPrimeMeasured() {
+/** A against today, measured live: the header's height, with planning's clock and in a phase whose gauges sat beside the title. */
+function AMeasured() {
   const rows = [
-    ['today-1', 'today', 'sick', ONE_LINE_TITLE, 'Today · one-line title'],
-    ['bp-1', 'bprime', 'sick', ONE_LINE_TITLE, 'B′ · one-line title · Sick spell'],
-    ['today-2', 'today', 'sick', BESIDE_TITLE, 'Today · two-line title'],
-    ['bp-2-well', 'bprime', 'well', BESIDE_TITLE, 'B′ · two-line title · Well'],
-    ['bp-2-sick', 'bprime', 'sick', BESIDE_TITLE, 'B′ · two-line title · Sick spell'],
-    ['bp-2-limit', 'bprime', 'limit', BESIDE_TITLE, 'B′ · two-line title · At the limit'],
+    ['today-1', 'today', 'sick', ONE_LINE_TITLE, 'Today · “Production” · gauges beside the title'],
+    ['a-1', 'aone', 'sick', ONE_LINE_TITLE, 'A · “Production” · gauges on their own row'],
+    ['today-row', 'todayrow', 'sick', ONE_LINE_TITLE, 'Today · planning · gauges on their own row'],
+    ['a-row-well', 'arow', 'well', ONE_LINE_TITLE, 'A · planning · Well'],
+    ['a-row-sick', 'arow', 'sick', ONE_LINE_TITLE, 'A · planning · Sick spell'],
+    ['a-row-limit', 'arow', 'limit', ONE_LINE_TITLE, 'A · planning · At the limit'],
   ] as const;
   return (
-    <section className="flex flex-col gap-2" data-testid="bprime-measured">
-      <h2 className="label-caps">B′ measured against today · the header beside the title at 760 px (canvas px; ×1.5 at 1920)</h2>
+    <section className="flex flex-col gap-2" data-testid="a-measured">
+      <h2 className="label-caps">A measured against today · the TV header (canvas px; ×1.5 at 1920)</h2>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {rows.map(([id, layout, st, title, label]) => (
           <div key={id} className="relative flex flex-col gap-1 rounded-panel border border-holo-line p-2" data-testid={`measured-${id}`}>
             <span className="text-sm font-semibold">{label}</span>
-            <TvScreen s={st} layout={layout} scale={0.5} crop={150} title={title} />
+            <TvScreen s={st} layout={layout} scale={0.5} crop={220} title={title} />
             <TitleProbes />
             <TvMeasure within={`measured-${id}`} />
           </div>
@@ -321,10 +393,10 @@ export default function App() {
   return (
     <div className="flex min-h-full flex-col gap-6 bg-void p-8 text-ink" data-testid="index">
       <header className="flex flex-col gap-1">
-        <span className="label-caps">WS8 · WS5’s rule, approved by Heiko 6 Nov</span>
-        <h1 className="font-display text-4xl font-semibold">Colony health, beside the colony’s mood</h1>
+        <span className="label-caps">WS8 · WS5’s rule, approved by Heiko 6 Nov · A chosen by Heiko 7 Nov</span>
+        <h1 className="font-display text-4xl font-semibold">Colony health, in its own cell</h1>
         <p className="font-semibold text-warn" data-testid="status">
-          For review: WS8 leads the design; the display bands are WS5’s to rule.
+          Chosen: A. Open: production at six seats measures 0.613 with the gauges on their own row, under TV-FIT’s 0.7 (with the PM).
         </p>
         <p className="max-w-4xl text-base text-ink-2">Colony health is the share of colonists who are well. It never goes below 60, because at most 4 in 10 are ever sick; a colony that is fed and has its Medicine settles at about 97. Sickness raises the colonists’ Medicine need, takes from the mood’s aim and slows growth.</p>
       </header>
@@ -339,7 +411,7 @@ export default function App() {
         </ul>
       </section>
       <SideBySide />
-      <BPrimeMeasured />
+      <AMeasured />
       {groups.map((g) => (
         <section key={g} className="flex flex-col gap-2">
           <h2 className="label-caps">{g}</h2>
@@ -347,7 +419,7 @@ export default function App() {
             {PAGES.filter((s) => s.group === g).map((s) => (
               <li key={s.id}>
                 <a href={`#/${s.id}`} className="font-semibold text-holo underline" data-testid={`link-${s.id}`}>
-                  {s.id.endsWith('today') ? (s.id.includes('667') ? '667 × 375' : '844 × 390') : s.id.includes('oneline') ? LAYOUT[s.id.split('-')[1] as Layout].name.split(',')[0] : s.id.endsWith('well') ? 'Well' : s.id.endsWith('sick') ? 'Sick spell' : 'At the limit'}
+                  {s.id === 'tv-monthend-today' ? 'Today, four gauges' : s.id.endsWith('today') ? (s.id.includes('667') ? '667 × 375' : '844 × 390') : s.id.includes('oneline') ? LAYOUT[s.id.split('-')[1] as Layout].name.split(',')[0] : s.id.endsWith('well') ? 'Well' : s.id.endsWith('sick') ? 'Sick spell' : 'At the limit'}
                 </a>
               </li>
             ))}
