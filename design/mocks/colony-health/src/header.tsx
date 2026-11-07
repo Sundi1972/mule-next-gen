@@ -25,6 +25,7 @@ export function TvHeaderHealth({
   chatLines,
   variant,
   beside = 'w-[760px]',
+  compact = false,
 }: {
   game: MuleView;
   title: string;
@@ -37,31 +38,34 @@ export function TvHeaderHealth({
   chatLines?: number;
   variant: HealthVariant;
   beside?: 'w-[760px]' | 'w-[950px]';
+  /** EXTEND (A, production, PM ruling 7 Nov): one row: a smaller title, the five gauges beside it in all the width left. */
+  compact?: boolean;
 }) {
   const crowded = seconds !== undefined || ready !== undefined || !!game.colony?.strike;
   // EXTEND (A, Heiko 7 Nov): with health the gauges always take a row of their own: five cells beside the title cut text.
-  const ownRow = !!game.colony && (gauges === true || gauges === 'beside') && (crowded || (variant === 'A' && healthOf(game.colony) !== null));
-  // EXTEND: the copy's ColonyGauges with health and its variant; the beside width a prop.
-  const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : beside} landing={landing} health={healthOf(game.colony)} variant={variant} /> : null;
+  const ownRow = !!game.colony && (gauges === true || gauges === 'beside') && !compact && (crowded || (variant === 'A' && healthOf(game.colony) !== null));
+  // EXTEND: the copy's ColonyGauges with health and its variant; the beside width a prop; compact, all the width left.
+  const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : compact ? 'min-w-0 flex-1' : beside} landing={landing} health={healthOf(game.colony)} variant={variant} /> : null;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
   const fixed = ready !== undefined;
   return (
     <>
       <header className="flex items-end justify-between gap-6" data-testid="tv-header">
-        <div className={cx('flex flex-col gap-1', fixed && 'min-w-0')} data-testid="tv-title-box">
+        <div className={cx('flex flex-col gap-1', fixed && 'min-w-0', compact && 'shrink-0')} data-testid="tv-title-box">
           <span className="flex items-center gap-3">
             <span className="label-caps whitespace-nowrap text-base!">
               Month {game.month} / {game.maxMonths}
             </span>
             {gauges && <StrikeBadge strike={game.colony?.strike} />}
           </span>
-          <h1 className={cx('flex items-center gap-4 font-display text-5xl font-semibold leading-none', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
+          {/* EXTEND: compact, the title a size down (text-4xl), so the five gauges keep the row. */}
+          <h1 className={cx('flex items-center gap-4 font-display font-semibold leading-none', compact ? 'whitespace-nowrap text-4xl' : 'text-5xl', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
             {icon}
             {title}
           </h1>
         </div>
-        <div className={cx('flex items-center gap-4', fixed && 'shrink-0')} data-testid="tv-header-right">
+        <div className={cx('flex items-center gap-4', fixed && 'shrink-0', compact && 'min-w-0 flex-1 justify-end')} data-testid="tv-header-right">
           {extra}
           <ThemeToggle />
           {ownRow || gauges === 'none' ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
