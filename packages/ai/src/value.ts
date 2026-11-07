@@ -376,10 +376,11 @@ function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
             // Electronics works).
             if (isFactory(adding)) {
               const stock = sim.players.find((p) => p.id === me)!.stock;
-              const needs = inputsOf(adding);
-              const counted = (o: ProcessedGood) => Object.keys(inputsOf(o)).some((g) => g in needs);
+              // Water, which every factory uses (AM-18), is no shared input: a works is counted only for its feed.
+              const needs = feedOf(adding);
+              const counted = (o: ProcessedGood) => Object.keys(feedOf(o)).some((g) => g in needs);
               const runs = { ...emptyStock(), ...needs };
-              for (const t of obs.tiles) if (t.owner === me && t.outfit && isFactory(t.outfit) && counted(t.outfit)) addStock(runs, inputsOf(t.outfit));
+              for (const t of obs.tiles) if (t.owner === me && t.outfit && isFactory(t.outfit) && counted(t.outfit)) addStock(runs, feedOf(t.outfit));
               for (const g of GOODS) stock[g] = Math.max(stock[g], runs[g]);
             }
           }
