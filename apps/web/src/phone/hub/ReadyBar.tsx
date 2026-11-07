@@ -5,7 +5,7 @@ import { Chip, ClaudeCountdown, playsBuiltIn, STATUS_CHIP } from '../../componen
 import { toSlot } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { claudeIn, connectedIn, continueQuestion, hostMayContinue, press, readyFooter, stageWords, viewerFirst, type Press, type ReadyWords, type Seat } from './ready';
+import { claudeIn, connectedIn, continueQuestion, hostMayContinue, planningProper, press, readyFooter, sidePick, stageWords, viewerFirst, type Press, type ReadyWords, type Seat } from './ready';
 
 /** The ready count, where the clock used to be: planning has none. `label` is what it counts, such as the ballot's VOTED. */
 export function ReadyCount({ players, tv = false, label = 'READY' }: { players: readonly PlayerView[]; tv?: boolean; label?: string | undefined }) {
@@ -20,7 +20,7 @@ export function ReadyCount({ players, tv = false, label = 'READY' }: { players: 
   );
 }
 
-/** The names still planning, each with its creature, an away mark for a dropped phone, and a waited-for Claude seat's countdown. */
+/** The names still planning, each with its creature, an away mark for a dropped phone, and off the TV a waited-for Claude seat's countdown. */
 export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { seats: readonly Seat[]; me: string | null; tv?: boolean; lead?: string }) {
   return (
     <span className={cx('flex flex-wrap items-center gap-x-2 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-for">
@@ -30,7 +30,8 @@ export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { se
           <PlayerMark slot={toSlot(s.slot)} size={tv ? 30 : 14} glow={!s.away} />
           <span data-testid="waiting-name">{s.id === me ? 'you' : s.name}</span>
           {s.away && <span className={cx('rounded-chip border border-warn/60 font-mono font-bold text-warn', tv ? 'px-2 text-lg' : 'px-1 text-[10px] @min-[1100px]/shell:text-xs')}>AWAY</span>}
-          {s.until !== undefined && <ClaudeCountdown until={s.until} className={tv ? 'px-2! text-lg!' : undefined} testid="waiting-chip" />}
+          {/* The TV counts down in its picked list, beside this box's narrow column: once is enough there. */}
+          {s.until !== undefined && !tv && <ClaudeCountdown until={s.until} status={s.status} testid="waiting-chip" />}
         </span>
       ))}
     </span>
@@ -44,6 +45,7 @@ export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { se
 export function ClaudeLines({ waiting }: { waiting: readonly Seat[] }) {
   const { table, view } = usePhoneGame();
   const claude = claudeIn(table.seats ?? []);
+  if (!planningProper(view) && !sidePick(view)) return null;
   return view.players.map((p) => {
     const status = claude(p.id);
     if (!status || waiting.some((s) => s.id === p.id)) return null;

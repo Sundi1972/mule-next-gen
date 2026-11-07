@@ -69,14 +69,14 @@ function useWaitLeft(until: number): string {
   return clock(Math.ceil(secondsUntil(until, now) ?? 0));
 }
 
-/** A Claude seat the side pick waits for, as a chip: CLAUDE · THINKING · 0:32. */
-export function ClaudeCountdown({ until, className, testid }: { until: number; className?: string | undefined; testid?: string }) {
-  return <Chip word="CLAUDE · THINKING" suffix={useWaitLeft(until)} className={className} testid={testid} />;
+/** A Claude seat the side pick waits for, as a chip: its status and the time left, CLAUDE · THINKING · 0:32. */
+export function ClaudeCountdown({ until, status = 'thinking', className, testid }: { until: number; status?: ClaudeStatus | undefined; className?: string | undefined; testid?: string }) {
+  return <Chip word={STATUS_CHIP[status]} suffix={useWaitLeft(until)} className={className} testid={testid} />;
 }
 
 /** The same, as a list row's state word. */
-export function ClaudeCountdownWord({ until, className }: { until: number; className?: string }) {
-  return <span className={cx('animate-pulse', className)}>{`CLAUDE · THINKING · ${useWaitLeft(until)}`}</span>;
+export function ClaudeCountdownWord({ until, status = 'thinking', className }: { until: number; status?: ClaudeStatus | undefined; className?: string }) {
+  return <span className={cx(status === 'thinking' && 'animate-pulse', className)}>{`${STATUS_CHIP[status]} · ${useWaitLeft(until)}`}</span>;
 }
 
 function useCopied(): [boolean, (text: string) => void] {

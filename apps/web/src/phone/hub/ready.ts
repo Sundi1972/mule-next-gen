@@ -6,6 +6,8 @@ export type Seat = Pick<PlayerView, 'id' | 'name' | 'isAi' | 'ready' | 'slot'> &
   away: boolean;
   /** A Claude seat the first side pick waits for: the server time its wait ends (RULE-6). */
   until?: number;
+  /** That seat's status, as the room has it. */
+  status?: ClaudeStatus;
 };
 
 type ClaudeStatus = NonNullable<TableView<MuleView>['seats'][number]['claude']>;
@@ -33,14 +35,17 @@ export type ReadyRow = { kind: 'seat'; seat: Seat } | { kind: 'ais'; seats: Seat
 /** From this many seats the TV folds its AIs into one row, so the news beside the list keeps its room. */
 export const FOLD_AIS_FROM = 5;
 
+/** A computer seat's statuses that need no row of their own: built-in (none), or a Claude seat with nothing to report. */
+const QUIET = new Set<ClaudeStatus | undefined>([undefined, 'ready', 'connected']);
+
 /**
  * The TV's ready list, in seat order. Every person keeps a row, so the TV names whoever the table waits for; from
- * FOLD_AIS_FROM seats the built-in AIs, always ready, share one row at the end. A Claude seat keeps its own row, for
- * its status. The seat count decides, not the space left, so the list doesn't jump as news arrives.
+ * FOLD_AIS_FROM seats the quiet AIs, always ready, share one row at the end. A Claude seat that is thinking, offline or
+ * never connected keeps its own row, for its status. The seat count decides, not the space left, so the list doesn't jump as news arrives.
  */
 export function readyRows(players: readonly PlayerView[], connected: (id: string) => boolean, claude: (id: string) => ClaudeStatus | undefined = () => undefined): ReadyRow[] {
   const seats = players.map((p) => seatOf(p, connected));
-  const folds = (s: Seat) => s.isAi && !claude(s.id);
+  const folds = (s: Seat) => s.isAi && QUIET.has(claude(s.id));
   const ais = seats.filter(folds);
   if (seats.length < FOLD_AIS_FROM || ais.length === 0) return seats.map((seat) => ({ kind: 'seat', seat }));
   return [...seats.filter((s) => !folds(s)).map((seat): ReadyRow => ({ kind: 'seat', seat })), { kind: 'ais', seats: ais }];
@@ -114,11 +119,12 @@ export function sidePick(view: Pick<MuleView, 'phase'> & WithAuction): boolean {
  * as picked, except a Claude seat the first side pick still waits for, which carries when its wait ends (RULE-6). A
  * dropped phone is still waited for, marked away, as in planning: the host can move on for it.
  */
-export function stillPicking(view: Pick<MuleView, 'players' | 'auction'>, connected: (id: string) => boolean): Seat[] {
+export function stillPicking(view: Pick<MuleView, 'players' | 'auction'>, connected: (id: string) => boolean, claude: (id: string) => ClaudeStatus | undefined = () => undefined): Seat[] {
   const waited = new Map((view.auction?.waitingForClaude ?? []).map((w) => [w.seatId, w.until]));
   return view.players.flatMap((p) => {
     const until = waited.get(p.id);
-    if (until !== undefined) return [{ ...seatOf(p, connected), ready: false, until }];
+    const status = claude(p.id);
+    if (until !== undefined) return [{ ...seatOf(p, connected), ready: false, until, ...(status ? { status } : {}) }];
     return p.isAi || pickedIn(view, p.id) ? [] : [{ ...seatOf(p, connected), ready: false }];
   });
 }

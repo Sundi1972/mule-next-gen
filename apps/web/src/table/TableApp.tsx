@@ -344,11 +344,14 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                     {ordinal(places.get(s.id) ?? game.players.length)}
                   </span>
                   <PlayerMark slot={toSlot(s.slot)} size={22} glow={!dim} />
-                  <span className="flex-1 truncate font-display text-xl font-semibold" data-testid="tv-ready-name">
-                    {s.name}
-                    {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate font-display text-xl font-semibold" data-testid="tv-ready-name">
+                      {s.name}
+                      {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
+                    </span>
+                    {/* Under the name, not beside it: beside, it leaves the name a few letters. */}
+                    {playsBuiltIn(status) && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
                   </span>
-                  {playsBuiltIn(status) && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
                   <span className={cx('font-mono text-sm', tone, status === 'thinking' && 'animate-pulse')} data-testid={`tv-state-${s.id}`}>
                     {state}
                   </span>
@@ -505,7 +508,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const ship = shipWants(game, auction);
   // The side pick has no clock (A-7): who has picked, who is still picking, and the host who can move on for them.
   const connected = connectedIn(table.seats);
-  const waiting = status ? stillPicking(game, connected) : [];
+  const waiting = status ? stillPicking(game, connected, claudeIn(table.seats)) : [];
   const host = game.players.find((p) => p.id === table.hostId);
   const picked = pickedPlayers(game.players, waiting);
   return (
@@ -593,22 +596,31 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               <ul className="flex flex-col gap-2" data-testid="tv-picked">
                 {game.players.map((p) => {
                   const s = auction.walkers.find((w) => w.id === p.id)?.side;
-                  const until = waiting.find((w) => w.id === p.id)?.until;
-                  const done = until === undefined && (p.isAi || pickedIn(game, p.id));
+                  const wait = waiting.find((w) => w.id === p.id && w.until !== undefined);
+                  const done = !wait && (p.isAi || pickedIn(game, p.id));
                   const away = !connected(p.id);
-                  return (
-                    <li key={p.id} className="flex items-center gap-3" data-testid={`tv-picked-${p.id}`}>
+                  const name = (
+                    <>
                       <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} glow={!done} />
-                      <span className="flex-1 truncate font-display text-xl font-semibold" data-testid="tv-picked-name">
+                      <span className="min-w-0 flex-1 truncate font-display text-xl font-semibold" data-testid="tv-picked-name">
                         {p.name}
                       </span>
-                      {until !== undefined ? (
-                        <ClaudeCountdownWord until={until} className="font-mono text-lg font-bold text-holo" />
-                      ) : (
-                        <span className={cx('font-mono text-lg font-bold', !done ? (away ? 'text-warn' : 'text-holo') : s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
-                          {!done ? (away ? 'AWAY · PICKING' : 'PICKING') : `${SIDE_WORD[s ?? 'pass'].toUpperCase()} ✓`}
-                        </span>
-                      )}
+                    </>
+                  );
+                  // In this 300 px column the countdown beside the name would leave the name no room: it goes under it.
+                  if (wait)
+                    return (
+                      <li key={p.id} className="flex flex-col" data-testid={`tv-picked-${p.id}`}>
+                        <span className="flex items-center gap-3">{name}</span>
+                        <ClaudeCountdownWord until={wait.until!} status={wait.status} className={cx('pl-[34px] font-mono text-base font-bold', playsBuiltIn(wait.status) ? 'text-warn' : 'text-holo')} />
+                      </li>
+                    );
+                  return (
+                    <li key={p.id} className="flex items-center gap-3" data-testid={`tv-picked-${p.id}`}>
+                      {name}
+                      <span className={cx('font-mono text-lg font-bold', !done ? (away ? 'text-warn' : 'text-holo') : s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
+                        {!done ? (away ? 'AWAY · PICKING' : 'PICKING') : `${SIDE_WORD[s ?? 'pass'].toUpperCase()} ✓`}
+                      </span>
                     </li>
                   );
                 })}

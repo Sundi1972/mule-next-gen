@@ -32,7 +32,7 @@ import { useAuctionSound } from '../game/sound';
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
-import { connectedIn, pickedPlayers, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
+import { claudeIn, connectedIn, pickedPlayers, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
 import { ClaudeLines, ReadyCount } from './hub/ReadyBar';
 import { AuctionHeadline } from '../components/AuctionHeadline';
 import { PhoneShell } from './Shell';
@@ -105,7 +105,7 @@ export function Auction() {
     const ship = shipWants(view, auction);
     // A table the room has not listed yet counts every seat as connected.
     const connected = connectedIn(table.seats ?? []);
-    const waiting = stillPicking(view, connected);
+    const waiting = stillPicking(view, connected, claudeIn(table.seats ?? []));
     const others = waiting.filter((s) => s.id !== me.id);
     const isHost = table.hostId === me.id;
     const picked = pickedPlayers(view.players, waiting);
