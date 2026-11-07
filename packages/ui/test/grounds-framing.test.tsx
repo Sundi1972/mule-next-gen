@@ -200,18 +200,23 @@ describe('T-AC-11: the grounds frame the occupied extent like look.html (spec AM
     expect(html.indexOf('data-testid="grounds-vignette"')).toBeLessThan(html.indexOf('data-testid="callout-'));
   });
 
-  it("T-AC-11: the buildings' footprint centre sits at the view's centre", () => {
-    const corners = blocksOf(MONTH_12).flatMap(footprint);
-    const span = (vs: number[]) => (Math.min(...vs) + Math.max(...vs)) / 2;
-    const [fx, fy] = [span(corners.map(([x]) => x)), span(corners.map(([, y]) => y))];
+  it('T-AC-11: across, the view centres on the grid unless a building would be cut', () => {
     const views = { 'TV 1280×720': render(), phone: render({ size: 'phone', framing: undefined, light: 'day', chips: true }) };
     for (const [label, html] of Object.entries(views)) {
       const vb = viewBoxOf(html);
-      // The month-12 view sits well inside the plate, so no clamp shift is owed.
-      expect(within(vb, PLATE_BOX, -1), `${label}: clear of the plate's edges`).toBe(true);
-      expect(Math.abs(fx - (vb.x + vb.w / 2)) / vb.w, `${label}: across`).toBeLessThanOrEqual(0.05);
-      expect(Math.abs(fy - (vb.y + vb.h / 2)) / vb.h, `${label}: down`).toBeLessThanOrEqual(0.05);
+      expect(Math.abs(vb.x + vb.w / 2 - iso(0, 0)[0]) / vb.w, `${label}: off the hall`).toBeLessThanOrEqual(0.01);
+      expectWhole(MONTH_12, vb);
     }
+  });
+
+  it('T-AC-11: a colony heavy to one side shifts the view across by just enough to keep its far building whole', () => {
+    const east: GroundsColony = { ...MONTH_12, projects: [{ ...MONTH_12.projects[3]!, place: { x: 3, y: 0, w: 2, h: 2 } }] };
+    const vb = viewBoxOf(render({ colony: east }));
+    expect(vb.x + vb.w / 2, 'centring on the hall would cut the Spaceport').toBeGreaterThan(0);
+    const farthest = Math.max(...footprint(east.projects[0]!.place!).map(([x]) => x));
+    expect(vb.x + vb.w, "the Spaceport's east corner a quarter place in from the edge").toBeCloseTo(farthest + W / 4, 6);
+    expectWhole(east, vb);
+    expect(within(vb, PLATE_BOX)).toBe(true);
   });
 
   it('HC-3: without a plate, framing is unchanged', () => {
