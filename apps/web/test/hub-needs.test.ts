@@ -7,10 +7,11 @@ const plots = (...outfits: (Outfit | null)[]) => outfits.map((outfit) => ({ outf
 
 describe("planning's This month you need (RULE-8)", () => {
   it('B-AC-14: Lena holds 3 Energy and her three farms and well burn 4: Energy SHORT 1, Food and Water OK', () => {
+    // Water: upkeep and the farms (UPKEEP.waterUse, AM-18), not the well: it pays its own use from its own output.
     const rows = needRows(stock({ food: 3, water: 2, energy: 4 }), stock({ food: 5, water: 2, energy: 3 }), plots('food', 'food', 'food', 'water', null));
     expect(rows).toEqual([
       { good: 'food', have: 5, need: 3, short: 0, why: 'upkeep' },
-      { good: 'water', have: 2, need: 2, short: 0, why: 'upkeep' },
+      { good: 'water', have: 2, need: 2, short: 0, why: 'upkeep and 3 farms' },
       { good: 'energy', have: 3, need: 4, short: 1, why: '3 farms and a well' },
     ]);
   });
@@ -25,7 +26,7 @@ describe("planning's This month you need (RULE-8)", () => {
     expect(rows.find((r) => r.good === 'energy')).toBeUndefined();
     expect(Object.fromEntries(rows.map((r) => [r.good, r.why]))).toEqual({
       food: 'upkeep',
-      water: 'upkeep',
+      water: 'upkeep, a mine, a power plant and 2 factories',
       smithore: 'Alloy inputs',
       alloy: 'Electronics inputs',
       rareEarth: 'Electronics inputs',
