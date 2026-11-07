@@ -42,8 +42,10 @@ function rowOf(seat: MockSeat, t: Table): Row {
       return t.left > 0
         ? { seat, word: `${PLAY_CHIP.thinking} · ${clock(t.left)}`, blocks: true, dim: false, tone: 'holo', chip: PLAY_CHIP.thinking, suffix: clock(t.left) }
         : { seat, word: PLAY_CHIP.ready, blocks: false, dim: true, tone: 'quiet', chip: PLAY_CHIP.ready, builtin: true };
-    const tone = t.juno === 'thinking' ? 'holo' : t.juno === 'offline' ? 'warn' : 'quiet';
-    return { seat, word: PLAY_CHIP[t.juno], blocks: false, dim: t.juno === 'ready', tone, chip: PLAY_CHIP[t.juno], builtin: t.juno === 'offline' };
+    // Whenever the built-in plan plays, the row says so: offline, or a chat that never connected (WS6 ruling, 7 Nov).
+    const builtin = t.juno === 'offline' || t.juno === 'waiting';
+    const tone = t.juno === 'thinking' ? 'holo' : builtin ? 'warn' : 'quiet';
+    return { seat, word: PLAY_CHIP[t.juno], blocks: false, dim: t.juno === 'ready', tone, chip: PLAY_CHIP[t.juno], builtin };
   }
   const state: Person = seat.id === ME ? t.me : t.kai;
   const doing = t.stage === 'sidepick' ? 'PICKING' : 'PLANNING';
@@ -162,6 +164,8 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
   const side = t.stage === 'sidepick';
   const ready = t.me === 'ready';
   const host = ME === HOST;
+  // G-7: at the side pick nothing of the others shows before your own Done, a Claude seat's wait included.
+  const others = !side || ready;
   return (
     <div className="h-full @container/shell">
       <div className="relative flex h-full bg-table text-ink" data-testid="game-shell">
@@ -212,7 +216,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
                 {side ? "You've picked" : "You're ready"}
               </span>
             )}
-            {waiting.length > 0 ? (
+            {!others ? null : waiting.length > 0 ? (
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="waiting-for">
                 <span className="text-ink-2">Waiting for</span>
                 {waiting.map((r) => (
@@ -222,7 +226,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
             ) : (
               ready && <span className="text-sm text-ink-2">{side ? 'Everyone has picked.' : 'Everyone is ready.'}</span>
             )}
-            <ClaudeLine row={claudeRow} />
+            {others && <ClaudeLine row={claudeRow} />}
             {!ready ? (
               <Button size="lg" className="w-full" onClick={onReady} data-testid="ready">
                 {side ? 'Done' : "I'm ready"}

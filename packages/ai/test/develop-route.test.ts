@@ -661,6 +661,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       play(runner, state, hand);
       const steps = byIndex(hand, state);
       const log = JSON.stringify(hand.done);
+      expect(steps.get(2), log).toEqual({ route: 2, outcome: 'done' });
       expect(steps.get(3), log).toEqual({ route: 3, outcome: 'done', note: 'led' });
       expect(steps.get(5), log).toEqual({ route: 5, outcome: 'done' });
       // The promise: Energy on the swapped plot, the Food MULE taken off it on the idle one, one MULE paid for.
@@ -677,9 +678,24 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       play(runner, state, hand);
       const steps = byIndex(hand, state);
       const log = JSON.stringify(hand.done);
+      expect(steps.get(2), log).toEqual({ route: 2, outcome: 'done' });
       expect(steps.get(4), log).toEqual({ route: 4, outcome: 'skipped', note: 'swapped MULE kept its outfit' });
       expect([a.outfit, b.outfit], log).toEqual(['energy', 'food']);
       expect(me(state).carriedMule).toBeNull();
+    });
+
+    it("AM-35 swap: an analysis of an own plot while it leads the MULE swapped off is skipped on the floor, 'leading', not walked to and refused; tapped, it is done", () => {
+      const { state, plots } = foodOnFirst(2);
+      const [a, b] = plots as [Tile, Tile];
+      const { hand } = seatAndHand();
+      hand.follow(state.month, routeOf([...swapTo(state, a, 'energy'), { act: 'analyse', plot: indexOf(state, b) }, { act: 'pub' }]));
+      play(runner, state, hand);
+      const steps = byIndex(hand, state);
+      const log = JSON.stringify(hand.done);
+      // On the floor, a plot of its own offers INSTALL to a seat leading a fitted MULE, never ANALYSE.
+      expect(steps.get(3), log).toEqual(runner === 'steer' ? { route: 3, outcome: 'skipped', note: 'leading' } : { route: 3, outcome: 'done' });
+      expect(steps.get(4), log).toEqual({ route: 4, outcome: 'done' });
+      expect(a.outfit, log).toBe('energy');
     });
 
     it("HC-9: an own re-pick after the analyses whose draft throws is logged with the seat and plays as 'stop'; no MULE is added", () => {
