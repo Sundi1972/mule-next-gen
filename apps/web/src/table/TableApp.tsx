@@ -25,7 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
-import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWord, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
+import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -323,8 +323,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                         {row.seats.map((s) => s.name).join(', ')}
                       </span>
                     )}
-                    <span className={cx('shrink-0 font-mono text-sm', row.status === 'thinking' ? 'animate-pulse text-holo' : 'text-warn')}>
-                      {foldedClaudeWord(row.status, row.seats.length)}
+                    {/* The note wraps under the words when the column is narrow (five seats at full size), never past its edge. */}
+                    <span className={cx('flex min-w-0 flex-wrap justify-end gap-x-2 font-mono text-sm', row.status === 'thinking' ? 'animate-pulse text-holo' : 'text-warn')}>
+                      {foldedClaudeWords(row.status, row.seats.length).map((w) => w && <span key={w} className="whitespace-nowrap">{w}</span>)}
                     </span>
                   </li>
                 );

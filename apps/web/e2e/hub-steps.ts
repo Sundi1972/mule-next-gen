@@ -388,7 +388,7 @@ export async function sixSeatsOnTheTv(
       Object.assign((room as unknown as { game: object }).game, { claudeStatus: () => claude });
       room.broadcast();
       // A Claude seat with nothing to report folds into the AI row from five seats; the others keep their rows.
-      if (claude === 'ready' || claude === 'connected') await board.locator('[data-testid=tv-ready-ais][data-count="${count}"]').waitFor({ timeout });
+      if (claude === 'ready' || claude === 'connected') await board.locator(`[data-testid=tv-ready-ais][data-count="${count}"]`).waitFor({ timeout });
       else await board.getByTestId(`tv-ready-list`).getByText(claude === 'waiting' ? 'WAITING FOR CLAUDE' : `CLAUDE · ${claude.toUpperCase()}`).first().waitFor({ timeout });
     }
     const newest = board.getByTestId('tv-news').locator('li').first();
@@ -426,8 +426,11 @@ export async function sixSeatsOnTheTv(
       const past = await board.getByTestId('tv-ready-list').evaluate((list) => {
         const edge = list.getBoundingClientRect().right;
         return [...list.querySelectorAll(':scope > li, :scope > li *')]
-          // A line cut short with an ellipsis (the folded names) gives way by design.
-          .filter((el) => el.getBoundingClientRect().right > edge + 1 || (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow !== 'ellipsis'))
+          // A line cut short with an ellipsis (the folded names, the AI row) gives way by design, and so does what it cuts.
+          .filter((el) => {
+            for (let a: Element | null = el; a && a !== list; a = a.parentElement) if (getComputedStyle(a).textOverflow === 'ellipsis') return false;
+            return el.getBoundingClientRect().right > edge + 1 || el.scrollWidth > el.clientWidth + 1;
+          })
           .map((el) => `${el.getAttribute('data-testid') ?? el.tagName.toLowerCase()} "${(el.textContent ?? '').slice(0, 40)}" to x ${el.getBoundingClientRect().right.toFixed(0)} of ${edge.toFixed(0)}`);
       });
       check(past.length === 0, `TV-FIT (${count + 1} seats${when}): the ready list stays inside its column, got ${past.slice(0, 3).join('; ')}`);

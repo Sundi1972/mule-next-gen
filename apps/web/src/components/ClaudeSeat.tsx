@@ -50,10 +50,10 @@ export const isClaude = (seat: Seat) => seat.kind === 'claude';
 /** In play, whether the seat plays its built-in plan: offline, or its chat never connected (WS6 ruling, #663). */
 export const playsBuiltIn = (status: ClaudeStatus | undefined) => status === 'offline' || status === 'waiting';
 
-/** A folded TV row's words for `n` Claude seats in one status: 4 Claude · THINKING, 1 Claude · OFFLINE · plays its built-in plan. */
-export function foldedClaudeWord(status: ClaudeStatus, n: number): string {
+/** A folded TV row's words for `n` Claude seats in one status, and its note if any: [1 Claude · OFFLINE, · plays its built-in plan]. */
+export function foldedClaudeWords(status: ClaudeStatus, n: number): [string, string | null] {
   const word = status === 'waiting' ? `${n} WAITING FOR CLAUDE` : `${n} Claude · ${STATUS_CHIP[status].slice('CLAUDE · '.length)}`;
-  return playsBuiltIn(status) ? `${word} · plays its built-in plan` : word;
+  return [word, playsBuiltIn(status) ? '· plays its built-in plan' : null];
 }
 
 /** Seconds as the side pick's countdown shows them: 0:32. */
