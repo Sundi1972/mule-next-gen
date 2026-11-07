@@ -930,7 +930,8 @@ evaluated  at upkeep, at S5-RULE-3 step 3a (who is last after this month's aucti
            welfareRecipient(state) at any moment, as "would go to X now".
 first match wins
   #   when                                                     then
-  1   politics off, or the Welfare share is 0                  nobody
+  1   politics off                                             nobody (AM-8: a 0% share still names who it
+                                                               would go to; step 3a pays nothing at 0%)
   2   no player but the Governor                               nobody
   3   one non-Governor has strictly the lowest Worth           that player
   4   a tie for the lowest Worth among non-Governors           a draw among them, on its own stream from (seed, month,
@@ -1671,6 +1672,19 @@ did       the Projects share is a ceiling: each open building takes only what it
           worked example now uses config's numbers: 350 of 432 taken, 82 more stay.
 because   a line that promised 432 toward a building that needs 350 would tell the Governor the wrong amount; "up
           to" is true at every need, and the need is already on the phone
+goal      S5-1 — unchanged
+```
+
+```
+AM-8 · 2026-11-07 · WS7 (build: #701's boundary review, Important 2) · Welfare's recipient is named at 0% too
+
+target    §2 S5-RULE-4 row 1; colony.ts::welfareRecipient
+said      row 1 named nobody when the Welfare share is 0, while AM-5 sends welfareTo "at every share, 0% included"
+did       row 1 is "politics off" only: welfareRecipient names the player rows 2-4 pick at any share, so the
+          Governor's desk shows who Welfare would go to before a share is set. Paying is unchanged: S5-RULE-3
+          step 3a pays nothing when the want is 0.
+because   AM-5 is the later decision, made for the Governor's screen; the server cannot rebuild rows 2-4 itself
+          (the tie stream is the engine's)
 goal      S5-1 — unchanged
 ```
 
