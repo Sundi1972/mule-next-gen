@@ -1,0 +1,219 @@
+import { describe, expect, it } from 'vitest';
+import {
+  advancePhase,
+  COLONY,
+  commission,
+  createGame,
+  POLITICS,
+  PRESTIGE,
+  runColony,
+  stableJson,
+  welfareRecipient,
+  type BudgetLine,
+  type FundLedger,
+  type GameState,
+  type PrestigeId,
+  type Project,
+} from '../src/index.js';
+
+const SEATS = ['lena', 'brix', 'ossa', 'kai'];
+const B = POLITICS.budget;
+
+/** A politics game in planning with Lena governing and no election open. */
+function governed(fund = 0, seed = 7): GameState {
+  const state = createGame({ seed, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+  state.politics = { ...state.politics!, governor: 'lena', election: null };
+  state.treasury.money = fund;
+  return state;
+}
+
+const shares = (projects: number, welfare: number): Record<BudgetLine, number> => ({ projects, welfare, security: 0 });
+
+function withBudget(state: GameState, s: Record<BudgetLine, number>): void {
+  state.politics = { ...state.politics!, budget: { month: state.month, setBy: 'lena', shares: s } };
+}
+
+function advanceTo(state: GameState, phase: GameState['phase']): void {
+  while (state.phase !== phase) advancePhase(state);
+}
+
+function money(state: GameState, id: string): number {
+  return state.players.find((p) => p.id === id)!.money;
+}
+
+/** Sets each player's Worth by their money alone (their goods, land and MULEs are the same at the start). */
+function worth(state: GameState, byId: Record<string, number>): void {
+  for (const p of state.players) p.money = byId[p.id] ?? p.money;
+}
+
+function projectOf(id: PrestigeId, stage: Project['stage'], extra: Partial<Project> = {}): Project {
+  const row = PRESTIGE[id];
+  const funded = stage === 'standing' || stage === 'building' ? { credits: row.credits, goods: { ...row.goods } } : { credits: 0, goods: {} };
+  return { id, stage, funded, monthsLeft: stage === 'building' ? row.buildMonths : null, since: 1, plaque: {}, ...extra };
+}
+
+function withProjects(state: GameState, projects: Project[]): void {
+  state.colony = { ...state.colony!, projects };
+}
+
+/** The fund runColony starts with when `spare` credits lie above the reserve, after upkeep, the grant and the Governor's pay. */
+function fundForSpare(spare: number): number {
+  return COLONY.reserve + spare - COLONY.grant.perMonth + POLITICS.pay.governor;
+}
+
+const total = (side: Partial<Record<string, number>>) => Object.values(side).reduce<number>((sum, n) => sum + (n ?? 0), 0);
+const net = (ledger: FundLedger) => total(ledger.in) - total(ledger.out);
+
+/** Lena commissions two buildings that between them need more credits than any fund here holds. */
+function commissioned(fund: number, s: Record<BudgetLine, number> | null): GameState {
+  const state = governed();
+  commission(state, 'lena', 'stadium');
+  commission(state, 'lena', 'spaceport');
+  state.treasury.money = fund;
+  if (s) withBudget(state, s);
+  return state;
+}
+
+function project(state: GameState, id: PrestigeId): Project {
+  return state.colony!.projects.find((p) => p.id === id)!;
+}
+
+describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects share', () => {
+  it("S5-T-AC-3: with budget null, runColony's output on a fixed state equals today's", () => {
+    const state = governed(800);
+    withProjects(state, [projectOf('hospital', 'standing'), projectOf('park', 'building'), projectOf('stadium', 'commissioned'), projectOf('observatory', 'commissioned')]);
+    worth(state, { lena: 9_000, brix: 14_000, ossa: 16_000, kai: 10_500 });
+    runColony(state, ['food']);
+    const seen = stableJson({ colony: state.colony, fund: state.treasury.money, players: state.players.map((p) => [p.id, p.money]) });
+    expect(seen).toBe(GOLDEN);
+  });
+
+  it('S5-B-AC-2: with 540 spare and shares Projects 80 / Welfare 10, upkeep pays Welfare 54, buildings take at most 432, the rest stays; with 6,000 spare Welfare pays its cap', () => {
+    const state = commissioned(fundForSpare(540), shares(80, 10));
+    const before = new Map(state.players.map((p) => [p.id, p.money]));
+    advanceTo(state, 'upkeep');
+    const ledger = state.history.at(-1)!.ledger!;
+    expect(ledger.out.welfare, 'Welfare is 10% of 540').toBe(54);
+    expect(ledger.out.project, 'buildings take the Projects share and no more').toBe(432);
+    expect(state.treasury.money, 'the reserve and the 54 nobody took stay in the fund').toBe(COLONY.reserve + 54);
+    const to = state.colony!.welfare!;
+    expect(to).toEqual({ month: 1, to: to.to, paid: 54 });
+    expect(to.to).not.toBe('lena');
+    expect(money(state, to.to) - before.get(to.to)!).toBe(54);
+
+    const rich = commissioned(fundForSpare(6_000), shares(80, 10));
+    advanceTo(rich, 'upkeep');
+    expect(rich.history.at(-1)!.ledger!.out.welfare, 'a tenth of 6,000 is 600; the cap holds it').toBe(B.welfare.maxCredits);
+
+    const plain = commissioned(fundForSpare(540), null);
+    advanceTo(plain, 'upkeep');
+    const today = plain.history.at(-1)!.ledger!;
+    expect(today.out.welfare, 'no budget set: nothing for Welfare').toBeUndefined();
+    expect(today.out.project, 'no budget set: buildings take all 540, as today').toBe(540);
+    expect(plain.treasury.money).toBe(COLONY.reserve);
+  });
+
+  it("S5-T-AC-2: S5-RULE-3's examples, and the ledger balances in every month of a seeded game with shares set", () => {
+    // Fund 640 after pay and upkeep, reserve 100: spare0 540.
+    const split = commissioned(640, shares(80, 10));
+    runColony(split, []);
+    expect(split.colony!.ledger.out).toEqual({ welfare: 54, project: 432 });
+    expect(split.treasury.money).toBe(640 - 54 - 432);
+
+    const capped = commissioned(COLONY.reserve + 6_000, shares(80, 10));
+    runColony(capped, []);
+    expect(capped.colony!.ledger.out.welfare).toBe(200);
+
+    // Credits and goods count together against the Projects limit: 65% of 540 is 351, the Hospital's credits are 340,
+    // and its Electronics cost more than the 11 cr left of the limit though the fund could pay them.
+    const tight = governed(COLONY.reserve + 540);
+    commission(tight, 'lena', 'hospital');
+    tight.store.stock.electronics = 5;
+    withBudget(tight, shares(65, 0));
+    runColony(tight, []);
+    expect(project(tight, 'hospital').funded).toEqual({ credits: 340, goods: {} });
+    expect(tight.colony!.ledger.out.project).toBe(340);
+
+    const poor = commissioned(90, shares(80, 10));
+    runColony(poor, []);
+    expect(poor.colony!.ledger.out).toEqual({});
+    expect(poor.colony!.welfare).toBeNull();
+    expect(poor.treasury.money).toBe(90);
+
+    const game = governed(0, 11);
+    commission(game, 'lena', 'stadium');
+    withBudget(game, shares(80, 10));
+    let months = 0;
+    let paid = 0;
+    while (game.phase !== 'gameOver') {
+      const start = game.treasury.money;
+      advanceTo(game, 'upkeep');
+      const ledger = game.history.at(-1)!.ledger!;
+      expect(net(ledger), `month ${game.month}`).toBe(game.treasury.money - start);
+      paid += ledger.out.welfare ?? 0;
+      months++;
+      advancePhase(game);
+      if (game.phase === 'planning') game.treasury.money += 700;
+    }
+    expect(months).toBe(game.maxMonths);
+    expect(paid, 'Welfare was paid in the months the fund had spare').toBeGreaterThan(0);
+  });
+
+  it('S5-T-AC-4: S5-RULE-4\'s rows; the Governor is never the recipient; a tie draws from its own stream and moves no election draw', () => {
+    const base = governed(1_000);
+    withBudget(base, shares(80, 10));
+    worth(base, { lena: 9_000, kai: 10_500, brix: 14_000, ossa: 16_000 });
+    expect(welfareRecipient(base), 'Lena is last but governs: the next-lowest gets it').toBe('kai');
+    worth(base, { lena: 20_000 });
+    expect(welfareRecipient(base)).toBe('kai');
+
+    const none = governed(1_000);
+    withBudget(none, shares(100, 0));
+    expect(welfareRecipient(none), 'row 1: a Welfare share of 0').toBeNull();
+    const off = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
+    expect(welfareRecipient(off), 'row 1: politics off').toBeNull();
+    const alone = governed(1_000);
+    withBudget(alone, shares(80, 10));
+    alone.players = alone.players.filter((p) => p.id === 'lena');
+    expect(welfareRecipient(alone), 'row 2: no player but the Governor').toBeNull();
+    const pair = governed(1_000);
+    withBudget(pair, shares(80, 10));
+    pair.players = pair.players.filter((p) => p.id === 'lena' || p.id === 'ossa');
+    worth(pair, { lena: 1, ossa: 99_999 });
+    expect(welfareRecipient(pair), 'two players, the Governor last: the other one').toBe('ossa');
+
+    // Row 4: a tie among the non-Governors is drawn, the same every time, and either of them can win it.
+    const winners = new Set<string | null>();
+    for (let seed = 1; seed <= 30; seed++) {
+      const tie = governed(1_000, seed);
+      withBudget(tie, shares(80, 10));
+      worth(tie, { lena: 50_000, kai: 10_000, brix: 10_000, ossa: 99_000 });
+      const first = welfareRecipient(tie);
+      expect(welfareRecipient(tie), 'the same draw each time it is asked').toBe(first);
+      expect(['kai', 'brix']).toContain(first);
+      winners.add(first);
+    }
+    expect([...winners].sort()).toEqual(['brix', 'kai']);
+
+    // The draw has its own stream: the election's result on one seed is the same with Welfare 0 and 10.
+    const election = (welfare: number): string | null => {
+      const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+      state.politics = { ...state.politics!, governor: 'lena' };
+      advanceTo(state, 'planning');
+      withBudget(state, shares(100 - welfare, welfare));
+      while (state.month < 4 || state.phase !== 'planning') {
+        if (state.phase === 'planning') state.treasury.money += 1_000;
+        advancePhase(state);
+        if (state.phase === 'planning' && state.month === 4) break;
+      }
+      worth(state, { lena: 5_000, brix: 5_000, ossa: 5_000, kai: 5_000 });
+      welfareRecipient(state);
+      advancePhase(state);
+      return state.politics!.governor;
+    };
+    expect(election(10)).toBe(election(0));
+  });
+});
+
+/** Recorded on the base before S5-C2 (trunk 7ecddae5): the colony, the fund and every player's money after one runColony. */
+const GOLDEN = '{"colony":{"happiness":55,"ledger":{"in":{},"month":1,"out":{"project":677,"upkeep":23}},"monthEnds":[{"air":0,"happiness":55,"month":1,"prestige":5,"wealth":50752}],"permanentPrestige":0,"projects":[{"funded":{"credits":340,"goods":{"electronics":1}},"id":"hospital","monthsLeft":null,"plaque":{},"since":1,"stage":"standing"},{"funded":{"credits":210,"goods":{"alloy":1}},"id":"park","monthsLeft":null,"plaque":{},"since":1,"stage":"standing"},{"funded":{"credits":500,"goods":{"alloy":1}},"id":"stadium","monthsLeft":null,"plaque":{},"since":1,"stage":"commissioned"},{"funded":{"credits":73,"goods":{}},"id":"observatory","monthsLeft":null,"plaque":{},"since":1,"stage":"commissioned"}],"promises":[],"strike":null,"welfare":null},"fund":100,"players":[["lena",9000],["brix",14000],["ossa",16000],["kai",10500]]}';
