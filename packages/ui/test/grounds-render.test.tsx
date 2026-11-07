@@ -17,7 +17,7 @@ const MANIFEST = manifestOf({ hall: ['standing'], park: ALL, hospital: ALL, stad
 
 /** Month 12 (spec B-AC-1): a Park standing, a Hospital closed, a Stadium with 1 of 3 months left, a Spaceport just commissioned. */
 const MONTH_12: GroundsColony = {
-  gauges: { happiness: 72 },
+  gauges: { happiness: 72, wealth: 0 },
   projects: [
     { id: 'park', name: 'Park', stage: 'standing', buildMonths: 1, monthsLeft: null, place: { x: 3, y: 2, w: 1, h: 1 } },
     { id: 'hospital', name: 'Hospital', stage: 'closed', buildMonths: 2, monthsLeft: null, place: { x: 2, y: 3, w: 1, h: 1 } },
@@ -152,13 +152,13 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
 
   it('B-AC-1 (AM-18): a 2×2 footprint sits at its block\'s centre and widens the scene to the ring it reaches', () => {
     const stadium = { id: 'stadium' as const, name: 'Stadium', stage: 'standing' as const, buildMonths: 3, monthsLeft: null, place: BLOCK };
-    const html = grounds({ colony: { gauges: { happiness: 72 }, projects: [stadium] } });
+    const html = grounds({ colony: { gauges: { happiness: 72, wealth: 0 }, projects: [stadium] } });
     expectAt(tagWith(html, 'data-testid="picture-1"'), BLOCK_CENTRE);
     expect(attrOf(tagWith(html, 'data-testid="colony-grounds"'), 'data-extent')).toBe('2');
   });
 
   it('B-AC-1: a project with no place yet is not drawn on the grounds', () => {
-    const html = grounds({ colony: { gauges: { happiness: 72 }, projects: [{ ...MONTH_12.projects[0]!, place: null }] } });
+    const html = grounds({ colony: { gauges: { happiness: 72, wealth: 0 }, projects: [{ ...MONTH_12.projects[0]!, place: null }] } });
     expect(tagsWith(html, 'data-testid="picture-1"')).toHaveLength(0);
     expect(tagsWith(html, 'data-testid="callout-1"')).toHaveLength(0);
   });
@@ -175,8 +175,8 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
 
   it('B-AC-4: a 2×2 kind with no picture falls back to a shape the size of its footprint', () => {
     const site = (place: typeof BLOCK) => ({ id: 'stadium' as const, name: 'Stadium', stage: 'commissioned' as const, buildMonths: 3, monthsLeft: null, place });
-    const one = siteCorners(grounds({ manifest: null, colony: { gauges: { happiness: 72 }, projects: [site({ x: 3, y: 2, w: 1, h: 1 })] } }), 'shape-1');
-    const four = siteCorners(grounds({ manifest: null, colony: { gauges: { happiness: 72 }, projects: [site(BLOCK)] } }), 'shape-1');
+    const one = siteCorners(grounds({ manifest: null, colony: { gauges: { happiness: 72, wealth: 0 }, projects: [site({ x: 3, y: 2, w: 1, h: 1 })] } }), 'shape-1');
+    const four = siteCorners(grounds({ manifest: null, colony: { gauges: { happiness: 72, wealth: 0 }, projects: [site(BLOCK)] } }), 'shape-1');
     const span = (pts: [number, number][]) => Math.max(...pts.map((p) => p[0])) - Math.min(...pts.map((p) => p[0]));
     const mid = (pts: [number, number][]) => [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
     expect(span(four)).toBeCloseTo(2 * span(one), 3);
