@@ -357,7 +357,8 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
       const offered: { from: string; office: string }[] = [];
       for (const month of [2, 3]) {
         state.month = month;
-        for (let t = 0; t < 8_000; t += WALK.tickMs) {
+        // Two of the hands' longest pauses: VoteHand decides on the first tick, and every offer is due by then.
+        for (let t = 0; t < 2 * POLITICS.ai.actMs[1]; t += WALK.tickMs) {
           ais.forEach((id, i) => {
             votes[i]!.tick(state, WALK.tickMs, voteAct(state, id));
             deals[i]!.tick(state, WALK.tickMs, engineAct(state, id));
@@ -373,7 +374,7 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
     }
     expect(ran, 'some seat did run, so the property is not vacuous').toBeGreaterThan(0);
     expect(cards, 'the table did offer vote cards once runs were decided').toBeGreaterThan(0);
-  });
+  }, 30_000); // 60 seeds of two planning months: about 1-3 s locally, so vitest's 5 s default flakes on slow runners
 
   it('S3-T-AC-8 AM-8: a port\'s offered vote for an office its seat runs for is dropped', () => {
     const state = announceWith(['ai0', 'ai1']);
