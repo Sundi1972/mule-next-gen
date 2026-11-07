@@ -279,16 +279,6 @@ export const UPKEEP = {
    * pays its use from its own output and is never turned off; a plant takes its Water last, from what the others leave.
    */
   waterUse: { food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
-  /**
-   * Plots whose owner the auction's status screen counts as needing a Water carry (auction.ts::auctionNeed). Production
-   * no longer reads it: AM-18's waterUse turns any plot off without Water, and the old farm halving went (AM-18 W4).
-   */
-  irrigated: ['food'] as RawGood[],
-  /**
-   * The old dry farm's share of its output, which only the language model's manual still quotes (llm/manual.ts).
-   * Production no longer halves: a plot short of Water or Energy makes offOutputShare (AM-17, AM-18 W4).
-   */
-  shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
   /** Colonists' Energy demand, as a share of their Food and Water units. */
@@ -1763,8 +1753,8 @@ export const STRATEGIST = {
   /**
    * A new farm's Food, Water or Energy that covers the seat's own shortfall is
    * worth at least this many times the reference price: going short costs
-   * development time (Food), half of every farm (Water) or half of every plot
-   * (Energy), whatever the market price is today.
+   * development time (Food), or plots turned off (Energy, Water: AM-17, AM-18),
+   * whatever the market price is today.
    */
   selfSupply: 3,
   /**

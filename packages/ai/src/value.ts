@@ -477,8 +477,8 @@ function neededReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): 
 /**
  * The value of each unit of a good the seat could hold after the auction,
  * most valuable first: the units next month needs are worth what going short
- * would cost (development time for Food, half a farm for Water, for Energy
- * what the plot it keeps on loses turned off (AM-17), a factory's run for its
+ * would cost (development time for Food, for Energy and Water what the plot
+ * it keeps on loses turned off (AM-17, AM-18), a factory's run for its
  * inputs, sickness for Medicine), the
  * rest what they fetch next month after spoilage, and nothing past what the
  * depot keeps. `keep` values a unit the seat already holds (its sell floor);
