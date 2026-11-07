@@ -336,6 +336,7 @@ export const MOVES: MoveTable = {
       refused('it is planning', 'The tax is set in planning'),
       refused("this month's election, if any, is over", 'Wait for the election to end'),
       refused('you are the Governor', 'Only the Governor sets the tax'),
+      refused('no overrule vote on the tax is open', 'An overrule vote on the tax is called: it holds until it is settled'),
       refused(`the percent is whole, at most ${TAX_STEP} from the month's starting rate, and ${TAX_MIN}% to ${TAX_MAX}%`, 'The tax can be <low>% to <high>% this month'),
     ],
     cost: null,

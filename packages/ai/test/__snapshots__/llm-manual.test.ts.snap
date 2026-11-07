@@ -117,7 +117,7 @@ Cost: free.
 ### setTax
 In: planning. Args: percent (number).
 Does: The Governor sets the sales tax on every sale, paid into the colony fund, in whole percent; it starts at 5%, stays within 0% to 15%, and moves at most 5 points from the month's starting rate.
-Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); no overrule vote on the tax is open (else: "An overrule vote on the tax is called: it holds until it is settled"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
 Cost: free.
 
 ### done
