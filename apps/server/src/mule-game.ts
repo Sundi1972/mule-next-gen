@@ -104,7 +104,7 @@ import {
   type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
+import { AiSeat, DealHand, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type ColonistMealView, type EventView, type MuleIntent, type MuleView, type NewsLine, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
@@ -489,6 +489,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly lotHands = new Map<string, LotHand>();
   /** Each AI player's hand in politics: runs, votes and governs, keyed by seat id. */
   private readonly voteHands = new Map<string, VoteHand>();
+  /** Each AI player's card table: answers the cards offered to it and offers its own, in planning, keyed by seat id. */
+  private readonly dealHands = new Map<string, DealHand>();
   /** The cards as the server last saw them, to diff for notices and news. Every write copies Politics, so this is a snapshot. */
   private dealsSeen: readonly DealCard[] = [];
 
@@ -548,6 +550,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.monthCondition = null;
     this.lotHands.clear();
     this.voteHands.clear();
+    this.dealHands.clear();
     seats.forEach((s, i) => {
       if (!s.isAi) return;
       const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL };
@@ -568,6 +571,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.ai.set(s.id, seat);
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
+      // Keyless: WS2's seat port, once it exists, goes to this VoteHand and this DealHand as one object (AM-5).
+      this.dealHands.set(s.id, new DealHand(seat.mind));
     });
     const source = this.options.playbookSource === undefined ? playbookSource([...this.ai.values()]) : this.options.playbookSource;
     this.playbooks = new Playbooks({
@@ -965,6 +970,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
     if (state.phase === 'development') this.finishDevelopment();
+    // However planning ends (every Ready, the host's Continue, its clock), each AI seat answers the cards still waiting.
+    if (state.phase === 'planning') for (const [id, hand] of this.dealHands) hand.flush(state, (action) => this.aiAct(id, action));
     // A card that settled in the closing phase without an intent or a votes tick to notice it is noticed now, stamped
     // with that phase; only what the change itself settles takes the stamp below.
     this.noteDeals();
@@ -1139,6 +1146,37 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // At once, so an AI Governor's tax lands before a quick table can press ready.
     this.tickVoteHands(0);
     for (const seat of this.ai.values()) seat.planMonth(state, (action) => this.aiAct(seat.id, action));
+    this.schedulePlanningTick(this.ctx.now());
+  }
+
+  /** Ticks the AI deal hands every WALK.tickMs through planning proper; the election tick ticks them while votes are open. */
+  private schedulePlanningTick(last: number): void {
+    const state = this.requireState();
+    this.cancels.push(
+      this.ctx.schedule(WALK.tickMs, () => {
+        if (state.phase !== 'planning' || this.electionOpen()) return;
+        const now = this.ctx.now();
+        const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
+        // The screens hear of a tick only when a hand sent a card or an answer: a quiet planning sends nothing.
+        const acted = this.tickDealHands(dt);
+        this.schedulePlanningTick(now);
+        if (acted) this.ctx.changed();
+      }),
+    );
+  }
+
+  /** Ticks every AI deal hand by dt through the same checks a phone gets; whether any of them acted. */
+  private tickDealHands(dt: number): boolean {
+    const state = this.requireState();
+    let acted = false;
+    for (const [id, hand] of this.dealHands) {
+      hand.tick(state, dt, (action) => {
+        const done = this.aiAct(id, action);
+        acted ||= done;
+        return done;
+      });
+    }
+    return acted;
   }
 
   /** True while the colony votes in planning (this month's election, then its law ballot), before planning proper. */
@@ -1181,10 +1219,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     );
   }
 
-  /** Ticks every AI vote hand by dt through the same checks a phone gets. */
+  /** Ticks every AI vote hand by dt through the same checks a phone gets, then every deal hand with the same dt. */
   private tickVoteHands(dt: number): void {
     const state = this.requireState();
     for (const [id, hand] of this.voteHands) hand.tick(state, dt, (action) => this.aiAct(id, action));
+    this.tickDealHands(dt);
   }
 
   /**
