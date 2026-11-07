@@ -78,9 +78,9 @@ export interface VoteWeight {
   parts: { base: number; land: number; reputation: number; baron: number; taxes: number };
 }
 
-/** A player's votes, part by part, derived from the state on every call. See WS7 spec RULE-4. */
+/** A player's votes, part by part, derived from the state on every call; at least POLITICS.weight.minVotes. See WS7 spec RULE-4, slice 3 S3-RULE-8. */
 export function voteWeight(state: GameState, playerId: string): VoteWeight {
-  const { base, plotsPerVote, repHigh, repLow, repVotes, baronVotes, taxPerVote, taxCap } = POLITICS.weight;
+  const { base, plotsPerVote, repHigh, repLow, repVotes, baronVotes, taxPerVote, taxCap, minVotes } = POLITICS.weight;
   const { reputation } = player(state, playerId);
   const parts = {
     base,
@@ -89,7 +89,8 @@ export function voteWeight(state: GameState, playerId: string): VoteWeight {
     baron: state.politics?.baron === playerId ? baronVotes : 0,
     taxes: Math.min(taxCap, Math.floor((state.treasury.paid[playerId] ?? 0) / taxPerVote)),
   };
-  return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
+  // The parts are shown as they are; the total never leaves a player without a voice (S3-RULE-8).
+  return { total: Math.max(minVotes, parts.base + parts.land + parts.reputation + parts.baron + parts.taxes), parts };
 }
 
 /** An event's change to a player's reputation (blamed for the unrest, G-5 C26): whole points, POLITICS.reputation.min..max. No-op with politics off. */
