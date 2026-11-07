@@ -160,3 +160,13 @@ export function answerDeal(state: GameState, to: string, id: string, accept: boo
   const card = editPolitics(state).deals.find((d) => d.id === id)!;
   Object.assign(card, { status, settled: status === 'active' ? null : state.month });
 }
+
+/** Judges the active vote cards of a ballot whose result is taking effect (S3-RULE-4). */
+export function settleVotes(_state: GameState, _ballot: 'election' | 'law'): void {
+  throw new Error('NotImplemented: settleVotes');
+}
+
+/** Planning is closing: offered cards expire, and so does every active vote card whose until has come (S3-RULE-1). */
+export function closePlanningDeals(_state: GameState): void {
+  throw new Error('NotImplemented: closePlanningDeals');
+}
