@@ -10,11 +10,33 @@ import { fmt, toSlot } from '../../../../../apps/web/src/game/derive';
  * Colony fund blocks; on the phone (compact) the panel's last row, across its three columns. The numbers are
  * ColonyView.ledger's out and ColonyView.welfare (S5-C8); month-end.ts's colonyReport gains them.
  *
- * Out only, in the spec's list: office pay, upkeep, Welfare and whom it went to, buildings. One line on the TV, because
- * the month end sits at TV-FIT's floor already. OPEN FINDING (measured 7 Nov): with the Observatory collecting, the month
- * end is 0.701 as built and 0.663 with this line, under the 0.7 floor (with a Stadium building instead: 0.746 → 0.703).
- * The balance beside it is the fund after them. Security is after RC and has no place here.
+ * Out only, in the spec's list: office pay, upkeep, Welfare and whom it went to, buildings. The balance beside it is the
+ * fund after them. Security is after RC and has no place here.
+ *
+ * PM ruling (TV-FIT's 0.7 floor): every phone keeps the full line, and so does the TV below five seats. From five seats
+ * the TV drops it; only the total shows, in the Wealth gauge's note: "fund 154 cr · paid out 581" (FundPaidNote). GRAFT
+ * TARGET for that one: apps/web/src/components/Colony.tsx, ColonyGauges, the Wealth gauge's `note` at size 'tv' in the
+ * month end. The phone's and the TV's gauges in every other phase keep "fund N cr".
  */
+
+/** From this many seats the TV's month end shows the total only (PM ruling). */
+export const FUND_LINE_SEATS_MAX = 4;
+
+/** Which form the TV's month end uses: the full line, or the total in the Wealth gauge's note. */
+export const fundOnTv = (view: Pick<MuleView, 'players'>): 'line' | 'total' => (view.players.length > FUND_LINE_SEATS_MAX ? 'total' : 'line');
+
+/** What the fund paid out this month, in all: the ledger's out lines summed. */
+export const paidOut = (view: Pick<MuleView, 'colony'>) => Object.values(view.colony?.ledger?.out ?? {}).reduce((n, v) => n + (v ?? 0), 0);
+
+/** The five-seat TV's Wealth note: "fund 154 cr · paid out 581". */
+export function FundPaidNote({ view }: { view: MuleView }) {
+  if (!view.colony?.ledger) return null;
+  return (
+    <span className="whitespace-nowrap text-ink-3" data-testid="fund-paid-note">
+      fund {fmt(view.colony.fund)} cr · paid out {fmt(paidOut(view))}
+    </span>
+  );
+}
 
 const OUT_ORDER: FundLine[] = ['officePay', 'upkeep', 'repair', 'strikePay', 'welfare', 'project'];
 const OUT_NAME: Partial<Record<FundLine, string>> = { officePay: 'office pay', upkeep: 'upkeep', repair: 'repairs', strikePay: 'strike pay', welfare: 'Welfare', project: 'Buildings' };

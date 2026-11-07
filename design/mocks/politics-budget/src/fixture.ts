@@ -82,12 +82,18 @@ const BASE_PLAYERS: PlayerView[] = [
   aPlayer({ id: 'kai', name: 'Kai', slot: 3, species: 'mollox', isAi: true, ready: true, money: 215, plots: 5, worth: 2950, lastWorth: 2900 }),
 ];
 
-/** ?six seats two more AI players, for measuring the TV against TV-FIT's six-seat floor (PM ruling, 6 Nov). */
-if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('six')) {
-  BASE_PLAYERS.push(
-    aPlayer({ id: 'mira', name: 'Mira', slot: 4, species: 'zipwing', isAi: true, ready: true, money: 300, plots: 5, worth: 3300, lastWorth: 3200 }),
-    aPlayer({ id: 'tov', name: 'Tov', slot: 5, species: 'gearling', isAi: true, ready: true, money: 280, plots: 5, worth: 3100, lastWorth: 3150 }),
-  );
+/**
+ * ?seats=5 or ?seats=6 (?six is 6) seats one or two more AI players: P15's five-seat form, and TV-FIT's floor measured
+ * at five and six seats (PM ruling, 6 Nov). The extra seats weigh 0 votes, so the overrule's numbers stay "5 of 9".
+ */
+const EXTRA = [
+  aPlayer({ id: 'mira', name: 'Mira', slot: 4, species: 'zipwing', isAi: true, ready: true, money: 300, plots: 5, worth: 3300, lastWorth: 3200 }),
+  aPlayer({ id: 'tov', name: 'Tov', slot: 5, species: 'gearling', isAi: true, ready: true, money: 280, plots: 5, worth: 3100, lastWorth: 3150 }),
+];
+if (typeof location !== 'undefined') {
+  const q = new URLSearchParams(location.search);
+  const seats = q.has('six') ? 6 : Number(q.get('seats') ?? 4);
+  BASE_PLAYERS.push(...EXTRA.slice(0, Math.max(0, Math.min(6, seats) - 4)));
 }
 
 /**

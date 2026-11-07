@@ -9,7 +9,7 @@ import { TableApp } from '../../../../apps/web/src/table/TableApp';
 import { HUB_SLOTS } from '../../../../apps/web/src/phone/hub/today';
 import { apply, boardClient, clientFor, gameFor, HOLDER, SCENES, SEATS, tableOf, viewFor, type Intent, type Scene, type SceneId, type Seat, type Shares } from './fixture';
 import { Graft } from './Graft';
-import { FundLines } from './proposed/FundLines';
+import { FundLines, FundPaidNote, fundOnTv } from './proposed/FundLines';
 import type { Variant } from './proposed/GovernorBudget';
 import { TvBudgetLine, TvOverruleCall } from './proposed/TvBudgetLine';
 import { TvOverrule } from './proposed/TvOverrule';
@@ -33,7 +33,8 @@ const DECISIONS: [string, string][] = [
   ['P13', 'The ready bar: “Cast my vote” until you cast, then “Waiting for the overrule vote”; in the reveal, “Continue” (AM-5).'],
   ['P14', 'The TV’s planning header gains the budget line under the promise line. The call’s banner heads the side column, above who the table waits for: in the header it shrank the body to 0.763 (TV-FIT), in the side the news gives way and it stays at 0.896.'],
   ['P14', 'The overrule panel is TvCouncil’s frame. Its reveal bar is all the table’s votes with the mark at “needed”, not the half-way mark the law’s bar uses: the rules differ.'],
-  ['P15', 'The month end’s colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 432. Out only. TV-FIT, open finding: with the Observatory collecting, 0.701 as built and 0.663 with this line, under the 0.7 floor.'],
+  ['P15', 'The month end’s colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 432. Out only. Every phone keeps it, and the TV below five seats.'],
+  ['P15', 'From five seats the TV drops that line: the total alone goes in the Wealth gauge’s note, “fund 154 cr · paid out 581” (PM ruling, TV-FIT’s floor).'],
 ];
 
 interface StateDef {
@@ -41,6 +42,8 @@ interface StateDef {
   label: string;
   scene: SceneId;
   seed?: Shares;
+  /** Seats at the table for this state (4 unless set): P15's five-seat form. */
+  seats?: number;
 }
 interface ScreenDef {
   id: string;
@@ -98,8 +101,11 @@ const SCREENS: ScreenDef[] = [
     ],
   },
   {
-    id: 'p15', title: 'P15 · the month end: the fund this month', graft: 'MonthEnd.tsx ColonyPanel (FundLines)', kind: 'monthEnd', seats: ['lena'],
-    states: [{ id: 'paid', label: 'Welfare and buildings paid', scene: 'monthEnd' }],
+    id: 'p15', title: 'P15 · the month end: what the fund paid out', graft: 'MonthEnd.tsx ColonyPanel (FundLines); from 5 seats on the TV, Colony.tsx ColonyGauges’ Wealth note (FundPaidNote)', kind: 'monthEnd', seats: ['lena'],
+    states: [
+      { id: 'paid', label: '4 seats: the full line', scene: 'monthEnd' },
+      { id: 'five', label: '5 seats: the TV shows the total only', scene: 'monthEnd', seats: 5 },
+    ],
   },
 ];
 
@@ -160,7 +166,8 @@ function Tv({ scene }: { scene: Scene }) {
     <figure className="flex flex-col gap-1" data-testid="tv-1280">
       <figcaption className="label-caps text-[10px]! text-ink-2">1280 × 720 · the TV</figcaption>
       {/* MOCK: TableApp's root is h-dvh (the TV's whole window); in this frame it is the frame's height, so Scaled draws 1:1. */}
-      <div className="overflow-hidden rounded-panel border border-holo-line [&>div]:h-full!" style={{ width: 1280, height: 720 }} data-graft-scope data-frame="tv">
+      {/* MOCK: from five seats the Wealth gauge's own note is hidden and FundPaidNote drawn in its place (the build changes ColonyGauges' note). */}
+      <div className={cx('overflow-hidden rounded-panel border border-holo-line [&>div]:h-full!', scene.moment === 'monthEnd' && !TODAY && fundOnTv(game) === 'total' && '[&_[data-testid=gauge-wealth]_span.truncate]:hidden')} style={{ width: 1280, height: 720 }} data-graft-scope data-frame="tv">
         <ClientProvider client={client}>
           {overrule ? (
             <TvOverrule game={game} />
@@ -168,9 +175,15 @@ function Tv({ scene }: { scene: Scene }) {
             <>
               <TableApp room="MULE" />
               {TODAY ? null : scene.moment === 'monthEnd' ? (
-                <Graft at='[data-testid="colony-fund"]' className="col-span-2">
-                  <FundLines view={game} density="tv" />
-                </Graft>
+                fundOnTv(game) === 'line' ? (
+                  <Graft at='[data-testid="colony-fund"]' className="col-span-2">
+                    <FundLines view={game} density="tv" />
+                  </Graft>
+                ) : (
+                  <Graft at='[data-testid="gauge-wealth"] span.truncate' className="min-w-0 truncate">
+                    <FundPaidNote view={game} />
+                  </Graft>
+                )
               ) : (
                 <>
                   <Graft at='[data-testid="tv-governor-promise"]'>
@@ -279,7 +292,7 @@ function Index() {
                 <td className="py-2 pr-3 font-mono text-xs text-ink-3">{s.graft}</td>
                 <td className="flex flex-wrap gap-x-3 gap-y-1 py-2">
                   {s.states.map((st) => (
-                    <a key={st.id} className="text-ink-2 underline-offset-2 hover:text-holo hover:underline" href={href({ screen: s.id, state: st.id })} data-testid={`state-link-${s.id}-${st.id}`}>
+                    <a key={st.id} className="text-ink-2 underline-offset-2 hover:text-holo hover:underline" href={href({ screen: s.id, state: st.id, seats: st.seats?.toString() })} data-testid={`state-link-${s.id}-${st.id}`}>
                       {st.label}
                     </a>
                   ))}
@@ -298,7 +311,10 @@ function ScreenPage({ screen, stateId, seatId, variant }: { screen: ScreenDef; s
   const seat = (screen.seats.find((s) => s === seatId) ?? screen.seats[0] ?? 'lena') as Seat;
   const [scene, send] = useScene(SCENES[state.scene]);
   const key = `${state.id}-${seat}-${variant}`;
-  const at = (over: Record<string, string | undefined>) => href({ screen: screen.id, state: state.id, seat: screen.seats.length > 1 ? seat : undefined, variant: screen.id === 'p12' ? variant : undefined, ...over });
+  const at = (over: Record<string, string | undefined>) => {
+    const to = screen.states.find((s) => s.id === (over.state ?? state.id));
+    return href({ screen: screen.id, state: state.id, seat: screen.seats.length > 1 ? seat : undefined, variant: screen.id === 'p12' ? variant : undefined, seats: to?.seats?.toString(), ...over });
+  };
   return (
     <main className="flex min-h-dvh flex-col gap-6 bg-table p-6 text-ink" data-testid={`screen-${screen.id}`} data-state={state.id} data-seat={seat}>
       <header className="flex flex-col gap-2">
