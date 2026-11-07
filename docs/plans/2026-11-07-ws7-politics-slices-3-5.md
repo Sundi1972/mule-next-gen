@@ -1468,7 +1468,7 @@ votes tick calls `overruleNews` (freeze point: its signature, `overruleNews(stat
 
 | PR | may_edit | may_edit_content | must_not_edit (and why) |
 |---|---|---|---|
-| S5-PR-1 | `packages/engine/src/politics.ts`, `packages/engine/src/colony.ts`, the POLITICS block of `packages/engine/src/config.ts`, new `packages/engine/test/budget.test.ts`, `colony-budget.test.ts`, `overrule.test.ts`, existing `packages/engine/test/colony-mood.test.ts`, `docs/rulebook/colony-and-politics.html`, `open-designs.html`, `search-index.js` (generated); named edits (one commit per owner, OK'd by SHA): HAPPINESS block of config.ts (WS1), `packages/ai/src/actions.ts`, `play.ts::applyAction`, `packages/ai/test/moves.test.ts` (WS1), `packages/engine/src/index.ts` export lines (anyone) | — | `packages/engine/src/types.ts`, `packages/protocol/**` (the contract is landed; a shape change is a PM ruling); `packages/engine/src/game.ts` (spec §1: no change; WS3's); `observe.ts` (WS1, #669); `play.ts`'s planning case (S5-PR-3, WS1); every server and web file (S5-PR-4..7) |
+| S5-PR-1 | `packages/engine/src/politics.ts`, `packages/engine/src/colony.ts`, the POLITICS block of `packages/engine/src/config.ts`, new `packages/engine/test/budget.test.ts`, `colony-budget.test.ts`, `overrule.test.ts`, existing `packages/engine/test/colony-mood.test.ts`, `docs/rulebook/colony-and-politics.html`, `search-index.js` (generated); named edits (one commit per owner, OK'd by SHA): HAPPINESS block of config.ts (WS1), `packages/ai/src/actions.ts`, `play.ts::applyAction`, `packages/ai/test/moves.test.ts` (WS1), `packages/engine/src/index.ts` export lines (anyone) | — | `packages/engine/src/types.ts`, `packages/protocol/**` (the contract is landed; a shape change is a PM ruling); `packages/engine/src/game.ts` (spec §1: no change; WS3's); `observe.ts` (WS1, #669); `play.ts`'s planning case (S5-PR-3, WS1); every server and web file (S5-PR-4..7) |
 | S5-PR-2 | new `packages/ai/src/hands/budget.ts`, `packages/ai/src/hands/vote.ts` (serialised S3 → S5 → S4), `docs/rulebook/computer-players.html`; named edit: new `packages/ai/test/budget-hand.test.ts` (WS1's test tree; precedent `council-ai.test.ts`), `packages/ai/src/index.ts` export line | — | `politics-value.ts` (WS1's values; #669, S5-PR-3); `play.ts`, `sim.ts`, `actions.ts` (WS1); the engine (S5-PR-1 is merged; a rule gap goes back to the lead) |
 | S5-PR-3 | WS1's: `packages/ai/src/{politics-value,play,sim}.ts`, `packages/ai/test/**`, `packages/engine/src/observe.ts` (#669) | — | `hands/budget.ts`, `hands/vote.ts` (WS7); the engine rules (WS7) |
 | S5-PR-4 | WS3's: `apps/server/src/mule-game.ts`, `apps/server/src/server.ts`, WS3's new server test file | — | `apps/server/src/politics-view.ts`, `colony-view.ts` (WS7, S5-PR-5); `packages/engine/**` |
@@ -1529,8 +1529,9 @@ votes tick calls `overruleNews` (freeze point: its signature, `overruleNews(stat
 - [ ] **Step 3: Record the named edits in SEAMS through the PM** before their commits: config.ts HAPPINESS block
   (WS1, S5-C3), `packages/ai/src/actions.ts`, `play.ts::applyAction`, `packages/ai/test/moves.test.ts` (WS1, S5-C9's
   AiAction part).
-- [ ] **Step 4: Check `docs/rulebook/open-designs.html`** carries slice 5 as "Designed, not in the game yet, WS7"
-  (spec §5). If not, add it in this PR's first commit: `docs(rulebook): slice 5 budget and overrule, designed`.
+- [ ] **Step 4: Check `docs/rulebook/colony-and-politics.html`** carries slice 5 as "Designed, not in the game yet,
+  WS7" (spec §5). Do not edit `open-designs.html`: it is the PM's, hand-edited; a missing entry there goes to the
+  lead, who asks the PM.
 
 #### Task S5-1.1 — config and exported names (S5-C1, S5-C3, S5-C5, S5-C6 config; securitySpend)
 
@@ -1731,8 +1732,8 @@ S5-RULE-2
 #### Task S5-1.9 — rulebook, push, tell the PM
 
 - [ ] **Step 1: Move the RC rules into `docs/rulebook/colony-and-politics.html`** (S5-C1, S5-C2, S5-C3, S5-C4, S5-C5
-  as built: the budget, Welfare, the tax overrule), keeping Security, the budget overrule, the snap and the inquiry
-  in `open-designs.html`; then `node docs/rulebook/build-index.mjs`. Commit `docs(rulebook): slice 5 RC rules as built`.
+  as built: the budget, Welfare, the tax overrule), leaving Security, the budget overrule, the snap and the inquiry
+  marked "Designed, not in the game yet" (`open-designs.html` is the PM's: the lead asks the PM for its entry); then `node docs/rulebook/build-index.mjs`. Commit `docs(rulebook): slice 5 RC rules as built`.
 - [ ] **Step 2: Push `ws7-s5-engine`, open the PR into `ws7-politics`, and tell the PM** (the working rule): the
   PR, the WS1 named-edit SHAs (Task S5-1.1 Step 2, Task S5-1.8), and that S5-PR-2/4/5 can start.
 
@@ -2063,8 +2064,8 @@ owner, CI 4/4, one review, rulebook the same day, money numbers to Heiko before 
     (line 93). Deal cards from slice 3's `Politics.deals`. D-S5-4 B drops this task.
     Commit `feat(engine): S5-C16 the Sheriff's inquiry and the no-confidence vote (S5-T-AC-20)`.
 - [ ] **Task S5-8.5: WS1 named edits** (one commit, OK'd by SHA): AiAction `openInquiry`, its `applyAction` case,
-  its `moves.test.ts` row (S5-C18's AI part). Then the rulebook: the after-RC rules move from `open-designs.html`
-  to `colony-and-politics.html`; `node docs/rulebook/build-index.mjs`.
+  its `moves.test.ts` row (S5-C18's AI part). Then the rulebook: the after-RC rules are written into `colony-and-politics.html` as built
+  (the lead asks the PM to take them off `open-designs.html`, which is the PM's); `node docs/rulebook/build-index.mjs`.
 - [ ] **S5-PR-8 merge gate:** S5-T-AC-9, -18, -19, -20 and S5-B-AC-7 green by id, red first; the RC tests unchanged;
   politics-off sim byte-identical; WS1's OK on the SHA; CI 4/4; one review once green; rulebook the same day.
 
