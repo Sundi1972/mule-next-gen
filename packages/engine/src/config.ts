@@ -10,46 +10,85 @@ import type { Strategy } from './playbook.js';
 export interface GoodConfig {
   /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
-  /** How strongly price reacts to low cover (k in the price formula). */
-  sensitivity: number;
   /** Share lost each month without suitable storage. */
   spoilage: number;
 }
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
-  food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.5 },
-  water: { refPrice: 25, sensitivity: 1.5, spoilage: 0.05 },
-  energy: { refPrice: 25, sensitivity: 1.2, spoilage: 0.25 },
-  smithore: { refPrice: 50, sensitivity: 1.2, spoilage: 0 },
-  crystite: { refPrice: 100, sensitivity: 0.5, spoilage: 0 },
-  rareEarth: { refPrice: 60, sensitivity: 0.8, spoilage: 0 },
-  alloy: { refPrice: 90, sensitivity: 0.8, spoilage: 0 },
-  electronics: { refPrice: 220, sensitivity: 0.5, spoilage: 0 },
-  medicine: { refPrice: 120, sensitivity: 1.0, spoilage: 0.2 },
+  food: { refPrice: 30, spoilage: 0.5 },
+  water: { refPrice: 25, spoilage: 0.05 },
+  energy: { refPrice: 25, spoilage: 0.25 },
+  smithore: { refPrice: 50, spoilage: 0 },
+  crystite: { refPrice: 100, spoilage: 0 },
+  rareEarth: { refPrice: 60, spoilage: 0 },
+  alloy: { refPrice: 90, spoilage: 0 },
+  electronics: { refPrice: 220, spoilage: 0 },
+  medicine: { refPrice: 120, spoilage: 0.2 },
 };
 
 export const PRICE = {
   /** Months of demand the store aims to hold. */
   targetCover: 2,
-  /** Cover below this counts as this, so an empty shelf still gives a finite target. */
-  minCover: 0.25,
-  /** Momentum: the posted price moves toward its target by at most this share up or down a month. */
-  maxRise: 0.5,
-  maxFall: 0.4,
-  /** The store sells this much above and buys this much below its posted price. */
-  storeSpread: 0.1,
+  /** Months of cover from which a good is posted at its normal price, whatever the colony makes. */
+  normalCover: 2,
+  /** Months of cover from which a good is only tight; under it, a shortage. */
+  tightCover: 1,
+  /** Months of cover from which a good is in a shortage; under it, a severe one. */
+  shortCover: 0.5,
+  /** Each band's target as a multiple of the normal price. */
+  band: { tight: 1.25, short: 2, severe: 4 },
+  /** Each band's spread: the store buys `under` below its mid and sells `over` above it. */
+  bandSpread: {
+    offWorld: { under: 0.15, over: 0.15 },
+    normal: { under: 0.15, over: 0.15 },
+    tight: { under: 0.15, over: 0.2 },
+    short: { under: 0.1, over: 0.25 },
+    severe: { under: 0.1, over: 0.25 },
+  },
+  /** The most the mid falls in a month towards a lower target, as a share of last month's mid. */
+  fallStep: 0.25,
+  /** After players paid each other more than the store sold at, the mid moves this share of the way to that price. */
+  tradePull: 0.5,
+  /** No mid is posted above this many times the good's configured reference price. */
+  ceiling: 12,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
-  /** Food and Water count as short when the store's shelf holds under this many months of the colonists' need, so the price climbs before they go hungry. */
-  shelfCover: 1,
-  /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
-  restockPremium: 1.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
   /** How fast the reference price follows what players pay each other (0..1). */
   refDrift: 0.25,
   /** How fast the reference price drifts back toward the off-world price (0..1). */
   worldPull: 0.1,
+};
+
+/**
+ * As each month opens, the export goods' off-world prices walk (pricing RULE-3): the log of the price keeps `phi` of
+ * its distance from the centre's, plus a seeded swing, then is clamped. Food, Water and Energy are not exported; their
+ * off-world price stays put.
+ */
+export const OFF_WORLD = {
+  /** Crystite: normally about 90, rarely 40, very rarely 300. */
+  crystite: {
+    /** The price Crystite's walk returns to, and opens the game at. */
+    centre: 90,
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into: the bigger, the wilder the swings. */
+    sigma: 0.35,
+    /** The lowest off-world price. */
+    min: 40,
+    /** The highest off-world price. */
+    max: 300,
+  },
+  /** Every other export good, centred on its GOOD_CONFIG refPrice. */
+  others: {
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into. */
+    sigma: 0.18,
+    /** The price stays within this share of its centre, above or below. */
+    band: 0.5,
+  },
 };
 
 /**
@@ -245,13 +284,10 @@ export const UPKEEP = {
   colonistEnergyShare: 0.5,
   /** Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick). */
   colonistsPerMedicine: 50,
+  /** Colonists want 1 Electronics a month per this many, and with it the Rare earth and Alloy its recipe takes. */
+  colonistsPerElectronics: 50,
   /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
   colonistGrowth: { fed: 1.04, hungry: 0.95 },
-  /**
-   * The most colonists pay per unit, from their off-world wages. Above it they
-   * buy less, so their demand falls as the price rises: this is the demand curve.
-   */
-  colonistBudget: { food: 150, water: 120, energy: 100, medicine: 400 } as Partial<Record<Good, number>>,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
@@ -301,11 +337,13 @@ export const MULE = {
   /** The store builds MULEs for every seat's corralPerPlayer, plus this many. */
   spareInCorral: 2,
   /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
-  scarcityUp: 0.15,
+  scarcityUp: 0.25,
   surplusDown: 0.1,
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Nor rises above this, so a MULE costs at most four times its labour and Smithore at the store's price (pricing C4). */
+  maxFactor: 4.0,
   /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
@@ -1045,8 +1083,8 @@ export const COLONY = {
   reserve: 100,
   /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
   fundBuysGoods: true,
-  /** The Federation's grant into the fund at each upkeep, in credits: 250 a month (pace set C, Heiko, 6 Nov); flat until a scaling rule is tuned. */
-  grant: { perMonth: 250 },
+  /** The Federation's grant into the fund at each upkeep, in credits: 200 a month (Heiko, 7 Nov; was 250 in pace set C, 6 Nov), so taxes stay the fund's largest income; flat until a scaling rule is tuned. */
+  grant: { perMonth: 200 },
   /**
    * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
@@ -1073,10 +1111,11 @@ export const COLONY_SCORE = {
   /**
    * The score's verdict at game over, in credits like the total: from `proud` "A colony to be proud of", from `held` "A
    * colony that held together", below it "A colony in ruins". Set from 100 politics-on 4-seat trader games (seeds
-   * 1–100): a quarter score under 60,650 and a quarter over 99,193, so held sits near the bottom quartile and proud
-   * near the top one.
+   * 1–100) on milestone A's final config (store bands, the free meal, pace set C with grant 200, the colony's own
+   * grounds, MULE scarcityUp 0.25 and maxFactor 4): a quarter score under 49,925 and a quarter over 63,105, so held
+   * sits at the bottom quartile and proud at the top one (PM ruling, 7 Nov; was 60,000 and 100,000 before A).
    */
-  verdict: { proud: 100_000, held: 60_000 },
+  verdict: { proud: 63_000, held: 50_000 },
 };
 
 /**

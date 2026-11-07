@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { advancePhase, createGame, GROWN_BASE, PRICE, STRATEGIST, stepAuction, WALK, type GameState, type Good, type Outfit, type Tile, type Trade } from '@mule/engine';
+import { advancePhase, createGame, GROWN_BASE, STRATEGIST, stepAuction, storeSellAt, WALK, type GameState, type Good, type Outfit, type Tile, type Trade } from '@mule/engine';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 
@@ -48,7 +48,8 @@ function table(plots: Plot[], posted: Partial<Record<Good, number>>, energy: num
   }
   state.treasury.salesTax = salesTax;
   Object.assign(state.store.posted, posted);
-  state.store.posted.energy = Math.round(ASK / (1 + PRICE.storeSpread));
+  // The mid whose selling line is about ASK: the store's markup is its selling line around a mid of 1.
+  state.store.posted.energy = Math.round(ASK / storeSellAt(state, 'energy', 1, { exact: true }));
   state.store.stock.energy = 20;
   for (const p of state.players) {
     p.stock.energy = p.id === 'ai0' ? energy : 0;
