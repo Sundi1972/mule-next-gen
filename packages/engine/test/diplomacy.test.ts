@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   answerDeal,
   closeElection,
@@ -8,10 +8,15 @@ import {
   nextElectionMonth,
   offerDeal,
   openPlanning,
+  pactBetween,
+  pactBreach,
   partyTo,
   POLITICS,
   proposeLaw,
+  reputationReasons,
+  reputationShift,
   RuleError,
+  sabotagePossible,
   runFor,
   stableJson,
   stepElection,
@@ -317,5 +322,27 @@ describe('politics off', () => {
     expect(refused(() => withdrawDeal(state, 'lena', 'deal-abc123'))).toBe('This game plays without deals');
     expect(refused(() => answerDeal(state, 'brix', 'deal-abc123', true))).toBe('Cards are answered in planning');
     expect(state.politics).toBeNull();
+  });
+});
+
+describe('the slice 4 contract', () => {
+  it("S3-T-AC-15: pactBreach, pactBetween, sabotagePossible, reputationShift and reputationReasons are exported from the engine's index with spec §3's signatures", () => {
+    type Reason = { kind: 'broken'; card: DealCard } | { kind: 'unrest'; month: number } | { kind: 'caught'; month: number };
+    expectTypeOf(pactBreach).toEqualTypeOf<(state: GameState, saboteurId: string, victimId: string, sabotageMonth: number, possible?: boolean) => boolean>();
+    expectTypeOf(pactBetween).toEqualTypeOf<(state: GameState, a: string, b: string, month?: number) => DealCard | null>();
+    expectTypeOf(sabotagePossible).parameters.toEqualTypeOf<[GameState]>();
+    expectTypeOf(sabotagePossible).returns.toBeBoolean();
+    expectTypeOf(reputationShift).toEqualTypeOf<(state: GameState, playerId: string, delta: number) => void>();
+    expectTypeOf(reputationReasons).toEqualTypeOf<(state: GameState, playerId: string) => Reason[]>();
+
+    // Each called once: a fresh game has no pact, no breach, no sabotage, and a reputation that moves by whole points.
+    const state = newGame();
+    expect(sabotagePossible(state)).toBe(false);
+    expect(pactBetween(state, 'lena', 'brix')).toBeNull();
+    expect(pactBreach(state, 'lena', 'brix', state.month)).toBe(false);
+    const before = state.players[0]!.reputation;
+    reputationShift(state, 'lena', -1);
+    expect(state.players[0]!.reputation).toBe(before - 1);
+    expect(reputationReasons(state, 'lena')).toEqual([]);
   });
 });
