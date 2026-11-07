@@ -419,7 +419,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** C7: the Claude seats the first good's side pick still waits for, that good, and when its side pick opened. */
   /**
    * The first good's side pick's wait for Claude seats (C7): `seats` still waited for, `builtin` those whose wait ended
-   * without a plan. Kept until that side pick ends, so every screen can say a seat plays its built-in plan.
+   * without a plan. Kept until that side pick ends or the phase changes, so every screen can say a seat plays its
+   * built-in plan.
    */
   private sidePickWait: { seats: Set<string>; builtin: Set<string>; good: Good; openedAt: number } | null = null;
   /** When the one development clock runs out for every seat, epoch ms; null outside development. */
@@ -930,6 +931,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
     this.cancelPhaseEnd = null;
+    // A side pick's wait for Claude seats belongs to its own auction: the auction can end in the tick its side pick does.
+    this.sidePickWait = null;
     this.hurry = { asked: new Set(), from: null, at: 0 };
     this.ready.clear();
     this.notices = [];
