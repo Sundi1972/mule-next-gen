@@ -52,12 +52,19 @@ async function play(game: MuleGame, fake: ReturnType<typeof fakeContext>, presen
 }
 
 describe('C8: a player hands their own seat to Claude mid-game', () => {
-  it('B-AC-8 (server): Lena hands her seat to Claude in month 1 and her phone drops; the game reaches game over without a Continue for her seat', async () => {
+  it.each([
+    ['planning', (v: MuleView) => v.phase === 'planning'],
+    ['the land grant', (v: MuleView) => v.phase === 'landGrant'],
+    ['development', (v: MuleView) => v.phase === 'development'],
+    ['production', (v: MuleView) => v.phase === 'production'],
+    ['the first side pick', (v: MuleView) => v.phase === 'auction' && v.auction?.stage === 'status'],
+    ['the walk', (v: MuleView) => v.phase === 'auction' && v.auction?.stage === 'walk'],
+  ] as const)('B-AC-8 (server): Lena hands her seat to Claude during %s and her phone drops; the game reaches game over without a Continue for her seat', async (_when, at) => {
     const fake = fakeContext({ table: TABLE });
     const game = new MuleGame(fake.ctx, 10, { maxMonths: 2 });
     game.start(TABLE);
-    await play(game, fake, ['s1', LEAVER], (v) => v.phase === 'production', 30 * 60_000);
-    expect(view(game).phase, 'the premise: month 1 reaches production with both people playing').toBe('production');
+    await play(game, fake, ['s1', LEAVER], at, 30 * 60_000);
+    expect(at(view(game)), 'the premise: month 1 reaches the moment with both people playing').toBe(true);
 
     (game as unknown as HandsOver).seatBecameComputer({ ...TABLE[1]!, isAi: true, kind: 'claude' });
     game.connectionChanged(LEAVER, false);

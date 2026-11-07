@@ -559,6 +559,33 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.enterPhase();
   }
 
+  /** SPIKE (C8): a person's seat becomes a computer seat mid-game. */
+  seatBecameComputer(seat: SeatInfo): void {
+    const state = this.requireState();
+    const i = this.seats.findIndex((s) => s.id === seat.id);
+    this.seats[i] = { ...this.seats[i]!, ...seat, isAi: true };
+    state.players.find((p) => p.id === seat.id)!.isAi = true;
+    this.away.delete(seat.id);
+    const kind = seatKindOf(seat);
+    const brainSeat = { id: seat.id, persona: personaFor(seat.name, i), level: DEFAULT_AI_LEVEL, kind };
+    const chat = this.brain.chatter(brainSeat, (line) => this.ctx.say?.(seat.id, line));
+    this.chats.set(seat.id, chat);
+    const ai = new AiSeat({
+      ...brainSeat,
+      name: seat.name,
+      seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
+      decider: this.brain.deciderFor(brainSeat),
+      onPlaybook: (playbook) => this.recordPlaybook({ seat: seat.id, month: playbook.month, phase: playbook.phase, playbook }),
+      onDecision: (record) => {
+        this.ctx.schedule(0, () => chat(record));
+      },
+    });
+    this.ai.set(seat.id, ai);
+    if (kind === 'claude') seatClaude(this, seat.id, seat.name, this.brain.writerFor(brainSeat));
+    this.lotHands.set(seat.id, new LotHand(ai.mind, createRng((ai.options.seed ^ 0xc2b2ae35) >>> 0)));
+    this.voteHands.set(seat.id, new VoteHand(ai.mind, createRng((ai.options.seed ^ 0x165667b1) >>> 0)));
+  }
+
   /**
    * A steer or a press changes no view by itself (AM-21): the colonist moves in the frames, and the tick that applies a
    * press, or finds a seat's reach words changed, sends the views.
