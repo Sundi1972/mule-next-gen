@@ -94,9 +94,13 @@ for kind in kinds:
             if not os.path.exists(png):
                 missing.append(png)
             entry[light] = f"{kind}/{stage}-{light}@{SIZES[0]}.webp"
+        if os.environ.get("PARTIAL") == "1" and any(m.startswith(os.path.join(out, kind, f"{stage}-")) for m in missing):
+            continue  # PARTIAL=1: a stage with a missing render is left out (the page draws its shape), never half-listed
         pictures[kind][stage] = entry
-if missing:
+if missing and os.environ.get("PARTIAL") != "1":
     sys.exit("publish: missing renders:\n  " + "\n  ".join(missing))
+if missing:
+    print("publish: PARTIAL, stages left out for missing renders:\n  " + "\n  ".join(missing))
 
 for kind in kinds:
     shutil.rmtree(os.path.join(pub, kind), ignore_errors=True)
@@ -129,7 +133,8 @@ for n in want:
             sys.exit(f"publish: missing plate render {png}")
         for w in SIZES:
             dst = os.path.join(pub, "plate", f"{n}-{light}@{w}.webp")
-            subprocess.run(["cwebp", "-quiet", "-q", "82", "-m", "6", "-resize", str(round(png_width(png) * w / 1600)), "0", png, "-o", dst], check=True)
+            q = os.environ.get("PLATE_Q_SMALL", "82") if w == SIZES[-1] else "82"  # the phone's plate tier may go lower (B-AC-5: <= 1 MB)
+            subprocess.run(["cwebp", "-quiet", "-q", q, "-m", "6", "-resize", str(round(png_width(png) * w / 1600)), "0", png, "-o", dst], check=True)
             total += os.path.getsize(dst)
         entry[light] = f"plate/{n}-{light}@{SIZES[0]}.webp"
     fr = meta["frame"]
