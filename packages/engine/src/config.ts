@@ -1123,6 +1123,10 @@ export const HAPPINESS = {
     gap: 2,
     gapUnit: 1_000,
     gapCap: 10,
+    /** Onto the target for each `welfareUnit` credits of Welfare paid this upkeep, up to `welfareCap` units (slice 5, S5-RULE-5). Placeholders. */
+    welfare: 1,
+    welfareUnit: 50,
+    welfareCap: 4,
   },
 };
 
