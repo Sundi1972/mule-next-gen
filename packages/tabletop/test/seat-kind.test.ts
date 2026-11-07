@@ -179,6 +179,87 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     expect(codes[1], 'the second room redraws rather than issue a live code').not.toBe('AAAA-00');
   });
 
+  it('PM ruling (a) on #628\'s review: a room that leaves the registry leaves its codes taken back, never live and never issued again', async () => {
+    let t = 0;
+    // The first room's first code is AAAA-00; the last room draws it again and must redraw.
+    const seatDraws: number[] = Array(6).fill(0);
+    const seatRandom = () => seatDraws.shift() ?? Math.random();
+    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix', 'Juno'], newToken: () => `t${++tokens}` }, Math.random, () => t, seatRandom);
+    /** A room whose host made two AI seats Claude's and switched the first back: one live code and one dead. */
+    const claudeRoom = async () => {
+      const room = registry.create();
+      const host = new Screen();
+      room.receive(host, host.from, { t: 'join', code: room.code, name: 'Host' });
+      room.receive(host, host.from, { t: 'addAi' });
+      room.receive(host, host.from, { t: 'addAi' });
+      await flush();
+      const [first, second] = host.view().seats.filter((s) => s.isAi).map((s) => s.id);
+      const codeOf = (id: string) => host.view().seats.find((s) => s.id === id)!.seatCode!;
+      room.receive(host, host.from, { t: 'setSeatKind', seatId: first!, kind: 'claude' });
+      await flush();
+      const dead = codeOf(first!);
+      room.receive(host, host.from, { t: 'setSeatKind', seatId: first!, kind: 'builtin' });
+      seatDraws.push(...Array(6).fill(0.5));
+      room.receive(host, host.from, { t: 'setSeatKind', seatId: second!, kind: 'claude' });
+      await flush();
+      return { room, host, codes: [dead, codeOf(second!)] };
+    };
+    const ends: [string, (r: Awaited<ReturnType<typeof claudeRoom>>) => void][] = [
+      ['the host closes it', ({ room, host }) => room.receive(host, host.from, { t: 'close' })],
+      ['a game error ends it', ({ room }) => room.fail()],
+      ['the idle sweep', ({ room, host }) => {
+        room.disconnect(host);
+        registry.sweep(1000);
+        t += 1000;
+        registry.sweep(1000);
+      }],
+      ['the server shuts down', () => registry.disposeAll()],
+    ];
+    for (const [how, end] of ends) {
+      const made = await claudeRoom();
+      expect(registry.seatForCode(made.codes[1]!), how).toMatchObject({ state: 'live' });
+      end(made);
+      expect(registry.get(made.room.code), `${how}: the room is gone`).toBeUndefined();
+      for (const code of made.codes) expect(registry.seatForCode(` ${code.toLowerCase()} `), `${how}: ${code}`).toEqual({ state: 'taken_back' });
+    }
+    // A new room's seat draws AAAA-00, which the first room issued: it redraws rather than issue a retired code.
+    const fresh = registry.create();
+    const host = new Screen();
+    fresh.receive(host, host.from, { t: 'join', code: fresh.code, name: 'Host' });
+    fresh.receive(host, host.from, { t: 'addAi' });
+    await flush();
+    const ai = host.view().seats.find((s) => s.isAi)!.id;
+    seatDraws.push(...Array(6).fill(0), ...Array(6).fill(0.75));
+    fresh.receive(host, host.from, { t: 'setSeatKind', seatId: ai, kind: 'claude' });
+    await flush();
+    const code = host.view().seats.find((s) => s.id === ai)!.seatCode!;
+    expect(code).toMatch(SEAT_CODE);
+    expect(code).not.toBe('AAAA-00');
+  });
+
+  it('#641 review: a late close from a swept room never drops the new room that took its room code, nor retires its codes', async () => {
+    let t = 0;
+    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix'], newToken: () => `t${++tokens}` }, () => 0, () => t);
+    const old = registry.create();
+    registry.sweep(1000);
+    t += 1000;
+    registry.sweep(1000);
+    expect(registry.get(old.code)).toBeUndefined();
+    const fresh = registry.create();
+    expect(fresh.code, 'the room code is reused').toBe(old.code);
+    const host = new Screen();
+    fresh.receive(host, host.from, { t: 'join', code: fresh.code, name: 'Host' });
+    fresh.receive(host, host.from, { t: 'addAi' });
+    await flush();
+    const ai = host.view().seats.find((s) => s.isAi)!.id;
+    fresh.receive(host, host.from, { t: 'setSeatKind', seatId: ai, kind: 'claude' });
+    await flush();
+    const code = host.view().seats.find((s) => s.id === ai)!.seatCode!;
+    old.fail();
+    expect(registry.get(fresh.code)).toBe(fresh);
+    expect(registry.seatForCode(code)).toMatchObject({ state: 'live', seatId: ai });
+  });
+
   it('RULE-1 row 1 (negative): only the host, only in the lobby, only on a computer seat', async () => {
     const { room, heiko, mia, brix, set } = await lobby();
     await set(mia, 'claude');
