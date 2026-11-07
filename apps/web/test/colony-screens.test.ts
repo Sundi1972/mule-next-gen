@@ -610,12 +610,15 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
   let root: ReturnType<typeof createRoot> | null = null;
   let frames = new Map<number, FrameRequestCallback>();
   let nextFrame = 1;
+  /** The page's frame clock, in ms: it moves only as the test lets time pass. */
+  let pageMs = 0;
 
   beforeEach(() => {
     Object.assign(FakeElement.prototype, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }), offsetWidth: 0, offsetHeight: 0, querySelectorAll: () => [] });
     Object.assign(document, { createElementNS: (_ns: string, tag: string) => document.createElement(tag) });
     Object.assign(window, { matchMedia: (q: string) => ({ media: q, matches: false, addEventListener() {}, removeEventListener() {} }) });
     frames = new Map();
+    pageMs = 0;
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
     vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
@@ -650,6 +653,7 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
       send: show,
       shows: (testid: string) => find(host!, testid) !== null,
       opener: () => find(host!, 'tv-grounds-opener'),
+      happiness: () => Number(words(find(host!, 'gauge-happiness')!).match(/Happiness\s*(\d+)/)?.[1]),
     };
   }
 
@@ -659,7 +663,8 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
       flushSync(() => vi.advanceTimersByTime(50));
       const due = [...frames.values()];
       frames.clear();
-      flushSync(() => due.forEach((cb) => cb(performance.now())));
+      pageMs += 50;
+      flushSync(() => due.forEach((cb) => cb(pageMs)));
     }
   }
 
@@ -705,6 +710,17 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     const screen = tv(at('upkeep', 2, parkAt('standing')));
     expect(screen.shows('tv-grounds-opener')).toBe(false);
     expect(screen.shows('tv-monthend')).toBe(true);
+  });
+
+  it('T-AC-9: the gauges count when TvMonthEnd mounts after the opener, not at the phase change: they open on last month’s mood and count to the server’s', () => {
+    const mood = (happiness: number, last: number): ColonyView => ({ ...parkAt('standing'), gauges: { ...MIDGAME.gauges, happiness, band: 'restless' }, lastGauges: { ...MIDGAME.lastGauges!, happiness: last } });
+    const screen = tv(at('planning', 3, mood(44, 50)));
+    screen.send(at('upkeep', 3, mood(31, 44)));
+    pass(3_000);
+    expect(screen.shows('tv-monthend')).toBe(true);
+    expect(screen.happiness()).toBe(44);
+    pass(3_000);
+    expect(screen.happiness()).toBe(31);
   });
 
   it('T-AC-5: politics off, the month end is TvMonthEnd at once: no opener and no grounds', () => {
