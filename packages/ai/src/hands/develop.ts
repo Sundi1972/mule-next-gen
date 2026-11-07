@@ -149,6 +149,36 @@ export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig
   });
 }
 
+/** One route MULE: the plot it is installed on and the outfit it is fitted with. */
+export interface RouteMule {
+  plot: number;
+  outfit: Outfit | null;
+}
+
+/**
+ * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's idle
+ * plot; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take the cash
+ * under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without `floor`
+ * the game taps, which installs on any lake. See RULE-9 row 3.
+ */
+export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: DevWalk, floor?: FloorConfig): string | null {
+  const { plot, outfit } = mule;
+  const tile = state.tiles[plot]!;
+  if (tile.owner !== mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
+  if (floor && unreachablePlot(state, plot, floor)) return `lake: no shore reaches plot ${plot}`;
+  // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
+  const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
+  if (cashFloor !== null && outfit !== null) {
+    const me = state.players.find((p) => p.id === mind.me)!;
+    const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
+    if (me.money - cost < cashFloor) return `stale: under the cash floor of ${cashFloor} cr`;
+  }
+  // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
+  const legs = outfit === null ? undefined : walk?.floor?.(plot, outfit);
+  const veto = legs && walkVeto(walk!, legs.there, legs.pub);
+  return veto ? `stale: ${veto}` : null;
+}
+
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
 const WOLF_LEVEL: Record<AiLevelId, WolfFightLevel> = { rookie: 'rookie', trader: 'regular', tycoon: 'veteran' };
 
@@ -1012,10 +1042,7 @@ export class DevelopHand {
     return true;
   }
 
-  /**
-   * Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, the floor's walk vetoes it
-   * (AM-25), or it would take the cash under the cash floor an adopted playbook set.
-   */
+  /** Why the route MULE of `group`, about to be bought, would be refused (routeVeto), or null. */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -1024,20 +1051,7 @@ export class DevelopHand {
       if (g === group && a.type === 'outfit') outfit = a.outfit;
     }
     if (plot < 0) return null;
-    const tile = state.tiles[plot]!;
-    if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
-    // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
-    const floor = adoptedNow(state, this.brain.mind)?.cashFloor != null ? cashReserve(state, this.brain.mind) : null;
-    if (floor !== null && outfit !== null) {
-      const me = state.players.find((p) => p.id === this.brain.mind.me)!;
-      const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
-      if (me.money - cost < floor) return `stale: under the cash floor of ${floor} cr`;
-    }
-    // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
-    const w = walk?.();
-    const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);
-    const veto = legs && walkVeto(w!, legs.there, legs.pub);
-    return veto ? `stale: ${veto}` : null;
+    return routeVeto(state, this.brain.mind, { plot, outfit }, walk?.(), this.onFloor ? (this.floorCfg ?? undefined) : undefined);
   }
 
   /** What the route's own MULE picks are drafted from: the playbook's seed and the plan mind. See RULE-9 row 3, RULE-14. */
