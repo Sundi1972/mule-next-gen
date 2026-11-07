@@ -233,7 +233,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   // The month-end opener, after the month end's event show and before TvMonthEnd (spec C7, RULE-6).
   const opener = useGroundsOpener(game, overlayShowAt(game, now) !== null);
   // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
-  const drift = useMonthEndDrift(game);
+  const drift = useMonthEndDrift(game, opener === null);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
