@@ -148,6 +148,19 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     expect(await writerOf(game).submit(asked.id, { edits: [], line: 'Late.' })).toEqual({ kind: 'too_late' });
   });
 
+  it('B-AC-5 (HC-3): the room closing mid-wait leaves no Claude ask open; a later answer is too late', async () => {
+    const { game, fake } = startedGame();
+    await toFirstSidePick(game, fake);
+    const writer = writerOf(game);
+    const asked = writer.openAsk()!;
+    fake.advance(10_000);
+
+    game.dispose();
+
+    expect(writer.openAsk()).toBeNull();
+    expect(await writer.submit(asked.id, { edits: [], line: 'Late.' })).toEqual({ kind: 'too_late' });
+  });
+
   it('C7 pin: with no Claude seat, the first good’s side pick ends as soon as everyone is Done, as today', async () => {
     const table = TABLE.map(({ kind: _kind, ...seat }) => seat);
     const { game, fake } = startedGame(table);
