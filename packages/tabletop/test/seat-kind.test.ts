@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Room, RoomRegistry, type Connection, type Game, type ServerEnvelope, type TableView } from '../src/index.js';
+import { Room, RoomRegistry, type ClaudeStatus, type Connection, type Game, type GameContext, type ServerEnvelope, type TableView } from '../src/index.js';
 
 /**
  * C1 (the Claude seat spec): a computer seat has a kind, builtin or claude, which the host sets in the lobby. A claude
@@ -220,5 +220,66 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     await flush();
     expect(started[0]!.find((s) => s.id === brix)).toMatchObject({ isAi: true, kind: 'claude' });
     expect(started[0]!.find((s) => s.name === 'Heiko')).not.toHaveProperty('kind');
+  });
+});
+
+describe("C6: a Claude seat's status reaches every screen", () => {
+  /** The lobby above, hosting a game that answers each seat's status from `status` and keeps its context. */
+  async function withStatus() {
+    const status = new Map<string, ClaudeStatus>();
+    let ctx: GameContext | null = null;
+    const room = new Room<unknown, View>({
+      code: 'KRTX',
+      createGame: (c) => {
+        ctx = c;
+        return { ...game(), claudeStatus: (seatId: string) => status.get(seatId) };
+      },
+      aiNames: ['Brix', 'Juno'],
+      newToken: () => `t${++tokens}`,
+    });
+    const heiko = new Screen();
+    const mia = new Screen();
+    const tv = new Screen();
+    room.receive(heiko, heiko.from, { t: 'join', code: 'KRTX', name: 'Heiko' });
+    room.receive(mia, mia.from, { t: 'join', code: 'KRTX', name: 'Mia' });
+    room.receive(tv, tv.from, { t: 'board', code: 'KRTX' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    await flush();
+    const [brix, juno] = heiko.view().seats.filter((s) => s.isAi).map((s) => s.id) as [string, string];
+    room.receive(heiko, heiko.from, { t: 'setSeatKind', seatId: brix, kind: 'claude' });
+    room.receive(heiko, heiko.from, { t: 'setSeatKind', seatId: juno, kind: 'builtin' });
+    await flush();
+    const screens = [['Heiko, the host', heiko], ['Mia', mia], ['the TV', tv]] as const;
+    return { room, heiko, screens, brix, juno, status, changed: async () => (ctx!.changed(), await flush()) };
+  }
+
+  it("B-AC-2 (room): the game's status for a Claude seat is on the host's, a phone's and the TV's view; the code stays the host's", async () => {
+    const { heiko, screens, brix, juno, status, changed } = await withStatus();
+    status.set(brix, 'connected');
+    status.set(juno, 'thinking');
+    await changed();
+    const code = heiko.view().seats.find((s) => s.id === brix)!.seatCode!;
+    for (const [who, screen] of screens) {
+      const seats = screen.view().seats;
+      expect(seats.find((s) => s.id === brix), `${who} sees Brix connected`).toMatchObject({ kind: 'claude', claude: 'connected' });
+      expect(seats.find((s) => s.id === juno), `${who}: a built-in seat has no status, whatever the game says`).not.toHaveProperty('claude');
+      for (const human of seats.filter((s) => !s.isAi)) expect(human, `${who}: ${human.name} has no status`).not.toHaveProperty('claude');
+      if (screen !== heiko) expect(JSON.stringify(screen.inbox), `${who} never sees the code`).not.toContain(code);
+    }
+  });
+
+  it("C6: a seat the game gives no status waits for its chat; the game's changed() carries each new status to every screen, in play too", async () => {
+    const { room, heiko, screens, brix, status, changed } = await withStatus();
+    for (const [who, screen] of screens) expect(screen.view().seats.find((s) => s.id === brix)!.claude, who).toBe('waiting');
+    status.set(brix, 'connected');
+    await changed();
+    for (const [who, screen] of screens) expect(screen.view().seats.find((s) => s.id === brix)!.claude, who).toBe('connected');
+    room.receive(heiko, heiko.from, { t: 'start' });
+    await flush();
+    status.set(brix, 'thinking');
+    await changed();
+    for (const [who, screen] of screens) expect(screen.view().seats.find((s) => s.id === brix)!.claude, `${who}, in play`).toBe('thinking');
+    expect(room.viewFor(null).seats.find((s) => s.id === brix)!.claude, 'the room for nobody').toBe('thinking');
   });
 });
