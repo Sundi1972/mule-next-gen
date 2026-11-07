@@ -422,6 +422,7 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(soldOut.trades.some((t) => t.seller === STORE_ID && t.buyer === 'ai1'), 'ai1 buys at the store first').toBe(true);
     expect(storeForSale(soldOut.state, 'food'), 'the store sells out').toBe(0);
     expect(soldOut.path.at(-1)!.price, 'the bluff rests at the top').toBe(hi);
+    // ai1's Food is worth its month of walking, a finite ceiling under the bluff, so it never bids up to the top.
     expect(Math.round(soldOut.state.auction!.walkers.find((w) => w.id === 'ai1')!.price), 'ai1 stops at its ceiling').toBe(buyer.walkAway);
     expect(buyer.walkAway, 'its ceiling is under the bluff').toBeLessThan(hi);
     expect(hi - 1).toBeGreaterThan(sellersBottom);
@@ -440,7 +441,8 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     // is read off the hand's debug view: past the rival, an overtake and the walk on look alike in the acts. The board
     // sits inside the edges, where the walk keeps every walker and the hand its targets.
     const W = lo + 10;
-    // A seat leading ten times the MULEs walks ten times as far, so going hungry costs it more: it values Food over W.
+    // The probe needs a buyer whose Food is worth more than W; a month-1 seat's walking makes it worth less, so this one
+    // leads ten times the MULEs, walks ten times as far, and going hungry costs it that much more.
     const walker = (s: AiSeat): Mind => ({ ...s.mind, level: { ...s.mind.level, mulesPerMonth: 10 * s.mind.level.mulesPerMonth } });
     const base: GoodPlay = { ...buyer, hold: buyer.hold + 5, walkAway: W, start: W };
     const board = { mine: lo, rival: lo + 6, ask: 40 };

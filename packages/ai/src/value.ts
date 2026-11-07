@@ -376,7 +376,8 @@ function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
 
 /**
  * The seconds the seat's month of walking takes, fed and well: a round trip from the corral for each MULE it leads a
- * month, to its own plots on average (to any plot while it holds none). Hunger and sickness stretch these seconds.
+ * month, to its own plots on average (to any plot while it holds none), of the plots a walk reaches; 0 when it reaches
+ * none. Hunger and sickness stretch these seconds.
  */
 export function monthWalkSeconds(obs: GameState, mind: Mind): number {
   const me = mind.me;
@@ -389,8 +390,10 @@ export function monthWalkSeconds(obs: GameState, mind: Mind): number {
     const cfg = floorConfig();
     const w = { pace: zip, bot: p.isAi };
     const corral = standPoint('corral', cfg.hall);
-    const floorTrips = plots.reduce((n, t) => n + tripSeconds(obs, cfg, w, corral, tileIndex(obs.width, t.x, t.y), true, 'corral'), 0);
-    return (mind.level.mulesPerMonth * floorTrips) / plots.length;
+    // A plot no walk reaches (a lake no shore reaches) gets no MULE, so no trip: averaged in, it would make the month Infinity.
+    const trips = plots.map((t) => tripSeconds(obs, cfg, w, corral, tileIndex(obs.width, t.x, t.y), true, 'corral')).filter(Number.isFinite);
+    if (trips.length === 0) return 0;
+    return (mind.level.mulesPerMonth * trips.reduce((n, s) => n + s, 0)) / trips.length;
   }
   const trips = plots.reduce((n, t) => {
     const i = tileIndex(obs.width, t.x, t.y);
