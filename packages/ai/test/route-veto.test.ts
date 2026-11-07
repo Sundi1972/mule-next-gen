@@ -169,3 +169,15 @@ describe('routeVeto on an own plot that has a MULE: a different outfit is a swap
     expect(routeVeto(state, mindOf(), { plot, outfit: 'energy' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: plot ${plot}`);
   });
 });
+
+describe('a lake plot whose only shore is a corner: the walk price agrees with unreachablePlot', () => {
+  it('seed 4, plot 25, its only shore the corner (9,2): reachable, priced finite, and played', () => {
+    const state = development(4);
+    const plot = own(state, 10, 1);
+    const walk = walkOf(state, 1_000);
+    const legs = walk.floor!(plot, 'water');
+    expect(unreachablePlot(state, plot, simFloorConfig())).toBe(false);
+    expect([legs.there, legs.pub].every(Number.isFinite)).toBe(true);
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walk, simFloorConfig())).toBeNull();
+  });
+});
