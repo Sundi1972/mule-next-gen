@@ -1,4 +1,4 @@
-/** The TV opener's camera: the built area filling the canvas, as look.html's whole-colony render frames it (AM-7 iv). */
+/** The TV opener's camera: the plate, or without one the built area, filling the canvas as look.html's colony render does (AM-7 iv). */
 import { centreOf, MASSING, type GridPlace } from './layout';
 import type { GroundsManifest, PictureKind } from './pick';
 import { iso, W } from './projection';
@@ -64,9 +64,18 @@ function leanedIn(area: Box, places: GridPlace[]): Box {
   return { x: clamp(mx - w / 2, area.x, area.x + area.w - w), y: clamp(my - h / 2, area.y, area.y + area.h - h), w, h };
 }
 
-/** The viewBox for a framing: the built area, eased towards the places leaned on as `lean` goes to 1. */
-export function framedBox({ aspect, leanOn = [], lean = 0 }: Framing, rings: number, tops: number[]): Box {
-  const area = builtArea(rings, tops, aspect);
+/** The part of `area` a canvas of `aspect` shows: cropped round its centre, never padded. */
+export function cropTo({ x, y, w, h }: Box, aspect: number): Box {
+  if (w / h > aspect) return { x: x + (w - h * aspect) / 2, y, w: h * aspect, h };
+  return { x, y: y + (h - w / aspect) / 2, w, h: w / aspect };
+}
+
+/**
+ * The viewBox for a framing: the plate's frame cropped to the canvas (its vignette has faded out by the frame's
+ * edges), or without a plate the built area; eased towards the places leaned on as `lean` goes to 1.
+ */
+export function framedBox({ aspect, leanOn = [], lean = 0 }: Framing, rings: number, tops: number[], plate: Box | null = null): Box {
+  const area = plate ? cropTo(plate, aspect) : builtArea(rings, tops, aspect);
   if (leanOn.length === 0 || lean <= 0) return area;
   const close = leanedIn(area, leanOn);
   const k = Math.min(1, lean);

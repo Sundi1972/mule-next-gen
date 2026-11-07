@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const MANIFEST_URL = '/art/colony/manifest.json';
-const shipped = JSON.parse(readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8')) as Record<string, unknown>;
+const shipped = JSON.parse(readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8')) as { pictures: Record<string, Record<string, unknown>> };
 
 /** The renderer's two plates (design/art/colony/plate.py), as the manifest carries them beside the pictures. */
 const PLATE = {
@@ -74,7 +74,7 @@ describe('the grounds loader and the plate (AM-7, Task 4.3)', () => {
   });
 
   it('HC-3: an unknown kind-level key under pictures still nulls the whole manifest, plate and all', async () => {
-    const spoilt = withPlate() as Record<string, unknown> & { pictures: Record<string, Record<string, unknown>> };
+    const spoilt = withPlate();
     spoilt.pictures.park!.plate = PLATE['3'].frame;
     const { manifest, html } = await load(spoilt);
     expect(manifest).toBeNull();

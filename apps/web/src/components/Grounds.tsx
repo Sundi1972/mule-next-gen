@@ -17,6 +17,22 @@ function isEntry(e: unknown): boolean {
   return isObject(e) && typeof e.day === 'string' && typeof e.dusk === 'string' && (e.glow === null || typeof e.glow === 'string');
 }
 
+function isPlateFrame(f: unknown): boolean {
+  return isObject(f) && isNumber(f.width) && isNumber(f.height) && Array.isArray(f.hall) && f.hall.length === 2 && f.hall.every(isNumber);
+}
+
+/** Both extents' plates and nothing else, each with its pictures and its frame. */
+function isPlate(p: unknown): boolean {
+  return isObject(p) && Object.keys(p).sort().join() === '3,5' && Object.values(p).every((e) => isEntry(e) && isPlateFrame((e as Record<string, unknown>).frame));
+}
+
+/** A bad plate costs the plate alone: the pictures stand on the SVG ground instead (HC-3). */
+function withSoundPlate(m: GroundsManifest): GroundsManifest {
+  if (m.plate === undefined || isPlate(m.plate)) return m;
+  const { plate, ...pictures } = m;
+  return pictures;
+}
+
 /** Every part the grounds compute with: a bad frame draws blank places, a missing picture name throws (HC-3). */
 function isManifest(m: unknown): m is GroundsManifest {
   if (!isObject(m) || !isFrame(m.frame) || !Array.isArray(m.sizes) || !m.sizes.every(isNumber) || !isObject(m.pictures)) return false;
@@ -29,7 +45,7 @@ function isManifest(m: unknown): m is GroundsManifest {
 export function loadGroundsManifest(): Promise<GroundsManifest | null> {
   loading ??= fetch(`${ART_BASE}manifest.json`)
     .then((r) => (r.ok ? r.json() : null))
-    .then((m: unknown) => (isManifest(m) ? m : null))
+    .then((m: unknown) => (isManifest(m) ? withSoundPlate(m) : null))
     .catch(() => null)
     .then((m) => {
       manifest = m;
