@@ -83,8 +83,14 @@ const SIDE_PARTS = String.raw`(() => {
     return id + ' ' + c.offsetHeight;
   });
   const natural = inner.offsetHeight;
+  // The largest scale whose content fits at its own width, read every 0.005: what the fit could reach, for the log.
+  let best = 0;
+  for (let s = 1; s >= 0.5 && best === 0; s -= 0.005) {
+    inner.style.width = 100 / s + '%';
+    if (s * inner.offsetHeight <= box.clientHeight + 0.5) best = s;
+  }
   [inner.style.width, inner.style.height] = saved;
-  return { scale: Number(box.getAttribute('data-fit')), room: box.clientHeight, natural, parts };
+  return { scale: Number(box.getAttribute('data-fit')), room: box.clientHeight, natural, best: best.toFixed(3), parts };
 })()`;
 
 const started = Date.now();
@@ -245,11 +251,11 @@ function stage(mix: Mix, ids: string[]): Pick<Auction, 'deals' | 'walkers' | 'st
 async function measure(tv: Page, mix: Mix, staged: ReturnType<typeof stage>, players: MuleView['players']): Promise<string> {
   const screen = `six-seat walk, ${mix.name}`;
   await fitSettled(tv, screen);
-  const side = (await tv.evaluate(SIDE_PARTS)) as { scale: number; room: number; natural: number; parts: string[] } | null;
+  const side = (await tv.evaluate(SIDE_PARTS)) as { scale: number; room: number; natural: number; best: string; parts: string[] } | null;
   check(side, `${screen}: the side column sits in a fit box`);
   const rows = await tv.locator('[data-testid=tv-deal]').count();
   const fits = await tv.evaluate(() => [...document.querySelectorAll('[data-phase] [data-fit]')].map((b) => b.getAttribute('data-fit')).join(' × '));
-  const log = `${mix.name}: fit ${fits}, the side ${side.natural} px at full size in ${side.room} px (${side.parts.join(', ')})`;
+  const log = `${mix.name}: fit ${fits} (the side could fit at ${side.best}), the side ${side.natural} px at full size in ${side.room} px (${side.parts.join(', ')})`;
   console.log(`  ${log}`);
   check(rows === staged.deals.length, `TV-FIT: every running deal has its row, ${staged.deals.length} staged, ${rows} shown`);
   const name = (id: string) => (id === 'store' ? 'the store' : id === 'ship' ? 'the ship' : players.find((p) => p.id === id)!.name);

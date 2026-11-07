@@ -17,7 +17,7 @@ import {
   storeSellsWord,
   StoreBox,
   TvReadout,
-  TvSoldOutBox,
+  TvSoldOutRow,
   WaitingToPick,
   type DealRow,
 } from '../components/AuctionParts';
@@ -565,9 +565,11 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
           {/* The side fits its own height, so every running deal stays in sight (PM rulings 5 and 6 Nov): when the deals
               don't fit at full size the side is drawn smaller, never the board, which keeps one size as deals come and
               go. Size-contained, it takes the row's height and never sets it. */}
-          <FitHeight className="w-[300px] shrink-0 [contain:size]" innerClassName="gap-4" gives>
-            <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
-              <GoodTag good={auction.good} name className="text-2xl" />
+          <FitHeight className="w-[300px] shrink-0 [contain:size]" innerClassName={status ? 'gap-4' : 'gap-2'} gives>
+            {/* On the walk the header already names the good, its glyph first, so the box keeps the stage and the units
+                traded: one row when both fit, else two short lines (PM ruling 7 Nov, the walk side at six seats). */}
+            <div className={cx('rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow', status ? 'flex flex-col gap-1' : 'flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1')} data-testid="tv-stage-box">
+              {status && <GoodTag good={auction.good} name className="text-2xl" />}
               <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')} data-testid="tv-stage">
                 {stageName}
               </span>
@@ -577,7 +579,6 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                 </span>
               )}
             </div>
-            {!status && stock === 0 && <TvSoldOutBox auction={auction} />}
             {status ? (
               <ul className="flex flex-col gap-2" data-testid="tv-picked">
                 {game.players.map((p) => {
@@ -620,6 +621,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                   <dt className="label-caps">Stock</dt>
                   <dd data-num className={cx('text-2xl font-bold', stock === 0 ? 'text-alert' : 'text-ink')}>{stock}</dd>
                 </div>
+                {stock === 0 && <TvSoldOutRow auction={auction} />}
               </dl>
             )}
             {auction.shipPays !== null && (

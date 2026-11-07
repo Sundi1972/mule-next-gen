@@ -62,16 +62,21 @@ export function SoldOutNote({ auction }: { auction: AuctionView }) {
   );
 }
 
-/** On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has. */
-export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
+/**
+ * On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has.
+ * A row of the TV's store box (a `<div>` of its `<dl>`), under its Sells, Buys and Stock: those already say "out" and 0,
+ * so the words join them rather than take a box of their own (PM ruling 7 Nov, the walk side at six seats).
+ */
+export function TvSoldOutRow({ auction }: { auction: AuctionView }) {
   const { soldOutAt } = storeLines(auction);
   // The old price is the sellers' zone's floor; without zones, the sold-out line until a bid passes it. Never the bid.
   const old = auction.zones?.sellersBottom ?? (soldOutAt && !soldOutAt.bid ? soldOutAt.price : null);
   const bid = soldOutAt?.bid ? soldOutAt.price : null;
   return (
-    <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
-      <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
-      <span className="text-lg leading-snug text-ink-2">
+    <div className="col-span-3 bg-panel px-3 py-2 font-sans text-base leading-snug" data-testid="tv-sold-out">
+      {/* One run of words, the heading's included, so the row wraps as a sentence and takes no line of its own. */}
+      <dt className="inline font-display font-semibold text-rise">Store sold out</dt>{' '}
+      <dd className="inline text-ink-2">
         {old !== null ? `Bids can go past its old ${old}.` : 'No store price yet: bids set it.'}
         {bid !== null && ' '}
         {bid !== null && (
@@ -82,7 +87,7 @@ export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
             </strong>
           </>
         )}
-      </span>
+      </dd>
     </div>
   );
 }
@@ -139,6 +144,21 @@ function pricesOn(auction: AuctionView, side: 'seller' | 'buyer', without?: stri
 }
 
 /**
+ * A readout value on one line (PM ruling 7 Nov, the walk side at six seats): the price always whole, the name cut with an
+ * ellipsis when the column is short of room, and said whole in its title.
+ */
+function PriceAndName({ price, name }: { price: number; name: string }) {
+  return (
+    <>
+      <span className="shrink-0 whitespace-pre">{`${price} · `}</span>
+      <span className="min-w-0 truncate" title={name} data-testid="readout-name">
+        {name}
+      </span>
+    </>
+  );
+}
+
+/**
  * The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the nearest trade a
  * player faces. TRADING is one word: NEAREST TRADE widens the label column, and a two-line value pushed the second deal row
  * out of the TV's list (TV-FIT).
@@ -153,11 +173,11 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
   const gap = pair.ask !== null && pair.bid !== null ? pair.ask - pair.bid : null;
   const trading = auction.deals.length > 0;
   return (
-    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
       <dt className="text-rise">LOWEST ASK</dt>
-      <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(view, ask.id)}` : '—'}</dd>
+      <dd data-num className="flex min-w-0 font-bold text-rise">{ask ? <PriceAndName price={ask.price} name={who(view, ask.id)} /> : '—'}</dd>
       <dt className="text-fall">HIGHEST BID</dt>
-      <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
+      <dd data-num className={cx('flex min-w-0 font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? <PriceAndName price={bid.price} name={who(view, bid.id)} /> : '—'}</dd>
       <dt className="text-ink-3">NEAREST TRADE</dt>
       <dd data-num className="font-bold text-ink">{trading ? 'TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
     </dl>

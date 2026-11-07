@@ -183,7 +183,29 @@ describe('a tie between the ship and the store goes to the ship, as the engine s
   it("the TV's readout names the ship as the highest bid", () => {
     const a = auction({ good: 'crystite', storeBuys: 100, shipPays: 100, walkers: [walker('lena', 'seller', 150)] });
     const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: a }));
-    expect(html).toContain('100 · the ship');
-    expect(html).not.toContain('100 · the store');
+    const text = html.replace(/<[^>]+>/g, '');
+    expect(text).toContain('100 · the ship');
+    expect(text).not.toContain('100 · the store');
+  });
+});
+
+describe("the TV's readout, one line a value (PM ruling 7 Nov, the walk side at six seats)", () => {
+  const html = renderToStaticMarkup(
+    createElement(TvReadout, { view, auction: auction({ walkers: [walker('acc', 'seller', 118), walker('lena', 'seller', 140), walker('kai', 'buyer', 131)], deals: [{ buyer: 'kai', seller: 'acc', price: 118, units: 12 }] }) }),
+  );
+  const values = [...html.matchAll(/<dd[^>]*>(.*?)<\/dd>/g)].map((m) => m[1]!);
+
+  it('each name is cut on one line, never wrapped, and said whole in its title', () => {
+    expect(values[0]).toMatch(/<span class="[^"]*\btruncate\b[^"]*" title="The Accountant"[^>]*>The Accountant<\/span>/);
+    expect(values[1]).toMatch(/<span class="[^"]*\btruncate\b[^"]*" title="Kai"[^>]*>Kai<\/span>/);
+  });
+
+  it('the price never gives way: it sits outside the cut, whole', () => {
+    expect(values[0]).toMatch(/^<span class="shrink-0 whitespace-pre">118 · <\/span>/);
+    expect(values[1]).toMatch(/^<span class="shrink-0 whitespace-pre">131 · <\/span>/);
+  });
+
+  it('the value column may shrink below its words, so the cut can happen', () => {
+    expect(html).toContain('grid-cols-[auto_minmax(0,1fr)]');
   });
 });
