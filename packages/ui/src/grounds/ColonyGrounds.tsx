@@ -1,9 +1,9 @@
 /** The colony's grounds drawn from its view: the hall and each project's picture at its place (spec C2). */
 import type { ObjectKind } from '../components/ObjectGlyph';
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
-import { framedBox, topOf, type Framing } from './framing';
+import { leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
 import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
@@ -36,7 +36,7 @@ export interface ColonyGroundsProps {
   manifest: GroundsManifest | null;
   /** Dusk at the month end and in the upkeep phase, day otherwise (RULE-1). */
   light?: Light;
-  /** A full-screen camera on the built area; without it the scene frames the whole land. */
+  /** A full-screen camera on the built area; without it the scene frames the occupied extent at its plate's aspect, or without a plate the whole land. */
   framing?: Framing;
   /** The place numbers and stage chips over each place; off on the TV opener (AM-7 v). */
   chips?: boolean;
@@ -105,6 +105,24 @@ function Callout({ n, p, c, r, words }: { n: number; p: GroundsProject; c: numbe
 }
 
 const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonths: 1 };
+const HALL_BLOCK: GridPlace = { x: 2, y: 2, w: 1, h: 1 };
+
+/** Clear over the buildings, fading from halfway out to the page background at the view's corners. */
+function Vignette({ view }: { view: Box }) {
+  const id = `grounds-vignette-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  return (
+    <>
+      <defs>
+        <radialGradient id={id} cx="0.5" cy="0.5" r="0.75">
+          <stop offset="0" stopColor="var(--color-table)" stopOpacity={0} />
+          <stop offset="0.5" stopColor="var(--color-table)" stopOpacity={0} />
+          <stop offset="1" stopColor="var(--color-table)" stopOpacity={1} />
+        </radialGradient>
+      </defs>
+      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={`url(#${id})`} pointerEvents="none" data-testid="grounds-vignette" />
+    </>
+  );
+}
 
 /** A plate placed so its hall pixel sits on the hall's centre, at the pictures' scale (`frame.place` px a place). */
 function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
@@ -139,9 +157,12 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   const edge = edgeDecoration(R + 0.85).slice(0, Math.min(4 * (2 * R + 2), standing * 3));
   const prop = (d: EdgeProp, k: string) => (d.kind === 'tree' ? <Tree key={k} c={d.col} r={d.row} /> : <Lamp key={k} c={d.col} r={d.row} on={mood >= 50} />);
   const plateArea = plate && { x: plate.box.x, y: plate.box.y, w: plate.box.width, h: plate.box.height };
-  const vb = framing
-    ? framedBox(framing, R, scene.map(({ p, col, row }) => topOf(p?.id ?? 'hall', col, row, manifest)), plateArea)
-    : (plateArea ?? { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W });
+  const tops = scene.map(({ p, col, row }) => topOf(p?.id ?? 'hall', col, row, manifest));
+  const blocks = [HALL_BLOCK, ...placed.map((q) => q.block)];
+  // Without a canvas (the phone's card) the view takes the plate's shape, so the card's height never changes with the colony.
+  const aspect = framing?.aspect ?? (plateArea && plateArea.w / plateArea.h);
+  const view = aspect ? viewOf(aspect, R, blocks, tops, plateArea) : { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W };
+  const vb = framing ? leaning(view, framing) : view;
   // The plate's lamps light as a standing building's do (RULE-2).
   const plateGlow = glowOpacity({ light, stage: 'standing', wealth: colony.gauges.wealth });
 
@@ -205,6 +226,8 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         blocks={placed.map((q) => q.block)}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
+      {/* On the view before the lean-in, so leaning in moves closer into the pool rather than dimming what it leans on. */}
+      {shortOfPlate(view, plateArea) && <Vignette view={view} />}
       {chips &&
         placed.sort(inBack).map(({ n, p, col, row }) => (
           <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />
