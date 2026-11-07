@@ -204,6 +204,8 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
       return str(m.emote) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'pick':
       return str(m.pick) ? (m as ClientEnvelope<MuleIntent>) : null;
+    case 'setSeatKind':
+      return str(m.seatId) && (m.kind === 'builtin' || m.kind === 'claude') ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'color':
       return num(m.color) ? (m as ClientEnvelope<MuleIntent>) : null;
     case 'ping':
@@ -280,8 +282,6 @@ function isIntent(v: unknown): v is MuleIntent {
       return typeof i.id === 'string';
     case 'payStrike':
       return true;
-    case 'setSiteBid':
-      return typeof i.id === 'string' && (i.maxBid === null || typeof i.maxBid === 'number');
     case 'propose':
       return i.proposal === null || isProposal(i.proposal);
     case 'voteLaw':
