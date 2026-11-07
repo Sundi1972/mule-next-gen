@@ -6,7 +6,7 @@
 import { COLONY, GAME, HAPPINESS, POLITICS, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
-import { budgetCredits, budgetShares, votesOpen } from './politics.js';
+import { budgetCredits, budgetShares, taxAsPlanningEnds, votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { createRng } from './rng.js';
 import { score, scoreParts } from './game.js';
@@ -366,7 +366,7 @@ export function keepPromise(state: GameState): void {
   const politics = state.politics;
   if (!state.colony || !politics?.governor || !politics.promise || politics.promiseFrom === null) return;
   if (politics.election && politics.election.stage !== 'over') return;
-  const tax = Math.round(state.treasury.salesTax * PERCENT);
+  const tax = Math.round(taxAsPlanningEnds(state) * PERCENT);
   const { promise, promiseFrom: from } = politics;
   const kept = promise.kind === 'cap' ? tax <= promise.percent : promise.kind === 'lower' ? tax < from : tax === from;
   edit(state).promises.push({ month: state.month, governor: politics.governor, kind: promise.kind, kept });

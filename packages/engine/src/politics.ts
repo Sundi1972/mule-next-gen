@@ -843,7 +843,7 @@ export function callOverrule(state: GameState, playerId: string, target: Overrul
     throw new RuleError('There is no call of yours to withdraw');
   }
   const why = canOverrule(state, id)[target];
-  if (why !== true) throw new RuleError(overruleRefusal(state, why, target as 'tax' | 'budget'));
+  if (why !== true) throw new RuleError(overruleRefusal(state, why, target));
   edit(state).overrule = { month: state.month, target, caller: id, stage: 'called', clockMs: 0, ballots: {}, done: [], result: null };
 }
 
@@ -884,8 +884,8 @@ function isOverruleDone(state: GameState, playerId: string): boolean {
   return state.phase === 'planning' && overrule?.stage === 'ballot' && overrule.done.includes(playerId);
 }
 
-/** The tally at the ballot's close: more than half of all vote weight restores the start; an absent ballot is an abstention. See S5-RULE-8. */
-function tallyOverrule(state: GameState, overrule: Overrule): void {
+/** The result of an overrule's ballot as it stands: more than half of all vote weight restores the start; an absent ballot is an abstention. See S5-RULE-8. */
+function overruleResult(state: GameState, overrule: Overrule): NonNullable<Overrule['result']> {
   let yes = 0;
   let no = 0;
   let total = 0;
@@ -898,9 +898,25 @@ function tallyOverrule(state: GameState, overrule: Overrule): void {
   }
   // literal-ok: more than half of all votes is the rule's definition (S5-RULE-8)
   const needed = Math.floor(total / 2) + 1;
-  overrule.result = { passed: yes >= needed, yes, no, total, needed };
+  return { passed: yes >= needed, yes, no, total, needed };
+}
+
+/** The tally at the ballot's close, then the reveal. */
+function tallyOverrule(state: GameState, overrule: Overrule): void {
+  overrule.result = overruleResult(state, overrule);
   overrule.stage = 'reveal';
   overrule.clockMs = 0;
+}
+
+/**
+ * The sales tax (a fraction) that stands as planning ends: a passed tax overrule's restored start, whatever stage its vote is in
+ * (an open ballot is read as closeVotes will tally it), otherwise the tax now. See S5 AM-6.
+ */
+export function taxAsPlanningEnds(state: GameState): number {
+  const call = monthsOverrule(state);
+  if (call?.target !== 'tax' || call.stage === 'called') return state.treasury.salesTax;
+  const result = call.stage === 'ballot' ? overruleResult(state, call) : call.result;
+  return result?.passed ? state.politics!.taxAtStart : state.treasury.salesTax;
 }
 
 /** A passed overrule restores the month's start; the reveal is over either way. */
