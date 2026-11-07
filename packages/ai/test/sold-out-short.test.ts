@@ -53,7 +53,7 @@ interface Walk {
   reach: number;
   /** ai1's limit. */
   limit: number;
-  /** The walk's clock when the good closed: under WALK.goodMs once every seat pressed Done. */
+  /** Board ms at the walk's last step. */
   closedAt: number;
   bought: number;
 }
@@ -80,7 +80,7 @@ function play(setup: Setup): Walk {
   for (const id of SELLERS) act(id)({ type: 'declare', side: 'seller' });
   for (const id of others) act(id)({ type: 'done', done: true });
 
-  const walk: Walk = { top: -Infinity, reach: Math.min(a.zones.hi, ...asks) - 1, limit, closedAt: 0, bought: 0 };
+  const walk: Walk = { top: -Infinity, reach: Math.min(a.zones.hi, ...asks.filter((p) => p > a.zones.sellersBottom)) - 1, limit, closedAt: 0, bought: 0 };
   let placed = false;
   for (let tick = 0; tick < 2_000; tick++) {
     const b = state.auction!;
@@ -99,6 +99,9 @@ function play(setup: Setup): Walk {
   stub.need = null;
   return walk;
 }
+
+/** Whether the walk ran to the end of its clock, rather than closing when every seat had pressed Done. */
+const timedOut = (walk: Walk) => walk.closedAt >= WALK.goodMs - WALK.tickMs;
 
 /** Two sellers resting above the old line, a step apart. */
 const resting = (z: { sellersBottom: number }) => [z.sellersBottom + 8, z.sellersBottom + 9];
@@ -121,5 +124,20 @@ describe('RULE-7 AI, sold out: only a buyer short of the good bids straight to i
       else expect(walk.top, `${at}: not short, it stops short of its reach`).toBeLessThan(walk.reach);
       expect(walk.bought, `${at}: walking up never trades with a resting seller`).toBe(0);
     }
+  });
+});
+
+describe('RULE-7 AI, sold out: a buyer that can stand no higher presses Done', () => {
+  it('RULE-7 AI: a short buyer whose reach is under its limit presses Done at its reach, so the walk does not wait out its clock', () => {
+    const walk = play({ h: 2, floorUnits: 3, mustHold: 0, limit: (z) => z.sellersBottom + 20, asks: resting });
+    expect(walk.limit, 'the premise: its limit is past the resting asks').toBeGreaterThan(walk.reach);
+    expect(walk.top, 'it bids to its reach').toBe(walk.reach);
+    expect(timedOut(walk), 'it presses Done there, and the walk closes before its clock runs out').toBe(false);
+  });
+
+  it('RULE-7 AI: a short buyer with an ask at its reach that it can take walks on and buys it, rather than pressing Done', () => {
+    const walk = play({ h: 2, floorUnits: 3, mustHold: 0, limit: (z) => z.sellersBottom + 20, asks: (z) => [z.sellersBottom + 1, z.sellersBottom] });
+    expect(walk.reach, 'the premise: the ask at the old line is at its reach').toBe(walk.top);
+    expect(walk.bought, 'it buys from the seller at the old line').toBeGreaterThan(0);
   });
 });
