@@ -34,7 +34,7 @@ import {
   type TaxPromise,
 } from '@mule/engine';
 import type { Act, AiAction } from '../src/actions.js';
-import { nextTax, ownVote, VoteHand } from '../src/hands/vote.js';
+import { nextTax, ownVote, VoteHand, type VotePort } from '../src/hands/vote.js';
 import { breakGain, reputationCost } from '../src/politics-value.js';
 import type { Mind } from '../src/value.js';
 
@@ -843,5 +843,97 @@ describe("S3-T-AC-9: VoteHand's S3-RULE-10 rows", () => {
       ownVote(observe(state, 'ai0'), mindOf('ai0', 'trader', level), { proposal: state.politics!.council!.proposal });
     expect(law(lawBallot([]))).toBe(true);
     expect(law(lawBallot([]), 'rookie')).toBeNull();
+  });
+});
+
+/** A fixed-answer port, as WS2's recorded reasoning would give; it records what it was asked. Never a Claude call. */
+function portAnswering(election: string | null, law: boolean | null): VotePort & { asked: string[] } {
+  const asked: string[] = [];
+  return {
+    asked,
+    electionVote(office) {
+      asked.push(`election:${office}`);
+      return election;
+    },
+    lawVote() {
+      asked.push('law');
+      return law;
+    },
+  };
+}
+
+describe("S3-T-AC-9 (port rows), AM-5: WS2's VotePort in VoteHand and ownVote", () => {
+  beforeEach(() => {
+    vi.mocked(breakGain).mockReset().mockReturnValue(0);
+    vi.mocked(reputationCost).mockReset().mockReturnValue(0);
+  });
+  const withPort = (port: VotePort, persona: AiPersonaId = 'trader', level: AiLevelId = 'trader') => new VoteHand({ ...mindOf('ai0', persona, level), salt: 9 }, createRng(3), port);
+
+  it('a port that answers wins over the keyless rule in vote and lawVote', () => {
+    const port = portAnswering('ai3', false);
+    expect(electionVoteOf(promisedBallot([]), withPort(port))).toBe('ai3');
+    expect(lawVoteOf(lawBallot([]), withPort(port))).toBe(false);
+    expect(port.asked).toEqual(['election:governor', 'law']);
+  });
+
+  it('a Rookie asks the port too: its recorded reasoning is not a guess', () => {
+    expect(electionVoteOf(promisedBallot([]), withPort(portAnswering('ai3', null), 'trader', 'rookie'))).toBe('ai3');
+  });
+
+  it('a port answering null leaves the keyless rule', () => {
+    const port = portAnswering(null, null);
+    expect(electionVoteOf(promisedBallot([]), withPort(port))).toBe('ai2');
+    expect(lawVoteOf(lawBallot([]), withPort(port))).toBe(true);
+    expect(port.asked).toEqual(['election:governor', 'law']);
+  });
+
+  it('an electionVote outside the candidates counts as null', () => {
+    expect(electionVoteOf(promisedBallot([]), withPort(portAnswering('ai0', null)))).toBe('ai2');
+    expect(electionVoteOf(promisedBallot([]), withPort(portAnswering('nobody', null)))).toBe('ai2');
+  });
+
+  it('a seat running for the office votes itself and the port is not asked', () => {
+    const port = portAnswering('ai3', null);
+    const state = ballotWith({ governor: ['ai0', 'ai2'] }, { ai0: 5, ai2: 1 });
+    expect(electionVoteOf(state, withPort(port))).toBe('ai0');
+    expect(port.asked).toEqual([]);
+  });
+
+  it('ownVote(obs, mind, ballot, port) returns the port\'s answer, so the offer and the cast vote are one decision', () => {
+    const state = promisedBallot([]);
+    const obs = observe(state, 'ai0');
+    const ballot = { office: 'governor', candidates: ['ai1', 'ai2', 'ai3'] } as const;
+    expect(ownVote(obs, mindOf('ai0', 'trader'), ballot, portAnswering('ai3', null))).toBe('ai3');
+    expect(ownVote(obs, mindOf('ai0', 'trader'), ballot, portAnswering(null, null))).toBe('ai2');
+    expect(ownVote(obs, mindOf('ai0', 'trader'), { proposal: lawBallot([]).politics!.council!.proposal }, portAnswering(null, false))).toBe(false);
+    const cast = electionVoteOf(promisedBallot([]), withPort(portAnswering('ai3', null)));
+    expect(cast).toBe(ownVote(obs, mindOf('ai0', 'trader'), ballot, portAnswering('ai3', null)));
+  });
+
+  it('with a promise held, S3-RULE-10 keeps or breaks against the port\'s choice as the seat\'s own vote', () => {
+    vi.mocked(reputationCost).mockReturnValue(10);
+    vi.mocked(breakGain).mockReturnValue(0);
+    expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), withPort(portAnswering('ai3', true)))).toBe('ai1');
+    expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), withPort(portAnswering('ai3', true)))).toBe(false);
+    vi.mocked(breakGain).mockReturnValue(1_000);
+    expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), withPort(portAnswering('ai3', true)))).toBe('ai3');
+    expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), withPort(portAnswering('ai3', true)))).toBe(true);
+    // The port already chose the promised candidate: nothing to break.
+    expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), withPort(portAnswering('ai1', null)))).toBe('ai1');
+  });
+
+  it('T-AC-B9: no VotePort, the vote is unchanged and the stream is called as often', () => {
+    const tie = { governor: ['ai1', 'ai2', 'ai3'] };
+    for (const level of ['trader', 'rookie'] as const) {
+      const run = (port?: VotePort) => {
+        const state = ballotWith(tie, {});
+        const rng = counted(5);
+        tickAlone(state, new VoteHand(mindOf('ai0', 'trader', level), rng, port));
+        return { vote: electionOf(state).ballots.ai0, draws: rng.draws() };
+      };
+      const none = run();
+      expect(run(undefined)).toEqual(none);
+      expect(run(portAnswering(null, null))).toEqual(none);
+    }
   });
 });
