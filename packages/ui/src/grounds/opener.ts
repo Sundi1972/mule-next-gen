@@ -12,4 +12,3 @@ export function openerOf({ changed, reduced, politics }: { changed: boolean; red
   if (!politics) return null;
   return changed && !reduced ? { kind: 'full', ms: OPENER_MS.full } : { kind: 'still', ms: OPENER_MS.still };
 }
-
