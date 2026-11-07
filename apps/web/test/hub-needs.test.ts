@@ -26,7 +26,7 @@ describe("planning's This month you need (RULE-8)", () => {
     expect(rows.find((r) => r.good === 'energy')).toBeUndefined();
     expect(Object.fromEntries(rows.map((r) => [r.good, r.why]))).toEqual({
       food: 'upkeep',
-      water: 'upkeep, a mine, a power plant and 2 factories',
+      water: 'upkeep, a power plant, a mine and 2 factories',
       smithore: 'Alloy inputs',
       alloy: 'Electronics inputs',
       rareEarth: 'Electronics inputs',
