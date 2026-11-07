@@ -2163,3 +2163,6 @@ export const BRAIN = {
   /** Longest reason the playbook writer accepts on a strategy or an edit, in characters. */
   writeReasonChars: 140,
 } as const;
+
+/** S1 spike (throwaway): the AI's first MULE is an Energy plant while it has none. */
+export const S1_SPIKE = { energyFirst: false, alsoNoStop: false };
