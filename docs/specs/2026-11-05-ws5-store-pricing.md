@@ -622,6 +622,23 @@ because   each item gives its reason on its own lines
 goal      G-3 met: UBER-AC-3 on 200 games, seed 1, politics off: Crystite off-world median 90, 40 to 300, above 200 in
           1.0% of months, 280 or more 0.1%, 50 or less 2.9%
 folded    §1 C3 and §6 T-AC-1 read with AM-7; docs/rulebook/store-and-prices.html#off-world-walk describes the build
+
+AM-8 · 2026-11-07 · Heiko, through the PM · the MULE factor climbs faster and stops at 4.0
+target    §1 C4; §2 RULE-4; §3 the MULE config line; §6 B-AC-6
+said      C4 and B-AC-6: MULE.maxFactor 2.0; RULE-4: the factor × (1 + scarcityUp), scarcityUp 0.15 as before
+did       MULE.maxFactor 4.0 and MULE.scarcityUp 0.25. B-AC-6 pins both: the factor is 1.25 after one sold-out month
+          and exactly 4.0 after ten. Heiko picked "4× + faster climb, now" from WS5's cap table, 40 seed-1 games,
+          politics off / on, on milestone A's head 67ca392a:
+            2× (built)        MULE p90 274/267, max 672; MULE 500+ in 2 games; MULE share of Worth m12 20/19%;
+                              Worth ratio p50 1.83/1.90, max 3.91; score median 50,307; colonists 87.1/84.4
+            3× or 4× alone    identical but the max (946) and 2 games of 40 in months 10-12
+            4× + 0.25 climb   MULE p90 330/311, max 1,344; MULE 500+ in 5/4 games; share m12 25%; Worth ratio p50
+                              2.35/2.45, max 7.81; games at 10x 0; score median 52,857; colonists 87.3/84.6
+because   Heiko likes the MULE price's extremes. A cap alone barely binds: at 15% a climb, the factor needs 5 sold-out
+          months in a row to reach 2, about 8 for 3 and 10 for 4, in a 12-month game. The climb is what brings them
+          back; the cap still keeps them off the old runaway (trunk 773f96b5: max 7,357, 18 of 40 games at 10x).
+goal      C4's intent holds: the MULE price is bounded, (labour + Smithore at its ceiling) × 4 = 2,880 at most
+folded    §1 C4, §2 RULE-4, §3 and §6 B-AC-6 read with AM-8; docs/rulebook/store-and-prices.html#mule-price describes it
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
