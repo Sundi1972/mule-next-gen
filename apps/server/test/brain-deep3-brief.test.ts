@@ -91,6 +91,8 @@ describe("deep3 fix 3: the land brief shows what became of last month's route", 
     expect(landBriefs()).toHaveLength(2);
     expect(next).toContain('What happened in your last phase (month 1, development):');
     expect(next).toMatch(new RegExp(`/development/route/2: planned \\{"act":"install","plot":${plot}\\}, got (skipped|replaced) \\(stale: plot ${plot}\\)`));
+    // The time used is a float in the log; the brief shows it whole.
+    expect(next).toMatch(/\/development\/timeBudgetMs: planned \d+, got \d+\n/);
   });
 });
 
