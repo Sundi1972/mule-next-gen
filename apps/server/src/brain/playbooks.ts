@@ -122,6 +122,8 @@ export class Playbooks {
   private readonly phaseAsks = new Map<string, Ask>();
   /** What the last reply for each seat's development or auction had refused, for that phase's next brief. */
   private readonly phaseFeedback = new Map<string, Feedback>();
+  /** The phase's draft of each seat kept past its start (C7), made as the phase started, by `${seat}/${phase}`. */
+  private readonly keptDrafts = new Map<string, ReturnType<AiSeat['draft']>>();
   /** Every seat's Worth when each seat's last land plan was asked, for the result line of its next. */
   private readonly worthAtAsk = new Map<PlayerId, WorthAt>();
 
@@ -292,45 +294,85 @@ export class Playbooks {
    * is applied to the phase's draft as it starts (AM-A17); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
    * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
+   *
+   * A seat in `keep` with this month's ask is left asking (C7): its ask stays open, it is drafted now, and takeSeat takes
+   * it later on that draft. Returns the seats kept.
    */
-  takePhase(state: GameState, phase: EditPhase): void {
+  takePhase(state: GameState, phase: EditPhase, keep: ReadonlySet<PlayerId> = new Set()): PlayerId[] {
+    const kept: PlayerId[] = [];
     for (const seat of this.options.seats) {
       const key = `${seat.id}/${phase}`;
       const ask = this.phaseAsks.get(key);
       if (!ask || ask.month !== state.month) continue;
-      ask.started = true;
-      ask.controller.abort();
-      this.phaseAsks.delete(key);
-      if (!ask.written) continue;
-      let made: ReturnType<typeof playbookFrom>;
-      try {
-        // The edits go onto the phase's draft as it starts, the one the engine's own seat would play (AM-A17): the
-        // development's was shown at upkeep, before the land grant changed what the seat owns; the auction's in
-        // production, before the store posted its prices and the month's events ran.
-        const draft = seat.draft(state, phase);
-        const flips = withoutFlippedGoods(ask.written, ask.roles, draft);
-        // A route's "granted" plot is the one the seat gained since its land write was asked: found in the ranking of
-        // the land playbook that took effect, else a land-auction win (B fix 4 a).
-        const granted = this.withGranted(flips.written, state, seat.id, ask.owned);
-        const written = granted.written;
-        const dropped = [...flips.dropped, ...granted.dropped];
-        made = playbookFrom(seat.validator(), state, draft, written);
-        if (dropped.length > 0 && made.feedback) {
-          // One new list for both: by 'llm', the feedback and the playbook share playbookFrom's rejected array.
-          const rejected = [...made.feedback.rejected, ...dropped];
-          made = { feedback: { ...made.feedback, rejected }, playbook: made.playbook.by === 'llm' ? { ...made.playbook, rejected } : made.playbook };
+      if (keep.has(seat.id)) {
+        try {
+          this.keptDrafts.set(key, seat.draft(state, phase));
+        } catch (err) {
+          console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted at its start, it is drafted when taken: ${messageOf(err)}`);
         }
-      } catch (err) {
-        console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
+        kept.push(seat.id);
         continue;
       }
-      if (made.feedback) this.phaseFeedback.set(key, made.feedback);
-      // The development part carries no line: the land write's was said at the land grant.
-      if (saysPlan(ask.written, made.playbook.by)) this.speak(seat.id, ask.written.reply.line, state.month, phase);
-      if (made.playbook.by !== 'llm') continue;
-      seat.adopt(made.playbook);
-      this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
+      this.take(state, phase, seat, ask);
     }
+    return kept;
+  }
+
+  /**
+   * Takes one seat kept at `phase`'s start (C7): its ask is cancelled, and a reply that came is applied to the draft made
+   * as the phase started, as takePhase would have; with none, the seat plays its own way. Nothing open: nothing happens.
+   */
+  takeSeat(state: GameState, phase: EditPhase, seatId: PlayerId): void {
+    const key = `${seatId}/${phase}`;
+    const held = this.keptDrafts.get(key);
+    this.keptDrafts.delete(key);
+    const seat = this.options.seats.find((s) => s.id === seatId);
+    const ask = this.phaseAsks.get(key);
+    if (!seat || !ask || ask.month !== state.month) return;
+    this.take(state, phase, seat, ask, held);
+  }
+
+  /** Whether this month's ask for the seat's `phase` is still open with its reply come. Reads only. */
+  answered(state: GameState, seatId: PlayerId, phase: EditPhase): boolean {
+    const ask = this.phaseAsks.get(`${seatId}/${phase}`);
+    return ask !== undefined && ask.month === state.month && ask.written !== null;
+  }
+
+  /** One seat's ask at its phase's start: cancelled, and its reply, if one came, applied to the draft (`held`, or made now). */
+  private take(state: GameState, phase: EditPhase, seat: AiSeat, ask: Ask, held?: ReturnType<AiSeat['draft']>): void {
+    const key = `${seat.id}/${phase}`;
+    ask.started = true;
+    ask.controller.abort();
+    this.phaseAsks.delete(key);
+    if (!ask.written) return;
+    let made: ReturnType<typeof playbookFrom>;
+    try {
+      // The edits go onto the phase's draft as it starts, the one the engine's own seat would play (AM-A17): the
+      // development's was shown at upkeep, before the land grant changed what the seat owns; the auction's in
+      // production, before the store posted its prices and the month's events ran.
+      const draft = held ?? seat.draft(state, phase);
+      const flips = withoutFlippedGoods(ask.written, ask.roles, draft);
+      // A route's "granted" plot is the one the seat gained since its land write was asked: found in the ranking of
+      // the land playbook that took effect, else a land-auction win (B fix 4 a).
+      const granted = this.withGranted(flips.written, state, seat.id, ask.owned);
+      const written = granted.written;
+      const dropped = [...flips.dropped, ...granted.dropped];
+      made = playbookFrom(seat.validator(), state, draft, written);
+      if (dropped.length > 0 && made.feedback) {
+        // One new list for both: by 'llm', the feedback and the playbook share playbookFrom's rejected array.
+        const rejected = [...made.feedback.rejected, ...dropped];
+        made = { feedback: { ...made.feedback, rejected }, playbook: made.playbook.by === 'llm' ? { ...made.playbook, rejected } : made.playbook };
+      }
+    } catch (err) {
+      console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
+      return;
+    }
+    if (made.feedback) this.phaseFeedback.set(key, made.feedback);
+    // The development part carries no line: the land write's was said at the land grant.
+    if (saysPlan(ask.written, made.playbook.by)) this.speak(seat.id, ask.written.reply.line, state.month, phase);
+    if (made.playbook.by !== 'llm') return;
+    seat.adopt(made.playbook);
+    this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
   }
 
   /**
