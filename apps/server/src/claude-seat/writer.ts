@@ -17,6 +17,8 @@ export interface SeatAsk {
 
 /** A chat's plan as submit_plan carries it, unchecked. */
 export interface SubmittedPlan {
+  /** Absent unless sent; the parser offers it only where the brief does (the land ask). */
+  strategy?: unknown;
   edits: unknown;
   line: unknown;
 }
@@ -101,7 +103,8 @@ export class ClaudeSeatWriter implements PlaybookWriter {
     if (open.state === 'aborted') return { kind: 'too_late' };
     if (open.state !== 'open') return { kind: 'answered' };
     open.state = 'answering';
-    const written = await writeReply(async () => ({ text: JSON.stringify({ edits: plan.edits, line: plan.line }) }), open.ask);
+    const reply = { ...(plan.strategy === undefined ? {} : { strategy: plan.strategy }), edits: plan.edits, line: plan.line };
+    const written = await writeReply(async () => ({ text: JSON.stringify(reply) }), open.ask);
     if (open.state !== 'answering') return { kind: 'too_late' };
     open.state = 'answered';
     this.tally.answered += 1;

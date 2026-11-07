@@ -31,12 +31,18 @@ const TOOLS = [
   },
   {
     name: 'submit_plan',
-    description: `Answers an ask: edits to the offered paths, each with a short reason, and one line the seat says at the table. The first answer to an ask counts. ${LOOP}`,
+    description: `Answers an ask: edits to the offered paths, each with a short reason, and one line the seat says at the table. On a land ask you may also set the seat's strategy (kind, moneyMaker, reason); any other ask refuses it. The first answer to an ask counts. ${LOOP}`,
     inputSchema: {
       type: 'object',
       properties: {
         code: CODE,
         ask_id: { type: 'string' },
+        strategy: {
+          type: 'object',
+          description: "Land asks only: the seat's strategy, all three fields.",
+          properties: { kind: { type: 'string' }, moneyMaker: { type: ['string', 'null'] }, reason: { type: 'string' } },
+          required: ['kind', 'moneyMaker', 'reason'],
+        },
         edits: {
           type: 'array',
           items: { type: 'object', properties: { path: { type: 'string' }, to: {}, reason: { type: 'string' } }, required: ['path', 'to', 'reason'] },
@@ -139,7 +145,7 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
 
     async submit_plan(found: Found, args: Record<string, unknown>) {
       if (!found.claude) return { kind: 'unknown_ask' };
-      const result = await found.claude.writer.submit(String(args.ask_id), { edits: args.edits, line: args.line });
+      const result = await found.claude.writer.submit(String(args.ask_id), { strategy: args.strategy, edits: args.edits, line: args.line });
       if (result.kind !== 'accepted') return result;
       return { kind: 'accepted', accepted: result.accepted, refused: result.refused.map((r) => ({ edit: r.path, why: r.cause })) };
     },
