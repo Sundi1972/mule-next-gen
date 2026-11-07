@@ -902,6 +902,57 @@ did       Recorded there in full: Cast my vote is the ballot's Done; the field c
 goal      P-1 — still met
 ```
 
+```
+AM-22 · 2026-11-07 · Heiko (via PM): all of politics in the first release candidate, plan A ·
+        slices 3-5 designed
+
+target    §0 P-2 (UBER-AC-3), P-3 (UBER-AC-4), D1 slices 3-5, AM-13 (the budget), AM-19 (the Sheriff
+          parked)
+said      slices 3-5 come one at a time after slice 2a, each with its own design; only the Governor is
+          elected until slice 4
+did       Heiko, 7 Nov (SEAMS 10:27Z): the first release candidate carries all of politics, "All 3 parts +
+          Claude's social side too", with computer players that use them. He picked plan A: RC on 18 Nov;
+          part 1 (deal cards, reputation) and part 2 (sabotage, the Sheriff) in full; part 3 thin (the
+          overrule on the tax only, plus the Projects and Welfare budget lines). The full part 3 (the
+          budget overrule, the Security line, the inquiry, the snap election) follows right after RC.
+          Layout: politics layout P0 option A (Heiko, 7 Nov 11:02Z): no new tab, at most five sections
+          per phone screen, the Sheriff gets a desk like the Governor's, an action starts where its
+          target is.
+          The three slices are designed in three specs, written in parallel on WS7's frozen contract
+          types of 7 Nov, with prefixed ids so they never collide:
+            docs/specs/2026-11-07-ws7-slice3-deals.md     S3-  deal cards and reputation
+            docs/specs/2026-11-07-ws7-slice4-sabotage.md  S4-  sabotage, the Sheriff, the sabotage ban
+            docs/specs/2026-11-07-ws7-slice5-budget.md    S5-  budget, overrule, projects; every item
+                                                               tagged [RC] or [after RC]
+          AM-19's parked Sheriff returns in slice 4 (S4-C6): POLITICS.offices becomes
+          ['governor', 'sheriff'], with the Sheriff's job (guard, investigate, fine) and pay.
+          Reputation moves only through politics.ts::reputationShift, by POLITICS.reputation.moves
+          (kept, voteBroken, pactBroken from slice 3; caught from slice 4).
+          AI split (PM ruling, 7 Nov): WS7 owns the rules and the hands (vote, deal, sabotage, sheriff,
+          budget); WS1 supplies the valuations in value.ts and utility.ts.
+          Open for Heiko: D-S3-1, D-S4-1, D-S4-2, D-S5-2 (RC); D-S5-3, D-S5-4 (after RC).
+because   G-4: the RC playtest is of all of politics, against computer players that play it
+goal      P-2, P-3 — designed, not in the game yet; P-1 — still met (now with two offices)
+folded    UBER-AC-3 legs A and C → slice 3 (S3-1, S3-2), leg B → slice 4's capture through slice 3's
+          pactBreach; UBER-AC-4 → S4-UBER-AC-1; AM-13 → slice 5; AM-19 reversed by S4-C6; §9's politics
+          state gains two writers of their own fields: diplomacy.ts writes Politics.deals through
+          politics.ts's exported editPolitics (slice 3 §9); sabotage.ts writes Politics.sabotage, guards
+          and rumoured through its own copy-on-write edit() (slice 4 §9). politics.ts writes the rest.
+```
+
+```
+AM-23 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recommended" · slices 3-5 ruled
+
+target    AM-22's open decisions
+did       D-S3-1 A (campaign law promises after RC); D-S4-1 B (an investigation finds the culprit half the
+          time); D-S4-2 A (no separate sabotage switch in RC); D-S5-2 A (the overrule is held as planning ends);
+          D-S5-3 A (a snap election after two overrules, after RC); D-S5-4 A (the inquiry examines the
+          Governor's public breaches, after RC). The broken-card reveal stands as recorded. Each slice spec
+          records its own (slice 3 AM-4, slice 4 AM-3, slice 5 AM-4). The build plan is
+          docs/plans/2026-11-07-ws7-politics-slices-3-5.md.
+goal      P-2, P-3 — designed and ruled, not in the game yet
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state
