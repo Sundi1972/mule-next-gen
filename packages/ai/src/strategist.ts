@@ -421,7 +421,8 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const keepBackFor = (good: Good) => keepBacks.get(good) ?? keepBacks.set(good, cashReserve(obs, mind, o, good)).get(good)!;
   const needFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food');
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
-  const needWater = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'water');
+  // Its wells' next output, net of their own use, short of the drink kept back and its plots' Water (AM-18).
+  const needWater = ownSupply(o, 'water') < monthNeeds(obs, mind.me).water;
   const analysed = new Set(p.analysed);
   const cands: Candidate<DevAction>[] = [];
   const chain = focus === null ? null : chainValue(obs, o, mind, focus);
@@ -484,7 +485,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
   // Energy first, then Water: a rule that finds its install allowed rules the rest out, and the next one finds none.
   if (STRATEGIST.energyFirst && needEnergy) firstOf(cands, 'energy', 'no Energy plant of my own yet');
-  if (STRATEGIST.waterFirst && needWater) firstOf(cands, 'water', 'no well of my own yet');
+  if (STRATEGIST.waterFirst && needWater) firstOf(cands, 'water', 'my wells don\'t cover my Water yet');
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 

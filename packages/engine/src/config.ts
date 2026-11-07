@@ -1807,9 +1807,10 @@ export const STRATEGIST = {
    */
   medicineDespiteInputs: true as boolean,
   /**
-   * Water first, Energy first's twin for AM-18: once a seat has its Energy plant (or may not install one), while it has
-   * no well and may install one, every other install and "Keep the cash" are ruled out, so its next MULE is a well. A
-   * PR-5b lever, chosen by sweep. A switch: `--set STRATEGIST.waterFirst=true|false`.
+   * Water first, Energy first's twin for AM-18: once a seat has its Energy plant (or may not install one), while its
+   * wells' next output (net of their own use) is short of its drink and its plots' Water, and it may install a well,
+   * every other install and "Keep the cash" are ruled out, so its next MULE is a well. A PR-5b lever, chosen by sweep.
+   * A switch: `--set STRATEGIST.waterFirst=true|false`.
    */
   waterFirst: false as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
