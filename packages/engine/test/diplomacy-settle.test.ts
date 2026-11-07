@@ -134,11 +134,15 @@ describe('vote cards at their ballot', () => {
 
   it.each(ELECTION_ROWS)('S3-T-AC-2: S3-RULE-4 election row $row ($why)', ({ declared, before, picks, then }) => {
     const { state, id } = electionWithCard(declared);
+    // A card for the next ballot (a card made during the ceremony has until 4): this result must leave it alone.
+    const later = deal(state, 'kai', GOV('mia', 'brix'));
+    cardOf(state, later).until = 4;
     before?.(state);
     closeBallot(state, picks);
     expect(cardOf(state, id), 'a card is not judged at ballot close').toMatchObject({ status: 'active', settled: null });
     finishCeremony(state);
     expect(cardOf(state, id)).toMatchObject({ ...then, settled: 1 });
+    expect(cardOf(state, later), 'a card whose until is not this month is not this ballot\'s').toMatchObject({ status: 'active', settled: null });
   });
 
   const LAW_ROWS: { why: string; from: string; yes: boolean; vote?: boolean; then: Pick<DealCard, 'status' | 'brokenBy'> }[] = [
@@ -154,10 +158,8 @@ describe('vote cards at their ballot', () => {
     const id = deal(state, from, LAW('ossa', yes));
     openLawBallot(state);
     if (vote !== undefined) castLawVote(state, from, vote);
-    for (const p of SEATS) councilDone(state, p);
-    stepVotes(state, 0);
-    expect(cardOf(state, id), 'a card is not judged at the tally').toMatchObject({ status: 'active', settled: null });
-    stepVotes(state, BIG_DT);
+    finishLawBallot(state);
+    expect(state.politics!.laws.landTax, 'the law took effect before the card was judged').toBeTruthy();
     expect(cardOf(state, id)).toMatchObject({ ...then, settled: 3 });
   });
 
@@ -204,10 +206,13 @@ describe('vote cards at their ballot', () => {
     const pact = deal(state, 'ossa', PACT('kai'));
     const later = deal(state, 'mia', GOV('lena', 'ossa'));
     state.politics!.deals.find((d) => d.id === later)!.until = 4;
+    const shortPact = deal(state, 'mia', PACT('brix', 1));
+    expect(cardOf(state, shortPact).until, 'a 1-month pact ends this month').toBe(1);
     closePlanningDeals(state);
     expect(cardOf(state, offered)).toMatchObject({ status: 'expired', settled: 1 });
     expect(cardOf(state, due)).toMatchObject({ status: 'expired', brokenBy: null, settled: 1 });
     expect(cardOf(state, pact)).toMatchObject({ status: 'active', settled: null });
+    expect(cardOf(state, shortPact), 'a pact settles at the upkeep, not at planning\'s close').toMatchObject({ status: 'active', settled: null });
     expect(cardOf(state, later)).toMatchObject({ status: 'active', settled: null });
     const off = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
     expect(() => closePlanningDeals(off)).not.toThrow();
@@ -292,6 +297,17 @@ describe('S3-RULE-3 vote card moves', () => {
     expect(rep(state, 'lena')).toBe(50 + 2 * POLITICS.reputation.moves.kept);
   });
 
+  it('S3-T-AC-4: the kept limit — a pact kept where no sabotage is possible paid nobody, so it does not use up the partner\'s gain', () => {
+    const { state } = electionWithCard(['brix', 'ossa']);
+    const pact = deal(state, 'lena', PACT('kai', 1));
+    monthEndDeals(state, false, false);
+    expect(cardOf(state, pact)).toMatchObject({ status: 'kept', settled: 1 });
+    expect(rep(state, 'lena')).toBe(50);
+    closeBallot(state, { lena: 'brix' });
+    finishCeremony(state);
+    expect(rep(state, 'lena')).toBe(50 + POLITICS.reputation.moves.kept);
+  });
+
   it("S3-T-AC-4: the ceremony's term counts — a kept card from the old term does not block a gain at the new one", () => {
     const state = newGame();
     state.month = 3;
@@ -343,6 +359,11 @@ describe('pacts', () => {
   });
 
   it('S3-T-AC-14: pactBreach rows 1-3 — outside the pact false and nothing changes; inside, once per card; a kept pact turns broken without a second gain', () => {
+    for (const month of [3, 5]) {
+      const edge = pactInMonth3();
+      edge.state.month = month;
+      expect(pactBreach(edge.state, 'lena', 'brix', month, true), `month ${month} is inside a 3-5 pact`).toBe(true);
+    }
     const { state, id } = pactInMonth3();
     const before = JSON.stringify([state.politics, state.players.map((p) => p.reputation)]);
     expect(pactBreach(state, 'lena', 'brix', 2, true), 'before the pact').toBe(false);
@@ -356,6 +377,7 @@ describe('pacts', () => {
     monthEndDeals(state, false, true);
     expect(cardOf(state, id).status).toBe('kept');
     state.month = 8;
+    state.politics = { ...state.politics!, termStart: 6 }; // a new term: the pact's gain at month 5 no longer counts, yet the kept pact must not pay its victim again
     expect(pactBreach(state, 'lena', 'brix', 4, true)).toBe(true);
     expect(cardOf(state, id)).toMatchObject({ status: 'broken', brokenBy: 'lena', settled: 8 });
     expect(rep(state, 'lena'), 'the earlier gain stays, the breach costs').toBe(50 + POLITICS.reputation.moves.kept + POLITICS.reputation.moves.pactBroken);
@@ -414,11 +436,13 @@ describe('what the table can read', () => {
       card('deal-live00', 'lena', 'mia', 'active', null, null),
       card('deal-new000', 'mia', 'lena', 'broken', 5, 'lena'),
     );
-    state.history = [3, 5].map((month) => ({ month, events: [unrest('lena'), unrest('brix')] }) as unknown as MonthReport); // only month and events are read
-    // The month's own list repeats the events its report filed at upkeep: month 5 must count once.
-    state.monthEvents = [unrest('lena')];
-    const reasons = reputationReasons(state, 'lena');
-    expect(reasons.map((r) => (r.kind === 'broken' ? `broken ${r.card.id} ${r.card.settled}` : `${r.kind} ${r.month}`))).toEqual(['broken deal-new000 5', 'unrest 5', 'unrest 3', 'broken deal-old000 2']);
+    const report = (month: number, ...who: string[]) => ({ month, events: who.map(unrest) }) as unknown as MonthReport; // only month and events are read
+    state.history = [report(3, 'lena', 'brix'), report(4, 'lena'), report(5, 'brix')];
+    // The month's own list: Lena's blame is not in any report yet and must be listed; Brix's repeats the report filed at upkeep and counts once.
+    state.monthEvents = [unrest('lena'), unrest('brix')];
+    const label = (r: ReturnType<typeof reputationReasons>[number]) => (r.kind === 'broken' ? `broken ${r.card.id} ${r.card.settled}` : `${r.kind} ${r.month}`);
+    expect(reputationReasons(state, 'lena').map(label)).toEqual(['broken deal-new000 5', 'unrest 5', 'unrest 4', 'unrest 3', 'broken deal-old000 2']);
+    expect(reputationReasons(state, 'brix').map(label), 'month 5 once').toEqual(['unrest 5', 'broken deal-theirs 4', 'unrest 3']);
     expect(reputationReasons(state, 'kai'), 'a kept card gives no reason').toEqual([]);
     expect(reputationReasons(state, 'mia').map((r) => r.kind), 'the victim of a break has none').toEqual([]);
   });
