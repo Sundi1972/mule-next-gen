@@ -200,6 +200,32 @@ describe('/mcp, stateless, the seat code on every call', () => {
     expect(openPhase(game, 's2')).toBeNull();
   });
 
+  it("T-AC-1: submit_plan's strategy goes through the API writer's parser: played on a land ask, refused on an auction ask", async () => {
+    const codes = new SeatCodeBook();
+    const { game, fake, notes, codeA } = startedGame(codes);
+    const client = mcpClient(await serve(codes));
+    const strategy = { kind: 'spoiler', moneyMaker: 'smithore', reason: 'Starve the rest of ore.' };
+    const strategyEdits = [
+      { path: '/strategy/kind', to: 'spoiler', reason: strategy.reason },
+      { path: '/strategy/moneyMaker', to: 'smithore', reason: strategy.reason },
+      { path: '/strategy/reason', to: strategy.reason, reason: strategy.reason },
+    ];
+
+    const land = await client.call('wait_for_my_turn', { code: codeA });
+    expect(await client.call('submit_plan', { code: codeA, ask_id: land.ask_id, strategy, edits: [], line: 'Ore is mine.' })).toEqual({ kind: 'accepted', accepted: strategyEdits, refused: [] });
+    await playUntil(game, fake, () => openPhase(game, 's2') === 'auction');
+    const played = notes.find((n) => n.seat === 's2' && n.phase === 'landGrant');
+    expect(played?.playbook.by).toBe('llm');
+    expect(played?.playbook.strategy).toMatchObject(strategy);
+
+    const auction = await client.call('wait_for_my_turn', { code: codeA });
+    expect(await client.call('submit_plan', { code: codeA, ask_id: auction.ask_id, strategy, edits: [], line: 'Still ore.' })).toEqual({
+      kind: 'accepted',
+      accepted: [],
+      refused: strategyEdits.map((e) => ({ edit: e.path, why: 'path_not_offered' })),
+    });
+  });
+
   it('B-AC-7: after switching to Built-in, the next call gets "seat taken back"', async () => {
     const codes = new SeatCodeBook();
     const lobby = new MuleGame(fakeContext({ table: TABLE }).ctx, 10);
