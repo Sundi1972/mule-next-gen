@@ -57,16 +57,22 @@ const TOOLS = [
 
 type Payload = { kind: string } & Record<string, unknown>;
 
-/** The sentence a result opens with, by kind; the same for a wrong, expired or guessed code (RULE-2). */
+/** The sentence each result opens with, by kind; the same for a wrong, expired or guessed code (RULE-2). */
 const SAID: Readonly<Record<string, (result: Payload) => string>> = {
+  joined: () => 'You play this seat. Read the rules below, then call wait_for_my_turn.',
+  // ms_left 0 is only the game's usual wait spent: the ask stays open until its phase starts, so 0 must not read as late.
+  ask: (r) => (r.ms_left === 0 ? 'This ask is still open: answer it now with submit_plan.' : 'Your turn: answer this ask with submit_plan.'),
+  again: () => 'Still waiting, call again now.',
+  accepted: () => 'Plan accepted: it plays as its phase starts. Call wait_for_my_turn for the next ask.',
+  unusable: (r) => `The plan could not be read (${String(r.cause)}). The ask is still open: fix the plan and resend it with submit_plan.`,
+  unknown_ask: () => 'Unknown or closed ask: call wait_for_my_turn for the open one.',
+  answered: () => 'One answer per ask: this ask was already answered. Call wait_for_my_turn for the next one.',
+  too_late: () => 'Too late, played the built-in plan. Call wait_for_my_turn for the next ask.',
   busy: (r) => `Too many wrong seat codes reached the game just now. Call again after ${String(r.retry_s)} seconds.`,
   no_such_seat: () => 'No seat has that code. Check the invite.',
   taken_back: () => 'The host took this seat back. Stop playing it.',
   game_over: () => 'The game is over. Stop playing.',
-  unusable: (r) => `The plan could not be read (${String(r.cause)}). The ask is still open: fix the plan and resend it with submit_plan.`,
 };
-
-const STILL_OPEN = 'This ask is still open: answer it now with submit_plan.';
 
 type Refusal = { kind: 'busy'; retry_s: number } | { kind: 'no_such_seat' | 'taken_back' | 'game_over' };
 
@@ -206,9 +212,7 @@ export function createMcpEndpoint(options: McpEndpointOptions): McpEndpoint {
 
 /** A tool's result: a sentence and the JSON for Claude to read, and the same object as structured content. */
 function resultOf(payload: Payload): CallToolResult {
-  const sentence = Object.hasOwn(SAID, payload.kind) ? `${SAID[payload.kind]!(payload)}\n` : '';
-  // ms_left 0 is only the game's usual wait spent: the ask stays open until its phase starts, so 0 must not read as late.
-  const said = payload.kind === 'ask' && payload.ms_left === 0 ? `${STILL_OPEN}\n` : sentence;
+  const said = Object.hasOwn(SAID, payload.kind) ? `${SAID[payload.kind]!(payload)}\n` : '';
   return { content: [{ type: 'text', text: `${said}${JSON.stringify(payload)}` }], structuredContent: payload };
 }
 
