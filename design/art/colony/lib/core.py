@@ -23,6 +23,13 @@ ZT = 0.02  # top of a place's paving
 IMAGES, MATS = {}, {}
 GLOW = []  # (socket, value): every emission input, set to value in the glow pass and 0 in day and dusk
 LIGHTS = []  # (light, energy): lamps, work lights, embers; they only shine in the glow pass
+# (socket, value): emission that is on in the DUSK pass itself, so the dusk picture reads lit on its own (every
+# occupied pane warm, lamp globes, signs; AM-7 dusk wealth). 0 in day; in glow the GLOW value rules
+DUSK = []
+# dusk pane strength: every pane of an occupied building glows ~2700 K at this, each bay its own level; 1.3 put the
+# month-12 panes at 0.97 / 1.04 of look.html's (calibrated 7 Nov at 32 spp, glow at 0.625; 1.6 read no brighter)
+DUSK_WIN = float(os.environ.get("COLONY_DUSK_WIN", "1.3"))
+DUSK_SIGN = 0.5  # signs and lit accents at dusk, as a share of their glow-pass strength
 
 
 def reset():
@@ -31,6 +38,7 @@ def reset():
         d.clear()
     GLOW.clear()
     LIGHTS.clear()
+    DUSK.clear()
 
 
 def coll():
@@ -156,6 +164,7 @@ def accent(name, rgb, glow=0.0, rough=0.4, emit=None):
     b.inputs["Emission Color"].default_value = (*(emit or rgb), 1)
     if glow:
         GLOW.append((b.inputs["Emission Strength"], glow))
+        DUSK.append((b.inputs["Emission Strength"], glow * DUSK_SIGN))
     return m
 
 
@@ -180,8 +189,16 @@ def glass_mat(name, lit_share=0.72, strength=2.6):
     # full strength to the camera, a quarter as light on the ground: at full spill a lit building washes its whole
     # slab orange in the glow layer
     spill = math_(nt, "ADD", math_(nt, "MULTIPLY", node(nt, "ShaderNodeLightPath").outputs["Is Camera Ray"], 0.75), 0.25)
-    link(nt, math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", lit, level), s.outputs[0]), spill), b.inputs["Emission Strength"])
+    glow = math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", lit, level), s.outputs[0])
+    # dusk: every pane of an occupied building glows warm on its own (lit_share 0, an empty building, stays dark),
+    # each bay its own level from 0.7 to 1.3, so the dusk picture reads as a lit colony without the glow layer
+    d = node(nt, "ShaderNodeValue")
+    d.outputs[0].default_value = 0.0
+    dusk = math_(nt, "MULTIPLY", math_(nt, "ADD", math_(nt, "MULTIPLY", wn.outputs["Value"], 0.6), 0.7), d.outputs[0])
+    link(nt, math_(nt, "MULTIPLY", math_(nt, "ADD", glow, dusk), spill), b.inputs["Emission Strength"])
     GLOW.append((s.outputs[0], strength))
+    if lit_share > 0:
+        DUSK.append((d.outputs[0], DUSK_WIN))
     return m
 
 
@@ -230,6 +247,7 @@ def globe_mat():
     link(nt, em.outputs[0], mx.inputs[2])
     shadow_see_through(nt, mx)
     GLOW.append((mx.inputs[0], 1.0))
+    DUSK.append((mx.inputs[0], 1.0))  # the globes are lit at dusk; their light on the ground stays wealth's (glow)
     return m
 
 

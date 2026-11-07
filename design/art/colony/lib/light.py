@@ -21,6 +21,11 @@ DUSK_BG = float(os.environ.get("COLONY_DUSK_BG", "0.6"))
 # the faces we see, so facades read bright and warm at dusk as in look.html's lit still (AM-7 check 5). Low (12 deg),
 # and linked off the ground. COLONY_DUSK_FILL overrides it for calibration runs only
 DUSK_FILL = float(os.environ.get("COLONY_DUSK_FILL", "2.4"))
+# the blue hour's ground fill, for a building layer's own place ground only (the forecourt, the pad, the park's lawn):
+# the colony's windows and lamps spilling on the ground round them, so the ground between the buildings matches the
+# plate's dusk grass (AM-7 dusk wealth: it measured 0.65 of look.html's grass without it). Warm, shadowless, linked
+# to the ground meshes alone; the plate takes none. COLONY_DUSK_GFILL overrides it for calibration runs only
+DUSK_GFILL = float(os.environ.get("COLONY_DUSK_GFILL", "0.6"))
 
 
 def rig():
@@ -67,7 +72,22 @@ def rig():
     fill.light_linking.receiver_collection = nofill
     for co in nofill.collection_objects:
         co.light_linking.link_state = "EXCLUDE"
-    R.update(bg=bg, tint=core.sock(tint, "B", False, "RGBA"), sun=sun, fill=fill)
+    bpy.ops.object.light_add(type="SUN")
+    gfill = bpy.context.active_object
+    e, a = math.radians(40), math.radians(-45)
+    gfill.rotation_euler = Vector((math.cos(e) * math.cos(a), math.cos(e) * math.sin(a), math.sin(e))).to_track_quat("Z", "Y").to_euler()
+    gfill.data.color = (1.0, 0.8, 0.58)
+    gfill.data.angle = math.radians(30)
+    if hasattr(gfill.data, "cycles") and hasattr(gfill.data.cycles, "cast_shadow"):
+        gfill.data.cycles.cast_shadow = False
+    ground = bpy.data.collections.new("ground_fill")
+    for o in nofill.objects:
+        if not o.name.startswith(("terrain", "apron", "shadow_catcher")):
+            ground.objects.link(o)
+    gfill.light_linking.receiver_collection = ground
+    for co in ground.collection_objects:
+        co.light_linking.link_state = "INCLUDE"
+    R.update(bg=bg, tint=core.sock(tint, "B", False, "RGBA"), sun=sun, fill=fill, gfill=gfill)
 
 
 def set_sun(elev, az, energy, color, angle):
@@ -100,9 +120,16 @@ def apply(name):
     R["sun"].hide_render = glow
     R["fill"].data.energy = DUSK_FILL
     R["fill"].hide_render = name in ("day", "glow")
+    R["gfill"].data.energy = DUSK_GFILL
+    R["gfill"].hide_render = name in ("day", "glow")
     scene.render.film_transparent = not glow  # the glow layer is added on black; the others composite by alpha
+    for s, _ in core.DUSK:
+        s.default_value = 0.0
     for s, v in core.GLOW:
         s.default_value = v if glow or lit else 0.0
+    if name in ("dusk", "lit"):  # the dusk picture's own light: occupied panes, globes, signs (shared sockets: max)
+        for s, v in core.DUSK:
+            s.default_value = max(v, s.default_value)
     for L, e in core.LIGHTS:
         L.hide_render = not (glow or lit)
         L.data.energy = e

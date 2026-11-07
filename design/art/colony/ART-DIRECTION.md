@@ -35,8 +35,11 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 - **Dusk:** the blue hour, not sunset-brown: sun 5° from the same side, orange; sky fill cool and dim; shadows go blue.
   Dusk is where wealth shows, so it is the hero light.
 - **Glow layer:** every emissive source (windows, lamps, signs, pad lights, floodlights, embers) is also rendered
-  **alone, additive, on black** — the live layer fades it per building by wealth and mood (§7). Dusk base pictures
-  are rendered with emission **off**.
+  **alone, additive, on black** — the live layer fades it per building by wealth and mood (§7).
+- **Dusk base pictures read lit on their own** (AM-7, 7 Nov): every occupied pane glows warm (~2 700 K), lamp
+  globes and signs are on, and a warm shadowless fill lifts each layer's own ground; the lamps' light pools and the
+  brighter lit share of the windows stay in the glow layer, as wealth's extra. Empty, closed and damaged glass stays
+  dark. Calibrated against look.html's colony at the page's glow opacity for wealth 2000 (0.625).
 
 ## 4. Palette and materials
 

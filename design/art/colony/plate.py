@@ -272,7 +272,7 @@ json.dump(meta, open(os.path.join(OUT, f"plate{N}.json"), "w"), indent=1)
 print(f"COLONY plate built t+{time.time() - T0:.0f}s; hall centre at px {hall} (full resolution)", flush=True)
 for li in LIGHTS:
     light.apply(li)  # day, dusk, glow: the same three passes as every building layer
-    light.R["fill"].hide_render = True  # the dusk fill is the colony's light on its facades; the plate has none (it
+    light.R["fill"].hide_render = light.R["gfill"].hide_render = True  # the dusk fill is the colony's light on its facades; the plate has none (it
     # turned the plinth's stone sides orange and lifted the land at the frame's bottom edge to 1.8 x look.html's)
     bpy.context.scene.render.filepath = os.path.join(OUT, f"plate{N}-{li}.png")
     t1 = time.time()

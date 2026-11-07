@@ -66,16 +66,26 @@ def over(dst, src, x, y):
 
 
 ADD = os.environ.get("GLOW_BLEND", "screen") == "add"  # add = CSS plus-lighter (what light does); screen = the page today
+# WEALTH=<n>: each glow at the page's opacity (packages/ui live.ts glowOpacity, RULE-2): stage share x (0.25 + 0.75 x
+# min(wealth / 4000, 1)); the month-12 fixture has wealth 2000, so 0.625 for standing. Unset: every glow at full
+WEALTH = os.environ.get("WEALTH")
+STAGE_GLOW = {"standing": 1.0, "build1": 0.5, "build2": 0.5, "damaged": 0.6, "site": 0.3, "closed": 0.0}
 
 
-def screen(dst, src, x, y):
+def glow_opacity(stage):
+    if WEALTH is None:
+        return 1.0
+    return STAGE_GLOW[stage] * (0.25 + 0.75 * min(float(WEALTH) / 4000, 1.0))
+
+
+def screen(dst, src, x, y, k=1.0):
     """The glow layer (light on black) laid over: added (plus-lighter), or screen as the look page does today."""
     h, w = src.shape[:2]
     H, W = dst.shape[:2]
     x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + w, W), min(y + h, H)
     if x0 >= x1 or y0 >= y1:
         return
-    s = src[y0 - y : y1 - y, x0 - x : x1 - x, :3]
+    s = src[y0 - y : y1 - y, x0 - x : x1 - x, :3] * k  # CSS opacity on a screen layer over black: the light times k
     d = dst[y0:y1, x0:x1]
     d[..., :3] = np.minimum(1.0, d[..., :3] + s) if ADD else 1 - (1 - d[..., :3]) * (1 - s)
     d[..., 3:] = np.maximum(d[..., 3:], s.max(2, keepdims=True))
@@ -106,10 +116,10 @@ for kind, stage, x, y, w in SPECS:
     layers.append((gx + gy, gx, kind, stage, gx, gy))
 layers.sort()
 os.makedirs(OUT, exist_ok=True)
-for li in ("day", "dusk"):
+for li in os.environ.get("COMPOSITE_LIGHTS", "day,dusk").split(","):  # COMPOSITE_LIGHTS=dusk for a quick check
     canvas = load(os.path.join(SRC, f"{PLATE}-{li}.png"))
     if li == "dusk":
-        screen(canvas, load(os.path.join(SRC, f"{PLATE}-glow.png")), 0, 0)
+        screen(canvas, load(os.path.join(SRC, f"{PLATE}-glow.png")), 0, 0, glow_opacity("standing"))
     for _, _, kind, stage, gx, gy in layers:
         fr = json.load(open(os.path.join(SRC, kind, "frame.json")))
         dc, dr = gx - 2, gy - 2
@@ -118,7 +128,7 @@ for li in ("day", "dusk"):
         base = os.path.join(SRC, kind, stage)
         over(canvas, load(f"{base}-{li}.png"), x0, y0)
         if li == "dusk" and os.path.exists(f"{base}-glow.png"):
-            screen(canvas, load(f"{base}-glow.png"), x0, y0)
+            screen(canvas, load(f"{base}-glow.png"), x0, y0, glow_opacity(stage))
         print(f"COLONY {li}: {kind}/{stage} at ({gx}, {gy}), centre px ({cx:.1f}, {cy:.1f})", flush=True)
     save(canvas, os.path.join(OUT, f"{PLATE}-{TAG}-{li}.png"))
     ring = load(os.path.join(RING, f"colony_{li}.png"))
