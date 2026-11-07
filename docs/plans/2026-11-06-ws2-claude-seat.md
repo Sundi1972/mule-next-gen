@@ -129,7 +129,7 @@ Every handoff carries, verbatim:
 
 ## Spike S1: the seat test in Claude Desktop and the phone (spike (b), spec §7)
 
-**Phase:** P0 (must complete before wave 1 sets `holdMs`, and before wave 3)
+**Phase:** P0. Split on 7 Nov (§8 below): the Claude Code half set wave 1's `holdMs` (done); the Desktop/phone half gates wave 3 and #setup.
 **Timebox:** the one ~20-minute test Heiko runs on 6 Nov, plus 1 hour to read the log
 **Stop condition:** the hold that survived in every tested app is known, and whether a Desktop chat plays several
 months on its own (D-1 b's condition) is answered yes or no.
@@ -333,3 +333,16 @@ Gated by S1's answer (D-1 b's condition, above).
 - [ ] WS3 named-edit OKs (server.ts `parse` and route line, mule-game.ts `start`, side pick, hook) and WS4 ownership of PR-0/1a/2a/3b/4 confirmed via the PM
 - [ ] Spike outcomes recorded: S1
 - [ ] Effort (~12–14 lane-days) communicated to the PM
+
+## §8 · Amendments
+
+- **7 Nov — S1 split; the Claude Code half run by WS2 (Heiko's OK via the PM, 7 Nov).** Heiko allowed WS2 to run the
+  Claude Code half of S1 headless on his own plan (no API spend) and to set wave 1's `holdMs` from it. Run 00:47–01:03Z
+  against the throwaway test server: holds of 5, 20 and 45 s returned; every longer hold was dropped at 60.0 s. So
+  `BRAIN.claudeSeat.holdMs` = 45_000 (spec §3, §7 spike (b), D-4). The Desktop / claude.ai / phone half stays with
+  Heiko and still gates wave 3 (D-1 b's condition) and PR-0's #setup screen; the test server now falls back below a
+  dropped hold, so that half also answers how many months a chat plays on its own.
+- **7 Nov — PR-1b built and merged (#618).** Spec Amendments 2 (submit_plan carries the land ask's strategy) and 3 (an
+  unusable reply is not an answer; game over decided in claude-seat) came from building and reviewing it. The seat-code
+  lookup in production is a one-line swap to WS4's `RoomRegistry.seatForCode` (664983b8) once PR-1a reaches this
+  branch.

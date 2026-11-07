@@ -141,7 +141,7 @@ so the old per-address rate limit cannot tell a guesser from a player.
 **Chosen: a** (Heiko, 6 Nov). Either way: the code dies when the host takes the seat back or the game ends, is never logged in full, and two chats
 holding the same code are both that seat, with the first answer to each decision winning.
 
-**D-4 · How a chat waits for its turn.** **Chosen: b** (Heiko, 6 Nov), the value from his seat test **[holdMs from spike (b)]**.
+**D-4 · How a chat waits for its turn.** **Chosen: b** (Heiko, 6 Nov), the value from his seat test: **45 s for Claude Code** (it drops a call at 60 s; measured 7 Nov); the chat apps' value is still owed by the Desktop/phone half.
 | Option | For | Against |
 |---|---|---|
 | a. Hold the call up to 110 s, then "call again" (as specced) | fewest calls; fine in Claude Code | chat apps may cut a call well before 110 s (unofficial reports: 60 s) |
@@ -503,7 +503,7 @@ handoverCodeMs passes ⇒ it dies, nothing changes.
   server `handoverCode{code, invite, expiresAt}`; `SeatView` gains `kind?: 'builtin'|'claude'`, `claude?: 'waiting'|
   'connected'|'thinking'|'ready'|'offline'`, and `seatCode?: string` only in the host's own view. Optional fields:
   non-breaking for old clients.
-- **Config** (ADDED, HC-6): `BRAIN.claudeSeat = { sidePickWaitMs: 45_000, holdMs: <from spike (b)>, offlineGraceMs:
+- **Config** (ADDED, HC-6): `BRAIN.claudeSeat = { sidePickWaitMs: 45_000, holdMs: 45_000 (Claude Code, measured; the chat apps' half may lower it), offlineGraceMs:
   20_000, handoverCodeMs: 600_000, wrongCodesPerMinute: 20, maxRequestBytes: 64_000 }`; `BRAIN.minLineLetters: 2`.
   Server setting `MULE_PUBLIC_MCP_URL` (C10a).
 
@@ -564,7 +564,13 @@ Invariant for every test: a Claude seat is never in `away`.
 - **R-5 Exposure.** /mcp on the internet, and every chat-app call arrives from Anthropic's addresses, so callers can't
   be told apart. Mitigation: /mcp only (HC-7), codes die, one wrong-code budget for the server (RULE-2), size caps.
   Accepted cost: a wrong-code flood puts the Claude seats on built-in plans for its duration; the table never waits.
-- **Spike (b)**, run by Heiko on 6 Nov: **[results go here]**.
+- **Spike (b)**, in two halves.
+  - **Claude Code half, run 7 Nov by WS2 with Heiko's OK** (headless Claude Code 2.1.319 on his claude.ai login, no API
+    key; test server log). Holds of 5, 20 and 45 s returned. Every hold of 75 s or more was dropped by the client at
+    60.0 s (14 drops, 59.999–60.123 s). So Claude Code's ceiling is 60 s, and `holdMs` is 45 s. The run stalled after
+    month 1 only because the test server's ladder never stepped back below a dropped hold; the server now falls back
+    to the longest hold below a drop.
+  - **Desktop / claude.ai / phone half: [results go here]** (Heiko; owed for wave 3 and the #setup screen).
 
 ## §8 · Amendments `[review-only]`
 

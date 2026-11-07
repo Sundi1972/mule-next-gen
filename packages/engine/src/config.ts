@@ -2056,10 +2056,11 @@ export const BRAIN = {
     /** The longest the first good's side pick waits for the seat's auction plan, in ms. */
     sidePickWaitMs: 45_000,
     /**
-     * How long wait_for_my_turn holds a call open with no ask before it answers "call again", in ms. Provisional until
-     * Heiko's seat test measures the longest hold every Claude app survives; this sits below the 60 s some report.
+     * How long wait_for_my_turn holds a call open with no ask before it answers "call again", in ms. Measured 7 Nov
+     * (seat test, Claude Code half): Claude Code drops a tool call at 60 s, and a 45 s hold returned; the chat apps'
+     * half of the test can lower it for wave 3.
      */
-    holdMs: 25_000,
+    holdMs: 45_000,
     /** How long past holdMs a seat may go without a call before it shows offline, in ms. */
     offlineGraceMs: 20_000,
     /** How long a hand-over code works before its first call, in ms. */
