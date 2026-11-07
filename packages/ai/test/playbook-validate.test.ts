@@ -18,6 +18,7 @@ import {
   stepAuction,
   STRATEGIST,
   stepLandAuction,
+  tileIndex,
   WALK,
   type AiLevelId,
   type AiPersonaId,
@@ -320,6 +321,45 @@ describe('the validator holds every playbook to RULE-1', () => {
     unled.players.find((p) => p.id === 'ai2')!.carriedMule = null;
     expect(one('development', '/development/route/1/outfit', 'energy', { state: unled, draft: handed })).toMatchObject({ plays: 'energy', why: null });
     expect(one('development', '/development/route/4/outfit', 'energy', { state: led, draft: handed })).toMatchObject({ plays: 'energy', why: null });
+  });
+
+  it('T-AC-1: RULE-1 P8, a route MULE the hands could never install is refused at adoption: a lake no shore reaches, a plot already making its outfit', () => {
+    // Seed 4's month-1 development: ai2 holds a lake ringed by lake (10, 0), a lake with a shore (10, 1), a plains plot
+    // and a plains plot with a Smithore MULE on it.
+    const state = createGame({ seed: 4, players });
+    while (state.phase !== 'development') advancePhase(state);
+    for (const t of state.tiles) if (t.owner === 'ai2') t.owner = null;
+    const own = (x: number, y: number) => {
+      const i = tileIndex(state.width, x, y);
+      state.tiles[i]!.owner = 'ai2';
+      return i;
+    };
+    const [ringed, shored] = [own(10, 0), own(10, 1)];
+    expect([state.tiles[ringed]!.terrain, state.tiles[shored]!.terrain]).toEqual(['lake', 'lake']);
+    const [plain, mine] = state.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : [])).slice(0, 2);
+    Object.assign(state.tiles[plain!]!, { owner: 'ai2' });
+    Object.assign(state.tiles[mine!]!, { owner: 'ai2', outfit: 'smithore' });
+    const mule = (outfit: Outfit, plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit }, { act: 'install', plot }, { act: 'pub' }];
+    const at = { state };
+    const draftRoute = run('development', [], at).playbook.development!.route;
+    const route = (outfit: Outfit, plot: number) => one('development', '/development/route', mule(outfit, plot), at);
+
+    const steering = DEV_STEER.on;
+    try {
+      // On the floor a colonist walks to a lake's shore to install, so a lake with none can never get the MULE.
+      DEV_STEER.on = true;
+      expect(route('water', ringed)).toMatchObject({ plays: draftRoute, why: `route: lake: no shore reaches plot ${ringed}, step 2` });
+      expect(route('water', shored)).toMatchObject({ plays: mule('water', shored), why: null });
+      // The game taps where it doesn't steer, and a tap installs on any lake.
+      DEV_STEER.on = false;
+      expect(route('water', ringed)).toMatchObject({ plays: mule('water', ringed), why: null });
+    } finally {
+      DEV_STEER.on = steering;
+    }
+    // A MULE over one of the same outfit has nothing to swap: the hands drop it (routeVeto's stale). Another outfit is a swap.
+    expect(route('smithore', mine!)).toMatchObject({ plays: draftRoute, why: `route: plot ${mine} already has a Smithore MULE, step 2` });
+    expect(route('energy', mine!)).toMatchObject({ plays: mule('energy', mine!), why: null });
+    expect(route('smithore', plain!)).toMatchObject({ plays: mule('smithore', plain!), why: null });
   });
 
   it('T-AC-1: RULE-1 P11-P17 and step 5, the auction rows', () => {
