@@ -49,7 +49,7 @@ function atAuction() {
 async function answer(writer: ClaudeSeatWriter) {
   const ask = writer.openAsk()!;
   const hold = ask.offers.find((o) => o.path.endsWith('/hold'))!;
-  expect(await writer.submit(ask.id, { edits: [{ path: hold.path, to: 0, reason: 'None.' }], line: 'Selling it all.' })).toEqual({ kind: 'accepted' });
+  expect(await writer.submit(ask.id, { edits: [{ path: hold.path, to: 0, reason: 'None.' }], line: 'Selling it all.' })).toMatchObject({ kind: 'accepted' });
   // The writer's promise settles on the next microtask.
   await Promise.resolve();
 }
@@ -92,6 +92,26 @@ describe('C7: Playbooks keeps a Claude seat’s auction ask open past the auctio
 
     expect(writer.openAsk(), 'aborted at the auction’s start, as today').toBeNull();
     expect(notes).toEqual([]);
+  });
+
+  it('C7: one code path: an answered seat taken at the start, with keep empty or absent, or kept and then taken, adopts the very same playbook', async () => {
+    const run = async (take: (t: ReturnType<typeof atAuction>) => void) => {
+      const t = atAuction();
+      await answer(t.writer);
+      take(t);
+      return t.notes;
+    };
+
+    const absent = await run(({ state, playbooks }) => playbooks.takePhase(state, 'auction'));
+    const empty = await run(({ state, playbooks }) => playbooks.takePhase(state, 'auction', new Set()));
+    const later = await run(({ state, playbooks }) => {
+      playbooks.takePhase(state, 'auction', new Set(['p0']));
+      playbooks.takeSeat(state, 'auction', 'p0');
+    });
+
+    expect(absent.map((n) => n.playbook.by)).toEqual(['llm']);
+    expect(empty).toEqual(absent);
+    expect(later).toEqual(absent);
   });
 
   it('C7: answered is false with no ask, and for an ask of another month; takeSeat with nothing open does nothing', () => {

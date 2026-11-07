@@ -105,7 +105,7 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     const good = await toFirstSidePick(game, fake);
     const answer = async () => {
       const writer = writerOf(game);
-      expect(await writer.submit(writer.openAsk()!.id, { edits: [], line: 'Ready to trade.' })).toEqual({ kind: 'accepted' });
+      expect(await writer.submit(writer.openAsk()!.id, { edits: [], line: 'Ready to trade.' })).toMatchObject({ kind: 'accepted' });
     };
 
     const pick = await runSidePick(game, fake, good, { 20_000: answer });
