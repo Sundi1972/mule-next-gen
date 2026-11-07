@@ -643,9 +643,13 @@ folded    §1 C4, §2 RULE-4, §3 and §6 B-AC-6 read with AM-8; docs/rulebook/s
 AM-10 · 2026-11-07 · lead (WS5) · N learns from the posted price, not the band (milestone A's review, minor (a); WS1 OK on the rule)
 target    §1 C1 (N's drift); §6 B-AC-8; §0 G-1's "then is forgotten"
 said      a trade's implied normal price = the trade ÷ the band's multiple (AM-6)
-did       implied = the trade × N ÷ the posted mid (economy.ts::driftReference). Inside a band mid = multiple × N, so it
-          is unchanged there; in a recovery the band already reads normal while the mid is still up to 3 × N, and the
-          old rule read the falling crisis price as N. B-AC-8 pins it: a trade at 90, a month after a severe 120,
+did       implied = the trade × N ÷ the posted mid (economy.ts::driftReference). Where the mid sits at its band's
+          target (mid = multiple × N) it is unchanged. It differs wherever the mid sits elsewhere: in a recovery the
+          band already reads normal while the mid is still up to 3 × N (the old rule read the falling crisis price as
+          N); a price falling inside a higher band (90 = 3 × N posted short, multiple 2); the pull toward a high trade
+          or the lift after a sell-out (B-AC-9's 78 against 2 × N = 60); the ceiling. In the off-world band it divides
+          by the walked off-world price ÷ N instead of 1, so a trade at the posted price confirms N and worldPull does
+          the converging (6 games, old against new: Smithore and Crystite end with the same N in every game). B-AC-8 pins it: a trade at 90, a month after a severe 120,
           leaves N at 30 (it read 45).
 because   20 seed-1 games, politics off / on: Food N at the end 49/47 -> 30/30 (configured 30), Water 37/34 -> 26/26
           (25); Food's highest posting 264/212 -> 128; colonists at the end 82.0/84.2 -> 85.8/87.2; score median
