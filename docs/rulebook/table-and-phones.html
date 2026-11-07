@@ -128,7 +128,7 @@
 <li><strong>A flag takes the dots' place while it shows</strong>, as a small sign in its usual colour: × for OFF, a ring with a dot for SCAN, a gavel for SALE. Its word moves to the plot's label and the rail. The dots come back when it goes.</li>
 <li><strong>The selection ring is drawn inside the plot you selected</strong>, on plots under 24 px. It may cover that plot's own dots, which the rail beside the map shows in full (Look, My plots), but never a neighbour's.</li>
 </ul>
-<p>A plot without dots keeps every mark as before.</p>
+<p>A plot without dots keeps every mark as before, except a flag: under 16 px it is the same small sign there too, its word in the plot's label and the rail.</p>
 <div class="box why"><h4>Why it is like this</h4><p>No mark may hide a rating (PM, 7 Nov). A bigger map on the small phone was turned down: the roadmap, needs and agenda above it are what planning is for, and a full-height map is still too narrow for 16 px plots on the biggest map. Hiding the tab or the gem outright was turned down too: they answer whose plot it is and where the Crystite is. WS6 ruling on Jira SA-1372, 7 Nov.</p></div>
 <p class="code-ref">In the code: <code>packages/ui/src/components/HoloMap.tsx</code> · checked by <code>apps/web/e2e/table-steps.ts::theMarksStayClearOfTheDots</code>, to be extended at 667 × 375</p>
 <p class="owner">Designed, not in the game yet, WS4 (HoloMap) · the rule: the UX team (WS6) · Spec: <code>docs/specs/2026-11-05-ws6-plot-info.md</code> §8, 7 Nov.</p>

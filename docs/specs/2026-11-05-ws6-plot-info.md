@@ -397,7 +397,8 @@ lands at the land grant (droneOrder is kept until then).
   outright (they carry the plot look A and Heiko's gem choice B). Checked by extending table-steps.ts
   theMarksStayClearOfTheDots at 667×375. WS4 builds HoloMap.
 - 7 Nov, on SA-1372 after WS4's build measures: (a) PM ruling A: under 16 px a SALE, SCAN or OFF flag (28×12.5 px at
-  12.8 px plots, over a neighbour's chip) becomes a 7×7 glyph chip in its usual colour in the dots chip's place; its
+  12.8 px plots, over a neighbour's chip) becomes a 7×7 glyph chip in its usual colour, in the dots chip's place, and
+  so on a plot without dots too (the one mark such a plot changes; WS4 on #636); its
   word moves to the plot's label and the rail. WS6's glyphs, rendered at 7×7 at 2× and 3×: OFF ×, SCAN a ring with a
   centre dot, SALE a gavel (an upright T); told apart by shape, so in greyscale too. The drone glyph and a coin were
   set aside: at 7×7 the drone reads as the gavel's T and the coin as a plain dot. (b) WS4 measured the inside ring's
