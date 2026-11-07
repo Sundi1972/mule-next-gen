@@ -7,7 +7,7 @@ import { pactBreach } from './diplomacy.js';
 import { reputationShift, securitySpend } from './politics.js';
 import { createRng, seedOf } from './rng.js';
 import { PERCENT } from './units.js';
-import { GOODS, type GameState, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
+import { GOODS, type GameState, type Good, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
 
 /**
  * Sabotage (slice 4): orders, guards, investigations, fines and rumours. This file is the contract freeze (S4-C20):
@@ -46,6 +46,7 @@ function isGuarded(state: GameState, order: SabotageOrder): boolean {
 
 const BASE_36 = 36; // literal-ok: the radix of an id tag, a definition
 const TAG_LENGTH = 6; // literal-ok: an id tag is six characters, a format not a balance number
+const MIN_PRICE = 1; // literal-ok: a posted price is at least one credit (S4-RULE-4), a floor of the unit and not a balance number
 const PER_SECURITY = 100; // literal-ok: Security is counted in hundreds of credits (S4-RULE-3), a unit and not a balance number
 
 /** 'sab-' plus six base-36 characters, drawn from a stream seeded by the game and the order's number only; a clash redraws (AM-1). */
@@ -183,11 +184,31 @@ export function sabotageEvents(state: GameState): MonthEvent[] {
   });
 }
 
-/** Shift the posted prices by the month's worked rumours, after the auction posts them. */
-export function applyRumours(_state: GameState): void {}
+/**
+ * Shift the posted prices by the month's worked rumours, after the auction posts them (S4-RULE-4): each good's price
+ * becomes its posted price times 1 plus the net shift (up and down cancel, two on one side add), rounded, at least 1.
+ * Each shifted good's price before the shift is kept in politics.rumoured, so the auction's end puts it back exactly.
+ */
+export function applyRumours(state: GameState): void {
+  if (!state.politics || state.politics.rumoured.length > 0) return;
+  const net = new Map<Good, number>();
+  for (const order of state.politics.sabotage) {
+    if (order.month !== state.month || order.target.kind !== 'rumour' || order.worked !== true) continue;
+    const { shift } = POLITICS.sabotage.orders.rumour;
+    net.set(order.target.good, (net.get(order.target.good) ?? 0) + (order.target.dir === 'up' ? shift : -shift));
+  }
+  if (net.size === 0) return;
+  const rumoured = [...net.keys()].map((good) => ({ good, from: state.store.posted[good] }));
+  edit(state).rumoured = rumoured;
+  for (const { good, from } of rumoured) state.store.posted[good] = Math.max(MIN_PRICE, Math.round(from * (1 + net.get(good)!)));
+}
 
-/** Restore the posted prices exactly, when the auction ends. */
-export function endRumours(_state: GameState): void {}
+/** Restore the posted prices exactly, when the auction ends: from the price recorded before the shift, never by undoing it. */
+export function endRumours(state: GameState): void {
+  if (!state.politics || state.politics.rumoured.length === 0) return;
+  for (const { good, from } of state.politics.rumoured) state.store.posted[good] = from;
+  edit(state).rumoured = [];
+}
 
 /** Charge the month's crew costs at upkeep. */
 export function settleSabotage(_state: GameState): void {}
