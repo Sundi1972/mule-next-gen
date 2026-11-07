@@ -1592,12 +1592,14 @@ goal      S5-1 — unchanged
 
 No ownership change:
 - `packages/engine/src/politics.ts` remains the sole writer of `state.politics`, now including the budget,
-  the overrule, the snap month and the inquiry.
+  the overrule, the snap month and the inquiry. The merged set's two other writers each own fields of their
+  own, and none of this slice's: diplomacy.ts writes `Politics.deals` (slice 3 §9), sabotage.ts writes
+  `Politics.sabotage`, `guards` and `rumoured` (slice 4 §9).
 - `packages/engine/src/colony.ts` remains the sole writer of the fund and of `state.colony`, now including
   the lines and `colony.welfare`. Welfare's write to a player's money sits in colony.ts beside fundOut, as
   office pay's sits in politics.ts::payOffices.
 - Enforcement, as in G-5 §9 and slice 2a §9: the ledger invariant test (S5-T-AC-2), and the review rule
-  "no other file writes state.politics or treasury.money".
+  "no other file writes state.politics (beyond the two field owners above) or treasury.money".
 
 ## §10 · Sizing `[review-only]`
 

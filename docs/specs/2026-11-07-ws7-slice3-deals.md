@@ -1103,7 +1103,7 @@ folded    the sections above; D-S3-2 (what a break reveals) is now implemented b
 
 ### Ownership: deal cards (a second writer inside Politics)
 - Sole owner:      packages/engine/src/diplomacy.ts for `Politics.deals`; politics.ts stays the sole writer of every
-                   other Politics field.
+                   other Politics field except slice 4's sabotage, guards and rumoured (sabotage.ts, slice 4 §9).
 - Read contract:   `state.politics.deals` through observe(state, me) (hands), partyTo (server views, news, notices).
 - Write contract:  only diplomacy.ts writes `politics.deals`, and only through politics.ts's copy-on-write edit (exported
                    as editPolitics for diplomacy.ts alone). politics.ts calls settleVotes; game.ts calls
