@@ -183,7 +183,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
       <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
-      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
+      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${Math.round(environment.value)}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
       <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
@@ -378,11 +378,38 @@ function ProjectLine({ p }: { p: ColonyProjectView }) {
 }
 
 /**
+ * Every standing project on one line after the rest, "Standing: Park · Hospital +5 prestige": a long game stands four
+ * or five, and a line each drew six seats under TV-FIT's floor (PM ruling 7 Nov). Each name keeps its own project id;
+ * five names wrap to a second line rather than cut, the fewer lines leaving it the room.
+ */
+function StandingLine({ projects }: { projects: ColonyProjectView[] }) {
+  const prestige = projects.reduce((sum, p) => sum + p.prestige, 0);
+  return (
+    <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid="projects-standing">
+      <span className="min-w-0 font-display text-xl font-semibold leading-tight">
+        <span className="text-ok">Standing:</span>{' '}
+        {projects.map((p, i) => (
+          <span key={p.id} data-testid={`project-${p.id}`} data-stage="standing">
+            {i > 0 && ' · '}
+            {p.name}
+          </span>
+        ))}
+      </span>
+      <span data-num className="ml-auto shrink-0 font-mono text-lg font-bold text-holo" data-testid="figure-standing">
+        +{prestige} prestige
+      </span>
+    </li>
+  );
+}
+
+/**
  * Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. `compact`
- * puts each on one line (ProjectLine), which has no room for buttons, so it draws no `action`.
+ * puts each on one line (ProjectLine) and the standing ones together on one after them (StandingLine); the lines have no room
+ * for buttons, so it draws no `action`.
  */
 export function BuildSite({ colony, players, size, action, compact = false, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; compact?: boolean; className?: string }) {
   const tv = size === 'tv';
+  const standing = colony.projects.filter((p) => p.stage === 'standing');
   return (
     <section className={cx('flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1.5 px-2.5 py-2', className)} aria-label="The colony's projects" data-testid="build-site">
       <header className="flex items-baseline justify-between gap-3">
@@ -397,15 +424,20 @@ export function BuildSite({ colony, players, size, action, compact = false, clas
         </p>
       ) : (
         <ul className="flex flex-col">
-          {colony.projects.map((p) =>
-            compact ? (
-              <ProjectLine key={p.id} p={p} />
-            ) : (
+          {compact ? (
+            <>
+              {colony.projects.filter((p) => p.stage !== 'standing').map((p) => (
+                <ProjectLine key={p.id} p={p} />
+              ))}
+              {standing.length > 0 && <StandingLine projects={standing} />}
+            </>
+          ) : (
+            colony.projects.map((p) => (
               <div key={p.id} className="flex flex-col">
                 <ProjectRow p={p} players={players} size={size} />
                 {action?.(p)}
               </div>
-            ),
+            ))
           )}
         </ul>
       )}
