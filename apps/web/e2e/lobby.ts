@@ -388,8 +388,8 @@ function colourRoom(cond: boolean, message: string): void {
 }
 
 /**
- * B-AC-1 (Claude seat spec, C1; the mock's #lobby-b and #tv-lobby): the host opens a computer seat and picks Claude. His
- * phone shows the seat's code and Copy invite, and the seat's chip says it waits for Claude. Mia's phone and the TV show
+ * B-AC-1 (Claude seat spec, C1; the mock's #lobby-b and #tv-lobby): the host opens a computer seat and picks Claude. The
+ * host's phone shows the seat's code and Copy invite, and the seat's chip says it waits for Claude. Mia's phone and the TV show
  * the seat and its chip, never the code. Negative: Mia has no control to change the kind.
  */
 async function aClaudeSeatInTheLobby(): Promise<void> {
@@ -415,14 +415,19 @@ async function aClaudeSeatInTheLobby(): Promise<void> {
   check(await shows(heiko.getByTestId('sheet-setup-invite-copy')), `${id}: the host's sheet has Copy invite`);
   check((await heiko.getByTestId('sheet-setup-invite-text').textContent())?.includes(`Play MULE seat ${seatCode}.`) ?? false, `${id}: the invite carries the code`);
   check((await heiko.getByTestId('sheet-chip').textContent())?.trim() === 'WAITING FOR CLAUDE', `${id}: the host's sheet says the seat waits for Claude`);
+  // The sheet fits a phone held sideways: Copy invite and Done are on screen, not under its edge.
+  for (const part of ['sheet-setup-invite-copy', 'sheet-done']) {
+    const box = await heiko.getByTestId(part).boundingBox();
+    check(box !== null && box.y >= 0 && box.y + box.height <= PHONE.viewport.height && box.x + box.width <= PHONE.viewport.width, `${id}: ${part} is on the 844×390 screen, got ${JSON.stringify(box)}`);
+  }
   await heiko.getByTestId('sheet-done').click();
 
-  for (const [who, page] of [['Mia', mia], ['the TV', tv]] as const) {
-    await page.getByTestId(`chip-${ai.id}`).filter({ hasText: 'WAITING FOR CLAUDE' }).waitFor({ timeout: SHOWN_MS });
+  for (const [who, page, chip] of [['Mia', mia, `chip-${ai.id}`], ['the TV', tv, `tv-chip-${ai.id}`]] as const) {
+    await page.getByTestId(chip).filter({ hasText: 'WAITING FOR CLAUDE' }).waitFor({ timeout: SHOWN_MS });
     check(!(await page.content()).includes(seatCode), `${id}: ${who} never shows the seat code`);
   }
   check(await gone(mia.getByTestId(`seat-${ai.id}-open`)), `${id} (negative): Mia has no control to change ${ai.name}'s kind`);
-  console.log(`✓ ${id}: the host made ${ai.name} Claude's; his phone alone shows ${seatCode} and Copy invite; Mia and the TV show WAITING FOR CLAUDE`);
+  console.log(`✓ ${id}: the host made ${ai.name} Claude's; the host's phone alone shows ${seatCode} and Copy invite; Mia and the TV show WAITING FOR CLAUDE`);
   for (const page of [heiko, mia, tv]) await page.context().close();
 }
 
