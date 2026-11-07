@@ -782,7 +782,7 @@ describe("S3-T-AC-9: VoteHand's S3-RULE-10 rows", () => {
     vi.mocked(breakGain).mockReturnValue(1_000);
     vi.mocked(reputationCost).mockReturnValue(1);
     expect(electionVoteOf(promisedBallot([activeCard(PROMISE_AI1)]), handOf(mindOf('ai0', 'trader', 'rookie'), 3))).toBe('ai1');
-    expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf(mindOf('ai0', 'trader', 'rookie'), 3))).toBe(false);
+    expect(lawVoteOf(lawBallot([activeCard(PROMISE_NO)]), handOf({ ...mindOf('ai0', 'trader', 'rookie'), salt: 9 }, 3))).toBe(false);
   });
 
   it('row 4: breakGain above honesty times the reputation cost, vote its own; at or below it, the promised choice', () => {
