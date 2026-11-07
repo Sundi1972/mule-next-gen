@@ -22,12 +22,12 @@
 <thead><tr><th class="n">Step</th><th>What happens</th><th>Why it comes here</th></tr></thead>
 <tbody>
 <tr><td class="n">1</td><td>The month's production events roll: dust storm, drought, acid rain, solar flare, comet pass, flood, volcanic ash, cold snap, and each player's pest swarm, wildfire and bumper harvest.</td><td>Events work on the plots they reach, on top of everything else that plot made.</td></tr>
-<tr><td class="n">2</td><td>Every Energy plant produces and pays its own 1 Energy from what it made, never from your depot; every well does the same with its own 1 Water. The rest goes into its owner's depot.</td><td>So this month's Energy and Water can run this month's other plots.</td></tr>
-<tr><td class="n">3</td><td>For each player, the game checks whether the Energy in their depot covers all their other plots (not their plants or wells). If not, it turns plots off, the biggest Energy user first, until the rest fit (see <a href="#energy-use">Energy</a>). Then the same for Water, over the plots still on, against the Water left once this month's drink for your household and crew is set aside (see <a href="#water-use">Water</a>). A factory counts only if your depot holds its inputs: smelters first, then works, then labs, each in map order, each setting its inputs aside.</td><td>Settled once, before anything else runs, so a shortage goes by size, not by where a plot stands on the map. Energy first, then Water: a plot is never cut twice.</td></tr>
-<tr><td class="n">4</td><td>Every other farm and mine produces, in map order (row by row from the top left). One still on pays its Energy and its Water from its owner's depot; one turned off makes 20% and pays neither.</td><td>Raw goods come before factories, because factories turn them.</td></tr>
-<tr><td class="n">5</td><td>The factories counted in step 3 run: every Alloy smelter first, then every Electronics works, then every Medicine lab, each in map order. One still on takes its inputs, its Energy and its Water; one turned off makes 20% from 20% of each input.</td><td>Alloy first because Electronics needs it.</td></tr>
-<tr><td class="n">6</td><td>The factories that didn't count, because their inputs only arrive this month, run in the same order on the Energy and Water left over: in full if enough is left, turned off if their inputs are there but the Energy or the Water isn't, not at all without their inputs.</td><td>Smithore mined this month still feeds this month's smelter, and such a factory never turns another plot off.</td></tr>
-<tr><td class="n">7</td><td>Last, each well takes its 1 Energy and each plant its 1 Water from whatever the other plots left. Short, they still run.</td><td>Wells and plants are never turned off; the other good is taken last (Heiko, 5 Nov: "Yes, taken last").</td></tr>
+<tr><td class="n">2</td><td>Every Energy plant produces and pays its own 1 Energy from what it made, never from your depot; the rest goes into its owner's depot.</td><td>So this month's Energy can power this month's other plots.</td></tr>
+<tr><td class="n">3</td><td>For each player, the game checks whether the Energy in their depot covers all their other plots. If not, it turns plots off, the biggest Energy user first, until the rest fit (see <a href="#energy-use">Energy</a>). A factory counts only if your depot holds its inputs: smelters first, then works, then labs, each in map order, each setting its inputs aside.</td><td>Settled once, before anything else runs, so a shortage goes by size, not by where a plot stands on the map.</td></tr>
+<tr><td class="n">4</td><td>The game checks, for each player, whether they hold the Water their household and crew need this month.</td><td>Decided before any well runs: a well harvested this month waters next month's crops, not this month's.</td></tr>
+<tr><td class="n">5</td><td>Every other farm, well and mine produces, in map order (row by row from the top left). One still on pays its Energy from its owner's depot; one turned off makes 20% and pays nothing. A Food farm whose owner is short of Water makes half again.</td><td>Raw goods come before factories, because factories turn them.</td></tr>
+<tr><td class="n">6</td><td>The factories counted in step 3 run: every Alloy smelter first, then every Electronics works, then every Medicine lab, each in map order. One still on takes its inputs and its Energy; one turned off makes 20% from 20% of each input.</td><td>Alloy first because Electronics needs it.</td></tr>
+<tr><td class="n">7</td><td>The factories that didn't count, because their inputs only arrive this month, run in the same order on the Energy left over: in full if enough is left, turned off if their inputs are there but the Energy isn't, not at all without their inputs.</td><td>Smithore mined this month still feeds this month's smelter, and such a factory never turns another plot off.</td></tr>
 <tr><td class="n">8</td><td>Run counts move on: a plot that worked adds one month to its run, one that didn't starts again at 0. A green belt counts as working. A turned-off factory keeps its count; a turned-off farm, well or mine still adds its month.</td><td>Factories gain experience and thin veins run out by how long a plot has worked in a row; a factory turned off gains no experience.</td></tr>
 <tr><td class="n">9</td><td>Special fields settle: ruins pay their salvage to their owner, and a crystal cavern that was mined for Crystite this month may collapse.</td><td>They pay or collapse after the month's output is made.</td></tr>
 <tr><td class="n">10</td><td>Pollution spreads around polluters and the colony's air gauge moves.</td><td>It counts what ran this month, and changes what next month makes.</td></tr>
@@ -67,7 +67,7 @@
 <tr><td class="n">6</td><td>Toxic air (Food and Water)</td><td>From the Toxic band of the air gauge (60 and up), every farm and well loses 1 more.</td><td class="n">−1</td></tr>
 <tr><td class="n">7</td><td>Floor</td><td>If the minuses took the total below 0, it is set back to 0.</td><td class="n">to 0</td></tr>
 <tr><td class="n">8</td><td>Turned off for want of Energy</td><td>20%, rounded to the nearest unit, halves up (see <a href="#energy-use">Energy</a>).</td><td class="n">×0.2</td></tr>
-<tr><td class="n">9</td><td>Turned off for want of Water</td><td>20%, as for Energy; a plot already off for Energy is never cut again (see <a href="#water-use">Water</a>).</td><td class="n">×0.2</td></tr>
+<tr><td class="n">9</td><td>Short of Water (Food only)</td><td>Half again, rounded down (see <a href="#water-shortage">Short of Water</a>).</td><td class="n">×0.5</td></tr>
 <tr><td class="n">10</td><td>Events</td><td>Each event that reaches the plot, in the order they fired, each working on what the ones before it left. Never below 0.</td><td class="n">see <a href="events.html">Events</a></td></tr>
 </tbody>
 </table></div>
@@ -97,12 +97,12 @@
 <p class="owner">Kept current by: the Balance team (WS1); special fields with the Maps team (WS5).</p>
 
 <h2 id="factories">Factories and recipes <span class="pill built">In the game</span></h2>
-<p>Three goods are made in factories from other goods. A factory takes its whole recipe from its owner's depot in one go. If any input is missing, the factory makes nothing that month, takes nothing, and its run in a row starts again at 0. Its Energy and Water are its use of the base goods: short of either, it is turned off (see <a href="#energy-use">Energy</a> and <a href="#water-use">Water</a>).</p>
+<p>Three goods are made in factories from other goods. A factory takes its whole recipe from its owner's depot in one go. If any input is missing, Energy included, the factory makes nothing that month, takes nothing, and its run in a row starts again at 0.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Factory</th><th>Takes each month</th><th class="n">Makes</th><th>Energy with a feeder next door</th></tr></thead>
 <tbody>
-<tr><td>Alloy smelter</td><td>2 Smithore, 2 Energy, 1 Water</td><td class="n">2 Alloy</td><td>1 (next to your Smithore mine)</td></tr>
-<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy, 1 Energy, 1 Water</td><td class="n">1 Electronics</td><td>0 (next to your Rare earth mine or Alloy smelter)</td></tr>
+<tr><td>Alloy smelter</td><td>2 Smithore, 2 Energy</td><td class="n">2 Alloy</td><td>1 (next to your Smithore mine)</td></tr>
+<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy, 1 Energy</td><td class="n">1 Electronics</td><td>0 (next to your Rare earth mine or Alloy smelter)</td></tr>
 <tr><td>Medicine lab</td><td>1 Food, 1 Water, 1 Energy</td><td class="n">2 Medicine</td><td>0 (next to your farm or well)</td></tr>
 </tbody>
 </table></div>
@@ -156,8 +156,8 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Plot, by what it produces</th><th class="n">Energy a month</th><th class="n">Before 5 Nov</th><th>Notes</th></tr></thead>
 <tbody>
-<tr><td>Food farm</td><td class="n">1</td><td class="n">1</td><td>Also drinks 2 Water (see <a href="#water-use">Water</a>)</td></tr>
-<tr><td>Water well</td><td class="n">1</td><td class="n">1</td><td>Taken last, after your other plots; never turned off</td></tr>
+<tr><td>Food farm</td><td class="n">1</td><td class="n">1</td><td>Also needs Water if irrigated</td></tr>
+<tr><td>Water well</td><td class="n">1</td><td class="n">1</td><td></td></tr>
 <tr><td>Energy plant</td><td class="n">1</td><td class="n">0</td><td><strong>New.</strong> Paid from its own output, never from your stock, so it is not in your need on the auction's status screen</td></tr>
 <tr><td>Smithore mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
 <tr><td>Crystite mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
@@ -188,9 +188,9 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Factory</th><th>Takes per run</th><th class="n">Energy</th><th class="n">Makes</th></tr></thead>
 <tbody>
-<tr><td>Alloy smelter</td><td>2 Smithore (and 1 Water)</td><td class="n">2</td><td class="n">2 Alloy</td></tr>
-<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy (and 1 Water)</td><td class="n">1</td><td class="n">1 Electronics</td></tr>
-<tr><td>Medicine lab</td><td>1 Food (and 1 Water)</td><td class="n">1</td><td class="n">2 Medicine</td></tr>
+<tr><td>Alloy smelter</td><td>2 Smithore</td><td class="n">2</td><td class="n">2 Alloy</td></tr>
+<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy</td><td class="n">1</td><td class="n">1 Electronics</td></tr>
+<tr><td>Medicine lab</td><td>1 Food, 1 Water</td><td class="n">1</td><td class="n">2 Medicine</td></tr>
 </tbody></table></div>
 <p>Ground, a neighbouring factory of the same kind, experience and relics can raise what a factory makes; see <a href="#factories">Factories and recipes</a>. Under the new rule:</p>
 <ul>
@@ -205,7 +205,7 @@
 <li>The plot that uses the most Energy goes first.</li>
 <li>When two use the same, the one whose output is worth less at the store's current price goes first, so your most valuable plot keeps running.</li>
 <li>Still tied: map order.</li>
-<li>Your farms, mines and factories are all in one list. Wells and plants are not in it: they are never turned off, and a well takes its Energy last (since PR-5, AM-18). Each player's plots are settled on their own.</li>
+<li>Your farms, wells, mines and factories are all in one list. Each player's plots are settled on their own.</li>
 <li>A turned-off plot gains no experience that month.</li>
 </ul>
 <p>20% is rounded to the nearest whole unit, halves up: a plot making 3 or 4 still gives 1; a plot making 2 or less gives 0.</p>
@@ -249,9 +249,9 @@
 <li><strong>Your household and crew drink first</strong>, as today. Your plots get only the Water left after this month's drinking.</li>
 <li><strong>Every working plot uses Water</strong>: Food farms 2 ("crops drink most"), every other plot 1.</li>
 <li><strong>Energy is settled first, then Water.</strong> After any Energy cuts, if your Water can't cover the plots still running, the biggest Water user is turned off first, then the next, until the rest fit. A plot is never cut twice.</li>
-<li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy. Its line in the month's report is filed as <code>waterOff</code>, Water's twin of <code>energyOff</code>; the TV and phone show it as "Turned off: not enough Water (20%)", a red "20%" with the Water icon.</li>
+<li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy. Its line reads "Turned off: not enough Water (20%)".</li>
 <li><strong>Wells and power plants are never turned off.</strong> A well pays its own Water from its own output, as a plant pays its own Energy. A well's Energy and a plant's Water are taken last, from whatever your other plots leave.</li>
-<li>The old rule, where only Food farms made half when you were short, is gone: this rule replaces it, it doesn't add to it.</li>
+<li>Today's rule, where only Food farms make half when you're short, goes away.</li>
 </ol></div>
 <div class="table-wrap"><table>
 <thead><tr><th>Plot, by what it produces</th><th class="n">Water a month</th><th class="n">Energy a month</th><th>Notes</th></tr></thead>
@@ -265,20 +265,19 @@
 <tr><td>Medicine lab</td><td class="n">1</td><td class="n">1</td><td>The 1 Water already in its recipe is its use</td></tr>
 </tbody></table></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: Water is a base resource, so every plot uses it, and a shortage works the same way as Energy: one rule to learn. He chose 2 for farms over the proposed 1. Measured before building (40 simulated games, farms at 1): months with a plot cut fell from 71&ndash;77% under the Energy rule alone to 59&ndash;68%, because the cross-use comes last. Taking it first deepened shortages to 72&ndash;76%. Without the computer players learning the rule, cuts reached 85&ndash;87%, so Water ships together with their valuation. With farms at 2 the colony measured about 5 points worse.</p></div>
-<div class="box why"><h4>Why it replaces the farm halving</h4><p>Under this rule a farm runs only when your Water covers your drink and its own 2, a stricter test than the old one (you held less than your drink). Keeping both would cut a dry farm twice, 20% and then half, against "a plot is never cut twice". AM-18 (Heiko, 5 Nov) says the halving goes.</p></div>
-<div class="box next"><h4>What is changing</h4><p>Built on the colony-economy branch in WS1's PR-5b (milestone B's supply pass), with the computer players' valuation in the same pull request: they count every plot's Water when they judge whether a factory can be fed, how much Water to hold, and what a well or a farm is worth. The PM's gate (8 Nov): Water like Energy, farms off for Water under 15% on seeds 1, 101 and 201, and the colony's Food a month within 15% of PR-5a's line. Measured on 10 games a seed: <strong>not met yet</strong>. Water first (computer players build wells until they cover their Water) with farms at 1 Water and the store starting with 80 brings farms off for Water to 3&ndash;7%, but the colony makes 16.8&ndash;18.4 Food a month against PR-5a's 24.7&ndash;29.5: the wells take MULEs the farms had. The PM rules next. In the game once the colony-economy branch reaches trunk.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction, baseOffOrder, waterUseOf, monthNeeds</code> · <code>economy.ts::playersUse</code> · <code>config.ts::UPKEEP.waterUse</code>, <code>RECIPES</code> · the computer players: <code>packages/ai/src/value.ts::canFeed, wholeNextMonth, unitValues</code></p>
-<p class="owner">Status: Being built &mdash; WS1, PR-5 (AM-18) · Kept current by: the Balance team (WS1).</p>
+<div class="box next"><h4>What is changing: built, switched off</h4><p>Built on the colony-economy branch in WS1's PR-5b, with the computer players' side (they count every plot's Water when they judge whether a factory can be fed, how much Water to hold and what a well or a farm is worth, and an optional <em>Water first</em> rule), and <strong>switched off</strong>: the farm's Water, <code>UPKEEP.waterUse.food</code>, is the switch, and it is <span class="num">0</span>. At 0 no plot or factory uses Water and <a href="#water-shortage">the farm halving</a> stays the rule; the game plays exactly as without it (the same games, byte for byte, on three seeds with politics on and off). Heiko's <span class="num">2</span> turns it on: <code>pnpm sim -- --set UPKEEP.waterUse.food=2</code>. Why off: measured on 10 games a seed, farms at 2 made the colony about half its Food (12.8&ndash;15.5 a month against 24.7&ndash;29.5), because wells took the MULEs farms had; Water first brought farms off for Water under 7% but not the Food back. The PM ruled on 8 Nov to ship it off; PR-12 turns it on with a Food lever on corrected Water prices.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::plotWaterOn, runProduction, baseOffOrder, waterUseOf, monthNeeds</code> · <code>economy.ts::playersUse</code> · <code>auction.ts::auctionNeed</code> · <code>config.ts::UPKEEP.waterUse</code> (<code>food</code> is the switch), <code>UPKEEP.factoryWaterUse</code> · the computer players: <code>packages/ai/src/value.ts::canFeed, wholeNextMonth, unitValues</code>, <code>strategist.ts::firstOf</code></p>
+<p class="owner">Status: Being built &mdash; built in WS1's PR-5b (AM-18), switched off until PR-12 · Kept current by: the Balance team (WS1).</p>
 
-<h2 id="water-shortage">Short of Water today, until the new rule lands: farms make half <span class="pill built">In the game</span></h2>
-<p><strong>Replaced by <a href="#water-use">Water: every plot uses it</a> on the colony-economy branch (PR-5); still the rule on trunk until that branch lands.</strong> Food farms need irrigation. When production starts, the game compares the Water you hold with the Water your household and crew need this month (see <a href="#upkeep-and-crew">Upkeep and crew</a>). If you hold less, every one of your Food farms makes half, rounded down. This comes on top of any Energy shortfall: a farm short of both makes a quarter, rounded down at each step.</p>
+<h2 id="water-shortage">Short of Water today, while the new rule is switched off: farms make half <span class="pill built">In the game</span></h2>
+<p>Food farms need irrigation. When production starts, the game compares the Water you hold with the Water your household and crew need this month (see <a href="#upkeep-and-crew">Upkeep and crew</a>). If you hold less, every one of your Food farms makes half, rounded down. This comes on top of any Energy shortfall: a farm short of both makes a quarter, rounded down at each step.</p>
 <ul>
 <li>Only Food farms are irrigated. Wells, Energy plots and mines don't care about Water.</li>
 <li>The check is made once, before any plot runs. Water your wells make this month counts for next month.</li>
 <li>The Water is not taken at this point. You pay it at the month end, when your household and crew drink.</li>
 </ul>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko's ruling of 21 October 2026 (economy design): "Short of Water, your Food farms make half, because they can't irrigate." It makes Water a real need for a Food grower and gives wells a reason to exist beyond the colonists' demand.</p></div>
-<p class="code-ref">In the code on trunk: <code>packages/engine/src/production.ts::runProduction</code> (the <code>dry</code> set) · <code>config.ts::UPKEEP.irrigated</code>, <code>UPKEEP.shortOutputShare</code> (both gone on the colony-economy branch)</p>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (the <code>dry</code> set) · <code>config.ts::UPKEEP.irrigated</code>, <code>UPKEEP.shortOutputShare</code></p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
 <h2 id="production-events">Events during production <span class="pill built">In the game</span></h2>
@@ -487,8 +486,8 @@
 <tr><td>floor</td><td>The total was set back up to 0.</td><td>A badge with the change.</td></tr>
 <tr><td>energyOff</td><td>Turned off for want of Energy: the plot made 20%.</td><td>"Turned off: not enough Energy (20%)", a red "20%" with the Energy icon.</td></tr>
 <tr><td>noEnergy</td><td>The old rule's half for want of Energy; no longer filed, kept so older months still read.</td><td>"No Energy for the plot: half", a red ½ with the Energy icon.</td></tr>
-<tr><td>waterOff</td><td>Turned off for want of Water: the plot made 20% (since PR-5, AM-18).</td><td>"Turned off: not enough Water (20%)", a red "20%" with the Water icon.</td></tr>
-<tr><td>noWater</td><td>The old rule's half for a farm short of Water; no longer filed, kept so older months still read.</td><td>"No Water for the farm: half", a red ½ with the Water icon.</td></tr>
+<tr><td>noWater</td><td>Half for want of Water, a farm only (the rule while AM-18 is switched off).</td><td>"No Water for the farm: half", a red ½ with the Water icon.</td></tr>
+<tr><td>waterOff</td><td>Turned off for want of Water: the plot made 20%. Filed only with <a href="#water-use">AM-18</a> switched on.</td><td>"Turned off: not enough Water (20%)", a red "20%" with the Water icon.</td></tr>
 <tr><td>event</td><td>One event's change, naming the event.</td><td>Played in the events beat, not as a badge.</td></tr>
 </tbody>
 </table></div>
