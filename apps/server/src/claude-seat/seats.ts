@@ -1,14 +1,14 @@
 /** Which seats a Claude chat plays, and how a seat named by a code reaches its writer. */
-import type { SeatInfo } from '@tabletop/core';
+import type { SeatInfo, SeatKind } from '@tabletop/core';
 import type { PlaybookWriter } from '../brain/index.js';
 import { ClaudeSeatWriter } from './writer.js';
 
-/** Who plays a computer seat: the built-in AI, or a Claude chat holding the seat's code. */
-export type SeatKind = 'builtin' | 'claude';
+/** Who plays a computer seat: the Room's own type (C1), named here for the brain's imports. */
+export type { SeatKind };
 
 /** A seat's kind as the Room hands it to the game; a seat with none plays builtin. */
 export function seatKindOf(seat: SeatInfo): SeatKind {
-  return (seat as SeatInfo & { kind?: unknown }).kind === 'claude' ? 'claude' : 'builtin';
+  return seat.kind === 'claude' ? 'claude' : 'builtin';
 }
 
 export interface ClaudeSeat {

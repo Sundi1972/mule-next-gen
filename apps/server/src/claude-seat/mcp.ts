@@ -244,8 +244,8 @@ function readBody(req: IncomingMessage, cap: number): Promise<string | 'too_larg
 
 const endpoints = new WeakMap<object, McpEndpoint>();
 
-/** The rooms hold no seat codes yet (C1), so no code names a seat here. */
-const roomLookup = (_registry: RoomRegistry<MuleIntent, MuleView>): SeatLookup => () => null;
+/** The Room is the one store of codes (spec §9): every call asks the registry the rooms live in, never a copy. */
+const roomLookup = (registry: RoomRegistry<MuleIntent, MuleView>): SeatLookup => (code) => registry.seatForCode(code);
 
 /** POST /mcp for the game server: one endpoint per server, so its wrong-code budget is the whole server's. */
 export function serveMcp(req: IncomingMessage, res: ServerResponse, registry: RoomRegistry<MuleIntent, MuleView>): void {
