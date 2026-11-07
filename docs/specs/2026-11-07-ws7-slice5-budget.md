@@ -3,8 +3,9 @@
 Programme amendment to `docs/specs/2026-10-22-ws7-politics.md` (D1 slice 5, AM-13) · WS7 design writer ·
 2026-11-07 · class: **Programme** (a cross-component contract over engine, AI, protocol, server and
 screens; about 9 PRs for the RC cut, 5 more after). **Status:** draft for WS7's merge into the 7 Nov
-amendment set (slices 3, 4, 5). The 7 Nov frozen contract types (WS7, binding) are adopted as written
-(§3). Heiko's plan A (7 Nov) fixes the cut: **RC on 18 Nov carries the overrule on the tax only, plus the
+amendment set (slices 3, 4, 5). The 7 Nov frozen contract types (WS7, binding) are adopted, with one
+supersession that WS7 directed: `BudgetLine` is `'welfare' | 'security'`, and Projects is the remainder line,
+not a share of its own (§3, AM-2). Heiko's plan A (7 Nov) fixes the cut: **RC on 18 Nov carries the overrule on the tax only, plus the
 Projects and Welfare lines. The full part (the budget overrule, the Security line, the inquiry) follows
 right after RC.** This spec designs the whole slice and tags every change, rule and AC **[RC]** or
 **[after RC]**, so the plan can split them. Base: `origin/feat/strategist` 52c54b07.
@@ -23,7 +24,7 @@ This slice builds on G-5 and slice 2a rather than replacing them:
 
 | | RC (18 Nov) | after RC (full part 3) |
 |---|---|---|
-| Budget lines | Projects, Welfare (S5-C1..C3) | + Security, once slice 4's Sheriff is in (S5-C13) |
+| Budget lines | Welfare, with Projects the remainder line the table sees (S5-C1..C3) | + Security, once slice 4's Sheriff is in (S5-C13) |
 | Overrule | on the **tax** (S5-C4, S5-C5) | + on the **budget** (S5-C14) |
 | Snap election after two overrules | — | S5-C15 (D-S5-3) |
 | Sheriff's inquiry and the no-confidence vote | — | S5-C16 (D-S5-4) |
@@ -75,8 +76,12 @@ Governor it disagrees with; computer players do both.**
   | buildings still open at game end | 26, every one `commissioned` | 25, every one `commissioned` |
 
   Every building still open at game end has its credits and is waiting for goods (G-5 AM-19: "goods block
-  it"). So about 6,000 cr a game sits idle. Heiko's "grant 200 now" (7 Nov, PR #633) cuts about 600 cr a
-  game from the income, which leaves about 5,400 idle.
+  it"). So about 6,000 cr a game sits idle.
+
+  The measurement used `COLONY.grant.perMonth` 250, as it stood on trunk. Heiko ruled 200 on 7 Nov (#633,
+  CI green and reviewed, in batch 76), which cuts about 600 cr a game from the income and leaves about
+  5,400 idle. The conclusion holds at 200: Welfare is a share of the fund, so it shrinks with the fund, and
+  every open building waits on goods, not credits.
 
   No player can challenge the Governor's tax. A Governor who raises it from 5% to 10% keeps it until the
   next election (`politics.ts::setSalesTax`; nothing calls a vote on it).
@@ -148,13 +153,16 @@ Governor it disagrees with; computer players do both.**
 
 ### §0.1 · Decision Record `[review-only]`
 
-**Chosen: three budget shares, and an overrule vote held as planning ends.**
-- The Governor sets a standing budget in whole-percent shares of the fund above the reserve: Projects,
-  Welfare, and Security after RC. The shares sum to at most 100, and the rest stays in the fund (the
-  frozen `Budget`).
+**Chosen: Welfare (and after RC Security) as shares, Projects as the remainder line, and an overrule
+vote held as planning ends.**
+- The Governor sets a standing budget in whole-percent shares of the fund above the reserve: Welfare, and
+  Security after RC. They sum to at most 100.
+- **Projects is the remainder**: 100 minus the other shares. The table sees it as a line ("Projects 70% ·
+  Welfare 30%"), with the open buildings it is funding.
 - At upkeep, after office pay and the buildings' upkeep, Welfare is paid (capped in credits a month).
-  Projects caps what new building funding may take. The default budget is Projects 100, which is exactly
-  today's runColony.
+  Projects caps what new building funding may take. Whatever the open buildings don't need stays in the
+  fund.
+- The default budget (none set) is Welfare 0, so Projects is 100, which is exactly today's runColony.
 - Any player except the Governor may call one overrule vote a month on the tax. After RC, the budget can be
   a target too. Either can be called only once it differs from where the month began.
 - The ballot opens when planning would end. It reuses the law ballot's untimed shape and its reveal. A
@@ -179,6 +187,13 @@ opens** (the law ballot's slot, `politics.ts::openCouncil`). About 3 PRs.
   same reason.
 - Held at the end of planning, Ready changes meaning once.
 
+**Alternative: Projects as its own share, with "kept in the fund" for the rest** (the frozen file's first
+shape, D-S5-1 B).
+- *It loses because* a share kept back buys nothing the rules spend. The 40 measured games end with
+  2,600-7,900 cr unspent, so saving more only grows an idle number.
+- It also gives the Governor three numbers to balance instead of one or two, and the default would have
+  to be set to Projects 100 or no building would ever be funded.
+
 **Larger: all five lines now.**
 - *It loses because* Reserve imports reverse Heiko's 6 Nov "no import" ruling, and plan A did not take
   Environment.
@@ -202,8 +217,8 @@ S5-HC-4  A seat decides only on what it can see. The hands read observe(state, m
          views, news, notices, MonthReport and record never name how anyone voted (§3.4).
                                                   source: politics HC-4, frozen types "Every slice: HC-4"   breach: fatal
 S5-HC-5  politics:false behaves exactly as today: no budget, no overrule, no Welfare, no inquiry, and WS1's
-         politics-off sim rows stay byte-identical. With politics on, the default budget (null:
-         Projects 100) and no overrule called, runColony pays exactly what it pays today.
+         politics-off sim rows stay byte-identical. With politics on, the default budget (null: Welfare
+         0, so Projects is 100) and no overrule called, runColony pays exactly what it pays today.
                                                   source: politics HC, G-5 HC-22   breach: fatal
 S5-HC-6  Every fund write goes through colony.ts (fundIn/fundOut). The lines are new FundLine values,
          never a direct write to treasury.money.  source: G-5 §9, slice 2a HC-44   breach: fatal
@@ -225,6 +240,19 @@ S5-HC-11 The RC cut reads no field that only after-RC work writes. After-RC work
 slice 4; there is no Environment or Reserve line. The RC overrule targets the tax only. The inquiry is in
 the full part. Each decision below leads with what the table will see; I decided the rest as WS7's
 designer, with the reason given at the rule.
+
+**D-S5-1 · How does the Projects line work?** [RC] *At the table:* the Governor's desk and the TV show the
+budget as lines, for example "Projects 70% · Welfare 30%". The Projects line names the open buildings it
+is funding ("Observatory, Park").
+- **A (recommended): Projects is the remainder.** The Governor sets Welfare (and Security after RC);
+  Projects is whatever is left, shown as its own line. Any money the open buildings don't need stays in
+  the fund.
+  - *For:* one number to set in RC. Projects can never be forgotten at 0.
+  - *Against:* the Governor can't hold money back from the buildings on purpose.
+- **B: Projects is a share of its own,** and whatever no line takes is kept in the fund.
+  - *For:* the Governor can save.
+  - *Against:* saving buys nothing; 2,600-7,900 cr already sit unspent at game end in the measured games.
+    Three numbers to balance instead of one.
 
 **D-S5-2 · When is the overrule vote held?** [RC] *At the table:* someone calls "Overrule the tax!". Their
 name and the target show on every screen. The vote itself happens:
@@ -265,18 +293,27 @@ Sheriff places the guards.
 
 ## What the table sees `[handoff]`
 
-The screens are the hub's desks on each phone, the TV's planning panels and the month end. The laptop is
-the phone app at desk width, so it shows the same desk as that player's phone. WS6 mocks every layout; this
-table lists only what each screen shows and where. Each screen change in §1 has `ux: mock: WS6, to come`.
+The frame is **politics layout P0 option A (Heiko, 7 Nov, 11:02Z)**: no new tab; at most five sections
+per phone; the Sheriff gets a desk like the Governor's; and an action starts where its target is.
+
+So:
+- The budget lives in the Governor desk (Governor.tsx).
+- "Call an overrule" sits on the line it targets, wherever the table sees that line: the tax line, and
+  after RC the budget line.
+- The overrule ballot uses the council's ballot place (LawBallot.tsx's CouncilBallot).
+
+The laptop runs the phone app at desk width, so it shows the same desk as that player's phone. WS6 mocks
+every layout. This table lists only what each screen shows and where. Each screen change in §1 has
+`ux: mock: WS6, to come`.
 
 | Moment | Governor's phone | Every other phone | TV |
 |---|---|---|---|
-| **1 · Planning: the Governor sets the budget** [RC] (once the month's votes are over) | **P12 Governor desk**, beside the tax: a share per line in steps of `POLITICS.budget.step` %. Each line shows what it pays at today's fund ("Welfare 10%: about 120 cr to Kai, last on Worth"; "Projects 80%: about 430 cr toward the Observatory"), plus "Kept in the fund 10%". Set. | **P13 Council desk:** the budget as set, each line marked if it changed this month ("Welfare 0% → 10%"). | **P14** planning header, under the Governor's promise line (TvGovernorPromise's place): "Budget: Projects 80% · Welfare 10% → Kai · kept 10%", with changes marked. |
-| **2 · A player calls an overrule** [RC: tax; after RC: or budget] | The called setting turns read-only: "Frozen: Brix called an overrule vote on the tax, held as planning ends". | **P13:** the caller sees "You called it" and Withdraw. Everyone else sees the call, and "Call an overrule vote" is gone (one call a month). | **P14:** a banner "Brix calls an overrule vote on the Governor's tax", plus the news line. |
-| **3 · Planning ends: the overrule ballot** [RC] | **P13 overrule ballot**, the same as every phone; the Governor's ballot starts at No. | **P13 overrule ballot:** "Undo the Governor's tax? 5% at the month's start → 10% now", Yes / No, "needs N of M votes", Cast. The caller's ballot starts at Yes. | **P14 overrule panel**, in the law ballot's frame (TvCouncil): the question, start vs now, who has voted (never how), "needs N of M votes". |
+| **1 · Planning: the Governor sets the budget** [RC] (once the month's votes are over) | **P12 Governor desk**, beside the tax, the budget as lines:<br>• **Welfare**: a stepper in steps of `POLITICS.budget.step` %, showing what it pays at today's fund ("Welfare 30%: about 160 cr to Kai, last on Worth").<br>• **Projects**: the remainder line, with the open buildings it funds ("Projects 70%: about 380 cr toward the Observatory and the Park").<br>• After RC, Security gets a stepper too.<br>Set. | The budget sits where each player sees the colony's money: the fund card in the Colony section (hub/politics/Colony.tsx, `fund-card`), as "Projects 70% · Welfare 30% → Kai". A line that changed this month is marked ("Welfare 0% → 30%"). | **P14** planning header, under the Governor's promise line (TvGovernorPromise's place): "Budget: Projects 70% · Welfare 30% → Kai", with changes marked. |
+| **2 · A player calls an overrule** [RC: tax; after RC: or budget] | The called setting turns read-only: "Frozen: Brix called an overrule vote on the tax, held as planning ends". | **P13:** "Call an overrule vote" starts on the tax line itself, in the fund card ("the 10% sales tax" → Overrule). After RC it also sits on the budget line. Once a call is made, the caller sees "You called it" and Withdraw; everyone sees the call; and the button is gone (one call a month). | **P14:** a banner "Brix calls an overrule vote on the Governor's tax", plus the news line. |
+| **3 · Planning ends: the overrule ballot** [RC] | **P13 overrule ballot**, in the council's ballot place, the same as every phone. The Governor's ballot starts at No. | **P13 overrule ballot**, in the council's ballot place: "Undo the Governor's tax? 5% at the month's start → 10% now", Yes / No, "needs N of M votes", Cast. The caller's ballot starts at Yes. | **P14 overrule panel**, in the law ballot's frame (TvCouncil): the question, start vs now, who has voted (never how), "needs N of M votes". |
 | **4 · The reveal** (`POLITICS.overrule.revealMs`) [RC] | the result | the result | **P14:** "Yes 6 · needed 5: Overruled, the tax goes back to 5%", or "The Governor's tax stands". After RC, a second overrule adds "Snap election next month". |
-| **5 · Month end** [RC] | **P15** month-end colony panel: the fund's lines this month: office pay, upkeep, "Welfare 120 → Kai", "Buildings 430", and, after RC, "Security 200". | same | **P15:** the same lines in the TV's colony panel. |
-| **6 · The Sheriff opens an inquiry** [after RC] | **P13:** the record shown, and "Inquiry finds: … — no-confidence vote as planning ends". | the Sheriff's phone, **P16 Sheriff desk** (slice 4's desk): "Open an inquiry" (once a term). Every phone shows the record and the finding. | **P14:** "Sheriff Ossa opens an inquiry into Governor Lena", the record, then the finding or "dismissed". |
+| **5 · Month end** [RC] | **P15** month-end colony panel: the fund's lines this month: office pay, upkeep, "Welfare 160 → Kai", "Projects 380", and after RC "Security 200". | same | **P15:** the same lines in the TV's colony panel. |
+| **6 · The Sheriff opens an inquiry** [after RC] | the record and the finding, in the council's ballot place | On the Sheriff's phone, the **P16 Sheriff desk** (slice 4's desk, like the Governor's) has "Open an inquiry" (once a term). Every phone shows the record and the finding. | **P14:** "Sheriff Ossa opens an inquiry into Governor Lena", then the record, then the finding or "dismissed". |
 | **7 · No-confidence ballot and reveal** [after RC] | as moment 3, with the question "No confidence in Governor Lena?" | as moment 3 | as moments 3-4; a pass shows "Snap election next month". |
 | **8 · Next month, after a snap election was called** [after RC] | the election desk, as in an election month (candidacy open in announce) | same | the election panels |
 
@@ -312,20 +349,21 @@ today        the Governor sets the tax (politics.ts::setSalesTax, RULE-6) and ma
              packages/engine/src/colony.ts::runColony, packages/engine/src/types.ts::Politics
              verified_by: read (52c54b07)
 tomorrow     MUST let the Governor set the budget in planning once the votes are over: a whole-percent
-             share per offered line, summing to at most 100 (S5-RULE-1, S5-RULE-2). The budget stands until
-             changed, like the tax. null means the default, POLITICS.budget.default (Projects 100).
+             share per offered line (Welfare; Security after RC), summing to at most 100 (S5-RULE-1,
+             S5-RULE-2). Projects is the remainder, 100 minus the shares, and shows as a line. The budget
+             stands until changed, like the tax. null means the default: every share 0, so Projects is 100.
              MUST snapshot it as budgetAtStart when planning opens, beside taxAtStart.
-             MUST export budgetLines, budgetShares and budgetCredits (S5-RULE-3's credits at today's fund)
-             for the AI, the views and the screens.
+             MUST export budgetLines, budgetShares (the projects remainder included) and budgetCredits
+             (S5-RULE-3's credits at today's fund) for the AI, the views and the screens.
 logic        → §2 S5-RULE-1, S5-RULE-2 · evaluated at the setBudget intent · writes politics.budget;
              openPlanning writes politics.budgetAtStart
 seam         politics.ts — setBudget beside setSalesTax, with the same refusals in the same order and the
              same copy-on-write edit()
-senior       junior would: put the budget on Colony and write it from colony.ts, or default to all-zero
-             shares ("the rest stays in the fund"), which would stop every building from being funded.
+senior       junior would: put the budget on Colony and write it from colony.ts, or give Projects a share of
+             its own that can be left at 0, which would stop every building from being funded.
              · senior does: the budget is a Governor's setting, so it sits with the tax in Politics, with its
-             start-of-month copy beside taxAtStart. Its default is Projects 100, which is exactly today's
-             runColony. colony.ts only reads it when it pays.
+             start-of-month copy beside taxAtStart. Projects is the remainder, so its default is 100, which
+             is exactly today's runColony. colony.ts only reads it when it pays.
 mechanism    sprout (setBudget, budgetLines, budgetShares, budgetCredits) + in_place (newPolitics, openPlanning)
 call sites   setBudget: MuleGame.handle (S5-C7), applyAction in play.ts (S5-C9), BudgetHand via VoteHand
              (S5-C6). openPlanning: game.ts::createGame and ::advancePhase (unchanged calls).
@@ -351,8 +389,9 @@ today        runColony runs four steps in order:
 tomorrow     MUST fix spare0 = max(0, fund − COLONY.reserve) once, between steps (2) and (3).
              MUST pay Welfare = min(floor(welfare% × spare0), POLITICS.budget.welfare.maxCredits) to the
                player S5-RULE-4 names, recorded under FundLine 'welfare' and in colony.welfare.
-             MUST cap step (3) at floor(projects% × spare0) in all, credits and goods together.
-             Whatever no line takes stays in the fund (S5-RULE-3).
+             MUST cap step (3) at floor(projects% × spare0) in all, credits and goods together, where
+             projects% = 100 − Σ shares (the remainder). Whatever the open buildings don't need stays in the
+             fund (S5-RULE-3).
              MUST export welfareRecipient(state).
 logic        → §2 S5-RULE-3, S5-RULE-4 · evaluated once at upkeep, inside runColony · reads politics.budget,
              treasury.money, score() · writes treasury.money (through fundOut), the recipient's money,
@@ -473,7 +512,7 @@ today        VoteHand runs for office and votes. As Governor it also sets the ta
              anchors: packages/ai/src/hands/vote.ts::VoteHand, ::goodsInReach, ::nextTax
              verified_by: read
 tomorrow     MUST add packages/ai/src/hands/budget.ts (WS7, new) with BudgetHand.split and OverruleHand.call
-             and .vote (S5-RULE-11, S5-RULE-12, the [RC] rows), on WS1's lineWorth and overruleWorth (§3.2).
+             and .vote (S5-RULE-11, S5-RULE-12, the [RC] rows), on WS1's valuations (§3.2).
              MUST have VoteHand drive them:
                - split as Governor, once a month after the tax and before the law proposal and colonyActs;
                - call on every tick in planning proper with no vote open, once per new tax it has not
@@ -496,7 +535,7 @@ call sites   VoteHand.tick: apps/server/src/mule-game.ts::MuleGame (tickVoteHand
              (planning case). The seat's salt comes from AiSeat (packages/ai/src/seat.ts).
 pin          packages/ai/test vote-hand tests (election, law ballot, colonyActs) pass unchanged when
              POLITICS.budget.welfare.maxShare is 0 and no overrule is open
-depends_on   S5-C1, S5-C4, S5-C5 (contract, stubbable from §3); WS1's two valuations (stubbable: 0 gives a
+depends_on   S5-C1, S5-C4, S5-C5 (contract, stubbable from §3); WS1's four valuations, proposed (stubbable: 0 gives a
              base-only budget and no calls)
 atomicity    none
 ```
@@ -567,8 +606,7 @@ S5-C9 · MODIFIED · [RC] the sim, the AI's moves and observe() (WS1 named edits
 
 today        play.ts's planning case loops the votes, ticks the hands once more, then runs planMonth.
              applyAction knows setTax, propose, voteLaw, commission and the rest. 'done' routes to votesDone
-             only when an election or a council exists. observe() hides other seats' election ballots, but
-             not their law-ballot ballots.
+             only when an election or a council exists. observe() hides other seats' election ballots.
              anchors: packages/ai/src/play.ts (planning case, applyAction), packages/ai/src/actions.ts::AiAction,
              packages/engine/src/observe.ts::observe, packages/ai/src/sim.ts
              verified_by: read
@@ -577,10 +615,10 @@ tomorrow     MUST add AiAction setBudget, callOverrule and voteOverrule, with th
              MUST, in the planning case after the Governor's tick, tick every hand once more, so a seat seated
              before the Governor can call. After planMonth, MUST call openOverrule and, if it opened, loop the
              votes as before.
-             MUST hide other seats' overrule ballots in observe(), and the law ballot's ballots too (the HC-4
-             gap above).
+             MUST hide other seats' overrule ballots in observe(). (The law ballot's own leak is WS1's separate
+             fix, already reported; this change covers the overrule only.)
              MUST print S5-UBER-AC-1's row and check it.
-             MUST add lineWorth and overruleWorth (§3.2).
+             MUST add lineWorth, projectsWorth, moodPointWorth and overruleWorth (§3.2; proposed shapes, WS1 owns the final ones).
 seam         WS1's files
 mechanism    in_place
 call sites   play.ts planning case and applyAction; observe() and its callers (every hand, unchanged);
@@ -594,18 +632,22 @@ atomicity    none
 S5-C10 · MODIFIED · [RC] the phone desks: the Governor's budget (P12), the tax overrule call and its ballot (P13)
 
 today        the Governor desk holds the tax and the law picker. The Council desk holds the vote weights, the
-             laws in force and next month's vote. The law ballot is its own component.
+             laws in force and next month's vote. The law ballot is its own component (CouncilBallot). Every
+             player sees the tax in the Colony section's fund card ("the N% sales tax on every sale").
              anchors: apps/web/src/phone/hub/politics/Governor.tsx::GovernorDesk,
-             apps/web/src/phone/hub/politics/Council.tsx, apps/web/src/phone/hub/politics/LawBallot.tsx,
-             apps/web/src/phone/hub/politics/words.ts
+             apps/web/src/phone/hub/politics/Council.tsx, apps/web/src/phone/hub/politics/LawBallot.tsx::CouncilBallot,
+             apps/web/src/phone/hub/politics/Colony.tsx::ColonyWithFacts, apps/web/src/phone/hub/politics/words.ts
              verified_by: read
-tomorrow     MUST render WS6's approved mock:
-               P12: the share steppers, with what each pays at today's fund and "kept in the fund", plus
-                    Set and the frozen state;
-               P13: "Call an overrule vote" (on the tax), Withdraw, the call's banner, and the overrule
-                    ballot (start vs now, needed, Yes/No, Cast).
-ux           mock: WS6, to come (start from the Governor desk's tax row and LawBallot's Yes/No) · GRAFT
-             TARGET: Governor.tsx, Council.tsx, new apps/web/src/phone/hub/politics/OverruleBallot.tsx, words.ts
+tomorrow     MUST render WS6's approved mock, inside politics layout P0 option A (Heiko, 7 Nov): no new tab,
+             at most five sections, and an action starts where its target is.
+               P12, the Governor desk (Governor.tsx): the Welfare stepper with what it pays at today's fund;
+                    the Projects remainder line naming the open buildings it funds; Set; the frozen state.
+               P13, on the tax line where each player sees it (the fund card): "Call an overrule vote",
+                    Withdraw, and the call's banner. The overrule ballot (start vs now, needed, Yes/No,
+                    Cast) in the council's ballot place.
+ux           mock: WS6, to come (start from the Governor desk's tax row, the fund card's tax line and
+             CouncilBallot's Yes/No) · GRAFT TARGET: Governor.tsx, Colony.tsx (the fund card's tax line),
+             LawBallot.tsx's ballot place (or a new OverruleBallot.tsx mounted there), words.ts
 mechanism    fill_scaffold
 pin          politics-desks tests for the tax and the law ballot pass unchanged
 depends_on   S5-C8 (contract), WS6's approved mock (not stubbable: an implementer never designs a screen)
@@ -660,8 +702,8 @@ tomorrow     MUST offer Security when 'sheriff' is in POLITICS.offices.
              MUST pay it at upkeep from spare0, after Welfare and before Projects, as
              min(floor(security% × spare0), POLITICS.budget.security.maxCredits), under FundLine 'security'
              (a sink: the militia's wages).
-             MUST export securityFunds(state): the credits the Security share would pay at today's fund,
-             after any overrule. Slice 4 reads it (§3.1).
+             MUST export securitySpend(state): number, the Security line's credits this month: what its
+             share pays at today's fund, after any overrule. Slice 4 reads it when sabotage resolves (§3.1).
 logic        → §2 S5-RULE-1 row 3, S5-RULE-3
 seam         the same runColony step as Welfare
 senior       junior would: give Security its own timing to match the guards. · senior does: pay it like
@@ -681,7 +723,8 @@ today        (after the RC cut) callOverrule refuses 'budget', and a call freeze
              anchors: packages/engine/src/politics.ts::setSalesTax (and RC's callOverrule)
              verified_by: none_exists until the RC cut is built
 tomorrow     MUST accept target 'budget' when the shares differ from budgetAtStart. A passed budget
-             overrule restores budgetAtStart.
+             overrule restores budgetAtStart. The call starts on the budget line, where the table
+             sees it (layout P0 option A).
              MUST freeze both settings from any call: setSalesTax and setBudget are both refused until
              planning ends.
 logic        → §2 S5-RULE-6 rows 8b and 9, S5-RULE-8 row 1 (budget)
@@ -783,8 +826,8 @@ atomicity    none
 S5-C18 · MODIFIED · [after RC] the server, the views, the sim and the screens for the full part
 
 tomorrow     MUST let the server accept the openInquiry intent, and route its news.
-             MUST let the views add the inquiry record and the 'confidence' target (§3), and P13/P14 the budget
-             ballot's "start vs now" by line.
+             MUST let the views add the inquiry record and the 'confidence' target (§3). MUST give P13/P14 the
+             budget ballot's "start vs now" by line, with "Call an overrule" on the budget line (layout P0 A).
              MUST give the Sheriff's desk (P16, slice 4's) the Open-an-inquiry button.
              MUST let the sim (WS1) print S5-UBER-AC-3's counters.
 ux           mock: WS6, to come (the RC panels plus the inquiry record) · GRAFT TARGET: the RC files plus
@@ -815,27 +858,29 @@ atomicity    none
 ## §2 · The Logic `[handoff]`
 
 ```
-S5-RULE-1 · The lines offered and their bounds                     shape: decision table (classification)
+S5-RULE-1 · The lines and their bounds                                shape: decision table (classification)
 
-inputs    line ∈ BudgetLine ('projects' | 'welfare' | 'security'); 'sheriff' ∈ POLITICS.offices
-  #   line       offered when                                   share bounds (whole %)                       credit cap a month
-  1   projects   politics on                         [RC]       0 ..= 100, multiple of POLITICS.budget.step (5)   none (the open buildings' needs cap it)
-  2   welfare    politics on                         [RC]       0 ..= POLITICS.budget.welfare.maxShare (20)      POLITICS.budget.welfare.maxCredits (200)
-  3   security   'sheriff' ∈ POLITICS.offices        [after RC] 0 ..= POLITICS.budget.security.maxShare (30)     POLITICS.budget.security.maxCredits (300)
-  4   (kept)     never a setting                                100 − Σ shares stays in the fund
-default    politics.budget = null means POLITICS.budget.default = { projects: 100, welfare: 0, security: 0 }:
-           exactly today's runColony (S5-HC-5)
-budgetLines(state)  the offered lines, in this order
-unknown   a line that is not offered keeps its share in state, but budgetShares reads it as 0 (Security is
-          inert until the Sheriff exists). shares is a full Record (frozen type), with a 0 for any line not
-          offered.
+inputs    line ∈ BudgetLine ('welfare' | 'security'); 'sheriff' ∈ POLITICS.offices
+  #   line       set by the Governor?   offered when                       share bounds (whole %)                     credit cap a month
+  1   welfare    yes                     politics on                [RC]       0 ..= POLITICS.budget.welfare.maxShare (30), multiple of POLITICS.budget.step (5)   POLITICS.budget.welfare.maxCredits (200)
+  2   security   yes                     'sheriff' ∈ offices  [after RC] 0 ..= POLITICS.budget.security.maxShare (30), multiple of step                    POLITICS.budget.security.maxCredits (300)
+  3   projects   no: the remainder       politics on                [RC]       100 − Σ offered shares                      none (the open buildings' still-needed credits and goods cap it)
+default    politics.budget = null means every share is 0, so Projects is 100: exactly today's runColony (S5-HC-5)
+budgetLines(state)        the offered lines the Governor sets, in this order
+budgetShares(state)       Record<BudgetLine | 'projects', number>: the shares in force, with 0 for a line not offered,
+                          and projects = 100 − Σ
+unknown   a line not offered keeps its share in state, but budgetShares reads it as 0, so Security is inert
+          until the Sheriff exists. shares is a full Record<BudgetLine, number>.
+why the remainder   Heiko's "Projects and Welfare lines" (plan A). Projects shows as a line on every screen,
+          but it can't be forgotten at 0, and money the buildings don't need stays in the fund anyway
+          (D-S5-1 A).
 ```
 
 ```
 S5-RULE-2 · Setting the budget (setBudget)                          shape: decision table
 
 inputs    actor · phase · votesOpen · shares: Record<BudgetLine, number> · politics.overrule (this month's,
-          any stage) · the offered lines and bounds (S5-RULE-1)
+          any stage) · the offered lines and their bounds (S5-RULE-1)
 first match wins
   #   when                                                      then
   1   politics off                                              refuse "This game plays without the colony's council"
@@ -846,14 +891,16 @@ first match wins
   6   a share not whole, < 0, above its max, or not a multiple of step   refuse "<Line> is 0% to <max>%, in steps of <step>"
   7   Σ shares > 100                                            refuse "The shares add up to <Σ>%: at most 100%"
   8   otherwise                                                 politics.budget = { month, setBy: actor, shares }
-in RC     row 4 is absent: a tax overrule freezes the tax only (setSalesTax's row, S5-RULE-6). The budget
-          can't be overruled in RC, so changing it after a tax call is harmless.
+in RC     row 4 is absent. A tax overrule freezes the tax only (setSalesTax's row, S5-RULE-6). The budget
+          can't be overruled in RC, so changing it after a tax call does no harm.
 setSalesTax's row (RC)   an overrule on the tax is called this month → refuse "An overrule vote on the tax is
           called: it holds until it is settled". After RC, the message is row 4's, for any call.
 no fund bound   shares of tomorrow's spare can never overspend, so there is nothing to check against the
                 fund now.
-examples  Lena sets { projects 80, welfare 10, security 0 } → row 8 · welfare 25 → row 6 · security 10
-          before a Sheriff exists → row 5 · projects 95 + welfare 10 → row 7 · Kai tries → row 3
+examples  Lena sets { welfare 30, security 0 } → row 8: Projects 70 · welfare 35 → row 6 · security 10
+          before a Sheriff exists → row 5 · Kai tries → row 3
+          (row 7 can bite only after RC: welfare 30 + security 30 = 60 is still fine, so the check is a guard
+          for future maxima)
 ```
 
 ```
@@ -864,30 +911,32 @@ runColony:
   1  standing / closed buildings pay their upkeep or close           (G-5 RULE-21 row 1, unchanged)
   2  buildings under way tick                                        (G-5 RULE-21 row 2, unchanged)
   3  NEW: spare0 = max(0, treasury.money − COLONY.reserve), fixed once; shares = budgetShares(state)
-     a  [RC] welfare: to = welfareRecipient(state) (S5-RULE-4)
-                      want = min(floor(shares.welfare × spare0 / 100), POLITICS.budget.welfare.maxCredits)
-                      to null or want 0 → nothing; else paid = fundOut('welfare', want); money(to) += paid;
-                      colony.welfare = { month, to, paid }
-     b  [after RC] security: want = min(floor(shares.security × spare0 / 100), maxCredits);
-                      fundOut('security', want)
-     c  [RC] projects: limit = floor(shares.projects × spare0 / 100); the commissioned buildings are funded
-                      in commission order, as today, but credits and goods together take at most `limit`
+     a  [RC] welfare:
+          to   = welfareRecipient(state) (S5-RULE-4)
+          want = min(floor(shares.welfare × spare0 / 100), POLITICS.budget.welfare.maxCredits)
+          to null or want 0 → nothing
+          else paid = fundOut('welfare', want); money(to) += paid; colony.welfare = { month, to, paid }
+     b  [after RC] security:
+          want = min(floor(shares.security × spare0 / 100), maxCredits)
+          fundOut('security', want)
+     c  [RC] projects (the remainder):
+          limit = floor(shares.projects × spare0 / 100)
+          the commissioned buildings are funded in commission order, as today, but credits and goods
+          together take at most `limit`
   4  the mood steps, reading Welfare paid                            (G-5 RULE-20 + S5-RULE-5)
-why it never overspends   Σ shares ≤ 100 and each payment is floored, so a + b + c ≤ spare0. The reserve is
-          never touched, and design 05's "cut every line by the same share" can never apply.
-unknown   budget null → shares = POLITICS.budget.default (projects 100) → step 3c's limit = spare0, which is
-          exactly today's fund() (S5-HC-5's pin). No Governor → the budget stands until the next Governor
-          changes it.
-invariants  the fund never falls below COLONY.reserve in step 3, nor below 0 anywhere (fundOut); the ledger's
-            Σ in − Σ out = Δ treasury.money (G-5 RULE-27)
-examples  fund 640 after office pay and upkeep, reserve 100 → spare0 540;
-          shares projects 80 / welfare 10:
-            welfare min(54, 200) = 54 to Kai; buildings take at most 432; 54 at least stays in the fund
-          shares projects 100 / welfare 0 (the default): buildings take up to 540, as today
-          spare0 6,000 with welfare 10%: min(600, 200) = 200 (the cap)
-          fund 90 → spare0 0 → nothing paid, nothing funded
+why it never overspends   the three shares sum to 100 and each payment is floored, so a + b + c ≤ spare0.
+          The reserve is never touched, and design 05's "cut every line by the same share" can never apply.
+          Whatever a capped line or the open buildings don't take stays in the fund.
+unknown   budget null → Projects is 100 → step 3c's limit = spare0 → exactly today's fund() (S5-HC-5's pin).
+          No Governor → the budget stands until the next Governor changes it.
+invariants  the fund never falls below COLONY.reserve in step 3, nor below 0 anywhere (fundOut); the
+            ledger's Σ in − Σ out = Δ treasury.money (G-5 RULE-27)
+examples  fund 640 after office pay and upkeep, reserve 100 → spare0 540
+          · welfare 30 (Projects 70) → welfare min(162, 200) = 162 to Kai; buildings take at most 378
+          · welfare 0 (the default, Projects 100) → buildings take up to 540, as today
+          · spare0 6,000 with welfare 10 → min(600, 200) = 200 (the cap); the rest beyond the buildings' needs stays
+          · fund 90 → spare0 0 → nothing paid, nothing funded
 ```
-
 ```
 S5-RULE-4 · Welfare's recipient [RC]                                  shape: decision table
 
@@ -1017,7 +1066,7 @@ S5-RULE-10 · Who sees what                                            shape: de
 
   item                                                   owner         other phones   TV
   the budget's shares now and at the month's start,      yes           yes            yes
-  their credits at today's fund, the amount kept
+  their credits at today's fund, the Projects remainder and the buildings it funds
   Welfare's recipient now, and who was paid              yes           yes            yes
   the call (caller, target), the frozen state            yes           yes            yes
   the ballot's stage, who has voted, who is Done,        yes           yes            yes
@@ -1034,29 +1083,30 @@ accepted  as for the council (AM-8 (a)): totals plus a public "who has voted" li
 ```
 S5-RULE-11 · BudgetHand.split (the AI Governor)                       shape: greedy fill
 
-when      the seat is Governor; in planning proper, once a month, after VoteHand.govern sets the tax and before
-          the law proposal and colonyActs. Never while an overrule on the budget is called. Never in a term in
-          which an overrule passed against it (it holds).
-inputs    obs = observe(state, me) · budgetLines, POLITICS.budget · the budget in force · spare =
-          max(0, fund − COLONY.reserve) · open buildings' stillNeeds credits
-fill      projects starts at the share whose credits at today's spare cover the open buildings' still-needed
-          credits, rounded up to a step (100 when none is open; at most 100)
-          welfare starts at POLITICS.ai.budget.base[persona].welfare; [after RC] security at base[persona].security
-          then repeat, one step at a time: for each non-projects line below its max,
-            gain(line) = (lineWorth(obs, me, line, credits(a + step)) − lineWorth(obs, me, line, credits(a)))
+when      the seat is Governor; in planning proper, once a month, after VoteHand.govern sets the tax and
+          before the law proposal and colonyActs. Never while an overrule on the budget is called. Never in
+          a term in which an overrule passed against it (it holds).
+inputs    obs = observe(state, me) · budgetLines, POLITICS.budget · the budget in force ·
+          spare = max(0, fund − COLONY.reserve) · open buildings' stillNeeds credits
+cover     the least Projects share whose credits at today's spare cover the open buildings' still-needed
+          credits, rounded up to a step (0 when none is open)
+fill      start: welfare at POLITICS.ai.budget.base[persona].welfare; [after RC] security at
+          base[persona].security; never above 100 − cover in all
+          then repeat, one step at a time, for each line below its max:
+            gain(line) = (lineWorth(obs, me, line, credits(line, a + step)) − lineWorth(obs, me, line, credits(line, a)))
                          × POLITICS.ai.budget.tilt[persona][line]
-            cost       = lineWorth(obs, me, 'projects', credits(p)) − lineWorth(obs, me, 'projects', credits(p − step))
-                         (0 when projects would stay above its covering share)
-          take the line with the best gain − cost > 0, while Σ ≤ 100 (taking from projects only above its
-          covering share, or from "kept"); stop when none qualifies
-          credits(s) = min(floor(s × spare / 100), the line's maxCredits)
+            cost       = projectsWorth(obs, me, step × spare / 100)
+                         (what the step takes from the Projects remainder is worth to me; 0 while the remainder
+                         still covers the open buildings)
+          take the line with the best gain − cost > 0 while Σ shares ≤ 100 − cover; stop when none qualifies
+          credits(line, s) = min(floor(s × spare / 100), the line's maxCredits)
   #   result                                      then
   1   Rookie                                      base shares only, no fill
   2   the split equals the budget in force        no action (a no-op change would invite an overrule)
   3   otherwise                                   setBudget(split)
-guard     the AI never gives a line the share that covers its own open buildings' credits
+guard     the Projects remainder never falls below `cover`: the AI never takes the credits its own open
+          buildings still need
 ```
-
 ```
 S5-RULE-12 · OverruleHand.call and .vote                              shape: decision table
 
@@ -1145,17 +1195,21 @@ vote ('confidence', in OverruleHand.vote)
 
 ## §3 · Contracts & Data Models `[handoff]`
 
-The 7 Nov frozen types are binding and adopted unchanged: `BudgetLine`, `Budget`, `Politics.budget`,
-`Politics.budgetAtStart`, and observe() as every hand's input. Everything below adds to them.
+The 7 Nov frozen types are binding and adopted: `Budget`, `Politics.budget`, `Politics.budgetAtStart`, and
+observe() as every hand's input. **One supersession, directed by WS7 on 7 Nov:** `BudgetLine` is
+`'welfare' | 'security'`, and Projects is the remainder (100 − Σ shares), not a share of its own. The
+`Budget` shape is unchanged; only the meaning of what the shares leave changes: it goes to Projects, not
+"stays in the fund". Money the open buildings don't take still stays in the fund. WS1's stubs written
+against the frozen file need `'projects'` dropped from the union. Everything below adds to these.
 
 | Contract | change_kind | Breaking | Cut | Change |
 |---|---|---|---|---|
-| frozen: `BudgetLine`, `Budget { month; setBy; shares }`, `Politics.budget / .budgetAtStart: Budget \| null` | ADDED | no | RC | S5-C1 |
+| frozen: `Budget { month; setBy; shares }`, `Politics.budget / .budgetAtStart: Budget \| null`; `BudgetLine = 'welfare' \| 'security'` (supersedes the frozen file's `'projects'` member) | ADDED | no | RC | S5-C1 |
 | `OverruleTarget = 'tax' \| 'budget' \| 'confidence'`, `OverruleWhy`, `Overrule`, `Politics.overrule` | ADDED | no | RC (the union is complete; RC refuses 'budget' and 'confidence' by rule) | S5-C4, S5-C5 |
 | `Politics.overruled: number`, `Politics.snapMonth: number \| null`, `Politics.inquiry: { term: number; record: InquiryRecord; finding: boolean } \| null` | ADDED | no | RC adds the fields at their zero values; after RC writes them | S5-C15, S5-C16 |
 | `FundLine` += `'welfare'` (RC), `'security'` (after RC; added in the RC commit, written later) | ADDED | no | RC | S5-C2, S5-C13 |
 | `Colony.welfare: { month: number; to: string; paid: number } \| null` | ADDED | no | RC | S5-C2 |
-| engine exports, politics.ts: `setBudget`, `budgetLines`, `budgetShares`, `budgetCredits`, `callOverrule`, `canOverrule`, `openOverrule`, `voteOverrule` (RC); `securityFunds`, `openInquiry`, `inquiryRecord` (after RC). colony.ts: `welfareRecipient` (RC) | ADDED | no | as listed | S5-C1..C5, C13, C16 |
+| engine exports, politics.ts: `setBudget`, `budgetLines`, `budgetShares`, `budgetCredits`, `callOverrule`, `canOverrule`, `openOverrule`, `voteOverrule` (RC); `securitySpend`, `openInquiry`, `inquiryRecord` (after RC). colony.ts: `welfareRecipient` (RC) | ADDED | no | as listed | S5-C1..C5, C13, C16 |
 | changed behaviour, same signatures: `votesOpen`, `votesDone`, `isVotesDone`, `stepVotes`, `closeVotes`; `setSalesTax` gains a refusal; `nextElectionMonth` sees a snap (after RC) | MODIFIED | no | RC / after RC | S5-C4, C5, C15 |
 | `MuleIntent` += `setBudget`, `callOverrule`, `voteOverrule` (RC); `openInquiry` (after RC) | ADDED | no | as listed | S5-C7, C18 |
 | `PoliticsView` += `budget`, `overrule` (RC); `overruled`, `snap`, `inquiry` (after RC). `MyPoliticsView` += `overruleBallot`, `canOverrule`. `ColonyView` += `welfare` | ADDED | no (optional fields, as `council?` and `strike?` were added) | as listed | S5-C8, C18 |
@@ -1167,14 +1221,15 @@ fields included, so the after-RC work never reopens types.ts or the protocol. Th
 signatures that throw `'not built'` until WS7 builds them.
 
 ```ts
-// packages/engine/src/types.ts (WS3 named edit). The frozen part, verbatim:
-export type BudgetLine = 'projects' | 'welfare' | 'security';
+// packages/engine/src/types.ts (WS3 named edit). The frozen part, with WS7's 7 Nov supersession of BudgetLine:
+/** A budget line the Governor sets. Projects is not one: it is the remainder (100 − Σ shares). Security only once a Sheriff is elected. */
+export type BudgetLine = 'welfare' | 'security';
 export interface Budget {
   month: number;
   setBy: string | null;     // the Governor, or null for the default
-  shares: Record<BudgetLine, number>;   // whole percent of the fund above COLONY.reserve; sum <= 100; the rest stays in the fund
+  shares: Record<BudgetLine, number>;   // whole percent of the fund above COLONY.reserve; sum <= 100; Projects gets the rest
 }
-// Politics.budget: Budget | null (null = POLITICS.budget.default); Politics.budgetAtStart: Budget | null.
+// Politics.budget: Budget | null (null = every share 0, so Projects 100); Politics.budgetAtStart: Budget | null.
 
 // Slice 5's own additions:
 /** What a vote of this kind can undo; 'confidence' is the Sheriff's inquiry's no-confidence motion (after RC). */
@@ -1212,15 +1267,15 @@ export interface InquiryRecord {
 ```ts
 // packages/engine/src/politics.ts (WS7) — signatures
 export function budgetLines(state: GameState): BudgetLine[];                          // S5-RULE-1, in order
-export function budgetShares(state: GameState): Record<BudgetLine, number>;           // in force, default applied, unoffered = 0
-export function budgetCredits(state: GameState): Record<BudgetLine, number>;          // what each share pays at today's fund (S5-RULE-3)
+export function budgetShares(state: GameState): Record<BudgetLine | 'projects', number>;   // in force; unoffered = 0; projects = 100 − Σ
+export function budgetCredits(state: GameState): Record<BudgetLine | 'projects', number>;  // what each line pays at today's fund (S5-RULE-3)
 export function setBudget(state: GameState, playerId: string, shares: Record<BudgetLine, number>): void;  // S5-RULE-2
 export function canOverrule(state: GameState, playerId: string): Record<OverruleTarget, true | OverruleWhy>;
 export function callOverrule(state: GameState, playerId: string, target: OverruleTarget | null): void;     // S5-RULE-6
 export function openOverrule(state: GameState): boolean;                              // S5-RULE-7: called → ballot
 export function voteOverrule(state: GameState, voterId: string, yes: boolean): void;
 // after RC
-export function securityFunds(state: GameState): number;                              // slice 4's hook (§3.1)
+export function securitySpend(state: GameState): number;                              // slice 4's hook (§3.1)
 export function inquiryRecord(state: GameState): InquiryRecord;
 export function openInquiry(state: GameState, playerId: string): void;                // S5-RULE-14
 // packages/engine/src/colony.ts (WS7)
@@ -1240,10 +1295,10 @@ export function welfareRecipient(state: GameState): string | null;              
   | { type: 'openInquiry' }
 
 export interface BudgetView {
-  /** The lines offered, in order: the share now and at the month's start, the bounds, and the credits it pays at today's fund. */
-  lines: { line: BudgetLine; share: number; start: number; maxShare: number; step: number; credits: number; maxCredits: number | null }[];
-  /** 100 − Σ shares: stays in the fund. */
-  kept: number;
+  /** The lines the Governor sets, in order: the share now and at the month's start, the bounds, and the credits it pays at today's fund. */
+  lines: { line: BudgetLine; share: number; start: number; maxShare: number; step: number; credits: number; maxCredits: number }[];
+  /** The Projects remainder line: 100 − Σ shares now and at the month's start, its credits at today's fund, and the open buildings it funds, in commission order. */
+  projects: { share: number; start: number; credits: number; funds: PrestigeId[] };
   /** Who Welfare would go to now (S5-RULE-4), or null. */
   welfareTo: string | null;
   /** The Governor who set it, or null for the default. */
@@ -1280,9 +1335,9 @@ export interface OverruleView {
 ```json
 "politics": { "governor": "lena", "tax": { "percent": 10, "start": 5, "low": 5, "high": 15 },
   "budget": { "lines": [
-      { "line": "projects", "share": 80, "start": 80, "maxShare": 100, "step": 5, "credits": 432, "maxCredits": null },
-      { "line": "welfare",  "share": 10, "start": 10, "maxShare": 20,  "step": 5, "credits": 54,  "maxCredits": 200 } ],
-    "kept": 10, "welfareTo": "kai", "setBy": "lena", "frozen": false },
+      { "line": "welfare", "share": 30, "start": 30, "maxShare": 30, "step": 5, "credits": 162, "maxCredits": 200 } ],
+    "projects": { "share": 70, "start": 70, "credits": 378, "funds": ["observatory", "park"] },
+    "welfareTo": "kai", "setBy": "lena", "frozen": false },
   "overrule": { "target": "tax", "caller": "brix", "stage": "ballot",
                 "restores": { "tax": 5 }, "stands": { "tax": 10 },
                 "voted": ["brix", "lena", "ai1"], "done": ["lena", "ai1"], "waitingFor": ["brix", "kai"],
@@ -1293,56 +1348,82 @@ No other player's view holds Lena's or ai1's ballot.
 
 ### §3.1 · Hooks for slice 4 [after RC]
 
-This slice supplies, and slice 4 (ws7-slice4-sabotage) decides:
-- `securityFunds(state): number`, new in politics.ts: the credits the Security share would pay at today's
-  fund, after any overrule; 0 while `'sheriff'` is not in `POLITICS.offices`. Slice 4 turns it into its own
-  numbers: guards, investigations, detection and the escort, in slice 4's config. Design 05 gives 1 guard
-  plus 1 per 100 cr, 2 investigations at 200 cr, and the escort at 200 cr.
-- **Read it when sabotage resolves, not when the guards are placed.** The fund moves between planning and
-  upkeep, and after RC a budget overrule as planning ends can lower the Security share after the Sheriff
-  has placed guards. Slice 4's rule must say which guards count when the allowance falls. WS7 suggests the
-  latest placed drop first.
+This slice supplies the hooks below; slice 4 (ws7-slice4-sabotage) decides what they buy. The names are the
+ones slice 4's spec uses.
+- `securitySpend(state): number`, new in politics.ts: the Security line's credits this month, meaning what
+  its share pays at today's fund after any overrule. It is 0 while `'sheriff'` is not in
+  `POLITICS.offices`.
+  - Slice 4 turns it into its own numbers, in slice 4's config: guards, investigations, detection and the
+    escort.
+  - Design 05 gives 1 guard plus 1 per 100 cr, 2 investigations at 200 cr, and the escort at 200 cr.
+- **Slice 4 reads securitySpend when sabotage resolves, not when the guards are placed** (accepted by WS7
+  on 7 Nov; slice 4's spec states it).
+  - The fund moves between planning and upkeep, and after RC a budget overrule as planning ends can lower
+    the Security share after the Sheriff has placed guards.
+  - Slice 4's rule says which guards count when the allowance falls; WS7 suggests the latest placed drop
+    first.
 - Slice 4 restores the Sheriff by putting `'sheriff'` back in `POLITICS.offices`. Security and the inquiry
   then appear with no other change here.
-- The inquiry needs `Politics.sheriff`, and slice 4's Sheriff desk for its button (P16).
+- The inquiry needs `Politics.sheriff`, and slice 4's Sheriff desk (P16, "a Sheriff's desk like the
+  Governor's", layout P0 A) for its button.
 
 ### §3.2 · Hand decisions and the values they need (the WS7 ↔ WS1 contract) `[handoff]`
 
-Every hand reads `observe(state, me)` (S5-HC-4). Classic seats need no API key; Smart seats run the same
+Every hand reads `observe(state, me)` (S5-HC-4). Classic seats need no API key. Smart seats run the same
 code until WS2's port takes these decisions.
 
 | Hand · method | Cut | Runs when | Inputs (all from obs) | Output | Values called |
 |---|---|---|---|---|---|
-| `BudgetHand.split(obs)` (new, hands/budget.ts) | RC: projects, welfare; after RC: + security | the seat is Governor; once a month in planning proper, inside VoteHand.govern after the tax, before proposeLaw and colonyActs; not after an overrule passed against it this term | budgetLines, POLITICS.budget, the budget in force, the fund, open buildings' stillNeeds | shares → `setBudget`, or none | `lineWorth` |
-| `OverruleHand.call(obs)` (new) | RC: tax; after RC: + budget | any non-Governor seat; every VoteHand tick in planning proper with no vote open, once per Governor setting it has not judged (the server ticks the hands after a Governor's change, S5-C7) | canOverrule, taxAtStart vs tax (budgetAtStart vs budget), voteWeight of every player | target → `callOverrule`, or none | `overruleWorth` |
-| `OverruleHand.vote(obs)` (new) | RC; after RC: + 'confidence' rows | when the overrule ballot opens: one ballot, then Done | the open overrule, the mood band; after RC the record and deal cards | yes/no → `voteOverrule`, then `done` | `overruleWorth` |
-| `InquiryHand.open(obs)` (new) | after RC | the seat is Sheriff; planning proper; at most once a term | inquiryRecord, its own deal cards | → `openInquiry`, or none | none (S5-RULE-16 is a rule over public facts) |
+| `BudgetHand.split(obs)` (new, hands/budget.ts) | RC: welfare (Projects is the remainder); after RC: + security | The seat is Governor. Once a month in planning proper, inside VoteHand.govern, after the tax and before proposeLaw and colonyActs. Not after an overrule passed against it this term. | budgetLines, POLITICS.budget, the budget in force, the fund, open buildings' stillNeeds | shares → `setBudget`, or none | `lineWorth`, `projectsWorth` |
+| `OverruleHand.call(obs)` (new) | RC: tax; after RC: + budget | Any non-Governor seat. Every VoteHand tick in planning proper with no vote open, once per Governor setting it has not judged. (The server ticks the hands after a Governor's change, S5-C7.) | canOverrule, taxAtStart vs tax (budgetAtStart vs budget), voteWeight of every player | target → `callOverrule`, or none | `overruleWorth` |
+| `OverruleHand.vote(obs)` (new) | RC; after RC: + 'confidence' rows | When the overrule ballot opens: one ballot, then Done. | the open overrule, the mood band; after RC, the record and deal cards | yes/no → `voteOverrule`, then `done` | `overruleWorth` |
+| `InquiryHand.open(obs)` (new) | after RC | The seat is Sheriff, in planning proper, at most once a term. | inquiryRecord, its own deal cards | → `openInquiry`, or none | none (S5-RULE-16 is a rule over public facts) |
 | `VoteHand.colonyActs` (existing) | RC | as today | + `budgetCredits(obs).projects` | the commission check (S5-RULE-13) | none new |
 | `VoteHand.govern` (existing) | RC | as today | + whether an overrule passed against it this term | holds the tax (and, after RC, the budget) | none new |
 
-**WS1's valuations, confirmed by WS7** (packages/ai/src/value.ts; pure functions, in credits, no randomness):
+**WS1's valuations.** These live in packages/ai/src/value.ts: pure functions, in credits, with no
+randomness. **All four signatures are proposed; WS1 owns the final shape** (parameter order, and whether
+they take the seat's `mind`). WS1 proposed the first two, and they lead with `(obs, me, …)`. The other two
+follow that order.
 
 ```ts
 /**
  * Credits this month that player `me` gains from `line` paying `amount` cr at this upkeep, against the line
- * paying 0. Non-decreasing in `amount`.
+ * paying 0. Non-decreasing in `amount`. (Projects is not a BudgetLine: projectsWorth values it.)
  */
 export function lineWorth(obs: GameState, me: string, line: BudgetLine, amount: number): number;
 ```
 It must account for:
-- **projects:** what `amount` more toward the open buildings is worth to `me`: the months it brings each
-  one forward × (its perk's value to `me`, i.e. the park, hospital and stadium event modifiers, + its
-  prestige's mood points × the value of a mood point to `me`). 0 when no building is commissioned, or when
-  every open one waits only for goods (§0's measurement: today it is mostly 0).
-- **welfare:** `amount` if `me` is `welfareRecipient(obs)` now, else 0. Plus the mood points it buys
-  (S5-RULE-5) × the value of a mood point to `me`.
+- **welfare:** `amount` if `me` is `welfareRecipient(obs)` now, else 0; plus the mood points it buys
+  (S5-RULE-5) × `moodPointWorth(obs, me)`.
 - **security** [after RC]: the expected sabotage loss on `me`'s plots this month that the guards and
-  detection it buys would prevent. It reads slice 4's `captureOdds` (frozen export) and is 0 until then.
-- **The value of a mood point to `me`** is internal to WS1. For the sitting Governor it is the change in
-  re-election chance × POLITICS.termScore (AI voters lean against the incumbent in
-  POLITICS.ai.colony.leanIn bands). For everyone it is the expected loss from the mood's social events it
-  avoids.
-- It does not count the fund's own wealth term, which is no player's Worth.
+  detection it buys would prevent. It reads slice 4's `captureOdds` (frozen export), and is 0 until then.
+- It does not count the fund's own wealth term, which is nobody's Worth.
+
+```ts
+/**
+ * Credits this month that player `me` gains from `credits` more reaching the colony's open buildings at this
+ * upkeep: the months it brings each building forward × (its perk's value to `me` — the park, hospital and
+ * stadium event modifiers — + its prestige's mood points × moodPointWorth). 0 when no building is
+ * commissioned, or when every open one waits only for goods. ≥ 0.
+ */
+export function projectsWorth(obs: GameState, me: string, credits: number): number;
+```
+It is the opportunity cost of every point a line takes from the Projects remainder. Today it is mostly 0,
+because the buildings wait for goods (§0's measurement). It rises when goods unblock (G-5 C49, WS9's
+chains).
+
+```ts
+/**
+ * Credits this month a point of colony happiness is worth to player `me`.
+ * For the sitting Governor: the change in re-election chance it buys × POLITICS.termScore, since AI voters
+ * lean against the incumbent in POLITICS.ai.colony.leanIn bands.
+ * For everyone: the expected loss it avoids from the mood's social events (SOCIAL_EVENTS: strikes, thefts,
+ * emigration).
+ * ≥ 0.
+ */
+export function moodPointWorth(obs: GameState, me: string): number;
+```
 
 ```ts
 /**
@@ -1353,23 +1434,23 @@ export function overruleWorth(obs: GameState, me: string): number;
 ```
 It must account for:
 - **tax:** (taxAtStart − salesTax) × the sales `me` is expected to make in this month's auctions (the
-  seller pays, economy.ts::taxSale), minus the share of the lost tax income that would have reached `me`
-  through the budget's lines (lineWorth).
-- **budget** [after RC]: Σ over lines of [lineWorth(at budgetAtStart's credits) − lineWorth(at now's
-  credits)].
+  seller pays: economy.ts::taxSale), minus the lost tax income's value to `me` through the Projects
+  remainder and Welfare.
+- **budget** [after RC]: Σ over lines of [lineWorth at budgetAtStart's credits − lineWorth at now's
+  credits], + projectsWorth of the change in the Projects remainder's credits.
 - **confidence** [after RC]: not used. S5-RULE-16's vote rows are rules.
 
-**What the hands need beyond these two:**
+The hands need two things beyond these:
 1. **Weighing other players.** The call's yes-weight estimate calls `overruleWorth(obs, p)` for other
-   players `p` on the seat's own obs. WS1 must therefore compute it from facts public in obs. For the tax,
-   other players' expected sales use what observe() implies about their stock, as the market panel does.
-2. **A hypothetical target, after RC.** To judge a call before one exists, the hand needs to evaluate a
-   target that is not yet called. Proposed: `overruleWorth(obs, me, target?: OverruleTarget)`, an optional
-   third parameter defaulting to the called target, else 'tax'. It keeps the confirmed RC signature and is
-   needed only after RC.
+   players `p`, on the seat's own obs. WS1 must therefore compute it from facts public in obs. For the
+   tax, other players' expected sales use what observe() implies about their stock, as the market panel
+   does.
+2. **A hypothetical target** [after RC]. To judge a call before one exists, the hand evaluates a target
+   that is not yet called. Proposed: an optional third parameter `target?: OverruleTarget`, defaulting to
+   the called target, else 'tax'. It leaves the RC signature unchanged.
 
-WS1 may stub both functions to 0 at first. The AI then sets only its persona's base shares and never calls
-an overrule. That is a legal, playable state, so S5-C6 does not wait on WS1.
+WS1 may stub all four functions to 0 at first. The AI then sets only its persona's base shares and never
+calls an overrule. That is a legal, playable state, so S5-C6 does not wait on WS1.
 
 ### §3.3 · The split by owner `[handoff]`
 
@@ -1377,11 +1458,11 @@ an overrule. That is a legal, playable state, so S5-C6 does not wait on WS1.
 |---|---|---|---|
 | packages/engine/src/types.ts | WS3 | RC (all of §3's types, after-RC members included) | the frozen types plus §3's additions: one commit, the contract freeze |
 | packages/protocol/src/index.ts | WS3 | RC (all of it) | four intents; `BudgetView`, `OverruleView`; optional view fields. Same commit |
-| packages/engine/src/politics.ts | WS7 | RC: S5-C1, C4, C5; after RC: C13 (securityFunds), C14, C15, C16 | setBudget and the budget reads; openPlanning's budgetAtStart; callOverrule, canOverrule, setSalesTax's row; openOverrule, voteOverrule, the tally, the five votes-open functions; snap; inquiry |
+| packages/engine/src/politics.ts | WS7 | RC: S5-C1, C4, C5; after RC: C13 (securitySpend), C14, C15, C16 | setBudget and the budget reads; openPlanning's budgetAtStart; callOverrule, canOverrule, setSalesTax's row; openOverrule, voteOverrule, the tally, the five votes-open functions; snap; inquiry |
 | packages/engine/src/colony.ts | WS7 | RC: S5-C2, C3; after RC: C13 | runColony's line step and the projects cap on fund(); welfareRecipient; Colony.welfare; the mood term; Security's payment |
-| packages/engine/src/config.ts, POLITICS block | WS7 | RC / after RC | `POLITICS.budget = { step: 5, default: { projects: 100, welfare: 0, security: 0 }, projects: { maxShare: 100 }, welfare: { maxShare: 20, maxCredits: 200 }, security: { maxShare: 30, maxCredits: 300 } }`; `POLITICS.overrule = { revealMs: 4_000, snapAfter: 2 }`; `POLITICS.ai.budget = { base, tilt }` per persona per line; `POLITICS.ai.overrule = { minGain: 20, longShot, rookieYes: 0.5, unhappyTilt: 30 }`; after RC `POLITICS.inquiry = { dismissedRep: -5 }`, `POLITICS.ai.inquiry = { opens }`. All placeholders |
+| packages/engine/src/config.ts, POLITICS block | WS7 | RC / after RC | `POLITICS.budget = { step: 5, welfare: { maxShare: 30, maxCredits: 200 }, security: { maxShare: 30, maxCredits: 300 } }` (Projects is the remainder: no entry); `POLITICS.overrule = { revealMs: 4_000, snapAfter: 2 }`; `POLITICS.ai.budget = { base, tilt }` per persona per line; `POLITICS.ai.overrule = { minGain: 20, longShot, rookieYes: 0.5, unhappyTilt: 30 }`; after RC `POLITICS.inquiry = { dismissedRep: -5 }`, `POLITICS.ai.inquiry = { opens }`. All placeholders |
 | packages/engine/src/config.ts, HAPPINESS block | WS1's numbers (D-G5-4), WS7 named edit | RC | `weights.welfare: 1, welfareUnit: 50, welfareCap: 4` |
-| packages/engine/src/observe.ts | WS1 | RC | hide other seats' overrule ballots, and the council's (S5-HC-4) |
+| packages/engine/src/observe.ts | WS1 | RC | hide other seats' overrule ballots (S5-HC-4). The law ballot's leak is WS1's separate fix, already reported |
 | packages/engine/src/game.ts | WS3 | — | **no change** |
 | apps/server/src/mule-game.ts | WS3 | RC: S5-C7; after RC: openInquiry | the intents; openOverrule at planning's end; the overrule branch in continuePlanning; nextPhase after the overrule; clear Ready and tick the hands after a Governor's change; news |
 | apps/server/src/server.ts | WS3 | RC / after RC | isIntent |
@@ -1390,7 +1471,7 @@ an overrule. That is a legal, playable state, so S5-C6 does not wait on WS1.
 | apps/server/test/politics.test.ts | WS7 | RC / after RC | the NEW_FIELD key list |
 | packages/ai/src/hands/budget.ts | WS7 (new; the PM's AI split) | RC / after RC | BudgetHand, OverruleHand; InquiryHand after RC |
 | packages/ai/src/hands/vote.ts | WS7 | RC | VoteHand drives the new hands; colonyActs; govern holds |
-| packages/ai/src/value.ts | WS1 | RC (projects, welfare, tax) / after RC (security, budget) | lineWorth, overruleWorth |
+| packages/ai/src/value.ts | WS1 | RC (welfare, projects, mood, tax) / after RC (security, budget) | lineWorth, projectsWorth, moodPointWorth, overruleWorth (proposed; WS1 owns the final shapes) |
 | packages/ai/src/actions.ts | WS1 | RC / after RC | AiAction +3 (+1) and their MOVES descriptors |
 | packages/ai/src/play.ts | WS1 | RC / after RC | applyAction; 'done' routing; the extra tick and the openOverrule loop |
 | packages/ai/src/sim.ts | WS1 | RC / after RC | S5-UBER-AC-1's row; S5-UBER-AC-3's counters |
@@ -1413,7 +1494,7 @@ everything else here is public by design (S5-RULE-10).
 
 | Leak point | Rule |
 |---|---|
-| observe() (WS1) | other seats' `overrule.ballots` are removed, as the election's are. The council's ballots are not removed today, and the same edit should close that gap. |
+| observe() (WS1) | other seats' `overrule.ballots` are removed, as the election's are. The law ballot's ballots are WS1's separate fix (already reported to WS1). |
 | server views (WS7's politics-view.ts) | `OverruleView` is built field by field: `voted` = the ballot keys, never the values. `MyPoliticsView.overruleBallot` holds the viewer's own ballot only. With WS3's `partyTo(viewerId, secret)` helper, a ballot's party is its voter. |
 | news and notices (WS3's mule-game.ts, WS2's brain chat notices) | a call, a withdrawal, the result (totals) and, after RC, the inquiry and the snap: none ever names how anyone voted. The brain's notices carry the same lines as the news. |
 | MonthReport | it carries the ledger (public money) and nothing about ballots. `Colony.welfare` is public. |
@@ -1448,13 +1529,13 @@ with no `openOverrule` call the overrule never opens.
 
 | id | Cut | Given / When / Then | changes | observed_at | negative case |
 |---|---|---|---|---|---|
-| S5-B-AC-1 | RC | Given Lena governs in month 3 with two phones and AI seats · When she sets Projects 80, Welfare 10 · Then every phone's desk and the TV show "Welfare 10% → Kai" with its credits at today's fund; at the month end every screen shows the Welfare line paid to Kai, and Kai's money rose by that much at upkeep | S5-C1 C2 C8 C10 C11 C12 | the phone, TV and month-end DOM in the e2e; Kai's money in the server view before and after upkeep | Lena last on Worth: Welfare goes to the next-lowest, never to Lena |
-| S5-B-AC-2 | RC | Given 540 spare at upkeep, shares Projects 80 / Welfare 10 · When upkeep runs · Then Welfare pays 54, buildings take at most 432, and the rest stays; with 6,000 spare Welfare pays its 200 cap | S5-C2 | the month's ledger out and the projects' funded credits (engine) | budget null → buildings may take all 540, as today |
+| S5-B-AC-1 | RC | Given Lena governs in month 3 with two phones and AI seats · When she sets Welfare 30 · Then the Governor desk, every phone's fund card and the TV show "Projects 70% · Welfare 30% → Kai", each with its credits at today's fund and Projects naming the buildings it funds; at the month end every screen shows the Welfare line paid to Kai, and Kai's money rose by that much at upkeep | S5-C1 C2 C8 C10 C11 C12 | the phone, TV and month-end DOM in the e2e; Kai's money in the server view before and after upkeep | Lena last on Worth: Welfare goes to the next-lowest, never to Lena |
+| S5-B-AC-2 | RC | Given 540 spare at upkeep and Welfare 30 (Projects 70) · When upkeep runs · Then Welfare pays 162 and buildings take at most 378; what they don't need stays; with 6,000 spare Welfare pays its 200 cap | S5-C2 | the month's ledger out and the projects' funded credits (engine) | budget null → buildings may take all 540, as today |
 | S5-B-AC-3 | RC | Given Lena raised the tax from 5% to 10% · When Brix calls a tax overrule and everyone presses Ready · Then the overrule ballot opens on every phone; once all have cast, every screen shows the totals and "Overruled" at once, and the next sale is taxed at 5% | S5-C4 C5 C7 C10 C11 | the phones' and TV's DOM; the seller's money after the first sale that month | yes below needed → "The Governor's tax stands", 10% applies |
 | S5-B-AC-4 | RC | Given Brix called a tax overrule · When Lena tries to change the tax · Then it is refused with "An overrule vote on the tax is called: it holds until it is settled" | S5-C4 | the RuleError message (server test) | with no call, the change succeeds |
 | S5-B-AC-5 | RC | Given an overrule ballot is open · When a human has not cast · Then nothing closes, however long; the host's Continue closes it and the news names them; in the reveal, Continue is refused | S5-C5 C7 | server state and news (server test) | every human has cast → it closes with no Continue |
 | S5-B-AC-6 | RC | Given four AI seats and no API key · When a game plays with politics on · Then the AI Governor sets a budget, AI seats call and vote on tax overrules, and every overrule ballot closes without a human | S5-C6 C9 | ai test on seeded games; the sim row (S5-UBER-AC-1) | Rookie seats never call |
-| S5-B-AC-7 | after RC | Given a Sheriff and the Security share at 20% · When upkeep runs · Then Security pays its credits under 'security', and slice 4 reads securityFunds | S5-C13 | ledger; securityFunds (engine) | no Sheriff office → Security refused (S5-RULE-2 row 5) |
+| S5-B-AC-7 | after RC | Given a Sheriff and the Security share at 20% · When upkeep runs · Then Security pays its credits under 'security', and slice 4 reads securitySpend | S5-C13 | ledger; securitySpend (engine) | no Sheriff office → Security refused (S5-RULE-2 row 5) |
 | S5-B-AC-8 | after RC | Given Brix called a budget overrule · When it passes · Then budgetAtStart's shares are paid at upkeep, and the month end shows them | S5-C14 | ledger; the views | Lena changing the tax after the call → refused (both frozen) |
 | S5-B-AC-9 | after RC | Given Lena was overruled in month 7 · When she is overruled again in month 8 · Then every screen shows "Snap election in month 9", and month 9 opens an election with candidacy open; if Lena wins, her term and term count are unchanged | S5-C15 | the views; Politics.terms and termStart (engine) | a second overrule in month 3 → no snap (4 is an election month) |
 | S5-B-AC-10 | after RC | Given Lena broke her cap promise in month 8 · When Sheriff Ossa opens an inquiry · Then every screen shows the record and "Inquiry finds", the no-confidence ballot opens as planning ends, and a pass calls a snap election | S5-C16 | the views; politics.snapMonth | a clean term → "dismissed", and the Sheriff's reputation drops by dismissedRep |
@@ -1473,8 +1554,8 @@ with no `openOverrule` call the overrule never opens.
 | S5-T-AC-14 | RC | (serves B-AC-6) OverruleHand per S5-RULE-12 (call rows 1-5 and vote rows 1-3, 5, 6 for the tax); the overrule stream leaves the election's and council's fixtures unchanged; no hand reads state.seed; every hand input is observe(state, me) | S5-C6 | ai test | — |
 | S5-T-AC-15 | RC | (serves B-AC-6) colonyActs commissions only when the share ≤ budgetCredits(obs).projects (S5-RULE-13) | S5-C6 | ai test | budget null → the same commission as today |
 | S5-T-AC-16 | RC | (serves S5-UBER-AC-1) the sim prints the row and checks it on every politics seed set | S5-C9 | `pnpm sim` | — |
-| S5-T-AC-17 | RC | (serves B-AC-3) observe() for seat B never holds seat A's overrule ballot, nor its law ballot | S5-C9 | engine/ai test | seat A's own observe holds it |
-| S5-T-AC-18 | after RC | (serves B-AC-7) S5-RULE-1 row 3 and S5-RULE-3 step 3b; securityFunds after an overrule | S5-C13 | engine | — |
+| S5-T-AC-17 | RC | (serves B-AC-3) observe() for seat B never holds seat A's overrule ballot | S5-C9 | engine/ai test | seat A's own observe holds it |
+| S5-T-AC-18 | after RC | (serves B-AC-7) S5-RULE-1 row 3 and S5-RULE-3 step 3b; securitySpend after an overrule | S5-C13 | engine | — |
 | S5-T-AC-19 | after RC | (serves B-AC-8) S5-RULE-6 rows 8b, 8c and 9 for the budget; S5-RULE-2 row 4; a passed budget overrule restores budgetAtStart | S5-C14 | engine | — |
 | S5-T-AC-9 | after RC | (serves B-AC-9) S5-RULE-9's rows and examples; a re-elected sitting Governor keeps terms and governorRun; nextElectionMonth returns the snap month | S5-C15 | engine | snapMonth null → every slice-1 and untimed-election test passes |
 | S5-T-AC-20 | after RC | (serves B-AC-10) S5-RULE-14's rows; S5-RULE-15's effect | S5-C16 | engine | — |
@@ -1497,21 +1578,22 @@ Invariants for every test:
   - WS1's row reports overrules and the tax's share of the fund's income, so Heiko's "taxes stay the
     fund's largest income" (AM-19) stays visible. A passed overrule halves that month's tax income at most.
 - **The lines starve the buildings (G-5's 4-5 a game).**
-  - *Argued from measurement (§0):* about 6,000 cr a game is idle (about 5,400 at grant 200), and every
-    building still open at game end already has its credits.
+  - *Argued from measurement (§0):* about 6,000 cr a game is idle at grant 250 (about 5,400 at Heiko's 200,
+    #633), and every building still open at game end already has its credits. At 200 it still holds: the
+    lines are shares of a smaller fund, and the buildings wait on goods, not credits.
   - Shares can never overspend. Welfare is capped at 200 cr a month, so at most 2,200 a game; Security
     after RC adds at most 3,300.
   - The AI never gives Welfare the share that covers its open buildings (S5-RULE-11).
   - *Gate:* S5-UBER-AC-1 fails if buildings per game fall by more than 0.2 against welfare maxShare 0 on
     the same seeds.
-- **A human Governor sets Projects low and starves the buildings.** That is the Governor's choice, and it
-  is visible: the TV's budget strip and the month end show it. The budget overrule (after RC) is the
+- **A human Governor sets Projects low and starves the buildings.** Projects is the remainder, so this means Welfare
+  (and later Security) set high. It is the Governor's choice, and it is visible: the TV's budget strip and the month end show it. The budget overrule (after RC) is the
   table's answer.
 - **Welfare becomes a kingmaker.** It is capped, goes to the last player by rule, and never to the Governor
   (S5-HC-3). WS1's row reports Welfare per recipient.
 - **The observe() HC-4 gap.** `packages/engine/src/observe.ts::observe` hides `election.ballots` but not
-  `council.ballots`. The frozen note says "ballots (already secret)", which is true for the election only.
-  *Mitigation:* S5-C9's observe edit closes both (S5-T-AC-17).
+  `council.ballots`. WS7 has reported it to WS1 as a separate fix. This slice's observe edit (S5-C9)
+  covers the overrule ballots only (S5-T-AC-17).
 - **Planning gets longer in months with a call.** The ballot ends the moment everyone casts; only the
   reveal is clocked. At most one call a month.
 - **Slice 4 slips.** Security and the inquiry never appear (S5-RULE-1 row 3, S5-RULE-14 row 1). The RC cut
@@ -1546,6 +1628,30 @@ because   S5-1: the frozen contract lets five lanes build in parallel; plan A's 
 goal      S5-1 — unchanged
 ```
 
+```
+AM-2 · 2026-11-07 · WS7 review + Heiko's politics layout P0 option A (11:02Z) · before build
+
+target    §0, §0.1, §0.3 (D-S5-1), What the table sees, §1 S5-C1, C2, C9, C10, C13, §2 S5-RULE-1..3, -11,
+          §3, §3.1, §3.2, §3.3, §3.4, §6, §7
+said      (AM-1) projects was a share of its own, with the rest kept in the fund; the hook was securityFunds;
+          WS1 had two valuations; observe() hid the law ballot's ballots as well
+did       (a) BudgetLine is 'welfare' | 'security', superseding the frozen file (WS7's direction). Projects
+              is the remainder (100 − Σ shares), shown as a line with the buildings it funds ("Projects 70% ·
+              Welfare 30%"). D-S5-1 puts this to Heiko explicitly. The null default needs no special case:
+              every share is 0, so Projects is 100.
+          (b) securitySpend(state), the name slice 4 uses; read when sabotage resolves (WS7 accepted).
+          (c) WS1's four valuations are all marked proposed (lineWorth, projectsWorth, moodPointWorth,
+              overruleWorth), and WS1 owns their final shape.
+          (d) The grant note: measured at 250; Heiko ruled 200 (#633, batch 76); why the conclusion holds.
+          (e) The law ballot's observe() leak is WS1's separate fix; this slice hides overrule ballots only.
+          (f) Layout P0 option A: the budget lives in the Governor desk; "Call an overrule" starts on the
+              line it targets (the tax line in the fund card; after RC, the budget line); the ballot uses the
+              council's ballot place; no new tab.
+because   S5-1: the table must see the Projects line Heiko named, and the screens must fit the approved
+          layout; the hook and value names must match the lanes building against them
+goal      S5-1 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change:
@@ -1566,7 +1672,7 @@ No ownership change:
 | PR-0 contract | WS3 (WS7 drafts from §3) | types.ts + protocol: every §3 type, after-RC members included; engine signatures that throw 'not built' | 0.5 | at once |
 | PR-1 engine | WS7 | S5-C1..C5, config, S5-T-AC-1..8 | 1.5 | after PR-0 |
 | PR-2 AI hands | WS7 | S5-C6; S5-T-AC-13..15 on WS1 stubs | 1 | after PR-0; finishes against PR-1 |
-| PR-3 sim and values | WS1 | S5-C9: lineWorth and overruleWorth (projects, welfare, tax), actions, play, observe, sim row; S5-T-AC-16, -17 | 1.5 | after PR-0 |
+| PR-3 sim and values | WS1 | S5-C9: the four valuations (welfare, projects, mood, tax), actions, play, observe (overrule ballots), sim row; S5-T-AC-16, -17 | 1.5 | after PR-0 |
 | PR-4 server | WS3 | S5-C7, S5-T-AC-10 | 1 | after PR-0 |
 | PR-5 views | WS7 | S5-C8, S5-T-AC-11 | 0.5 | after PR-0, beside PR-4 |
 | mocks | WS6 | P12-P15 → Heiko | 1 | at once |
