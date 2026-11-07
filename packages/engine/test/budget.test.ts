@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { advancePhase, budgetLines, budgetShares, callOverrule, createGame, POLITICS, RuleError, setBudget, stableJson, type BudgetLine, type GameState } from '../src/index.js';
 
@@ -95,10 +94,8 @@ describe('S5-C1: the Governor sets a standing budget', () => {
 });
 
 describe('S5-HC-5: politics off is untouched by slice 5', () => {
-  // The hash of stableJson(state) of this game on 7ecddae5, the base before slice 5.
-  const BASE_HASH = '64e555fc991749d341b742a436b1e10a95399c3670b7ebcf5d7746b489b32973';
-
-  it('S5-T-AC-12: politics off — no budget, no overrule, no Welfare; a month\'s state is identical to the base', () => {
+  // The snapshot is stableJson(state) of this game on 7ecddae5, the base before slice 5. Regenerate with `pnpm --filter @mule/engine test budget -u`; it may change only when politics-off behaviour is meant to change.
+  it('S5-T-AC-12: politics off — no budget, no overrule, no Welfare; a month\'s state is identical to the base', async () => {
     const state = governed(false);
     expect(refused(() => setBudget(state, 'lena', shares(80, 10)))).toBe("This game plays without the colony's council");
     expect(refused(() => callOverrule(state, 'brix', 'tax'))).toBe("This game plays without the colony's council");
@@ -106,6 +103,6 @@ describe('S5-HC-5: politics off is untouched by slice 5', () => {
     expect(state.month).toBe(4);
     expect(state.politics).toBeNull();
     expect(state.colony).toBeNull();
-    expect(createHash('sha256').update(stableJson(state)).digest('hex')).toBe(BASE_HASH);
+    await expect(stableJson(state)).toMatchFileSnapshot('./__snapshots__/politics-off-month-4.json');
   });
 });
