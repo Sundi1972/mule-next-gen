@@ -1049,8 +1049,8 @@ export const COLONY = {
   reserve: 100,
   /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
   fundBuysGoods: true,
-  /** The Federation's grant into the fund at each upkeep, in credits: 250 a month (pace set C, Heiko, 6 Nov); flat until a scaling rule is tuned. */
-  grant: { perMonth: 250 },
+  /** The Federation's grant into the fund at each upkeep, in credits: 200 a month (Heiko, 7 Nov; was 250 in pace set C, 6 Nov), so taxes stay the fund's largest income; flat until a scaling rule is tuned. */
+  grant: { perMonth: 200 },
   /**
    * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
