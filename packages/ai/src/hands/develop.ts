@@ -665,11 +665,11 @@ export class DevelopHand {
     const plot = (x: number, y: number) => tileIndex(state.width, x, y);
     const stops: PlanStop[] = [];
     for (const { action: a } of this.queue) {
-      if (a.type === 'analyse') stops.push({ plot: plot(a.x, a.y), work: this.assaySeconds(state, cfg, a.x, a.y) + pause });
-      else if (a.type === 'filter') stops.push({ plot: plot(a.x, a.y), work: pause });
+      if (a.type === 'analyse') stops.push({ plot: plot(a.x, a.y), press: 'analyse', work: this.assaySeconds(state, cfg, a.x, a.y) + pause });
+      else if (a.type === 'filter') stops.push({ plot: plot(a.x, a.y), press: 'filter', work: pause });
       else if (a.type === 'buyMule') stops.push({ place: 'corral', work: pause, lead: false });
       else if (a.type === 'outfit') stops.push({ place: a.outfit as HallPlace, work: pause, lead: true });
-      else if (a.type === 'install') stops.push({ plot: plot(a.x, a.y), work: pause, lead: true });
+      else if (a.type === 'install') stops.push({ plot: plot(a.x, a.y), press: 'install', work: pause, lead: true });
       else if (a.type === 'pub') stops.push({ place: 'pub', work: 0 });
     }
     const last = stops.at(-1);
@@ -695,7 +695,7 @@ export class DevelopHand {
     if (a.type === 'buyMule') return this.restFrom(view, c) * (1 + cfg.steer.botPlanSlackShare) + this.restMargin(cfg, c) <= secondsLeft;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
     const work = a.type === 'analyse' ? this.assaySeconds(state, cfg, a.x, a.y) : 0;
-    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + this.restMargin(cfg, c) <= secondsLeft;
+    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work, a.type) + this.restMargin(cfg, c) <= secondsLeft;
   }
 
   /**
