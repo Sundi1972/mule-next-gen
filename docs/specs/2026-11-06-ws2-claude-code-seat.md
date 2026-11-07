@@ -598,7 +598,7 @@ own state, around the Room's lookup; the Room answers "taken back" only.
 
 **Amendment 4 (7 Nov, WS2, inside the lane, from WS4's #641): a closed table's codes answer "taken back".** WS4 retires
 every code of a room that leaves the registry (close, error, idle sweep, shutdown) and never reissues one, so after a
-table closes RULE-2 row 3 answers "taken back", not "game over" (a call held at that moment still gets "game over").
+table closes RULE-2 row 3 answers "taken back", not "game over" (a call held in a started game at that moment still gets "game over"; one held in the lobby gets "again", then "taken back").
 The sentence Claude reads covers both: "This seat is no longer in play: the host took it back or the table closed. Stop
 playing it." Agreed with the PM (WS4's question, 7 Nov); no WS4 change.
 
