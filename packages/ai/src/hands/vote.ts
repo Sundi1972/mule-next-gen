@@ -21,6 +21,7 @@ import {
   type LawId,
   type LawProposal,
   type Office,
+  type PlayerId,
   type PrestigeId,
   type Rng,
   type TaxPromise,
@@ -97,25 +98,39 @@ export interface LawBallot {
 export type Ballot = ElectionBallot | LawBallot;
 
 /**
- * The seat's own vote on a ballot, by today's rule and with no draw (slice 3 S3-C14): itself if it runs, else the
- * candidate with the fewest plots, leaning against an unloved Governor; on a law, RULE-46's rows. Null where today's
- * rule would draw: a tie, or a Rookie's guess. DealHand reads it to offer a vote, VoteHand to cast one.
+ * WS2's port to a Claude seat's recorded reasoning (slice 3 AM-5; WS2 Spec B v2 AM-B5). A null answer means the keyless
+ * rule. It answers from recorded state only (WS2 HC-B3), so a replay casts the same vote, and it is never asked
+ * for an office the seat itself runs for.
  */
-export function ownVote(obs: GameState, mind: Mind, ballot: ElectionBallot): string | null;
-export function ownVote(obs: GameState, mind: Mind, ballot: LawBallot): boolean | null;
-export function ownVote(obs: GameState, mind: Mind, ballot: Ballot): string | boolean | null {
-  return 'proposal' in ballot ? ownLawVote(obs, mind, ballot.proposal) : ownElectionVote(obs, mind, ballot);
+export interface VotePort {
+  electionVote(office: Office, candidates: readonly PlayerId[]): PlayerId | null;
+  lawVote(proposal: LawProposal): boolean | null;
 }
 
-function ownElectionVote(obs: GameState, mind: Mind, { office, candidates }: ElectionBallot): string | null {
+/**
+ * The seat's own vote on a ballot, by today's rule and with no draw (slice 3 S3-C14): itself if it runs, else the
+ * port's answer when it gives one, else the candidate with the fewest plots, leaning against an unloved Governor; on a law, RULE-46's rows. Null where today's
+ * rule would draw: a tie, or a Rookie's guess. DealHand reads it to offer a vote, VoteHand to cast one.
+ */
+export function ownVote(obs: GameState, mind: Mind, ballot: ElectionBallot, port?: VotePort): string | null;
+export function ownVote(obs: GameState, mind: Mind, ballot: LawBallot, port?: VotePort): boolean | null;
+export function ownVote(obs: GameState, mind: Mind, ballot: Ballot, port?: VotePort): string | boolean | null {
+  return 'proposal' in ballot ? ownLawVote(obs, mind, ballot.proposal, port) : ownElectionVote(obs, mind, ballot, port);
+}
+
+function ownElectionVote(obs: GameState, mind: Mind, { office, candidates }: ElectionBallot, port?: VotePort): string | null {
   if (candidates.includes(mind.me)) return mind.me;
+  const asked = port?.electionVote(office, candidates);
+  if (asked != null && candidates.includes(asked)) return asked;
   if (mind.levelId === 'rookie') return null;
   const tied = fewestPlots(obs, leanAgainst(obs, candidates, office));
   return tied.length === 1 ? tied[0]! : null;
 }
 
-/** RULE-46's vote rows. */
-function ownLawVote(obs: GameState, mind: Mind, proposal: LawProposal): boolean | null {
+/** The port's yes or no, else RULE-46's vote rows. */
+function ownLawVote(obs: GameState, mind: Mind, proposal: LawProposal, port?: VotePort): boolean | null {
+  const asked = port?.lawVote(proposal);
+  if (typeof asked === 'boolean') return asked;
   const me = mind.me;
   const politics = obs.politics!;
   if (politics.governor === me) return true;
@@ -148,6 +163,7 @@ export class VoteHand {
   constructor(
     readonly mind: Mind,
     private readonly rng: Rng,
+    private readonly port?: VotePort,
   ) {}
 
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
@@ -242,7 +258,7 @@ export class VoteHand {
    * (AM-10: in month 1 nobody owns land). A lone minimum draws nothing.
    */
   private choose(obs: GameState, candidates: readonly string[], office: Office): string {
-    const own = ownVote(obs, this.mind, { office, candidates });
+    const own = ownVote(obs, this.mind, { office, candidates }, this.port);
     if (own !== null) return own;
     const pool = leanAgainst(obs, candidates, office);
     return this.rng.pick(this.mind.levelId === 'rookie' ? pool : fewestPlots(obs, pool));
@@ -278,7 +294,7 @@ export class VoteHand {
 
   /** RULE-46's vote rows through ownVote; a Rookie's yes is the council's own draw. */
   private lawVote(obs: GameState, council: Readonly<Council>): boolean {
-    const own = ownVote(obs, this.mind, { proposal: council.proposal }) ?? this.council(obs).chance(POLITICS.ai.council.rookieYes);
+    const own = ownVote(obs, this.mind, { proposal: council.proposal }, this.port) ?? this.council(obs).chance(POLITICS.ai.council.rookieYes);
     const card = this.activeCard(obs, (t) => 'law' in t);
     return this.keepOrBreak(obs, card, own, card && 'yes' in card.terms ? card.terms.yes : own);
   }
