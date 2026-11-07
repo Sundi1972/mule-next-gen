@@ -270,7 +270,8 @@ export function Auction() {
       {closed ? (
         <Hint line={`${GOOD_NAME[good]} is closed.`} how={auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}, buy or sell?` : null} />
       ) : held ? (
-        <Hint tone="ok" {...heldWords(good, need)} testid="held" />
+        // Held, ▼ says "Hold: sell short" itself: on a phone held sideways the how gives its row to the Buy/Sell switch.
+        <Hint tone="ok" {...heldWords(good, need)} testid="held" howTall />
       ) : (
         (lineRail ?? (myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />))
       )}
