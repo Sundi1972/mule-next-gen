@@ -116,17 +116,23 @@ export function sidePick(view: Pick<MuleView, 'phase'> & WithAuction): boolean {
 
 /**
  * At a good's side pick: every person not yet Done, in seat order, ready meaning Done. An AI picks by itself and counts
- * as picked, except a Claude seat the first side pick still waits for, which carries when its wait ends (RULE-6). A
+ * as picked, except a Claude seat the first side pick still waits for, which carries when its wait ends, until it runs
+ * out (RULE-6). A
  * dropped phone is still waited for, marked away, as in planning: the host can move on for it.
  */
 export function stillPicking(view: Pick<MuleView, 'players' | 'auction'>, connected: (id: string) => boolean, claude: (id: string) => ClaudeStatus | undefined = () => undefined): Seat[] {
-  const waited = new Map((view.auction?.waitingForClaude ?? []).map((w) => [w.seatId, w.until]));
+  const waited = new Map((view.auction?.waitingForClaude ?? []).filter((w) => !w.builtin).map((w) => [w.seatId, w.until]));
   return view.players.flatMap((p) => {
     const until = waited.get(p.id);
     const status = claude(p.id);
     if (until !== undefined) return [{ ...seatOf(p, connected), ready: false, until, ...(status ? { status } : {}) }];
     return p.isAi || pickedIn(view, p.id) ? [] : [{ ...seatOf(p, connected), ready: false }];
   });
+}
+
+/** The Claude seats whose side-pick wait ran out: they play their built-in plan and are waited for no more (RULE-6). */
+export function ranOut(view: Pick<MuleView, 'auction'>): Set<string> {
+  return new Set((view.auction?.waitingForClaude ?? []).filter((w) => w.builtin).map((w) => w.seatId));
 }
 
 /** The players for the side pick's PICKED count, `ready` alone saying who has picked: nobody `waiting` is waited for. */

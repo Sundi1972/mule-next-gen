@@ -33,7 +33,7 @@ import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, sec
 import { inCollapse, ordinal } from '../game/month-end';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { claudeIn, connectedIn, hostMayContinue, pickedIn, pickedPlayers, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
+import { claudeIn, connectedIn, hostMayContinue, pickedIn, pickedPlayers, ranOut, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
@@ -509,6 +509,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   // The side pick has no clock (A-7): who has picked, who is still picking, and the host who can move on for them.
   const connected = connectedIn(table.seats);
   const waiting = status ? stillPicking(game, connected, claudeIn(table.seats)) : [];
+  const builtIn = ranOut(game);
   const host = game.players.find((p) => p.id === table.hostId);
   const picked = pickedPlayers(game.players, waiting);
   return (
@@ -607,6 +608,16 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                       </span>
                     </>
                   );
+                  if (builtIn.has(p.id))
+                    return (
+                      <li key={p.id} className="flex flex-col opacity-60" data-testid={`tv-picked-${p.id}`}>
+                        <span className="flex items-center gap-3">{name}</span>
+                        <span className="flex flex-wrap items-baseline gap-x-2 pl-[34px] font-mono">
+                          <span className="text-base font-bold text-warn">CLAUDE · READY</span>
+                          <span className="text-sm text-ink-3">plays its built-in plan</span>
+                        </span>
+                      </li>
+                    );
                   // In this 300 px column the countdown beside the name would leave the name no room: it goes under it.
                   if (wait)
                     return (

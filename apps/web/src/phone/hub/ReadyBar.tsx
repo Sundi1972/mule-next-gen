@@ -5,7 +5,7 @@ import { Chip, ClaudeCountdown, playsBuiltIn, STATUS_CHIP } from '../../componen
 import { toSlot } from '../../game/derive';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { claudeIn, connectedIn, continueQuestion, hostMayContinue, planningProper, press, readyFooter, sidePick, stageWords, viewerFirst, type Press, type ReadyWords, type Seat } from './ready';
+import { claudeIn, connectedIn, continueQuestion, hostMayContinue, planningProper, press, ranOut, readyFooter, sidePick, stageWords, viewerFirst, type Press, type ReadyWords, type Seat } from './ready';
 
 /** The ready count, where the clock used to be: planning has none. `label` is what it counts, such as the ballot's VOTED. */
 export function ReadyCount({ players, tv = false, label = 'READY' }: { players: readonly PlayerView[]; tv?: boolean; label?: string | undefined }) {
@@ -46,15 +46,17 @@ export function ClaudeLines({ waiting }: { waiting: readonly Seat[] }) {
   const { table, view } = usePhoneGame();
   const claude = claudeIn(table.seats ?? []);
   if (!planningProper(view) && !sidePick(view)) return null;
+  const builtIn = ranOut(view);
   return view.players.map((p) => {
     const status = claude(p.id);
     if (!status || waiting.some((s) => s.id === p.id)) return null;
+    const done = builtIn.has(p.id);
     return (
-      <span key={p.id} className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm @min-[1100px]/shell:text-lg" data-testid="claude-line">
-        <PlayerMark slot={toSlot(p.slot)} size={14} glow={status !== 'ready'} />
+      <span key={p.id} className={cx('flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm @min-[1100px]/shell:text-lg', done && 'opacity-60')} data-testid="claude-line">
+        <PlayerMark slot={toSlot(p.slot)} size={14} glow={!done && status !== 'ready'} />
         <span className="font-semibold">{p.name}</span>
-        <Chip word={STATUS_CHIP[status]} testid="claude-line-chip" />
-        {playsBuiltIn(status) && <span className="text-xs text-ink-2">plays its built-in plan</span>}
+        <Chip word={done ? 'CLAUDE · READY' : STATUS_CHIP[status]} testid="claude-line-chip" />
+        {(done || playsBuiltIn(status)) && <span className="text-xs text-ink-2">plays its built-in plan</span>}
       </span>
     );
   });
