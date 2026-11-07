@@ -2049,6 +2049,26 @@ export const BRAIN = {
   charsPerToken: 2.2,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,
+  /** A line with fewer letters than this is not said: a stray "x" never reaches the table. */
+  minLineLetters: 2,
+  /** A computer seat played by a Claude chat that calls the game's /mcp with the seat's code. */
+  claudeSeat: {
+    /** The longest the first good's side pick waits for the seat's auction plan, in ms. */
+    sidePickWaitMs: 45_000,
+    /**
+     * How long wait_for_my_turn holds a call open with no ask before it answers "call again", in ms. Provisional until
+     * Heiko's seat test measures the longest hold every Claude app survives; this sits below the 60 s some report.
+     */
+    holdMs: 25_000,
+    /** How long past holdMs a seat may go without a call before it shows offline, in ms. */
+    offlineGraceMs: 20_000,
+    /** How long a hand-over code works before its first call, in ms. */
+    handoverCodeMs: 600_000,
+    /** Wrong seat codes the whole server takes per minute; past it every call is told to call again. */
+    wrongCodesPerMinute: 20,
+    /** The largest /mcp request body read, in bytes; a larger one is refused before parsing. */
+    maxRequestBytes: 64_000,
+  },
   /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */
   linesPerMonth: 3,
   /** Longest quoted table-talk line put in a prompt, in characters. */
