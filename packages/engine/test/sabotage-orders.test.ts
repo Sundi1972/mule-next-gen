@@ -1,5 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createGame, GOODS, orderSabotage, POLITICS, RuleError, type GameState, type SabotageTarget } from '../src/index.js';
+import {
+  advancePhase,
+  captureOdds,
+  createGame,
+  createRng,
+  GOODS,
+  guardsMax,
+  orderSabotage,
+  POLITICS,
+  resolveSabotage,
+  RuleError,
+  sabotageEvents,
+  seedOf,
+  storeEvent,
+  type EventKey,
+  type GameState,
+  type MonthEvent,
+  type SabotageOrder,
+  type SabotageTarget,
+} from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa'];
 const NAME = (id: string) => id[0]!.toUpperCase() + id.slice(1);
@@ -195,5 +214,286 @@ describe('sabotage orders', () => {
       expect(state.politics!.guards).toEqual([]);
       expect(state.politics!.sabotage).toHaveLength(1);
     });
+  });
+});
+
+// --- Task S4-1.3: resolution, and the power cut as a production event -------------------------------------------------
+
+/** Lena orders against Brix's Food plot (and Ossa's other plots); everything is seeded from `seed`. Month 2, no election. */
+function monthOfSabotage(seed: number, orders: { by: string; target: (p: ReturnType<typeof plots>) => SabotageTarget }[], guard: (p: ReturnType<typeof plots>) => number[] = () => []) {
+  const state = newGame({ seed });
+  state.month = 2;
+  state.politics = { ...state.politics!, governor: 'lena', election: null };
+  const p = plots(state);
+  for (const o of orders) {
+    state.players.find((x) => x.id === o.by)!.money = 1_000;
+    orderSabotage(state, o.by, o.target(p));
+  }
+  state.politics!.guards = guard(p);
+  return { state, p };
+}
+
+/** The raw draws the order stream gives a month: [works, seen] for each non-void order in seat order (S4-RULE-3's `draws` line). */
+function draws(state: GameState, count: number): { works: number; seen: number }[] {
+  const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
+  return Array.from({ length: count }, () => ({ works: rng.next(), seen: rng.next() }));
+}
+
+/** The first seed in 1..400 whose single-order month draws the wanted (works, seen) pair; found by search, never hand-tuned. */
+function seedFor(want: { works: boolean; seen: boolean }, target: Parameters<typeof monthOfSabotage>[1][0]['target'], guard?: Parameters<typeof monthOfSabotage>[2]): number {
+  for (let seed = 1; seed <= 400; seed++) {
+    const { state } = monthOfSabotage(seed, [{ by: 'lena', target }], guard);
+    const order = state.politics!.sabotage[0]!;
+    const [d] = draws(state, 1);
+    const terms = POLITICS.sabotage.orders[order.target.kind];
+    if (d!.works < terms.success === want.works && d!.seen < captureOdds(state, order) === want.seen) return seed;
+  }
+  throw new Error('no seed draws that pair');
+}
+
+const cutBrix = (p: ReturnType<typeof plots>): SabotageTarget => ({ kind: 'powerCut', tile: p.food });
+const rumourFood: SabotageTarget = { kind: 'rumour', good: 'food', dir: 'up' };
+
+describe('sabotage resolution', () => {
+  sabotageOn();
+
+  it('S4-T-AC-2: S4-RULE-3 row 1: a cut whose plot lost its owner, changed hands to the orderer, or lost its MULE is void and removed, with no draw', () => {
+    const lost: ((s: GameState, p: ReturnType<typeof plots>) => void)[] = [
+      (s, p) => void (s.tiles[p.food]!.owner = null),
+      (s, p) => void (s.tiles[p.food]!.owner = 'lena'),
+      (s, p) => void (s.tiles[p.food]!.outfit = null),
+      (s, p) => void (s.tiles[p.food]!.outfit = 'greenBelt'),
+    ];
+    for (const lose of lost) {
+      // Ossa's order is second in seat order: if the void order drew, Ossa's would draw other values than the first pair.
+      const { state, p } = monthOfSabotage(11, [
+        { by: 'lena', target: cutBrix },
+        { by: 'ossa', target: () => rumourFood },
+      ]);
+      lose(state, p);
+      resolveSabotage(state);
+      expect(state.politics!.sabotage.map((o) => o.by)).toEqual(['ossa']);
+      const [first] = draws(state, 1);
+      const terms = POLITICS.sabotage.orders.rumour;
+      const worked = first!.works < terms.success;
+      const seen = first!.seen < captureOdds(state, state.politics!.sabotage[0]!);
+      expect(state.politics!.sabotage[0]).toMatchObject({ outcome: worked ? (seen ? 'caught' : 'done') : seen ? 'caught' : 'failed' });
+    }
+  });
+
+  const cases = [
+    { row: 3, want: { works: true, seen: true }, outcome: 'caught', worked: true, public: true },
+    { row: 4, want: { works: true, seen: false }, outcome: 'done', worked: true, public: false },
+    { row: 5, want: { works: false, seen: true }, outcome: 'caught', worked: false, public: true },
+    { row: 6, want: { works: false, seen: false }, outcome: 'failed', worked: false, public: false },
+  ] as const;
+
+  it.each(cases)('S4-T-AC-2: S4-RULE-3 row $row: a power cut that works=$want.works and is seen=$want.seen is $outcome, worked $worked, culpritPublic $public, victim the owner now', ({ want, outcome, worked, public: isPublic }) => {
+    const seed = seedFor(want, cutBrix);
+    const { state, p } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+    // Kai buys the plot between the order and production: the victim is the owner now.
+    state.tiles[p.food]!.owner = 'ossa';
+    resolveSabotage(state);
+    expect(state.politics!.sabotage[0]).toMatchObject({ outcome, worked, culpritPublic: isPublic, victim: 'ossa' });
+  });
+
+  it.each(cases)('S4-T-AC-2: S4-RULE-3 row $row, a rumour: the same verdict with victim null', ({ want, outcome, worked, public: isPublic }) => {
+    const seed = seedFor(want, () => rumourFood);
+    const { state } = monthOfSabotage(seed, [{ by: 'lena', target: () => rumourFood }]);
+    resolveSabotage(state);
+    expect(state.politics!.sabotage[0]).toMatchObject({ outcome, worked, culpritPublic: isPublic, victim: null });
+  });
+
+  it('S4-T-AC-2: S4-RULE-3 row 2: a guarded plot is caught and not worked whatever the draws, victim the owner', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
+      resolveSabotage(state);
+      expect(state.politics!.sabotage[0]).toMatchObject({ outcome: 'caught', worked: false, culpritPublic: true, victim: 'brix' });
+    }
+  });
+
+  it('S4-T-AC-2: only the first guardsMax tiles of the guards list guard (the rest guard nothing)', () => {
+    const { state, p } = monthOfSabotage(3, [{ by: 'lena', target: cutBrix }], (q) => [q.own, q.bare, q.food]);
+    expect(guardsMax(state)).toBe(POLITICS.sheriff.guards);
+    expect(captureOdds(state, state.politics!.sabotage[0]!)).toBe(POLITICS.sabotage.orders.powerCut.detect);
+    state.politics!.guards = [p.food, p.own, p.bare];
+    expect(captureOdds(state, state.politics!.sabotage[0]!)).toBe(1);
+  });
+
+  it('S4-T-AC-2: captureOdds is the chance of being seen: detect, 1 when guarded, and a rumour is never guarded', () => {
+    const { state } = monthOfSabotage(3, [{ by: 'lena', target: cutBrix }, { by: 'ossa', target: () => rumourFood }]);
+    const [cut, rumour] = state.politics!.sabotage as [SabotageOrder, SabotageOrder];
+    expect(captureOdds(state, cut)).toBe(POLITICS.sabotage.orders.powerCut.detect);
+    expect(captureOdds(state, rumour)).toBe(POLITICS.sabotage.orders.rumour.detect);
+    state.politics!.guards = [(cut.target as { tile: number }).tile];
+    expect(captureOdds(state, cut)).toBe(1);
+    expect(captureOdds(state, rumour)).toBe(POLITICS.sabotage.orders.rumour.detect);
+  });
+
+  it('S4-T-AC-2: both draws are made for every non-void order whatever the guard: the next order\'s outcome is the same guarded or not', () => {
+    let differed = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const two = [
+        { by: 'lena', target: cutBrix },
+        { by: 'ossa', target: () => rumourFood },
+      ];
+      const guarded = monthOfSabotage(seed, two, (p) => [p.food]);
+      const open = monthOfSabotage(seed, two);
+      resolveSabotage(guarded.state);
+      resolveSabotage(open.state);
+      const [g1, g2] = guarded.state.politics!.sabotage;
+      const [o1, o2] = open.state.politics!.sabotage;
+      expect(g1!.outcome).toBe('caught');
+      expect(g2).toMatchObject({ outcome: o2!.outcome, worked: o2!.worked, culpritPublic: o2!.culpritPublic });
+      if (g1!.outcome !== o1!.outcome) differed++;
+    }
+    // The guard changed the first order in some seeds, so the comparison above had something to prove.
+    expect(differed).toBeGreaterThan(0);
+  });
+
+  it('S4-T-AC-2: orders resolve in seat order, not in the order they were placed', () => {
+    const state = monthOfSabotage(5, [
+      { by: 'ossa', target: () => rumourFood },
+      { by: 'lena', target: cutBrix },
+    ]).state;
+    const [lena, ossa] = draws(state, 2);
+    resolveSabotage(state);
+    const byWho = Object.fromEntries(state.politics!.sabotage.map((o) => [o.by, o]));
+    expect(state.politics!.sabotage.map((o) => o.outcome)).not.toContain('pending');
+    const seenBy = (d: { works: number; seen: number }, order: SabotageOrder) => d.seen < captureOdds(state, order);
+    expect(byWho.lena!.culpritPublic).toBe(seenBy(lena!, byWho.lena!));
+    expect(byWho.ossa!.culpritPublic).toBe(seenBy(ossa!, byWho.ossa!));
+  });
+
+  it('S4-T-AC-2: a what-if copy resolves nothing, and neither does a month of no orders', () => {
+    const { state } = monthOfSabotage(5, [{ by: 'lena', target: cutBrix }]);
+    const copy = structuredClone(state);
+    const real = structuredClone(state);
+    resolveSabotage(real);
+    expect(real.politics!.sabotage[0]!.outcome).not.toBe('pending');
+    copy.whatIf = true;
+    resolveSabotage(copy);
+    expect(copy.politics!.sabotage[0]!.outcome).toBe('pending');
+    expect(sabotageEvents(copy)).toEqual([]);
+    const none = newGame();
+    resolveSabotage(none);
+    expect(none.politics!.sabotage).toEqual([]);
+  });
+
+  it('S4-T-AC-2: an order resolves once: a second resolveSabotage in the month changes nothing', () => {
+    const { state } = monthOfSabotage(5, [{ by: 'lena', target: cutBrix }]);
+    resolveSabotage(state);
+    expect(state.politics!.sabotage[0]!.outcome).not.toBe('pending');
+    const once = structuredClone(state.politics!.sabotage);
+    resolveSabotage(state);
+    expect(state.politics!.sabotage).toEqual(once);
+  });
+
+  // Task S4-1.3, steps 3: the shape of a sabotage event.
+  const EVERY_KEY: Record<EventKey, true> = {
+    dustStorm: true, drought: true, acidRain: true, solarFlare: true, cometPass: true, flood: true, volcanicAsh: true, pestSwarm: true,
+    wildfire: true, bumperHarvest: true, cavernCollapse: true, federationTax: true, federationGrant: true, immigrationWave: true,
+    inheritance: true, muleTheft: true, epidemic: true, coldSnap: true, meteorStrike: true, pirateRaid: true, storeFire: true,
+    ratsInSilo: true, crookedAccountant: true, packageFromHome: true, festival: true, generalStrike: true, emigrationWave: true,
+    blamedForUnrest: true, storeStrike: true, walkout: true, loyalCrew: true, riot: true, volunteerCleanup: true, powerCut: true,
+    marketRumour: true,
+  };
+
+  it("S4-T-AC-14 (engine): only powerCut and marketRumour have kind 'sabotage' or a title starting \"Sabotage\"; no colony event has either", () => {
+    const state = newGame();
+    for (const key of Object.keys(EVERY_KEY) as EventKey[]) {
+      const event = storeEvent(state, key, 'production');
+      const sabotage = key === 'powerCut' || key === 'marketRumour';
+      expect(event.kind === 'sabotage', key).toBe(sabotage);
+      expect(event.title.startsWith('Sabotage'), key).toBe(sabotage);
+    }
+  });
+
+  it("S4-T-AC-14 (engine): every event sabotageEvents files has kind 'sabotage' and a title starting \"Sabotage\"", () => {
+    let filed: MonthEvent[] = [];
+    for (let seed = 1; seed <= 12; seed++) {
+      const { state } = monthOfSabotage(seed, [
+        { by: 'lena', target: cutBrix },
+        { by: 'ossa', target: () => rumourFood },
+      ]);
+      resolveSabotage(state);
+      filed = filed.concat(sabotageEvents(state));
+    }
+    expect(filed.length).toBeGreaterThan(0);
+    for (const event of filed) {
+      expect(event.kind).toBe('sabotage');
+      expect(event.title.startsWith('Sabotage')).toBe(true);
+      expect(['powerCut', 'marketRumour']).toContain(event.key);
+    }
+  });
+});
+
+// --- The month through advancePhase: the wiring (Task S4-1.10) ----------------------------------------------------
+
+/** Runs the month from planning through to the production report: the wiring of game.ts and production.ts is what is tested. */
+function throughProduction(state: GameState) {
+  for (let guard = 0; guard < 8 && state.phase !== 'production'; guard++) advancePhase(state);
+  expect(state.phase).toBe('production');
+  const report = state.history.at(-1)!;
+  return { report, lines: report.lines!, events: report.events! };
+}
+
+describe('a sabotage month through advancePhase', () => {
+  sabotageOn();
+
+  const lineOf = (lines: ReturnType<typeof throughProduction>['lines'], tile: number) => lines.find((l) => l.tile === tile)!;
+
+  it('S4-T-AC-3: the cut\'s part is the plot line\'s last (why \'event\', event \'powerCut\'), the line makes 0, and runMonths still counts', () => {
+    const seed = seedFor({ works: true, seen: false }, cutBrix);
+    const control = monthOfSabotage(seed, []);
+    const cut = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+    const before = cut.state.tiles[cut.p.food]!.runMonths;
+    const base = lineOf(throughProduction(control.state).lines, control.p.food);
+    const { lines } = throughProduction(cut.state);
+    const line = lineOf(lines, cut.p.food);
+    expect(base.made).toBeGreaterThan(0);
+    expect(line.made).toBe(0);
+    expect(line.parts.at(-1)).toEqual({ why: 'event', delta: -base.made, event: 'powerCut' });
+    expect(line.parts.slice(0, -1)).toEqual(base.parts.slice(0, line.parts.length - 1));
+    expect(cut.state.tiles[cut.p.food]!.runMonths).toBe(control.state.tiles[control.p.food]!.runMonths);
+    expect(cut.state.tiles[cut.p.food]!.runMonths).toBeGreaterThan(before);
+    expect(cut.state.tiles[cut.p.food]!.outfit).toBe('food');
+  });
+
+  it('S4-B-AC-1 (engine): a guarded power cut fails, the plot makes its normal output, and the month\'s production events name the culprit', () => {
+    const seed = 9;
+    const control = monthOfSabotage(seed, []);
+    const guarded = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
+    const base = lineOf(throughProduction(control.state).lines, control.p.food);
+    const { lines, events } = throughProduction(guarded.state);
+    expect(lineOf(lines, guarded.p.food)).toEqual(base);
+    const cut = events.find((e) => e.key === 'powerCut')!;
+    expect(cut).toBeDefined();
+    expect(cut.plots).toEqual([]);
+    expect(cut.sabotage).toMatchObject({ culprit: 'lena', worked: false, guarded: true });
+    expect(guarded.state.monthEvents.some((e) => e.key === 'powerCut')).toBe(true);
+    expect(guarded.state.politics!.sabotage[0]).toMatchObject({ outcome: 'caught', culpritPublic: true });
+  });
+
+  it('S4-B-AC-2 (engine): an unguarded cut that works and is not seen makes the plot 0 and names nobody', () => {
+    const seed = seedFor({ works: true, seen: false }, cutBrix);
+    const { state, p } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+    const { lines, events } = throughProduction(state);
+    expect(lineOf(lines, p.food).made).toBe(0);
+    const cut = events.find((e) => e.key === 'powerCut')!;
+    expect(cut.sabotage).toMatchObject({ culprit: null, worked: true, guarded: false });
+    expect(cut.plots.map((q) => q.index)).toEqual([p.food]);
+    expect(JSON.stringify(events)).not.toContain('lena');
+  });
+
+  it('S4-B-AC-2 (engine), negative: a failed, unseen order files no event and changes no output', () => {
+    const seed = seedFor({ works: false, seen: false }, cutBrix);
+    const control = monthOfSabotage(seed, []);
+    const failed = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+    const base = throughProduction(control.state);
+    const { lines, events } = throughProduction(failed.state);
+    expect(lines).toEqual(base.lines);
+    expect(events).toEqual(base.events);
+    expect(failed.state.politics!.sabotage[0]).toMatchObject({ outcome: 'failed', culpritPublic: false });
   });
 });
