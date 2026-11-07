@@ -176,7 +176,6 @@ function andList(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
-/** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
 /** When a notice happened: its month and phase. */
 type Stamp = Pick<Notice, 'month' | 'phase'>;
 
@@ -185,6 +184,7 @@ function publicNotices(notices: readonly Notice[]): Notice[] {
   return notices.filter((n) => !('parties' in n) || n.parties === undefined);
 }
 
+/** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
 export function gameOverNews(seats: readonly { id: string; name: string; score: number }[]): NewsLine {
   const best = Math.max(...seats.map((s) => s.score));
   const winners = seats.filter((s) => s.score === best);
@@ -965,6 +965,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
     if (state.phase === 'development') this.finishDevelopment();
+    // A card that settled in the closing phase without an intent or a votes tick to notice it is noticed now, stamped
+    // with that phase; only what the change itself settles takes the stamp below.
+    this.noteDeals();
     // The development's public facts, copied before the phase changes: its outcome goes into the auction's brief, which
     // every AI seat shares, so a notice private to its parties stays out, and so does whatever the change settles.
     const developmentFacts = state.phase === 'development' ? publicNotices(this.notices) : null;
