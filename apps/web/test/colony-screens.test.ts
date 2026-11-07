@@ -1,7 +1,7 @@
 // A browser's document before react-dom loads: the month-end opener and the drift are decided in effects and timers.
 import { document, FakeElement } from './fake-dom';
 import type { ColonyProjectView, ColonyView, MuleView, MyView, PoliticsView, TableView } from '@mule/protocol';
-import { COLONY_SCORE } from '@mule/engine';
+import { COLONY_SCORE, EVENT_SHOW } from '@mule/engine';
 import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
 import { flushSync } from 'react-dom';
@@ -608,6 +608,8 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
   let nextFrame = 1;
   /** The page's frame clock, in ms: it moves only as the test lets time pass. */
   let pageMs = 0;
+  /** The server's clock, as the TV reads it: it moves with the page's. */
+  let serverMs = 0;
 
   beforeEach(() => {
     Object.assign(FakeElement.prototype, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }), offsetWidth: 0, offsetHeight: 0, querySelectorAll: () => [] });
@@ -615,6 +617,7 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     Object.assign(window, { matchMedia: (q: string) => ({ media: q, matches: false, addEventListener() {}, removeEventListener() {} }) });
     frames = new Map();
     pageMs = 0;
+    serverMs = 0;
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
     vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
@@ -642,7 +645,8 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     root = createRoot(host as unknown as HTMLElement);
     const show = (view: MuleView) => {
       onTvRouterState(view);
-      flushSync(() => root!.render(createElement(ClientProvider, { client: { ...client, watch: () => {} } as unknown as TableClient, children: createElement(TableApp, { room: 'MULE' }) })));
+      const board = { ...client, watch: () => {}, serverNow: () => serverMs } as unknown as TableClient;
+      flushSync(() => root!.render(createElement(ClientProvider, { client: board, children: createElement(TableApp, { room: 'MULE' }) })));
     };
     show(first);
     return {
@@ -660,6 +664,7 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
       const due = [...frames.values()];
       frames.clear();
       pageMs += 50;
+      serverMs += 50;
       flushSync(() => due.forEach((cb) => cb(pageMs)));
     }
   }
@@ -689,6 +694,26 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     pass(5_900);
     expect(screen.shows('tv-grounds-opener')).toBe(true);
     pass(200);
+    expect(screen.shows('tv-monthend')).toBe(true);
+  });
+
+  it('T-AC-8: the month end’s event show plays first: under it the opener waits, its clock still, no month end; its 3 s start when the show ends', () => {
+    const screen = tv(at('planning', 1, parkAt('building')));
+    // A colony event at the month end, its show on the server's clock for the next 4 s.
+    const showMs = 4_000;
+    const event = { key: 'festival', kind: 'festival', title: 'Festival', line: 'The colony celebrates.', sign: 'good', scope: 'colony', origin: null, hits: [], phase: 'upkeep', weight: 'minor', playMs: EVENT_SHOW.playMs.minor, objects: [], effects: [] };
+    screen.send({ ...at('upkeep', 1, parkAt('standing')), events: [event], eventShow: { startsAt: serverMs, showMs, introMs: EVENT_SHOW.introMs, endsAt: serverMs + showMs, held: true } } as unknown as MuleView);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    pass(3_900);
+    // Longer than the still's 3 s: had its clock run under the show, it would be over.
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    expect(screen.shows('tv-monthend')).toBe(false);
+    pass(300);
+    // The show is over; the still now runs its whole 3 s, then the month end.
+    pass(2_700);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    pass(400);
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
     expect(screen.shows('tv-monthend')).toBe(true);
   });
 
