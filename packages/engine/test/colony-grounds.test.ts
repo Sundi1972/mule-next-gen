@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COLONY } from '../src/config.js';
-import { commission, commissionRefusal, createGame, PRESTIGE, RuleError, type GameState, type PrestigeId, type Project } from '../src/index.js';
+import { advancePhase, commission, commissionRefusal, createGame, PRESTIGE, RuleError, type GameState, type PrestigeId, type Project } from '../src/index.js';
 
 /**
  * G-5 C48, RULE-32 (AM-16 A as Heiko reshaped it after WS6's mock): the colony builds on its own grounds, each new
@@ -24,7 +24,7 @@ function governedGame(politics = true): GameState {
 /** An object already in the colony at a stage that is not open, holding a place (or none). */
 function holding(state: GameState, id: PrestigeId, stage: Project['stage'], slot: number | null): void {
   const row = PRESTIGE[id];
-  state.colony!.projects.push({ id, stage, funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null, slot });
+  state.colony!.projects.push({ id, stage, funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, since: 1, plaque: {}, slot });
 }
 
 function slotOf(state: GameState, id: PrestigeId): number | null | undefined {
@@ -79,7 +79,7 @@ describe("T-AC-51 · RULE-32: growth-order places on the colony's grounds", () =
     expect(slotOf(state, 'park')).toBe(1);
   });
 
-  it('T-AC-51 · RULE-32: a project sited on a map plot before the change (slot null) holds no place', () => {
+  it('T-AC-51 · RULE-32: a project holding no place (slot null) leaves place 0 free', () => {
     const state = governedGame();
     holding(state, 'stadium', 'standing', null);
     commission(state, 'lena', 'park');
@@ -114,5 +114,37 @@ describe("T-AC-51 · RULE-32: growth-order places on the colony's grounds", () =
     const state = governedGame();
     holding(state, 'park', 'standing', 0);
     expect(refused(() => commission(state, 'lena', 'park'))).toBe('The colony already has a Park');
+  });
+});
+
+/** Plays on to the next upkeep, where the colony funds and builds (RULE-21). */
+function nextUpkeep(state: GameState): void {
+  do advancePhase(state);
+  while (state.phase !== 'upkeep');
+}
+
+describe("B-AC-31 (engine): a building on the colony's grounds builds once funded, with no wait for land", () => {
+  it('B-AC-31: the Hospital takes place 0, the Park next takes place 1; the Park fully funded at an upkeep builds from it, stands after its build months, and no tile changes owner', () => {
+    const state = governedGame();
+    commissionAndBuild(state, 'hospital');
+    commission(state, 'lena', 'park');
+    expect(slotOf(state, 'hospital')).toBe(0);
+    expect(slotOf(state, 'park')).toBe(1);
+
+    // The fund covers the Park and the store has its Alloy, so the upkeep pays it in full.
+    state.treasury.money = 10_000;
+    state.store.stock.alloy = 10;
+    const owners = state.tiles.map((t) => t.owner);
+
+    nextUpkeep(state);
+    const park = () => state.colony!.projects.find((p) => p.id === 'park')!;
+    expect(park()).toMatchObject({ stage: 'building', monthsLeft: PRESTIGE.park.buildMonths, slot: 1, funded: { credits: PRESTIGE.park.credits, goods: PRESTIGE.park.goods } });
+    for (let left = PRESTIGE.park.buildMonths - 1; left > 0; left--) {
+      nextUpkeep(state);
+      expect(park()).toMatchObject({ stage: 'building', monthsLeft: left });
+    }
+    nextUpkeep(state);
+    expect(park()).toMatchObject({ stage: 'standing', slot: 1 });
+    expect(state.tiles.map((t) => t.owner), 'the colony takes no map plot: every tile keeps its owner').toEqual(owners);
   });
 });

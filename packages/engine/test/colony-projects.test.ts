@@ -50,7 +50,7 @@ function standing(state: GameState, id: PrestigeId): void {
   const row = PRESTIGE[id];
   state.colony = {
     ...state.colony!,
-    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null }],
+    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, since: 1, plaque: {} }],
   };
 }
 
@@ -134,12 +134,15 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(project(state, 'hospital')).toMatchObject({ stage: 'commissioned', funded: { credits: 0, goods: {} }, since: state.month, plaque: {} });
   });
 
-  it('T-AC-25: an object that needs a plot waits commissioned with no site, however well funded, and never builds', () => {
-    const state = governedGame(10_000);
-    state.store.stock.alloy = 10;
-    commission(state, 'lena', 'park');
-    for (let i = 0; i < 3; i++) runColony(state, []);
-    expect(project(state, 'park')).toMatchObject({ stage: 'commissioned', plot: null, funded: { credits: PRESTIGE.park.credits, goods: PRESTIGE.park.goods } });
+  it('T-AC-25 (C48): every object, the Park and the Spaceport upgrade included, builds at the first upkeep that funds it in full, with no wait for land', () => {
+    for (const id of ['park', 'stadium', 'spaceport'] as const) {
+      const state = governedGame(10_000);
+      state.store.stock.alloy = 10;
+      state.store.stock.electronics = 10;
+      commission(state, 'lena', id);
+      runColony(state, []);
+      expect(project(state, id), id).toMatchObject({ stage: 'building', monthsLeft: PRESTIGE[id].buildMonths, funded: { credits: PRESTIGE[id].credits, goods: PRESTIGE[id].goods } });
+    }
   });
 
   /** A colony with no goods to buy at the store, so only credits move. */
@@ -149,7 +152,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     return state;
   }
 
-  it('T-AC-24b (pace set C): a front project paid in credits but waiting for its plot does not starve the ones behind it', () => {
+  it('T-AC-24b (pace set C): a front project paid in credits but waiting for its goods does not starve the ones behind it', () => {
     const state = noGoods(2_000);
     commission(state, 'lena', 'spaceport');
     commission(state, 'lena', 'hospital');
@@ -157,7 +160,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
       payGrant(state);
       runColony(state, []);
     }
-    expect(project(state, 'spaceport'), 'the Spaceport is paid in credits and waits for its plot').toMatchObject({ stage: 'commissioned', plot: null, funded: { credits: PRESTIGE.spaceport.credits } });
+    expect(project(state, 'spaceport'), 'the Spaceport is paid in credits and waits for its goods').toMatchObject({ stage: 'commissioned', funded: { credits: PRESTIGE.spaceport.credits } });
     expect(project(state, 'hospital').funded.credits, 'the Hospital behind it is paid too').toBe(PRESTIGE.hospital.credits);
     expect(state.treasury.money).toBe(2_000 + 4 * COLONY.grant.perMonth - PRESTIGE.spaceport.credits - PRESTIGE.hospital.credits);
   });
@@ -166,10 +169,10 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     const state = noGoods(0);
     commission(state, 'lena', 'spaceport');
     commission(state, 'lena', 'hospital');
-    // The Hospital has every credit and good in before the month end; the Spaceport in front of it has no plot.
+    // The Hospital has every credit and good in before the month end; the Spaceport in front of it has no goods.
     project(state, 'hospital').funded = { credits: PRESTIGE.hospital.credits, goods: { ...PRESTIGE.hospital.goods } };
     runColony(state, []);
-    expect(project(state, 'spaceport'), 'the Spaceport still waits for its plot').toMatchObject({ stage: 'commissioned', plot: null });
+    expect(project(state, 'spaceport'), 'the Spaceport still waits for its goods').toMatchObject({ stage: 'commissioned' });
     expect(project(state, 'hospital'), 'the Hospital starts behind it').toMatchObject({ stage: 'building', monthsLeft: PRESTIGE.hospital.buildMonths });
   });
 

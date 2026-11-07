@@ -83,12 +83,11 @@ function project(id: PrestigeId, stage: ColonyProjectView['stage'], extra: Parti
     funded: { credits: 0, goods: {} },
     buildMonths: row.buildMonths,
     monthsLeft: null,
-    plot: null,
+    slot: null,
     prestige: row.prestige,
     upkeep: row.upkeep,
     repairCost: stage === 'damaged' ? row.repairCost : null,
     plaque: [],
-    maxBid: null,
     ...extra,
   };
 }
@@ -98,7 +97,7 @@ function catalogue(refused: Partial<Record<PrestigeId, string>> = {}): ColonyCat
   return (Object.keys(PRESTIGE) as PrestigeId[]).map((id) => {
     const row = PRESTIGE[id];
     const why = refused[id] ?? null;
-    return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, needsPlot: row.needsPlot, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
+    return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
   });
 }
 
@@ -223,7 +222,7 @@ function tap(testid: string): void {
 }
 
 describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
-  it('B-AC-35-1: the Governor sees "Commission a project"; the list shows every catalogue row with cost, months, plot, prestige and upkeep', () => {
+  it('B-AC-35-1: the Governor sees "Commission a project"; the list shows every catalogue row with cost, months, prestige and upkeep, and no word of a plot (C48)', () => {
     mount(game(colonyOf([])));
     expect(text('commission-open')).toBe('Commission a project');
     tap('commission-open');
@@ -236,7 +235,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
       expect(shown, id).toContain(`${row.buildMonths} month${row.buildMonths > 1 ? 's' : ''} to build`);
       expect(shown, id).toContain(`+${row.prestige} prestige`);
       expect(shown, id).toContain(`upkeep ${row.upkeep} cr a month`);
-      expect(shown.includes('Needs a plot'), id).toBe(row.needsPlot);
+      expect(shown, id).not.toContain('plot');
     }
   });
 
@@ -359,55 +358,14 @@ describe('C35: anyone donates through the chips (B-AC-35-2)', () => {
   });
 });
 
-describe("C35: the Governor's site bid (B-AC-35-3)", () => {
-  const park = (maxBid: number | null = null) => project('park', 'commissioned', { maxBid });
-
-  it('B-AC-35-3: a chip and Set send setSiteBid {id, maxBid}', () => {
-    mount(game(colonyOf([park()])));
-    expect(text('bid-line-park')).toBe('No plot yet, and the colony doesn’t bid for one');
-    tap('bid-open-park');
-    tap('bid-chip-200');
-    tap('bid-set');
-    expect(sent).toEqual([{ type: 'setSiteBid', id: 'park', maxBid: 200 }]);
-  });
-
-  it('B-AC-35-3: "Other…" opens a stepper; its figure is what Set sends', () => {
-    mount(game(colonyOf([park()])));
-    tap('bid-open-park');
-    tap('bid-chip-other');
-    tap('bid-step-up');
-    tap('bid-set');
-    expect(sent).toEqual([{ type: 'setSiteBid', id: 'park', maxBid: 325 }]);
-  });
-
-  it('B-AC-35-3: "No bid" sends null', () => {
-    mount(game(colonyOf([park(300)])));
-    tap('bid-open-park');
-    tap('bid-chip-none');
-    tap('bid-set');
-    expect(sent).toEqual([{ type: 'setSiteBid', id: 'park', maxBid: null }]);
-  });
-
-  it.each([['s1'], ['s2']])('B-AC-35-3: once set, the row says "Bids up to N cr at the land auction" (governor %s)', (governor) => {
-    mount(game(colonyOf([park(300)]), { governor }));
-    expect(text('bid-line-park')).toBe('Bids up to 300 cr at the land auction');
-  });
-
-  it('B-AC-35-3: only the Governor can set it', () => {
-    mount(game(colonyOf([park()]), { governor: 's2' }));
-    expect(has('bid-open-park')).toBe(false);
-  });
-
-  it('B-AC-35-3: a hospital needs no plot, so no bid line and no bid button', () => {
-    mount(game(colonyOf([project('hospital', 'commissioned')])));
-    expect(has('donate-hospital')).toBe(true);
-    expect(has('bid-hospital')).toBe(false);
-    expect(has('bid-line-hospital')).toBe(false);
-  });
-
-  it('B-AC-35-3: a park that has its plot has no bid line', () => {
-    mount(game(colonyOf([project('park', 'commissioned', { plot: 12 })])));
+describe("C48: no site bid on the Colony desk (G-5 AM-16 A)", () => {
+  it.each([['s1'], ['s2']])('a commissioned Park shows Donate, and no bid line, no bid button and no wait for a plot (governor %s)', (governor) => {
+    mount(game(colonyOf([project('park', 'commissioned')]), { governor }));
+    expect(has('donate-park')).toBe(true);
     expect(has('bid-park')).toBe(false);
+    expect(has('bid-open-park')).toBe(false);
+    expect(has('bid-line-park')).toBe(false);
+    expect(text('actions-park')).not.toMatch(/plot|land auction/i);
   });
 });
 
