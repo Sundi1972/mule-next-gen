@@ -25,6 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
+import { Chip, claudeChip, isClaude } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -138,7 +139,9 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
               <PlayerMark slot={toSlot(s.color)} species={lobbySeatSpecies(s, i)} size={34} />
               <div className="flex min-w-0 flex-col">
                 <span className="truncate font-display text-2xl font-semibold">{s.name}</span>
-                <span className="truncate font-mono text-sm text-ink-3">{s.isAi ? 'AI player' : s.id === table.hostId ? 'Host' : s.connected ? 'Ready' : 'Away'}</span>
+                <span className="truncate font-mono text-sm text-ink-3">{isClaude(s) ? 'Claude' : s.isAi ? 'AI player' : s.id === table.hostId ? 'Host' : s.connected ? 'Ready' : 'Away'}</span>
+                {/* Its own line: beside the name, the chip leaves a 1280 px TV's half-width card no room for the name. The TV never shows the code. */}
+                {isClaude(s) && <Chip word={claudeChip(s)} className="mt-1 self-start px-2! py-0.5 text-xs!" testid={`tv-chip-${s.id}`} />}
               </div>
             </li>
           ))}
