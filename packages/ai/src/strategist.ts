@@ -485,9 +485,12 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
-const ENERGY_FIRST = 'no Energy plant of my own yet';
+export const ENERGY_FIRST = 'no Energy plant of my own yet';
 
-/** STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. */
+/**
+ * STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. On
+ * the floor, the draft's shoreless narrows it to reachable installs: its vetoes come off when no reachable plant is left.
+ */
 function energyFirst(cands: Candidate<DevAction>[]): void {
   const isPlant = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === 'energy';
   if (!cands.some((c) => isPlant(c) && !c.veto)) return;
