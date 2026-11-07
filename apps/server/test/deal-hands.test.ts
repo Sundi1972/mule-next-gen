@@ -19,6 +19,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+// The casts reach MuleGame's private engine state and its votes check: the tests set up and read the cards there.
 const stateOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 const votesOpen = (game: MuleGame) => (game as unknown as { electionOpen(): boolean }).electionOpen();
 
@@ -83,7 +84,7 @@ describe('S3-T-AC-10: the server flushes every DealHand before planning ends', (
     expect(stateOf(game).politics!.deals.find((d) => d.id === id)!.status).not.toMatch(/^(offered|expired)$/);
   });
 
-  it('a card offered to the AI in planning proper is answered by its ticks, before anyone presses Ready', () => {
+  it('S3-T-AC-10: a card offered to the AI in planning proper is answered by its ticks, before anyone presses Ready', () => {
     const { game, step } = inPlanningProper();
     const id = offerToAi(game);
 
