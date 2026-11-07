@@ -346,6 +346,7 @@ function energyLine(obs: GameState, me: PlayerId, afterProduction: boolean, deve
   };
   return (
     `${weighed}. To cover it, end this auction holding ${keep}: ${spoils}: ${verdict}. ` +
+    // literal-ok: the 1 and 2 are the worked examples the brief shows, not balance
     `If next month's MULEs add 1 more use (${useRule()}), ${hold(1)}; 2 more, ${hold(2)}.`
   );
 }
