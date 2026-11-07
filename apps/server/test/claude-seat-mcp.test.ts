@@ -232,6 +232,24 @@ describe('/mcp, stateless, the seat code on every call', () => {
     });
   });
 
+  it('T-AC-1: an unusable plan is not an answer: its cause is named, the ask stays open, and a correct resend plays', async () => {
+    const codes = new SeatCodeBook();
+    const { game, fake, notes, codeA } = startedGame(codes);
+    const client = mcpClient(await serve(codes));
+    const ask = await client.call('wait_for_my_turn', { code: codeA });
+
+    const probe = { code: codeA, ask_id: ask.ask_id, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'mine' }] };
+    expect(await client.call('submit_plan', probe)).toEqual({ kind: 'unusable', cause: 'bad_shape' });
+    const said = await client.text('submit_plan', probe);
+    expect(said).toContain('bad_shape');
+    expect(said).toContain('resend');
+    expect(await client.call('wait_for_my_turn', { code: codeA })).toMatchObject({ kind: 'ask', ask_id: ask.ask_id });
+
+    expect(await client.call('submit_plan', { ...probe, line: 'Mine.' })).toMatchObject({ kind: 'accepted' });
+    await playUntil(game, fake, () => game.viewFor(null).phase === 'development');
+    expect(notes.find((n) => n.seat === 's2' && n.phase === 'landGrant')?.playbook.by).toBe('llm');
+  });
+
   it('T-AC-2: an open ask whose wait has run out shows ms_left 0 and says it is still open; the answer still plays', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const codes = new SeatCodeBook();
