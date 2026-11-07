@@ -5,6 +5,7 @@ import { GOODS, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
 import { RoomRegistry, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { serveMcp } from './claude-seat/mcp.js';
 import { AI_NAMES, MuleGame } from './mule-game.js';
 import { createRecordedGame, isUserError } from './record.js';
 
@@ -99,6 +100,7 @@ function handleHttp(
   staticDir: string | null,
 ): void {
   const url = new URL(req.url ?? '/', 'http://localhost');
+  if (url.pathname === '/mcp') return serveMcp(req, res, registry);
   if (req.method === 'POST' && url.pathname === '/rooms') {
     const room = registry.create();
     res.writeHead(201, { 'content-type': 'application/json' }).end(JSON.stringify({ code: room.code }));

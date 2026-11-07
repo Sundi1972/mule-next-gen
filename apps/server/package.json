@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.137.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@mule/ai": "workspace:*",
     "@mule/engine": "workspace:*",
     "@mule/protocol": "workspace:*",

@@ -106,6 +106,7 @@ import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
 import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
+import { seatClaude, seatKindOf } from './claude-seat/seats.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
@@ -517,9 +518,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.monthCondition = null;
     this.lotHands.clear();
     this.voteHands.clear();
+    const kinds = new Map(seats.map((s) => [s.id, seatKindOf(s)]));
     seats.forEach((s, i) => {
       if (!s.isAi) return;
-      const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL };
+      const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL, kind: kinds.get(s.id) };
       const chat = this.brain.chatter(brainSeat, (line) => this.ctx.say?.(s.id, line));
       this.chats.set(s.id, chat);
       const seat = new AiSeat({
@@ -535,6 +537,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         },
       });
       this.ai.set(s.id, seat);
+      if (brainSeat.kind === 'claude') seatClaude(this, s.id, s.name, this.brain.writerFor(brainSeat));
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
@@ -543,6 +546,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       brain: this.brain,
       source,
       seats: [...this.ai.values()],
+      kinds,
       record: this.recordPlaybook,
       // Ruling (a'): a plan's line is said as its phase starts, through the seat's chat, after that phase's view goes out.
       speak: (seat, said) => {

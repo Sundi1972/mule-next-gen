@@ -453,7 +453,8 @@ RULE-4 · submit_plan                                                     shape:
   2  ask_id not this seat's open ask          refuse "unknown or closed ask"
   3  ask already answered                     refuse "one answer per ask"
   4  ask aborted (late)                       refuse "too late, played the built-in plan"
-  5  otherwise                                parse + validate as a Smart reply; resolve the write; return accepted/refused edits; status ready
+  5  the reply parser cannot use the reply     refuse "unusable: <cause>, resend"; the ask stays open (not answered)
+  6  otherwise                                parse + validate as a Smart reply; resolve the write; return accepted/refused edits; status ready
 ```
 
 ```
@@ -491,7 +492,7 @@ handoverCodeMs passes ⇒ it dies, nothing changes.
   greeting; not required before the others); `wait_for_my_turn{code}` → `{kind:'ask', ask_id, phase:'land'|'auction',
   persona, digest, brief, edits_allowed, ms_left}` | `{kind:'again'}` | `{kind:'busy', retry_s}` |
   `{kind:'taken_back'}` | `{kind:'game_over'}` | `{kind:'no_such_seat'}`;
-  `submit_plan{code, ask_id, edits:[{path,to,reason}], line}` → `{accepted:[…], refused:[{edit, why}]}` | the same
+  `submit_plan{code, ask_id, edits:[{path,to,reason}], line, strategy?:{kind, moneyMaker, reason}}` (strategy: the land ask's, as the API writer's reply carries it; refused on an auction ask) → `{accepted:[…], refused:[{edit, why}]}` | the same
   refusals. Each result is text Claude reads plus the structured content. Edit shape = the API writer's
   (packages/ai/src/llm/writer.ts::WriterReply). Breaking: no (new).
 - **Seat code**: 4 letters from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`-style unambiguous letters, a dash, 2 digits
@@ -575,6 +576,19 @@ Code to Claude, C2 stateless with the code per call, C6 status from calls, C9 th
 address + /mcp-only tunnel), C11 (new: the mock update), RULE-2 code lookup with the server-wide wrong-code budget,
 RULE-3 holdMs, RULE-5, §3 tools/code/invite/config, §6 B-AC-6/7/10/11 and T-AC-1/4/8, §7 R-1/R-3/R-5.
 Open: the spike (b) numbers (holdMs, UBER-AC-1's bar for chat apps).
+
+**Amendment 2 (7 Nov, WS2, inside the lane) — submit_plan carries the strategy.** Found while building PR-1b: §3's
+submit_plan took only edits and a line, but the land brief offers the strategy (kind, moneyMaker, reason), and the reply
+parser reads strategy only from the reply's strategy object, as the API writer sends it; so a Claude seat could never
+set its strategy. §3 now adds an optional `strategy` object, parsed exactly as the API writer's (HC-4); on an auction ask
+it is refused as not offered. Tested in `claude-seat-mcp.test.ts` (T-AC-1). Also: `holdMs` ships provisional at 25 s in
+`BRAIN.claudeSeat` until spike (b) sets it.
+
+**Amendment 3 (7 Nov, WS2, inside the lane, from PR-1b's review): an unusable reply is not an answer.** RULE-4 gains
+row 5: a submit the reply parser cannot use (bad shape, bad line, not JSON) is refused with its cause and the ask stays
+open, so the chat can resend before the phase starts; before, it counted as the answer and the seat silently played its
+built-in plan. Also, from the PM's ruling of 7 Nov: RULE-2 row 3's "game over" is decided in claude-seat from the game's
+own state, around the Room's lookup; the Room answers "taken back" only.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
