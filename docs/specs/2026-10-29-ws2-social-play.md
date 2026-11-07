@@ -480,8 +480,10 @@ written  (PM ruling (a), 7 Nov, from WS9's #691 AM-37: a vote in Playbook.politi
          announce (AM-B4). The ask shows the declared candidates. No ballot ask and no table wait: an AI acts 0.8-2.5 s
          into the ballot (POLITICS.ai.actMs), shorter than any write, and HC-3 allows Claude one table wait only (the
          first good's side pick). A candidate who declares later than that reply cannot get Claude's vote: that office
-         falls to row 1 (keyless). Scope note: this misses month 1 (AI seats declare at its last call)
-         [pending WS7: "and late human declarers" if a human can declare in the election month's announce]. If
+         falls to row 1 (keyless). Scope note: no candidacy opens once an election month's planning has started except in
+         month 1 (WS7, 7 Nov: politics.ts `candidacyClosed` is true for announce when month > 1; rulebook
+         colony-and-politics.html:239), so this misses only month 1's election in the RC, plus a snap election's month
+         after the RC (S5-RULE-9). If
          playtests show Claude's votes landing keyless too often, the fix is a ballot ask with a capped Claude wait,
          a second table wait that is Heiko's call (not asked now)
 never    the port's answer comes from chat text (HC-B3): it is a value of the recorded playbook, set by the monthly
