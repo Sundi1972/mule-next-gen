@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1260 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1261 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>5b53f6d6cc81</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>4c77c6bc3634</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1020,11 +1020,6 @@
 <tr><td><code>POLITICS.ai.colony.repairs.cautious</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs.aggressive</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.repairs.saboteur</code></td><td class="n">false</td><td>See the note on <code>POLITICS.ai.colony.repairs</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid</code></td><td class="n"></td><td>An AI Governor&#39;s top bid, in credits, for an object&#39;s site at the land auction (RULE-28, AM-10); null, it never bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.trader</code></td><td class="n">400</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.cautious</code></td><td class="n">300</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.aggressive</code></td><td class="n">500</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
-<tr><td><code>POLITICS.ai.colony.siteBid.saboteur</code></td><td class="n">null</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.leanIn</code></td><td class="n">[&quot;unhappy&quot;, &quot;unrest&quot;]</td><td>In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs.</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate</code></td><td class="n"></td><td>What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25).</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate.share</code></td><td class="n"></td><td>The share of its cash above its reserve each persona gives.</td></tr>
@@ -1040,7 +1035,7 @@
 </table></div>
 
 <h2 id="prestige"><code>PRESTIGE</code> <span class="pill built">In the game</span></h2>
-<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and repairCost are unchanged.</p>
+<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and repairCost are unchanged. Its footprint is the block of cells it takes on the colony&#39;s grounds, w × h (G-5 AM-18, RULE-32b: Heiko, 6 Nov, &quot;a Stadium is much bigger than the Hospital&quot;).</p>
 
 <h3 id="prestige-park"><code>PRESTIGE.park</code></h3>
 <div class="table-wrap"><table>
@@ -1050,10 +1045,11 @@
 <tr><td><code>PRESTIGE.park.credits</code></td><td class="n">210</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.goods.alloy</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.buildMonths</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.park.needsPlot</code></td><td class="n">true</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.prestige</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.upkeep</code></td><td class="n">15</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.repairCost</code></td><td class="n">150</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1065,10 +1061,11 @@
 <tr><td><code>PRESTIGE.hospital.credits</code></td><td class="n">340</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.goods.electronics</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.buildMonths</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.hospital.needsPlot</code></td><td class="n">false</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.prestige</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.upkeep</code></td><td class="n">23</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.repairCost</code></td><td class="n">225</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1080,10 +1077,11 @@
 <tr><td><code>PRESTIGE.observatory.credits</code></td><td class="n">350</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.goods.crystite</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.buildMonths</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.observatory.needsPlot</code></td><td class="n">false</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.prestige</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.upkeep</code></td><td class="n">25</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.repairCost</code></td><td class="n">250</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1096,10 +1094,11 @@
 <tr><td><code>PRESTIGE.stadium.goods.alloy</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.goods.electronics</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.buildMonths</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.stadium.needsPlot</code></td><td class="n">true</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.prestige</code></td><td class="n">4</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.upkeep</code></td><td class="n">35</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.repairCost</code></td><td class="n">350</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.footprint.w</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.footprint.h</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1112,10 +1111,11 @@
 <tr><td><code>PRESTIGE.spaceport.goods.alloy</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.goods.electronics</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.buildMonths</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
-<tr><td><code>PRESTIGE.spaceport.needsPlot</code></td><td class="n">true</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.prestige</code></td><td class="n">5</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.upkeep</code></td><td class="n">50</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.repairCost</code></td><td class="n">500</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.footprint.w</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.footprint.h</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1166,7 +1166,8 @@
 <tr><td><code>COLONY.strike</code></td><td class="n"></td><td>A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).</td></tr>
 <tr><td><code>COLONY.strike.cost</code></td><td class="n">250</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
 <tr><td><code>COLONY.strike.output</code></td><td class="n">0.2</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
-<tr><td><code>COLONY.groundsSlots</code></td><td class="n">24</td><td>Places on the colony&#39;s own grounds, filled in growth order (index 0 next to the town hall, then outward ring by ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).</td></tr>
+<tr><td><code>COLONY.grounds</code></td><td class="n"></td><td>The colony&#39;s own grounds (G-5 AM-16 A, RULE-32b): a size × size square of cells with the town hall on the centre cell. Each building takes a block of its PRESTIGE footprint, the first free block nearest the hall.</td></tr>
+<tr><td><code>COLONY.grounds.size</code></td><td class="n">5</td><td>See the note on <code>COLONY.grounds</code>.</td></tr>
 </tbody>
 </table></div>
 
