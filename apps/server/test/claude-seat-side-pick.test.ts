@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AI_HANDS, BRAIN, WALK, type Good } from '@mule/engine';
+import { AI_HANDS, BRAIN, WALK, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { claudeSeatAt, type SeatKind } from '../src/claude-seat/seats.js';
@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function startedGame(table = TABLE, phaseScale = 1) {
+function startedGame(table = TABLE, phaseScale = 1, maxMonths = 1) {
   const fake = fakeContext({ table });
-  const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, phaseScale });
+  const game = new MuleGame(fake.ctx, 10, { maxMonths, phaseScale });
   game.start(table);
   return { game, fake };
 }
@@ -51,27 +51,35 @@ async function toFirstSidePick(game: MuleGame, fake: ReturnType<typeof fakeConte
   throw new Error('the game never reached the auction');
 }
 
+type Waiting = NonNullable<NonNullable<MuleView['auction']>['waitingForClaude']>;
+
 interface SidePick {
   /** When the Claude seat was first Done, from the side pick's start: at the latest, when the side pick ended. */
   claudeDone: number;
   /** When the side pick ended, from its start. */
   ended: number;
+  /** The board's waitingForClaude at every tick of the side pick, with the side pick's age then; null when absent. */
+  waits: { age: number; waiting: Waiting | null }[];
+  /** The side pick's start on the game's clock. */
+  opened: number;
 }
 
 /**
- * Runs `good`'s side pick to its end from now, the host pressing Ready at once; `at` runs once the side pick is that
- * old. Reads every tick, on the game's own clock.
+ * Runs `good`'s side pick to its end from now, the host pressing Ready at once unless `hostWaits`; `at` runs once the
+ * side pick is that old. Reads every tick, on the game's own clock.
  */
-async function runSidePick(game: MuleGame, fake: ReturnType<typeof fakeContext>, good: Good, at: Record<number, () => unknown> = {}): Promise<SidePick> {
+async function runSidePick(game: MuleGame, fake: ReturnType<typeof fakeContext>, good: Good, at: Record<number, () => unknown> = {}, hostWaits = false): Promise<SidePick> {
   const opened = fake.ctx.now();
-  game.handle('s1', { type: 'ready' });
+  if (!hostWaits) game.handle('s1', { type: 'ready' });
   let claudeDone: number | null = null;
+  const waits: SidePick['waits'] = [];
   const due = Object.entries(at).map(([ms, fn]) => ({ ms: Number(ms), fn, ran: false }));
   for (let t = 0; t <= 2 * WAIT_MS; t += WALK.tickMs) {
     const v = view(game);
     const age = fake.ctx.now() - opened;
     // Without the host's Continue a side pick ends only once every seat is Done: a seat Done in its last tick was Done then.
-    if (!sidePick(v, good)) return { claudeDone: claudeDone ?? age, ended: age };
+    if (!sidePick(v, good)) return { claudeDone: claudeDone ?? age, ended: age, waits, opened };
+    waits.push({ age, waiting: v.auction!.waitingForClaude ?? null });
     if (claudeDone === null && doneAt(v, CLAUDE)) claudeDone = age;
     for (const d of due) {
       if (!d.ran && age >= d.ms) {
@@ -101,6 +109,25 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     expect(writerOf(game).openAsk(), 'its ask was aborted at the wait’s end').toBeNull();
   });
 
+  it('B-AC-5 (view): every screen shows the seat waited for until the wait’s end, then built-in for the rest of that side pick, never nothing in between', async () => {
+    const { game, fake } = startedGame();
+    const good = await toFirstSidePick(game, fake);
+    const HOST_READY_MS = WAIT_MS + 5_000;
+
+    // The host stays on the side pick past the wait's end, so it is still open after the seat's wait runs out.
+    const pick = await runSidePick(game, fake, good, { [HOST_READY_MS]: () => game.handle('s1', { type: 'ready' }) }, true);
+
+    const until = pick.opened + WAIT_MS;
+    expect(pick.ended, 'the premise: the side pick runs until the host is Ready').toBeGreaterThanOrEqual(HOST_READY_MS);
+    const before = pick.waits.filter((w) => w.age < WAIT_MS);
+    const after = pick.waits.filter((w) => w.age >= WAIT_MS);
+    expect(before.length, 'the premise: the side pick is seen during the wait').toBeGreaterThan(0);
+    for (const w of before) expect(w.waiting).toEqual([{ seatId: CLAUDE, until }]);
+    expect(after.length, 'the premise: the side pick is seen after the wait, before the seat is Done').toBeGreaterThan(0);
+    for (const w of after) expect(w.waiting).toEqual([{ seatId: CLAUDE, until, builtin: true }]);
+    expect(game.viewFor('s1').auction?.waitingForClaude, 'gone once that side pick is over').toBeUndefined();
+  });
+
   it('B-AC-5: at a faster table (phaseScale 0.5) the wait is still 45 real seconds: a chat thinks in real time', async () => {
     const { game, fake } = startedGame(TABLE, 0.5);
     const good = await toFirstSidePick(game, fake);
@@ -126,6 +153,28 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     expect(pick.ended).toBeLessThanOrEqual(20_000 + PRESS_MS);
   });
 
+  it('B-AC-5 (view): a plan in time takes the seat off the list at once; it is never shown as built-in', async () => {
+    const { game, fake } = startedGame();
+    const good = await toFirstSidePick(game, fake);
+    const answer = async () => {
+      const writer = writerOf(game);
+      expect(await writer.submit(writer.openAsk()!.id, { edits: [], line: 'Ready to trade.' })).toMatchObject({ kind: 'accepted' });
+    };
+    const HOST_READY_MS = 30_000;
+
+    // The host stays on the side pick past the answer, so the list is seen after the plan is taken.
+    const pick = await runSidePick(game, fake, good, { 20_000: answer, [HOST_READY_MS]: () => game.handle('s1', { type: 'ready' }) }, true);
+
+    const until = pick.opened + WAIT_MS;
+    const before = pick.waits.filter((w) => w.age < 20_000);
+    // The plan is taken in the first tick after it comes: from then on the seat is off the list.
+    const after = pick.waits.filter((w) => w.age >= 20_000 + WALK.tickMs);
+    expect(before.length, 'the premise: the side pick is seen before the plan comes').toBeGreaterThan(0);
+    for (const w of before) expect(w.waiting).toEqual([{ seatId: CLAUDE, until }]);
+    expect(after.length, 'the premise: the side pick is seen after the plan is taken').toBeGreaterThan(0);
+    for (const w of after) expect(w.waiting, 'its plan taken, it is waited for no longer and is not built-in').toBeNull();
+  });
+
   it('B-AC-5: the later goods’ side picks don’t wait for the Claude seat', async () => {
     const { game, fake } = startedGame();
     const first = await toFirstSidePick(game, fake);
@@ -145,6 +194,7 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
 
     expect(pick.ended).toBeLessThan(WAIT_MS);
     expect(pick.claudeDone).toBeLessThanOrEqual(PRESS_MS);
+    expect(pick.waits.map((w) => w.waiting).filter((w) => w !== null)).toEqual([]);
   });
 
   it('B-AC-5 (RULE-6): the host’s Continue still ends the side pick at once; the seat’s ask is aborted and a later answer is too late', async () => {
@@ -171,6 +221,37 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     expect(await writer.submit(asked.id, { edits: [], line: 'Late.' })).toEqual({ kind: 'too_late' });
   });
 
+  it('B-AC-5 (view): a side pick’s list never reaches a later month, even when the auction ends in the tick its first side pick does', async () => {
+    const { game, fake } = startedGame(TABLE, 1, 2);
+    const good = await toFirstSidePick(game, fake);
+    const until = fake.ctx.now() + WAIT_MS;
+    const internals = game as unknown as { requireState(): GameState; holdMs(state: GameState): number };
+    // Nobody can trade and no good is left: the side pick's end ends the whole auction in the same step.
+    const nothingToTrade = () => {
+      const a = internals.requireState().auction!;
+      a.queue = [];
+      for (const w of a.walkers) w.side = 'pass';
+      game.handle('s1', { type: 'ready' });
+    };
+    const pick = await runSidePick(game, fake, good, { [WAIT_MS + 1_000]: nothingToTrade }, true);
+    expect(pick.waits.at(-1)?.waiting, 'the premise: the seat was built-in when the side pick ended').toEqual([{ seatId: CLAUDE, until, builtin: true }]);
+    expect(view(game).phase, 'the premise: the auction ended with that side pick').not.toBe('auction');
+    // Next month's auction holds for its events show, so its first side pick is on screen before its wait opens.
+    vi.spyOn(internals, 'holdMs').mockImplementation((state: GameState) => (state.phase === 'auction' ? 10_000 : 0));
+
+    const seen: (Waiting | null)[] = [];
+    for (let t = 0; t < 30 * 60_000 && view(game).phase !== 'gameOver' && seen.length < 300; t += WALK.tickMs) {
+      const v = view(game);
+      if (v.phase === 'auction') seen.push(v.auction?.waitingForClaude ?? null);
+      if (v.phase === 'planning' || v.phase === 'upkeep') game.handle('s1', { type: 'ready' });
+      fake.advance(WALK.tickMs);
+      await Promise.resolve();
+    }
+
+    expect(seen.length, 'the premise: next month’s auction is seen').toBeGreaterThan(0);
+    for (const w of seen) expect(w?.some((e) => e.until === until) ?? false, 'last month’s entry on this month’s board').toBe(false);
+  });
+
   it('C7 pin: with no Claude seat, the first good’s side pick ends as soon as everyone is Done, as today', async () => {
     const table = TABLE.map(({ kind: _kind, ...seat }) => seat);
     const { game, fake } = startedGame(table);
@@ -179,5 +260,6 @@ describe('C7: the first good’s side pick waits for a Claude seat’s auction p
     const pick = await runSidePick(game, fake, good);
 
     expect(pick.ended).toBeLessThanOrEqual(PRESS_MS);
+    expect(pick.waits.map((w) => w.waiting).filter((w) => w !== null)).toEqual([]);
   });
 });

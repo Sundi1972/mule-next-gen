@@ -468,6 +468,12 @@ export interface AuctionView {
   upNext: Good | null;
   /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
   receipt: GoodReceipt | null;
+  /**
+   * At the first good's side pick, each Claude seat it waits for, with the server time (epoch ms) the wait ends. A seat
+   * whose plan comes in time leaves the list; one whose wait ends without a plan stays with `builtin` for the rest of
+   * that side pick. Absent when nobody is listed.
+   */
+  waitingForClaude?: { seatId: string; until: number; builtin?: true }[];
   /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
   tally: number | null;
 }

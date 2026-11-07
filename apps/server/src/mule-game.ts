@@ -101,7 +101,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type AuctionView, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
@@ -416,8 +416,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
-  /** C7: the Claude seats the first good's side pick still waits for, that good, and when its side pick opened. */
-  private sidePickWait: { seats: Set<string>; good: Good; openedAt: number } | null = null;
+  /**
+   * The first good's side pick's wait for Claude seats (C7): `seats` still waited for, `builtin` those whose wait ended
+   * without a plan. Kept until that side pick ends or the phase changes, so every screen can say a seat plays its
+   * built-in plan.
+   */
+  private sidePickWait: { seats: Set<string>; builtin: Set<string>; good: Good; openedAt: number } | null = null;
   /** When the one development clock runs out for every seat, epoch ms; null outside development. */
   private devEndsAt: number | null = null;
   /** Development's floor, inputs and tick; null outside development. */
@@ -926,6 +930,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
     this.cancelPhaseEnd = null;
+    // A side pick's wait for Claude seats belongs to its own auction: the auction can end in the tick its side pick does.
+    this.sidePickWait = null;
     this.hurry = { asked: new Set(), from: null, at: 0 };
     this.ready.clear();
     this.notices = [];
@@ -971,7 +977,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const keep = new Set(this.seats.filter((s) => claudeSeatAt(this, s.id) && !this.playbooks?.answered(state, s.id, 'auction')).map((s) => s.id));
       const kept = this.playbooks?.takePhase(state, 'auction', keep) ?? [];
       const first = state.auction?.stage === 'status' ? state.auction.good : null;
-      this.sidePickWait = kept.length > 0 && first ? { seats: new Set(kept), good: first, openedAt: this.ctx.now() } : null;
+      this.sidePickWait = kept.length > 0 && first ? { seats: new Set(kept), builtin: new Set(), good: first, openedAt: this.ctx.now() } : null;
       if (!first) for (const id of kept) this.playbooks?.takeSeat(state, 'auction', id);
       this.phaseEndsAt = null;
       this.dealsInGood = [];
@@ -1508,11 +1514,22 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const open = a?.stage === 'status' && a.good === wait.good;
     const timeUp = now - wait.openedAt >= BRAIN.claudeSeat.sidePickWaitMs;
     for (const id of [...wait.seats]) {
-      if (!all && open && !timeUp && !this.playbooks?.answered(state, id, 'auction')) continue;
+      const answered = this.playbooks?.answered(state, id, 'auction') ?? false;
+      if (!all && open && !timeUp && !answered) continue;
       this.playbooks?.takeSeat(state, 'auction', id);
       wait.seats.delete(id);
+      if (!answered) wait.builtin.add(id);
     }
-    if (wait.seats.size === 0) this.sidePickWait = null;
+    if (!open || (wait.seats.size === 0 && wait.builtin.size === 0)) this.sidePickWait = null;
+  }
+
+  /** The Claude seats the first good's side pick waits for, or played built-in when the wait ran out; absent when none. */
+  private waitingForClaude(a: NonNullable<GameState['auction']>): AuctionView['waitingForClaude'] {
+    const wait = this.sidePickWait;
+    if (!wait || a.stage !== 'status' || a.good !== wait.good) return undefined;
+    const until = wait.openedAt + BRAIN.claudeSeat.sidePickWaitMs;
+    const listed = this.seats.flatMap((s) => (wait.seats.has(s.id) ? [{ seatId: s.id, until }] : wait.builtin.has(s.id) ? [{ seatId: s.id, until, builtin: true as const }] : []));
+    return listed.length > 0 ? listed : undefined;
   }
 
   /**
@@ -1779,6 +1796,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
     // RULE-7: once the store is sold out, its line shows the highest bid a buyer can pay, flagged so a screen labels it.
     const selling = shownSellLine(state);
+    const waiting = this.waitingForClaude(a);
     return {
       good: a.good,
       stage: a.stage,
@@ -1815,6 +1833,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       upNext: a.stage === 'close' ? a.upNext : null,
       receipt: seatId !== null && a.stage === 'close' ? (a.receipts[seatId] ?? NO_RECEIPT) : null,
       tally: seatId !== null ? (a.tally[seatId] ?? 0) : null,
+      ...(waiting ? { waitingForClaude: waiting } : {}),
     };
   }
 
