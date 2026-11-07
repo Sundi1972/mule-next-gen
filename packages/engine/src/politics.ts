@@ -10,7 +10,7 @@ import { RuleError } from './errors.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
-import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
+import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Overrule, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
 
 /** Read-only all the way down: an election read before edit() may be shared with a what-if copy. */
 type Shared<T> = { readonly [K in keyof T]: T[K] extends object ? Shared<T[K]> : T[K] };
@@ -63,6 +63,7 @@ export function openPlanning(state: GameState): void {
     ? { stage: 'announce', ceremony: null, candidates: noCandidates(), promises: {}, ballots: {}, done: [], result: null }
     : null;
   p.council = null;
+  p.overrule = null;
   if (!p.election) openCouncil(state, p);
 }
 
@@ -428,6 +429,7 @@ export function setSalesTax(state: GameState, playerId: string, percent: number)
   if (state.phase !== 'planning') throw new RuleError('The tax is set in planning');
   if (politics.election && politics.election.stage !== 'over') throw new RuleError('Wait for the election to end');
   if (politics.governor !== id) throw new RuleError('Only the Governor sets the tax');
+  if (monthsOverrule(state)?.target === 'tax') throw new RuleError('An overrule vote on the tax is called: it holds until it is settled');
   const { low, high } = taxBounds(state);
   if (!Number.isInteger(percent) || percent < low || percent > high) throw new RuleError(`The tax can be ${low}% to ${high}% this month`);
   state.treasury.salesTax = percent / PERCENT;
@@ -781,14 +783,64 @@ export function setBudget(state: GameState, playerId: string, given: Record<Budg
   edit(state).budget = { month: state.month, setBy: id, shares };
 }
 
+/** This month's overrule, in any stage, or null. */
+function monthsOverrule(state: GameState): Shared<Overrule> | null {
+  const overrule = state.politics?.overrule;
+  return overrule && overrule.month === state.month ? overrule : null;
+}
+
 /** Per target: true, or why the player may not call an overrule now. See S5-RULE-6. */
 export function canOverrule(state: GameState, playerId: string): Record<OverruleTarget, true | OverruleWhy> {
-  return notBuilt();
+  const { id } = player(state, playerId);
+  const politics = state.politics;
+  const all = (why: OverruleWhy): Record<OverruleTarget, OverruleWhy> => ({ tax: why, budget: why, confidence: why });
+  if (!politics) return all('politicsOff');
+  if (state.phase !== 'planning' || votesOpen(state)) return all('notNow');
+  if (politics.governor === null) return all('noGovernor');
+  if (politics.governor === id) return all('governor');
+  if (monthsOverrule(state)) return all('called');
+  const taxChanged = Math.round(state.treasury.salesTax * PERCENT) !== Math.round(politics.taxAtStart * PERCENT);
+  return { tax: taxChanged ? true : 'unchanged', budget: 'notYet', confidence: 'sheriffOnly' };
+}
+
+function overruleRefusal(state: GameState, why: OverruleWhy, target: OverruleTarget): string {
+  switch (why) {
+    case 'politicsOff':
+      return "This game plays without the colony's council";
+    case 'notNow':
+      return 'Call an overrule once the votes are over';
+    case 'noGovernor':
+      return 'There is no Governor to overrule';
+    case 'governor':
+      return "The Governor can't overrule themself";
+    case 'called':
+      return `${player(state, monthsOverrule(state)!.caller).name} already called this month's vote`;
+    case 'notYet':
+      return 'Only the tax can be overruled in this version';
+    case 'sheriffOnly':
+      return "Only the Sheriff's inquiry opens a no-confidence vote";
+    case 'unchanged':
+      return `The ${target} is as it was when the month began`;
+  }
 }
 
 /** A player calls this month's overrule on a target, or withdraws their call with null. See S5-RULE-6. */
 export function callOverrule(state: GameState, playerId: string, target: OverruleTarget | null): void {
-  return notBuilt();
+  const { id } = player(state, playerId);
+  if (target === null) {
+    const call = monthsOverrule(state);
+    if (state.politics && state.phase === 'planning' && !votesOpen(state) && call?.caller === id && call.stage === 'called') {
+      edit(state).overrule = null;
+      return;
+    }
+    // Rows 1 and 2 come first, as they do for a call.
+    const why = canOverrule(state, id).tax;
+    if (why === 'politicsOff' || why === 'notNow') throw new RuleError(overruleRefusal(state, why, 'tax'));
+    throw new RuleError('There is no call of yours to withdraw');
+  }
+  const why = canOverrule(state, id)[target];
+  if (why !== true) throw new RuleError(overruleRefusal(state, why, target as 'tax' | 'budget'));
+  edit(state).overrule = { month: state.month, target, caller: id, stage: 'called', clockMs: 0, ballots: {}, done: [], result: null };
 }
 
 /** As planning would end: a pending call opens its ballot. Returns whether it did. See S5-RULE-7. */
