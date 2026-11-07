@@ -3,10 +3,11 @@
  * carries the land grant's and the development's edits, taken at each of those phases' start; the auction's is asked in
  * the production show and taken at the auction's start.
  */
-import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
+import { BRAIN, cloneForSim, outfitMule, RuleError, type GameState, type Outfit, type Player, type Playbook, type PlayerId } from '@mule/engine';
 import {
   afterGrant,
   atAuctionStart,
+  GOOD_NAME,
   landBrief,
   newPlots,
   ownedPlots,
@@ -107,6 +108,36 @@ function joined(a: Feedback | null, b: Feedback | null): Feedback | null {
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+const ROUTE_PATH = '/development/route';
+
+/** The engine's own words for fitting the MULE the seat leads now, or null where outfitMule would not refuse it. */
+function refitWords(state: GameState, seat: PlayerId, outfit: Outfit): string | null {
+  try {
+    outfitMule(cloneForSim(state), seat, outfit);
+    return null;
+  } catch (err) {
+    return err instanceof RuleError ? err.message : null;
+  }
+}
+
+/**
+ * The development's refusals, the route's told why when the seat leads into development a fitted MULE it did not lead
+ * as this month's land grant started (`atGrant`): one it won at the land auction between, the only rule that hands a
+ * seat a MULE outside development (lots.ts resolve; production's endLead ends every lead). Only a refusal in the
+ * engine's own words for fitting that MULE is told so (the validator's refitFault); every other refusal is as it was.
+ */
+function withLotMule(state: GameState, seat: PlayerId, atGrant: { month: number; led: Player['carriedMule'] } | undefined, rejected: NonNullable<Playbook['rejected']>): NonNullable<Playbook['rejected']> {
+  const me = state.players.find((p) => p.id === seat);
+  const led = me?.carriedMule;
+  if (!me || !led || led === 'empty' || me.takenMule || atGrant?.month !== state.month || atGrant.led !== null) return rejected;
+  const refit = refitWords(state, seat, led);
+  if (refit === null) return rejected;
+  const good = led === 'greenBelt' ? 'a green belt' : GOOD_NAME[led];
+  const mule = led === 'greenBelt' ? 'green-belt MULE' : `${GOOD_NAME[led]} MULE`;
+  const why = `${refit}. You led a ${mule} you won at the land auction into development: when you lead one, your route's first MULE must be fitted for ${good}, or be dropped`;
+  return rejected.map((r) => (r.path === ROUTE_PATH && r.why === refit ? { ...r, why } : r));
+}
+
 /**
  * Each Smart seat's land-grant playbook: asked for without waiting, at game start and as each upkeep opens, and taken
  * at the land grant's start from the reply that came before it, if any, else from the engine's draft. Never throws
@@ -125,6 +156,8 @@ export class Playbooks {
   private readonly phaseFeedback = new Map<string, Feedback>();
   /** The phase's draft of each seat kept past its start (C7), made as the phase started, by `${seat}/${phase}`. */
   private readonly keptDrafts = new Map<string, ReturnType<AiSeat['draft']>>();
+  /** The MULE each seat led as this month's land grant started (null: none), to tell one won at the land auction since. */
+  private readonly ledAtGrant = new Map<PlayerId, { month: number; led: Player['carriedMule'] }>();
   /** Every seat's Worth when each seat's last land plan was asked, for the result line of its next. */
   private readonly worthAtAsk = new Map<PlayerId, WorthAt>();
 
@@ -231,6 +264,7 @@ export class Playbooks {
         }
       }
       this.feedback.delete(seat.id);
+      this.ledAtGrant.set(seat.id, { month: state.month, led: state.players.find((p) => p.id === seat.id)?.carriedMule ?? null });
       let now: Playbook;
       try {
         now = source.draft(state, seat.id).playbook;
@@ -297,7 +331,8 @@ export class Playbooks {
    * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
    * is applied to the phase's draft as it starts (AM-A17); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
-   * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
+   * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief; the last time's is dropped,
+   * so a phase with no reply, or no edits for it, briefs no refusal of a month before.
    *
    * A seat in `keep` with this month's ask is left asking (C7): its ask stays open, it is drafted now, and takeSeat takes
    * it later on that draft. Returns the seats kept.
@@ -306,6 +341,8 @@ export class Playbooks {
     const kept: PlayerId[] = [];
     for (const seat of this.options.seats) {
       const key = `${seat.id}/${phase}`;
+      // The last time's feedback has been briefed by now: this phase's take sets its own, and with no take there is none.
+      this.phaseFeedback.delete(key);
       const ask = this.phaseAsks.get(key);
       if (!ask || ask.month !== state.month) continue;
       if (keep.has(seat.id)) {
@@ -371,7 +408,10 @@ export class Playbooks {
       console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
       return;
     }
-    if (made.feedback) this.phaseFeedback.set(key, made.feedback);
+    if (made.feedback) {
+      const rejected = phase === 'development' ? withLotMule(state, seat.id, this.ledAtGrant.get(seat.id), made.feedback.rejected) : made.feedback.rejected;
+      this.phaseFeedback.set(key, { ...made.feedback, rejected });
+    }
     // The development part carries no line: the land write's was said at the land grant.
     if (saysPlan(ask.written, made.playbook.by)) this.speak(seat.id, ask.written.reply.line, state.month, phase);
     if (made.playbook.by !== 'llm') return;

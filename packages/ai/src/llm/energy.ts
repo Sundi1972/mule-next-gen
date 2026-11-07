@@ -93,9 +93,13 @@ function nominalUse(outfit: Outfit): number {
 /** What upkeep leaves of `held` Energy for the next production, as runUpkeep plays it: spoilage rounded down, the depot cap. */
 export const energyAfterUpkeep = (held: number) => Math.min(UPKEEP.depotCapacity, Math.floor(held * (1 - GOOD_CONFIG.energy.spoilage)));
 
-/** The least Energy the seat may end the auction with and still hold `check` at the next production; null when the depot cannot keep it. */
+/**
+ * The least Energy the seat may end the auction with and still hold `check` at the next production; null when the depot
+ * cannot keep it, or when upkeep spoils it all (a `pnpm sim --set` sweep may set spoilage to 1 or more).
+ */
 export function energyToKeep(check: number): number | null {
   if (check > UPKEEP.depotCapacity) return null;
+  if (check > 0 && GOOD_CONFIG.energy.spoilage >= 1) return null;
   let held = Math.max(0, check);
   while (energyAfterUpkeep(held) < check) held++;
   return held;

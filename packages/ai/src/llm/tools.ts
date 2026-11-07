@@ -22,6 +22,7 @@ import type { Mind } from '../value.js';
 import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
 import { newPlots, ownedPlots, resolveGranted } from './granted.js';
+import { cutOffAs, noWalkTo } from './reach.js';
 
 /**
  * The game's tools for Claude while it writes a seat's strategy and playbook (C9). Each definition is MCP-shaped, so a
@@ -117,8 +118,10 @@ const MULE_STEPS = 3; // literal-ok: buyMule, outfit, install
  * The MULEs of `route` the hands would refuse at development's start `at`, each named on its install step with
  * routeVeto's reason. Each is judged on the state as its turn comes: the MULEs before it bought, fitted and installed
  * by the engine's own moves. On the floor every development walks (C6), so a lake plot no shore reaches is refused,
- * as in play; the walk's clock is not known here, so a walk too long for it is not. A refused MULE is judged as
- * dropped: the pick the hands would queue in its place is not played, so a later MULE's cash floor may differ.
+ * as in play, and so is a plot no walk reaches at all (noWalkTo), which the hands refuse once they read the clock as
+ * "the walk takes Infinity s". The walk's clock is not known here, so a walk merely too long for it is not refused. A
+ * refused MULE is judged as dropped: the pick the hands would queue in its place is not played, so a later MULE's cash
+ * floor may differ.
  */
 function handsRefuse(at: GameState, mind: Mind, route: DevelopmentPlay['route']): NonNullable<Playbook['rejected']> {
   const refused: NonNullable<Playbook['rejected']> = [];
@@ -131,7 +134,7 @@ function handsRefuse(at: GameState, mind: Mind, route: DevelopmentPlay['route'])
     const install = i + MULE_STEPS - 1;
     const plot = route[install]!.plot!;
     i = install;
-    const veto = routeVeto(view, mind, { plot, outfit }, undefined, floor);
+    const veto = routeVeto(view, mind, { plot, outfit }, undefined, floor) ?? (floor && noWalkTo(view, plot, floor) === 'walk' ? `${cutOffAs(view, plot)}: no walk reaches plot ${plot}` : null);
     if (veto) {
       refused.push({ path: `${ROUTE_PATH}/${install}`, to: route[install], why: `route step ${install}: ${veto}` });
       continue;

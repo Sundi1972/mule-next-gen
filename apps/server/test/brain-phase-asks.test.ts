@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, allPrices, createGame, type GameState } from '@mule/engine';
+import { advancePhase, allPrices, createGame, list, lotDone, lotLeader, setLotWalk, stepLandAuction, type GameState } from '@mule/engine';
 import { AiSeat, atAuctionStart, playbookSource } from '@mule/ai';
 import { createBrain, type MeteredBrain } from '../src/brain/index.js';
 import { Playbooks } from '../src/brain/playbooks.js';
@@ -541,5 +541,83 @@ describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { time
     expect(briefs).toHaveLength(2);
     expect(briefs[0]).not.toContain('Since your plan for month');
     expect(briefs[1]).toMatch(/Since your plan for month 2: your Worth .+ \(\+300\)/);
+  });
+});
+
+describe('hands-refusals fix: "Last time" tells only what last month\'s reply had refused', { timeout: 30_000 }, () => {
+  it("hands-refusals fix: FM-stale-feedback: a development edit the rules clamped is told in that month's upkeep brief, and not again a month later when that month's land write carried no development edit (deep4: 2-4 AI 3 was told a month-10 refusal again in month 11)", async () => {
+    const withDevelopment = JSON.stringify({
+      edits: [
+        { path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' },
+        { path: '/development/timeBudgetMs', to: -5, reason: 'No time.' },
+      ],
+      line: '',
+    });
+    const landOnly = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }], line: '' });
+    const sdk = fakeSdk((n) => sdkMessage(n === 1 ? withDevelopment : landOnly, USED));
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const playbooks = new Playbooks({ brain: smartOn(sdk), source: playbookSource([seat]), seats: [seat] });
+    const told = '/development/timeBudgetMs (clamped to 0: a time of 0 or more)';
+
+    // Month 1: the land write carries a development edit, clamped at development's start.
+    playbooks.ask(state, 1);
+    for (const month of [1, 2]) {
+      await vi.advanceTimersByTimeAsync(0);
+      advanceTo(state, 'landGrant');
+      playbooks.takeEffect(state);
+      advanceTo(state, 'development');
+      playbooks.takePhase(state, 'development');
+      advanceTo(state, 'upkeep');
+      playbooks.ask(state, month + 1);
+    }
+    expect(sdk.calls).toBe(3);
+    expect(promptOf(sdk.requests[1]!.params).user).toContain(`Last time: the rules clamped or refused ${told}.`);
+    // Month 2's land write carried no development edit: month 1's clamp is not this month's.
+    expect(promptOf(sdk.requests[2]!.params).user).not.toContain(told);
+  });
+
+  it("hands-refusals fix: FM-lot-mule: a route refused because the seat leads a MULE it won at this month's land auction is told with that MULE's good, and that the route's first MULE must be fitted for it or be dropped (deep4: 7 refusals told only 'This MULE is outfitted')", async () => {
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    // p0's plot for the route's install; p1's Food MULE, listed for the land auction.
+    const plains = state.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : []));
+    const mine = plains[0]!;
+    const sold = state.tiles[plains[1]!]!;
+    state.tiles[mine]!.owner = 'p0';
+    Object.assign(sold, { owner: 'p1', outfit: 'food' });
+    // Month 1's land write: a route whose first MULE is fitted for Energy.
+    const route = [{ act: 'buyMule', plot: null, outfit: null }, { act: 'outfit', plot: null, outfit: 'energy' }, { act: 'install', plot: mine, outfit: null }];
+    const sdk = fakeSdk(() => sdkMessage(JSON.stringify({ edits: [{ path: '/development/route', to: route, reason: 'Power.' }], line: '' }), USED));
+    const played = new Playbooks({ brain: smartOn(sdk), source: playbookSource([seat]), seats: [seat] });
+    list(state, 'p1', { item: { kind: 'mule', x: sold.x, y: sold.y }, minimum: 1, unsold: 'keep' });
+
+    played.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(0);
+    advanceTo(state, 'landGrant');
+    played.takeEffect(state);
+    advanceTo(state, 'landAuction');
+    // On the MULE lot p0 holds up until it leads, then presses Done; any other lot goes unbid.
+    const p0 = state.players.find((p) => p.id === 'p0')!;
+    for (let t = 0; state.landAuction && state.landAuction.stage !== 'over' && t < 100_000; t++) {
+      const a = state.landAuction;
+      if (a.stage === 'walk' && a.lot!.item.kind === 'mule' && p0.carriedMule === null) {
+        const leads = lotLeader(state)?.id === 'p0';
+        setLotWalk(state, 'p0', leads ? 0 : 1);
+        if (leads) lotDone(state, 'p0');
+      } else for (const p of state.players) lotDone(state, p.id);
+      stepLandAuction(state, 10);
+    }
+    expect(p0.carriedMule, 'p0 won the Food MULE').toBe('food');
+    advanceTo(state, 'development');
+    played.takePhase(state, 'development');
+    advanceTo(state, 'upkeep');
+    played.ask(state, 2);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const brief = promptOf(sdk.requests[1]!.params).user;
+    expect(brief).toContain(
+      'Last time: the rules clamped or refused /development/route (This MULE is outfitted: re-outfit it. You led a Food MULE you won at the land auction into development: when you lead one, your route\'s first MULE must be fitted for Food, or be dropped).',
+    );
   });
 });

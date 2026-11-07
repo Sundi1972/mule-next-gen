@@ -164,7 +164,10 @@ describe("Claude's tools (C9)", () => {
 });
 
 describe('hands fix 1: whatIf refuses a route MULE the hands would refuse (routeVeto)', () => {
-  /** Seed 4's four-seat map (route-veto.test.ts's), seat `a` holding the plot at (x, y): (10, 0) is lake ringed by lake, (10, 1) lake with a free shore. */
+  /**
+   * Seed 4's four-seat map (route-veto.test.ts's), seat `a` holding the plot at (x, y): (10, 0) is lake ringed by lake,
+   * (9, 1) lake with a free shore the floor walks to. Not (10, 1): its only shore is a corner no walk reaches.
+   */
   function lakeTable(x: number, y: number): { state: GameState; plot: number } {
     const state = createGame({ seed: 4, players: ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id.toUpperCase(), isAi: true })) });
     tileAt(state.tiles, state.width, x, y)!.owner = 'a';
@@ -189,14 +192,14 @@ describe('hands fix 1: whatIf refuses a route MULE the hands would refuse (route
   });
 
   it('hands fix 1: a MULE on a lake plot a shore reaches is not refused', async () => {
-    const { state, plot } = lakeTable(10, 1);
+    const { state, plot } = lakeTable(9, 1);
     expect(state.tiles[plot]!.terrain).toBe('lake');
     expect(unreachablePlot(state, plot)).toBe(false);
     expect(await whatIfRoute(state, waterOn(plot))).toEqual([]);
   });
 
   it('hands fix 1: a second MULE is judged after the first is installed: the same outfit on the same plot is refused as stale', async () => {
-    const { state, plot } = lakeTable(10, 1);
+    const { state, plot } = lakeTable(9, 1);
     const twice = [...waterOn(plot).slice(0, 3), ...waterOn(plot)];
     const rejected = await whatIfRoute(state, twice);
     expect(rejected).toHaveLength(1);

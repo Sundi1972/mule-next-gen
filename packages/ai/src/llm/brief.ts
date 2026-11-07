@@ -36,7 +36,6 @@ import {
   UPKEEP,
 } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
-import { unreachablePlot } from '../hands/develop.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
 import type { Mind } from '../value.js';
@@ -47,6 +46,7 @@ import type { LandDraft } from '../playbook/index.js';
 import type { Feedback } from './writer.js';
 import { GRANTED } from './granted.js';
 import { energyAt, energyToKeep, useRule } from './energy.js';
+import { cutOffAs, noWalkTo } from './reach.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -198,16 +198,20 @@ const GOOD_FIELDS: readonly { field: keyof GoodPlay; to: object }[] = [
   { field: 'concedeCrPerS', to: { type: 'number' } },
 ];
 
-/** A lake plot no MULE can be walked to (unreachablePlot): the brief marks it wherever the seat might claim or install on it. */
-const LAKE_MARK = 'lake: no MULE can be installed';
-/** The same lake with a MULE already on it (its shore was the seat's once): only another MULE is barred. */
-const FITTED_LAKE_MARK = 'lake: no other MULE can be installed';
-// With steering off a tap installs on any lake, so only the floor has unreachable lakes (as whatIf judges them).
-const unreachable = (obs: GameState, plot: number) => DEV_STEER.on && unreachablePlot(obs, plot);
+/**
+ * A plot no MULE can be walked to (noWalkTo: a lake with no shore to stand on, or a plot the floor's walk never reaches):
+ * the brief marks it wherever the seat might claim or install on it, "lake: no MULE can be installed", or "cut off: …"
+ * for land.
+ */
+const markOf = (obs: GameState, plot: number) => `${cutOffAs(obs, plot)}: no MULE can be installed`;
+/** The same plot with a MULE already on it (its shore was the seat's once): only another MULE is barred. */
+const fittedMarkOf = (obs: GameState, plot: number) => `${cutOffAs(obs, plot)}: no other MULE can be installed`;
+// With steering off a tap installs anywhere, so only the floor has unreachable plots (as whatIf judges them).
+const unreachable = (obs: GameState, plot: number) => DEV_STEER.on && noWalkTo(obs, plot) !== null;
 
 /** A ranked plot and its value, marked when no MULE can be installed on it: "plot N lake: no MULE can be installed (V cr)". */
 const plotText = (obs: GameState) => (r: { plot: number; value: number }) =>
-  `plot ${r.plot}${unreachable(obs, r.plot) ? ` ${LAKE_MARK}` : ''} (${r.value} cr)`;
+  `plot ${r.plot}${unreachable(obs, r.plot) ? ` ${markOf(obs, r.plot)}` : ''} (${r.value} cr)`;
 const goodText = (g: Strategy['moneyMaker']) => (g === null ? 'none' : GOOD_NAME[g]);
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -224,11 +228,11 @@ function ownership(obs: GameState, me: string): string[] {
     const plots = obs.tiles.flatMap((t, i) => (t.owner === p.id ? [{ i, outfit: t.outfit }] : []));
     const who = p.id === me ? `${p.name} (you)` : p.name;
     if (plots.length === 0) return `${who}: no plots`;
-    // The seat's own lake plot no MULE can reach is marked in place of idle (or after its MULE).
+    // The seat's own plot no MULE can reach is marked in place of idle (or after its MULE).
     const status = (t: { i: number; outfit: Outfit | null }) => {
-      const mark = p.id === me && unreachable(obs, t.i) ? LAKE_MARK : null;
-      if (!t.outfit) return mark ?? 'idle';
-      return mark ? `${outfitName(t.outfit)}, ${FITTED_LAKE_MARK}` : outfitName(t.outfit);
+      const marked = p.id === me && unreachable(obs, t.i);
+      if (!t.outfit) return marked ? markOf(obs, t.i) : 'idle';
+      return marked ? `${outfitName(t.outfit)}, ${fittedMarkOf(obs, t.i)}` : outfitName(t.outfit);
     };
     const named = capped(plots, BRAIN.brief.plotsPerPlayer, (t) => `plot ${t.i} ${status(t)}`);
     return `${who}: ${plural(plots.length, 'plot')} — ${named}`;
@@ -353,13 +357,20 @@ function energyLine(obs: GameState, me: PlayerId, afterProduction: boolean, deve
 
 const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
 
+/** Whether upkeep spoils every unit of Water it leaves: a `pnpm sim --set` sweep may set its spoilage to 1 or more. */
+const waterSpoilsWhole = () => GOOD_CONFIG.water.spoilage >= 1;
+
 /** What upkeep leaves of `held` Water for the next production, as runUpkeep plays it: the drink, spoilage rounded down, the depot cap. */
 const waterAfterUpkeep = (held: number, drink: number) =>
   Math.min(UPKEEP.depotCapacity, Math.floor(Math.max(0, held - drink) * (1 - GOOD_CONFIG.water.spoilage)));
 
-/** The least Water the seat may end the auction with, upkeep drinking `drink`, and still hold `check` at the next production; null when the depot cannot keep `check`. */
+/**
+ * The least Water the seat may end the auction with, upkeep drinking `drink`, and still hold `check` at the next
+ * production; null when the depot cannot keep `check`, or when upkeep spoils it all (waterSpoilsWhole).
+ */
 function waterToKeep(drink: number, check: number): number | null {
   if (check > UPKEEP.depotCapacity) return null;
+  if (check > 0 && waterSpoilsWhole()) return null;
   let held = check;
   while (waterAfterUpkeep(held, drink) < check) held++;
   return held;
@@ -411,7 +422,10 @@ function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): stri
   const subject = farms === 0 ? `a ${kind} plot you install next month` : `${plots}`;
   const keep = waterToKeep(drink, need);
   if (keep === null) {
-    return `${head}; your household and crew drink ${drink} at upkeep, and the depot keeps at most ${UPKEEP.depotCapacity} Water after it, less than the ${need} the next production checks, so no holding keeps ${subject} whole next month.`;
+    const after = waterSpoilsWhole()
+      ? `${pct(GOOD_CONFIG.water.spoilage)} of what is left after it spoils at upkeep`
+      : `the depot keeps at most ${UPKEEP.depotCapacity} Water after it, less than the ${need} the next production checks`;
+    return `${head}; your household and crew drink ${drink} at upkeep, and ${after}, so no holding keeps ${subject} whole next month.`;
   }
   const verdict = held >= keep ? 'covered' : `short by ${keep - held}, or ${cut} next month`;
   const grow = room(need) + 1;
@@ -421,7 +435,7 @@ function waterLine(obs: GameState, me: PlayerId, afterProduction: boolean): stri
   const top = grow + UPKEEP.crewPerWater - 1;
   const grown =
     `If next month's MULEs add ${grow} to ${top} crew${beyond} (${crewRule}), production checks ${next}: ` +
-    `${keepNext === null ? `more than the depot keeps after upkeep, ${UPKEEP.depotCapacity}, so no holding covers that` : `hold ${keepNext}`}; ` +
+    `${keepNext === null ? `${waterSpoilsWhole() ? 'all of it spoils at upkeep' : `more than the depot keeps after upkeep, ${UPKEEP.depotCapacity}`}, so no holding covers that` : `hold ${keepNext}`}; ` +
     `every ${UPKEEP.crewPerWater} crew past that add one more to the check.`;
   return (
     `${farms === 0 ? `${noFarm} To keep ${subject} whole` : `${head}. To keep ${subject} whole next month`}, end this auction holding ${keep}: upkeep drinks ${drink}, ` +
@@ -629,7 +643,7 @@ const ACT_TEXT = (obs: GameState, granted: number | null) => (s: DevelopmentPlay
     case 'outfit':
       return s.outfit ? `outfit it for ${s.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[s.outfit]}` : 'outfit it';
     case 'install':
-      return `install it on ${plot(s.plot)}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${LAKE_MARK})` : ''}`;
+      return `install it on ${plot(s.plot)}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${markOf(obs, s.plot)})` : ''}`;
     case 'analyse':
       return `analyse ${plot(s.plot)}`;
     case 'filter':
