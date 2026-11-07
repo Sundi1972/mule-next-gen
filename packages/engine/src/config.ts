@@ -313,8 +313,12 @@ export const START = {
   storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
-  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
-  storeEnergyPerPlayer: 5,
+  /**
+   * The store's Energy at the start, for each seat: 10, so 40 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
+   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov): farms then turn off for Energy in under 15% of
+   * farm-months.
+   */
+  storeEnergyPerPlayer: 10,
 };
 
 /** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
