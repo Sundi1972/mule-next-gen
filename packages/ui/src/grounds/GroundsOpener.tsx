@@ -45,7 +45,8 @@ export function useGroundsOpener(view: MonthEndView & { politics: unknown }, eve
 function useSeconds(on: boolean): number {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
-    if (!on) return;
+    // Where the frame clock is missing (or half-stubbed) the view holds still rather than throw on unmount.
+    if (!on || typeof requestAnimationFrame !== 'function' || typeof cancelAnimationFrame !== 'function') return;
     let frame = 0;
     let first: number | null = null;
     const tick = (now: number) => {
