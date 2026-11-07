@@ -361,6 +361,18 @@ describe('C34: the build site at the month end', () => {
     expect(has(empty, 'project-park')).toBe(false);
   });
 
+  it('PM ruling 7 Nov (TV-FIT, six seats): with politics on, the grounds opener has shown the buildings, so the month end puts each project on one line: name, stage and the figure its stage turns on; no funding bar, build pips or plaque', () => {
+    const politics = { governor: 's1', sheriff: null, term: [4, 6], next: 7, baron: null, tax: { percent: 5, start: 5, low: 0, high: 10 }, fund: 0, pay: { governor: 50 }, weights: [], candidates: { governor: [] }, promises: {}, promise: null, promiseFrom: null, election: null } as unknown as NonNullable<MuleView['politics']>;
+    const html = onTv(game(MIDGAME, { politics }), TvMonthEnd);
+    const line = (id: string) => text(element(html, `project-${id}`));
+    expect([...element(html, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => m[1])).toEqual(['stadium', 'hospital', 'park', 'observatory', 'spaceport']);
+    for (const id of ['stadium', 'hospital', 'park', 'observatory', 'spaceport']) expect(element(html, `project-${id}`)).not.toMatch(/data-testid="(funding|build|plaque)-/);
+    expect(line('stadium')).toMatch(/^Stadium Collecting \d+% paid$/);
+    expect(line('hospital')).toMatch(/^Hospital Building stands (this month|in \d+ months)$/);
+    expect(line('park')).toMatch(/^Park Standing \+\d+ prestige$/);
+    expect(element(html, 'figure-spaceport')).toMatch(/line-through/);
+  });
+
   it('B-AC-34-4 (negative): without politics the month end has no build site', () => {
     expect(has(onTv(game(null), TvMonthEnd), 'build-site')).toBe(false);
   });
