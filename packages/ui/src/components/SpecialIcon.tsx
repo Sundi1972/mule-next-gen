@@ -34,8 +34,9 @@ export function SpecialIcon({ kind, size = 16, className }: SpecialIconProps) {
 }
 
 /**
- * The badge's size per density, in screen pixels. DS-GAP: there are no size tokens for map marks; HoloMap writes
- * each mark's size per density inline (PlayerMark 7/12, GoodIcon 10/20), and these follow that precedent.
+ * The badge's size per density, in screen pixels: the TV's size, and the phone's cap (see specialBadgeBox). DS-GAP:
+ * there are no size tokens for map marks; HoloMap writes each mark's size per density inline (PlayerMark 7/12,
+ * GoodIcon 10/20), and these follow that precedent.
  */
 export const SPECIAL_BADGE = { phone: { box: 15, icon: 10, ring: 1.6 }, tv: { box: 21, icon: 14, ring: 2.2 } } as const;
 
@@ -47,27 +48,41 @@ export const SPECIAL_BADGE = { phone: { box: 15, icon: 10, ring: 1.6 }, tv: { bo
  */
 export const SPECIAL_HANG = 0.25;
 
+/** The phone badge's share of its plot, so on a 25 px plot it keeps off the third of the plot's dots. */
+export const SPECIAL_BADGE_SHARE = 0.36;
+
+/** The badge's size on a map plot `plot` px wide: on a phone a share of the plot, at most the phone's cap; on the TV its fixed size. */
+export function specialBadgeBox(plot: number, density: 'phone' | 'tv'): number {
+  if (density === 'tv') return SPECIAL_BADGE.tv.box;
+  return Math.min(SPECIAL_BADGE.phone.box, Math.max(1, Math.round(plot * SPECIAL_BADGE_SHARE)));
+}
+
 export interface SpecialBadgeProps {
   special: MapSpecial;
   density: 'phone' | 'tv';
+  /** The badge's size in px, its density's by default; its symbol scales with it. */
+  box?: number;
   className?: string;
   style?: CSSProperties;
+  /** The 1 px edge glow around it; off where the badge must stay within its box (the small phone plot's strip). */
+  halo?: boolean;
 }
 
 /** A special field's mark: a hexagonal chip (no other map chip has this shape) holding the kind's symbol. Decorative. */
-export function SpecialBadge({ special, density, className, style }: SpecialBadgeProps) {
+export function SpecialBadge({ special, density, box, className, style, halo = true }: SpecialBadgeProps) {
   const s = SPECIAL_BADGE[density];
+  const size = box ?? s.box;
   const color = SPECIAL_COLOR[special.kind];
   return (
     <span
       aria-hidden
       className={cx('inline-flex shrink-0 items-center justify-center', className ?? 'relative')}
-      style={{ ...style, width: s.box, height: s.box, filter: 'drop-shadow(0 0 1px var(--color-mark-edge))' }}
+      style={{ ...style, width: size, height: size, ...(halo ? { filter: 'drop-shadow(0 0 1px var(--color-mark-edge))' } : {}) }}
     >
       <svg aria-hidden viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
         <path d="M12 1.2 21.4 6.6v10.8L12 22.8 2.6 17.4V6.6z" fill="var(--color-map-chip)" stroke={color} strokeWidth={s.ring * (24 / s.box)} strokeLinejoin="round" />
       </svg>
-      <SpecialIcon kind={special.kind} size={s.icon} className="relative" />
+      <SpecialIcon kind={special.kind} size={(s.icon * size) / s.box} className="relative" />
     </span>
   );
 }

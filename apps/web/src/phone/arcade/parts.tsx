@@ -1,8 +1,11 @@
 import type { RawGood } from '@mule/engine';
-import { Creature, cx, GoodIcon, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
+import type { TileView } from '@mule/protocol';
+import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { useTableChat } from '../../chat/store';
-import { groundPips, plotName, toSlot } from '../../game/derive';
+import { plotName, toSlot } from '../../game/derive';
+import { OnlyYou } from '../hub/OnlyYou';
+import { bestLine, GoodDots } from '../plotInfo';
 import { SWAP_NOTE } from './guide';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
@@ -13,7 +16,7 @@ import { assaySeconds, type ArcadeSeat } from './seat';
  * language. Every number is the view's or the engine's config.
  */
 
-const dots = (n: number) => '●'.repeat(n) + '○'.repeat(4 - n);
+const dots = (n: number) => '●'.repeat(n) + '○'.repeat(3 - n);
 
 /** The land underfoot and what it does to your speed: terrain you can feel, said in words. */
 export function GroundChip({ seat, className }: { seat: ArcadeSeat; className?: string }) {
@@ -187,6 +190,12 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
   if (seat.mine?.space !== 'map' || !t || t.owner !== seat.me.id) return null;
   const lead = seat.me.carriedMule && seat.me.carriedMule !== 'empty' ? seat.me.carriedMule : null;
   const best = t.ground ? bestHere(t.ground) : null;
+  const worked = !!best && groundDots(best, t.ground![best]) > 0;
+  const bestFor = worked ? `this plot is best for ${OUTFIT_WORD[best!]}` : 'this plot has nothing worth working';
+  // A MULE whose good ties the best on dots is on a plot as good for it as any; only a worse fit is a mismatch.
+  const misfits = (good: string | null | undefined): boolean =>
+    !!good && !!best && good !== best && !((RAW as string[]).includes(good) && groundDots(good as RawGood, t.ground![good as RawGood]) === groundDots(best, t.ground![best]));
+  const misfit = lead ? misfits(lead) : misfits(t.outfit);
   const total = assaySeconds(seat.view, seat.me);
   const left = seat.assayUntil !== null ? Math.max(0, seat.assayUntil - now) / 1000 : 0;
   return (
@@ -207,24 +216,24 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
             {RAW.map((g: RawGood) => (
               <span key={g} className={cx('flex justify-between gap-1', g === best && 'font-bold text-holo')}>
                 <span className="font-sans">{OUTFIT_WORD[g]}</span>
-                <span>{dots(groundPips(g, t.ground![g]))}</span>
+                <span>{dots(groundDots(g, t.ground![g]))}</span>
               </span>
             ))}
           </span>
           {/* A mismatch names the best good itself; otherwise the best gets its own line. */}
-          {!(lead && lead !== best) && !(!lead && t.outfit && t.outfit !== best) && (
+          {!misfit && (
             <span className="font-semibold" data-testid="plot-best">
-              Best here: {OUTFIT_WORD[best!]}
+              {worked ? `Best here: ${OUTFIT_WORD[best!]}` : 'Nothing worth working here'}
             </span>
           )}
-          {lead && lead !== best && (
+          {lead && misfit && (
             <span className="font-semibold text-alert" data-testid="plot-mismatch">
-              Your MULE makes {OUTFIT_WORD[lead]}; this plot is best for {OUTFIT_WORD[best!]}
+              Your MULE makes {OUTFIT_WORD[lead]}; {bestFor}
             </span>
           )}
-          {!lead && t.outfit && t.outfit !== best && (
+          {!lead && t.outfit && misfit && (
             <span className="font-semibold text-warn" data-testid="plot-mismatch">
-              Its {OUTFIT_WORD[t.outfit]} MULE: this plot is best for {OUTFIT_WORD[best!]}
+              Its {OUTFIT_WORD[t.outfit]} MULE: {bestFor}
             </span>
           )}
         </>
@@ -234,6 +243,33 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
         </span>
       )}
     </div>
+  );
+}
+
+// --- C5 · Analyse says what it found ---------------------------------------------------------------
+
+/** The Analyse card's width, as the mock draws it: Develop.tsx places it beside the plot by this. */
+export const ANALYSE_CARD_W = 236;
+
+/** What Analyse found, over the map beside the plot, any plot: its words and every good's dots. A tap closes it. */
+export function AnalyseCard({ t, at, onClose }: { t: TileView; at: CSSProperties; onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      className="pointer-events-auto absolute z-30 flex flex-col gap-1 rounded-panel border-2 border-holo bg-panel/95 px-2.5 py-2 text-left shadow-map animate-[show-card-in_0.25s_ease-out]"
+      style={{ width: ANALYSE_CARD_W, ...at }}
+      data-testid="analyse-card"
+    >
+      <span className="flex w-full items-center justify-between gap-2">
+        <span className="font-display text-sm font-semibold">
+          {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]} <span className="text-ok">analysed</span>
+        </span>
+        <OnlyYou />
+      </span>
+      <span className="text-[11px] font-semibold text-holo">{bestLine(t.ground!)}</span>
+      <GoodDots ground={t.ground!} />
+    </button>
   );
 }
 
@@ -261,7 +297,7 @@ export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?:
       ))}
       {all.length > mine.length && (
         <span className="text-ink-3" data-testid="legend-more">
-          +{all.length - mine.length} more
+          +{all.length - mine.length} more · Plots ▸{short ? '' : ' shows all'}
         </span>
       )}
     </div>

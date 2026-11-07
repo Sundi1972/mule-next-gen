@@ -1,17 +1,25 @@
 import { GAME, GOOD_CONFIG, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { electronicsNeed, healthOn, medicineNeed, nextSickShare, sickShare } from './health.js';
-import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice, storeSellPrice } from './economy.js';
+import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { ceilUse, plotsUse } from './production.js';
-import { GOODS, type GameState, type Good } from './types.js';
+import { GOODS, type GameState, type Good, type MonthReport } from './types.js';
+
+/**
+ * RULE-1, the colonists' meal of one good: they take their need from the shelf, as far as it holds it, and pay
+ * nothing. `short` is the share of their need they went without, 0 to 1; 0 when they need none.
+ */
+export function colonistMeal(need: number, stock: number): { took: number; short: number } {
+  const took = Math.min(need, Math.max(0, stock));
+  return { took, short: need > 0 ? (need - took) / need : 0 };
+}
 
 /**
  * End of month: players and colonists eat, goods spoil, anything above the
  * home depot is lost, the export ship takes the store's surplus and
  * leaves, and the store builds MULEs. Nothing is imported: the colony lives
  * on what its players make. Returns the goods the store ran out of before
- * its colonists had enough, and whether colonists went short at all (also
- * when the price was more than their wages pay).
+ * its colonists had enough, and whether colonists went short at all.
  */
 export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolean } {
   const shortages = new Set<Good>();
@@ -32,23 +40,27 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     player.crewShort = short;
   }
 
-  // Colonists buy their Food and Water from the store at its selling price,
-  // out of wages paid from off-world. When the shelf is empty or the price is
-  // more than they can pay, they go short.
+  // Colonists take their Food and Water from the store, free, as far as its shelf holds them (needs C1, RULE-1):
+  // they hold no money and the meal moves none (HC-2). The store kept their month back from the players (HC-3).
   const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
+  const meal: NonNullable<MonthReport['colonistMeal']> = { colonists: state.colonists, food: { need: 0, took: 0 }, water: { need: 0, took: 0 } };
   let fed = true;
   const colonistShort = { food: 0, water: 0 };
   for (const good of ['food', 'water'] as const) {
     // A festival month the colonists eat more Food (G-5 C26).
-    const colonistNeed = colonistBase + (good === 'food' ? festivalFood(state) : 0);
-    // AFTER-B STAND-IN for WS7's mechanism (prototype only): colonists take their need straight from the store's
-    // stock, with no price, no budget cap and no change to the store's capital.
-    const bought = Math.min(colonistNeed, state.store.stock[good]);
-    if (bought < colonistNeed) fed = false;
-    colonistShort[good] = colonistNeed > 0 ? (colonistNeed - bought) / colonistNeed : 0;
-    if (state.store.stock[good] < colonistNeed) shortages.add(good);
-    state.store.stock[good] = Math.max(0, state.store.stock[good] - bought);
+    const need = colonistBase + (good === 'food' ? festivalFood(state) : 0);
+    const { took, short } = colonistMeal(need, state.store.stock[good]);
+    if (short > 0) {
+      fed = false;
+      shortages.add(good);
+    }
+    colonistShort[good] = short;
+    state.store.stock[good] -= took;
+    meal[good] = { need, took };
   }
+  // The month's report keeps the meal for the month-end line (C6). A what-if shares the real report: it writes nothing.
+  const report = state.history.at(-1);
+  if (report?.month === state.month && !state.whatIf) report.colonistMeal = meal;
   // HEALTH prototype: colonists take their Medicine free from the store; Electronics only a full month's want (bonus).
   const h = sickShare(state);
   const medNeed = medicineNeed(state);

@@ -1,4 +1,4 @@
-import type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from './protocol.js';
+import type { ChatMessage, ClaudeStatus, ClientEnvelope, SeatKind, ServerEnvelope, TableView } from './protocol.js';
 
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
@@ -30,7 +30,17 @@ export interface SeatInfo {
   color: number;
   /** Absent means not chosen: the game applies its own default. */
   pick?: string;
+  /** A computer seat the host set: claude seats play their built-in plan until a Claude chat calls (C1). */
+  kind?: SeatKind;
 }
+
+/**
+ * What a seat code names, as the Claude seat's MCP module reads it (its CodeAnswer, spec C1/C2): a live code's seat and
+ * the game hosting it, the object the game's start recorded its seats under; a code killed by take-back or a kick says
+ * so (it must not count as a wrong code); a code no seat ever held is null. Game over is the MCP side's to answer, from
+ * the game's own state, before it asks.
+ */
+export type SeatCodeAnswer = { state: 'live'; table: object; seatId: string } | { state: 'taken_back' } | null;
 
 /** What a room offers the game it hosts. */
 export interface GameContext {
@@ -83,7 +93,14 @@ export interface Game<Intent, GameView> {
   heard?(from: string, text: string, to?: string): void;
   /** The seat's screen was replaced by another device; drop any input the old screen was holding. Not a disconnect. */
   seatMoved?(seatId: string): void;
+  /** A Claude seat's status for every screen (C6); undefined while its chat has not called. Call `changed()` when it moves. */
+  claudeStatus?(seatId: string): ClaudeStatus | undefined;
   dispose?(): void;
+  /**
+   * The game itself, when the room hosts a wrapper of it (the server's recorder): what a Claude seat's code names as its
+   * table, the object the game's start keyed its seats under. Absent: the hosted game is the game.
+   */
+  readonly table?: object;
 }
 
 export interface RoomOptions<Intent, GameView> {
@@ -102,6 +119,8 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
+  /** A fresh seat code (seatCode below); the registry's is unique across its live rooms. The room still skips one it holds. */
+  newSeatCode?(): string;
   /** Called once the room has ended, closed by the host or stopped by a game error, and is disposed. */
   onClose?(): void;
   /** Hears a game error that ended the room, for logging. The players are only told the table stopped. */
@@ -120,7 +139,25 @@ function cleanName(name: string): string {
   return Array.from(oneLine).slice(0, ROOM_LIMITS.nameChars).join('').trim();
 }
 
+/**
+ * A seat code, as players type it (spec §3): 4 characters from an alphabet with no look-alikes (no I, O, 0 or 1), a
+ * dash, 2 digits; about 26.6 bits. `random` returns [0, 1): the registry's, or a cryptographic one, since the code
+ * lets whoever holds it play the seat.
+ */
+export function seatCode(random: () => number): string {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const pick = (from: string) => from[Math.floor(random() * from.length)]!;
+  return `${Array.from({ length: 4 }, () => pick(letters)).join('')}-${pick('0123456789')}${pick('0123456789')}`;
+}
+
+/** A uniform [0, 1) from the platform's cryptographic generator. */
+export const cryptoRandom = (): number => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
+
 interface Seat<View> extends SeatInfo {
+  /** A computer seat's kind, once the host set one; unset plays builtin (C1). */
+  kind?: SeatKind;
+  /** A claude seat's live code; null otherwise. It lives on the seat, so a kicked seat takes it along. */
+  seatCode: string | null;
   token: string | null;
   conn: Connection<View> | null;
   /** The seat's one live handoff code; a newer one replaces it, and it goes with the seat. */
@@ -149,6 +186,9 @@ export class Room<Intent, View> {
   /** Once disposed, the room is done with its game: no callback runs, none is scheduled, and no leave reaches it. */
   private disposed = false;
   private nextSeat = 1;
+  /** Seat codes taken back or kicked: they answer "taken back" for the room's life and are never issued again. */
+  private readonly deadCodes = new Set<string>();
+  private readonly issued = new Set<string>();
   private chatId = 0;
   private broadcastQueued = false;
 
@@ -164,6 +204,7 @@ export class Room<Intent, View> {
       isUserError: options.isUserError ?? ((err) => err instanceof TableError),
       now: options.now ?? Date.now,
       newToken: options.newToken ?? (() => crypto.randomUUID()),
+      newSeatCode: options.newSeatCode ?? (() => seatCode(cryptoRandom)),
       onClose: options.onClose ?? (() => {}),
       onError: options.onError ?? (() => {}),
     };
@@ -258,7 +299,7 @@ export class Room<Intent, View> {
         if (this.started) throw new TableError('The game has already started');
         if (this.seats.length < this.opts.minSeats) throw new TableError(`At least ${this.opts.minSeats} players are needed`);
         this.started = true;
-        this.game.start(this.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) })));
+        this.game.start(this.seats.map(({ id, name, isAi, color, pick, kind }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}), ...(kind !== undefined ? { kind } : {}) })));
         this.broadcast();
         return;
       case 'kick':
@@ -295,7 +336,56 @@ export class Room<Intent, View> {
         if (!this.opts.emotes.includes(msg.emote)) throw new TableError('Unknown emote');
         this.everyone((c) => c.send({ t: 'emote', from: seatId, emote: msg.emote }));
         return;
+      case 'setSeatKind':
+        this.setSeatKind(seatId, msg.seatId, msg.kind);
+        this.broadcast();
+        return;
+      // The contract is frozen ahead of C8's build, so a client sending this is told so, never ignored.
+      case 'handoverToClaude':
+        throw new TableError('Claude seats are not built yet');
     }
+  }
+
+  /**
+   * The live claude seat that holds `code` in this room, or null: how the Claude seat's MCP module finds a seat, on
+   * every call (spec §9: never a second store of codes). Case-insensitive and trimmed, as players type and paste codes.
+   */
+  seatForCode(code: string): SeatCodeAnswer {
+    const typed = code.trim().toUpperCase();
+    if (!typed) return null;
+    const seat = this.seats.find((s) => s.kind === 'claude' && s.seatCode === typed);
+    if (seat) return { state: 'live', table: this.game.table ?? this.game, seatId: seat.id };
+    return this.deadCodes.has(typed) ? { state: 'taken_back' } : null;
+  }
+
+  /** Every seat code this room has issued, live or dead: the registry retires them all when the room goes. */
+  get seatCodes(): ReadonlySet<string> {
+    return this.issued;
+  }
+
+  /** RULE-1: the host, in the lobby, sets a computer seat's kind; claude issues it a code, builtin kills the code at once. */
+  private setSeatKind(by: string, target: string, kind: SeatKind): void {
+    this.requireHost(by);
+    if (this.started) throw new TableError('The game has already started');
+    const seat = this.seats.find((s) => s.id === target);
+    if (!seat) throw new TableError('No such seat');
+    if (!seat.isAi) throw new TableError('Only a computer seat can be played by Claude');
+    if (kind !== 'claude' && kind !== 'builtin') throw new TableError('No such kind of seat');
+    if ((seat.kind ?? 'builtin') === kind) return;
+    if (seat.seatCode) this.deadCodes.add(seat.seatCode);
+    seat.kind = kind;
+    seat.seatCode = kind === 'claude' ? this.freshSeatCode() : null;
+  }
+
+  /** A code this room never issued, live or dead: the registry's generator already avoids every other room's. */
+  private freshSeatCode(): string {
+    for (let i = 0; i < 100; i++) {
+      const code = this.opts.newSeatCode().trim().toUpperCase();
+      if (this.seatForCode(code) !== null) continue;
+      this.issued.add(code);
+      return code;
+    }
+    throw new Error('No free seat code after 100 draws');
   }
 
   private join(conn: Connection<View>, name: string, token?: string, handoff?: string): string {
@@ -365,7 +455,7 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), token: isAi ? null : this.opts.newToken(), conn: null, handoff: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), seatCode: null, token: isAi ? null : this.opts.newToken(), conn: null, handoff: null };
     this.seats.push(seat);
     return seat;
   }
@@ -416,6 +506,7 @@ export class Room<Intent, View> {
     if (!seat) throw new TableError('No such seat');
     if (target === this.hostId) throw new TableError('Close the table instead');
     this.seats.splice(this.seats.indexOf(seat), 1);
+    if (seat.seatCode) this.deadCodes.add(seat.seatCode);
     seat.conn?.send({ t: 'removed', reason: 'kicked' });
   }
 
@@ -527,6 +618,10 @@ export class Room<Intent, View> {
         color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
         ...(!this.started && this.game.defaultPick ? { defaultPick: this.game.defaultPick(i, this.seats.length) } : {}),
+        ...(s.kind ? { kind: s.kind } : {}),
+        ...(s.kind === 'claude' ? { claude: this.game.claudeStatus?.(s.id) ?? 'waiting' } : {}),
+        // T-AC-5: the code lets whoever holds it play the seat, so it goes to the host's own view and no other.
+        ...(s.seatCode && seatId !== null && seatId === this.hostId ? { seatCode: s.seatCode } : {}),
       })),
       boards: this.boards.size,
       game: this.started ? this.game.viewFor(seatId) : null,

@@ -53,8 +53,6 @@ export type AiAction =
   | { type: 'payStrike' }
   /** Planning, the Governor once the votes are over: mend a damaged prestige object from the fund (G-5 RULE-22). */
   | { type: 'repair'; id: PrestigeId }
-  /** Planning, the Governor once the votes are over: the colony's top bid for an object's site; null, no bid (G-5 RULE-28). */
-  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
   /** Planning, the Governor once the votes are over: put a law to the next planning's ballot; null withdraws it (slice 2a RULE-41). */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes (slice 2a RULE-40). */
@@ -241,10 +239,10 @@ const DESCRIBED = {
     command: 'drone',
     phases: ['planning'],
     does: () =>
-      `Sends the geo drone over ${DEVELOPMENT.dronePlots} or fewer free or listed plots, for ${DEVELOPMENT.droneFee} credits; their ground is known from the land grant on.`,
+      `Sends the geo drone over ${DEVELOPMENT.dronePlots} or fewer free or listed plots, for ${DEVELOPMENT.droneFee} credits; their ground is known at once, in this planning.`,
     legalWhen: () => [
       PHASE,
-      'A drone is already on its way',
+      'A drone was already used this planning',
       `Pick 1 to ${DEVELOPMENT.dronePlots} plots`,
       'Not a plot',
       'The drone only flies over free or listed plots',
@@ -290,7 +288,7 @@ const DESCRIBED = {
     type: 'commission',
     command: 'commission',
     phases: ['planning'],
-    does: () => 'The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).',
+    does: () => "The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep, and it builds once paid, on the colony's own grounds.",
     legalWhen: () => [
       "This game plays without the colony's council",
       'Commission once the votes are over',
@@ -349,23 +347,6 @@ const DESCRIBED = {
     ],
     cost: null,
     args: { id: "the damaged object: 'park', 'hospital', 'observatory', 'stadium' or 'spaceport'" },
-  },
-  setSiteBid: {
-    type: 'setSiteBid',
-    command: 'setSiteBid',
-    phases: ['planning'],
-    does: () => "The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.",
-    legalWhen: () => [
-      "This game plays without the colony's council",
-      'Set the bid once the votes are over',
-      "Only the Governor sets the colony's bid",
-      'Nothing is waiting for a site',
-      'The {name} needs no plot',
-      'The {name} already has its site',
-      'Bid a whole number of credits',
-    ],
-    cost: null,
-    args: { id: 'the commissioned object that needs a plot', maxBid: 'whole credits, or null for no bid' },
   },
   propose: {
     type: 'propose',

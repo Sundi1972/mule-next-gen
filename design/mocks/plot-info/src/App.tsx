@@ -40,6 +40,13 @@ const DECISIONS: ReactNode[] = [
     <strong>One scale, 0 to 3, for every good (rule 4, the screen first).</strong> Food, Water, Energy: −2/−1 → 0, 0 → 1, +1
     → 2, +2/+3 → 3. Smithore, Crystite, Rare earth: as rated, 3 and 4 both → 3. The production numbers don't change.
   </>,
+  <>
+    <strong>The report is compact (PM ruling, 6 Nov, UBER-AC-1 at the table).</strong> In the built rail at 844×390 the
+    first cut showed one plot and needed a scroll for the second. Now each plot is one line (where, land, best for) and one
+    row of six goods by icon and dots, a found Crystite or Rare earth as its gem; "Next drone: month N" closes it, so the
+    rail's footer stays free. Measured 132 px tall at the rail's widths (237 and 206 px), against about 137 and 146 px of
+    room in the built rail at 844×390 and 667×375. Before and after: shots/compact-report/.
+  </>,
 ];
 
 const RECOMMENDATION = (

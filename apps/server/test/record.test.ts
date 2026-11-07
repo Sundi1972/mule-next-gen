@@ -87,9 +87,8 @@ const GAME_LIMIT_MS = 30 * 60_000;
  */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
 /**
- * Three months: under the 5 Nov start values (2 Food and 2 Energy a seat, one claim a grant) the Smart seat meets no
- * close call in month 1, so it would never ask the stand-in; by month 3 it has asked, and been answered busy, at least
- * once (WS1's B-AC-2 plays four months for the same reason).
+ * Three months, the council on. The Smart seat may meet a single close call in them; T-AC-1, which needs a second ask
+ * for ANSWERS' busy reply, hands it Food to spare (`spareFood`).
  */
 const GAME_OPTIONS = { maxMonths: 3, politics: true };
 /** Units of a good T-AC-10's market hands Mia to spare as each production opens. */
@@ -106,6 +105,13 @@ const arrangeMarket = (state: GameState) => {
   heiko.stock.food = 0;
   mia.stock.food += SPARE;
   mia.stock[state.ship.goods[0]!] += SPARE;
+};
+/**
+ * T-AC-1's Smart seat (s3) gets SPARE more Food as each production opens, so every month's Food side pick weighs a sale
+ * against keeping: a choice with more than one option, which it asks the stand-in about.
+ */
+const spareFood = (state: GameState) => {
+  if (state.phase === 'production') state.players.find((p) => p.id === 's3')!.stock.food += SPARE;
 };
 /** The rows beyond T-AC-1 run locally only (MULE_FULL=1, `pnpm test:full`); each plays one or two whole games. */
 const FULL = process.env.MULE_FULL === '1';
@@ -200,6 +206,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 afterEach(() => {
+  spies.arrange = null;
   for (const room of rooms) room.dispose();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -423,6 +430,7 @@ const heardIn = (record: MuleRecord) =>
 
 describe('the game record', { timeout: 60_000 }, () => {
   it('T-AC-1: a recorded game with a late Claude answer and a dropped phone replays identical', async () => {
+    spies.arrange = spareFood;
     const { record, t } = await recordedGame();
     expect(t.brain.calls(), 'the Smart seat asked the stand-in').toBeGreaterThan(0);
     const steps = record.events.filter(isStep);
@@ -811,7 +819,8 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
   it('T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical', async () => {
     const { record } = await recordedGame({ ...NOTICE_GAME, market: true });
     const notices = record.events.map(factOf).filter((n) => n !== null);
-    const phaseOf = { claim: 'landGrant', declare: 'auction', trade: 'auction', sale: 'landAuction' } as const;
+    // This game runs without politics: a politics notice here has no entry in this table and fails the check.
+    const phaseOf: Partial<Record<Notice['kind'], string>> = { claim: 'landGrant', declare: 'auction', trade: 'auction', sale: 'landAuction' };
     for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
     expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
     expect(notices.some((n) => n.kind === 'claim' && n.seat !== 's1'), "an AI seat's claim").toBe(true);

@@ -1,26 +1,27 @@
-import { COLONY_SELLER, DEVELOPMENT } from '@mule/engine';
+import { DEVELOPMENT } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
+import { useEffect, useRef } from 'react';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { SpecialLine } from '../../components/SpecialLine';
 import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
+import { droneReport, myPlots, MyPlotsList, nextDroneWords, ScanReport, useScanning } from '../plotInfo';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { OnlyYou } from './OnlyYou';
 import { useToday } from './state';
 
-/* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
+/* Today's map tools: Look, My plots, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
 
-/** A plot the drone may fly over: nobody's, not the store, and not the colony's (a sited object's plot is no player's). */
-export const freeForDrone = (t: MapTile) => t.owner === null && !t.object && t.terrain !== 'store';
+/** A plot the drone may fly over: nobody's and not the store. */
+export const freeForDrone = (t: MapTile) => t.owner === null && t.terrain !== 'store';
 
-/** Whose a plot is, in the Look panel's words: yours, a player's name, the colony's, or free. */
+/** Whose a plot is, in the Look panel's words: yours, a player's name, or free. */
 export function ownerWord(view: MuleView, tile: Pick<TileView, 'owner'>, meId: string): string {
   if (tile.owner === meId) return 'YOURS';
-  if (tile.owner === COLONY_SELLER) return 'COLONY';
   return player(view, tile.owner)?.name.toUpperCase() ?? 'FREE';
 }
 
@@ -42,7 +43,10 @@ export function LookMap() {
   );
 }
 
-/** The plot looked at: where, what ground, whose, and what its MULE makes. */
+/**
+ * The plot looked at: where, what land and whose, then its ground's dots when you know them, above its special and what
+ * its MULE makes; a plot you have not analysed ends with its land's hint.
+ */
 export function LookPanel() {
   const { view, me } = usePhoneGame();
   const { looked, setLooked } = useToday();
@@ -59,11 +63,10 @@ export function LookPanel() {
       <span className="font-display text-lg font-semibold leading-tight">
         {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-xs text-holo">{ownerWord(view, tile, me.id)}</span>
       </span>
+      {tile.ground && <GroundCard ground={tile.ground} />}
       <SpecialLine special={tile.special} />
       {tile.outfit && <span className="text-xs text-ink-2">A MULE here makes {tile.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[tile.outfit]}.</span>}
-      {tile.ground ? (
-        <GroundCard ground={tile.ground} />
-      ) : (
+      {!tile.ground && (
         <span className="text-xs text-ink-2" data-testid="terrain-hint">
           {TERRAIN_ODDS[tile.terrain]}
         </span>
@@ -72,22 +75,63 @@ export function LookPanel() {
   );
 }
 
-/** Whether the drone was sent this month, and the plots it was sent to or that are picked for it. */
-function useDrone() {
-  const { me } = usePhoneGame();
-  const { picked, setPicked } = useToday();
-  const ordered = me.droneOrder.length > 0;
-  return { ordered, chosen: ordered ? me.droneOrder : picked, picked, setPicked };
+/** My plots on the map: a tap on one of yours selects its row; a tap anywhere else lets go. */
+export function MyPlotsMap() {
+  const { view, me, slot } = usePhoneGame();
+  const { looked, setLooked } = useToday();
+  const wide = useWide();
+  const mine = (p: { x: number; y: number } | null) => !!p && tileAt(view, p.x, p.y)?.owner === me.id;
+  const tap = (t: MapTile) => setLooked(mine(t) ? { x: t.x, y: t.y } : null);
+  return (
+    <MapFit width={view.width} height={view.height}>
+      <StrikeMap view={view} size="phone">
+        <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={mine(looked) ? looked : null} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
+      </StrikeMap>
+    </MapFit>
+  );
 }
 
-/** Pick one or two free plots for the geo drone. Results arrive, only for you, when the land grant starts. */
+/** Every plot you own, one row each with its goods' dots; a tap on a row selects the plot on the map. */
+export function MyPlotsPanel() {
+  const { view, me } = usePhoneGame();
+  const { looked, setLooked } = useToday();
+  const list = useRef<HTMLElement>(null);
+  const isLooked = (t: TileView) => looked?.x === t.x && looked.y === t.y;
+  // A plot tapped on the map may have its row below the rail's fold.
+  useEffect(() => {
+    if (looked) list.current?.querySelector?.(`[data-testid="plot-row-${looked.x}-${looked.y}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [looked]);
+  return (
+    <section ref={list} className="flex flex-col gap-1.5" data-testid="my-plots">
+      <MyPlotsList tiles={myPlots(view, me.id)} note={<OnlyYou />} picked={isLooked} onPick={(t) => setLooked({ x: t.x, y: t.y })} />
+    </section>
+  );
+}
+
+/** Where the drone stands this planning: plots being picked, a second of scanning after Scan, then its report. */
+function useDrone() {
+  const { view, me } = usePhoneGame();
+  const { picked, setPicked } = useToday();
+  const ordered = me.droneOrder.length > 0;
+  const scanning = useScanning(ordered);
+  const report = droneReport(view);
+  const stage = !ordered ? 'pick' : scanning || !report ? 'scanning' : 'report';
+  return { stage, report, chosen: ordered ? me.droneOrder : picked, picked, setPicked };
+}
+
+/** The drone's button: what to do first, then the plots picked and the fee. */
+export function droneButtonWords(picked: number): string {
+  return picked === 0 ? 'Pick a free plot for the drone' : `Scan · ${picked} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`;
+}
+
+/** Pick one or two free plots for the geo drone; they keep the SCAN chip until the report is in the rail. */
 export function DroneMap() {
   const { view } = usePhoneGame();
-  const { ordered, chosen, setPicked } = useDrone();
+  const { stage, chosen, setPicked } = useDrone();
   const wide = useWide();
-  const tiles: MapTile[] = mapTiles(view).map((t) => (chosen.some((p) => p.x === t.x && p.y === t.y) ? { ...t, flag: 'survey' } : t));
+  const tiles: MapTile[] = mapTiles(view).map((t) => (stage !== 'report' && chosen.some((p) => p.x === t.x && p.y === t.y) ? { ...t, flag: 'survey' } : t));
   const toggle = (t: MapTile) => {
-    if (ordered || !freeForDrone(t)) return;
+    if (stage !== 'pick' || !freeForDrone(t)) return;
     setPicked((p) => (p.some((q) => q.x === t.x && q.y === t.y) ? p.filter((q) => q.x !== t.x || q.y !== t.y) : [...p, { x: t.x, y: t.y }].slice(-DEVELOPMENT.dronePlots)));
   };
   return (
@@ -98,12 +142,14 @@ export function DroneMap() {
 }
 
 /**
- * The drone in the rail while it is open: what to tap, that only you see the result, and the plot last picked. It takes
- * the rail's top, the desks under it, until you send it or pick another tool.
+ * The drone in the rail while it is open: what to tap, that only you see the result, and the plot last picked; after
+ * Scan, "Scanning…", then the Drone report. It takes the rail's top, the desks under it.
  */
 export function DronePanel() {
   const { view } = usePhoneGame();
-  const { ordered, chosen } = useDrone();
+  const { stage, report, chosen } = useDrone();
+  if (stage === 'report') return <ScanReport tiles={report!} next={nextDroneWords(view)} />;
+  const scanning = stage === 'scanning';
   const last = chosen.at(-1);
   const lastTile = last ? tileAt(view, last.x, last.y) : undefined;
   return (
@@ -111,14 +157,12 @@ export function DronePanel() {
       <div className="flex flex-col gap-1 @min-[1100px]/shell:gap-1.5" data-testid="drone">
         <span className="flex items-center gap-1.5">
           <span className="font-display text-sm font-semibold @min-[1100px]/shell:text-lg" data-testid="drone-hint">
-            {ordered ? 'Your drone is on its way' : `Tap up to ${DEVELOPMENT.dronePlots} free plots`}
+            {scanning ? 'Scanning…' : `Tap up to ${DEVELOPMENT.dronePlots} free plots`}
           </span>
           <OnlyYou />
         </span>
         <span className="text-[11px] leading-snug text-ink-2 @min-[1100px]/shell:text-sm">
-          {ordered
-            ? 'Only you see what it finds, when the land grant starts.'
-            : `The drone reads their ground from orbit for ${DEVELOPMENT.droneFee} cr, before anyone claims them. Only you see what it finds, at the land grant.`}
+          {scanning ? 'The drone reads the ground from orbit.' : `The drone reads their ground from orbit, at once, for ${DEVELOPMENT.droneFee} cr. Only you see what it finds.`}
         </span>
         {lastTile && (
           <span className="flex flex-col gap-0.5 border-t border-holo-faint pt-1 text-[11px] leading-snug @min-[1100px]/shell:text-sm" data-testid="drone-pick">
@@ -136,25 +180,29 @@ export function DronePanel() {
   );
 }
 
-/** Send the drone: the button counts the plots picked, and while one more is free to add, says so. */
+/**
+ * Scan: the button counts the plots picked and, while one more is free to add, says so. Once the report shows it is
+ * gone: the report says when the next drone flies, and the footer's room goes to the report.
+ */
 export function DroneSend() {
   const client = useClient();
   const { self } = usePhoneGame();
-  const { ordered, picked } = useDrone();
-  if (ordered) return null;
+  const { stage, picked } = useDrone();
+  if (stage === 'report') return null;
+  const scanning = stage === 'scanning';
   const left = DEVELOPMENT.dronePlots - picked.length;
   return (
     <div className="relative flex flex-col gap-1">
       <Button
         size="md"
         className="w-full whitespace-nowrap px-1.5 text-xs! tracking-tight @min-[1100px]/shell:text-base! @min-[1100px]/shell:tracking-normal"
-        disabled={picked.length === 0 || self.money < DEVELOPMENT.droneFee}
+        disabled={scanning || picked.length === 0 || self.money < DEVELOPMENT.droneFee}
         onClick={() => client.intent({ type: 'drone', plots: picked })}
-        data-testid="drone-send"
+        data-testid="scan"
       >
-        {picked.length === 0 ? 'Pick a free plot for the drone' : `Send the drone · ${picked.length} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`}
+        {scanning ? 'Scanning…' : droneButtonWords(picked.length)}
       </Button>
-      {picked.length > 0 && left > 0 && (
+      {!scanning && picked.length > 0 && left > 0 && (
         <span className="text-[11px] leading-snug text-warn @min-[1100px]/shell:text-sm" data-testid="drone-one-more">
           Pick {left} more: {left === 1 ? 'it costs' : 'they cost'} nothing extra.
         </span>

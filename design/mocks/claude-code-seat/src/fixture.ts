@@ -6,8 +6,11 @@ export type SeatKind = 'phone' | 'builtin' | 'claude';
 /** A Claude Code seat before the game: no session yet, or a session has joined with the code. */
 export type LobbyLink = 'waiting' | 'connected';
 
-/** A Claude Code seat in play. Offline plays its built-in plan and never holds the table up. */
-export type PlayLink = 'thinking' | 'ready' | 'offline';
+/**
+ * A Claude Code seat in play. Waiting (its chat never connected) and offline both play its built-in plan and never hold the
+ * table up.
+ */
+export type PlayLink = 'thinking' | 'ready' | 'offline' | 'waiting';
 
 export interface MockSeat {
   id: string;

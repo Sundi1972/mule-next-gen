@@ -68,21 +68,26 @@ describe('planning without a clock: who is still planning, and the host', () => 
     for (const [seats, me, names] of rows) expect(namesOf(seats, me), `${seats.map((s) => s.name).join('+')} seen by ${me}`).toBe(names);
 
     const others = waiting;
-    expect(readyNow(others, true).title).toBe("You're ready. Waiting for Lena and Ossa");
+    // The title fits the folded Now card (131 px at 667) at any name's length: who is waited for opens the detail, and the ready bar names them too.
+    expect(readyNow(others, true).title).toBe("You're ready");
+    expect(readyNow(others, true).detail).toMatch(/^Waiting for Lena and Ossa\. /);
+    expect(readyNow([{ ...waiting[0]!, name: 'The Big Spender' }], false).title, 'a long name never reaches the title').toBe("You're ready");
     expect(readyNow(others, true).detail).toContain('As the host, you can continue without them.');
     expect(readyNow(others, true).detail).toContain('Ossa is away.');
-    expect(readyNow(others, false).title).toBe("You're ready. Waiting for Lena and Ossa");
+    expect(readyNow(others, false).title).toBe("You're ready");
+    expect(readyNow(others, false).detail).toMatch(/^Waiting for Lena and Ossa\. /);
     expect(readyNow(others, false).detail, 'a player who is not the host is not offered to continue').not.toContain('As the host');
     expect(readyNow([], true).title).toBe('Everyone is ready');
-    expect(readyNowIn(planning(), true, others, true)?.title, 'a Ready player in planning proper is told who the table waits for').toBe("You're ready. Waiting for Lena and Ossa");
-    expect(readyNowIn(planning('over'), true, others, false)?.title, 'after the election too').toBe("You're ready. Waiting for Lena and Ossa");
+    expect(readyNowIn(planning(), true, others, true)?.title, 'a Ready player in planning proper is told who the table waits for').toBe("You're ready");
+    expect(readyNowIn(planning(), true, others, true)?.detail).toMatch(/^Waiting for Lena and Ossa\. /);
+    expect(readyNowIn(planning('over'), true, others, false)?.detail, 'after the election too').toMatch(/^Waiting for Lena and Ossa\. /);
     for (const stage of ['announce', 'ballot', 'ceremony'] as const)
       expect(readyNowIn(planning(stage), true, others, true), `during the ${stage}, Ready is Done for the stage and the election's Now stays`).toBeNull();
     expect(readyNowIn(planning(), false, others, true), 'before Ready the screen keeps its own Now').toBeNull();
   });
 
   it("T-AC-13: the TV's ready list keeps a row for every person, Ready, planning or away, in seat order; from five seats the AIs fold into one row", () => {
-    const line = (r: ReadyRow) => (r.kind === 'ais' ? `AIs: ${r.seats.map((s) => s.name).join(', ')}` : `${r.seat.name}${r.seat.ready ? ' ready' : ''}${r.seat.away ? ' away' : ''}`);
+    const line = (r: ReadyRow) => (r.kind !== 'seat' ? `AIs: ${r.seats.map((s) => s.name).join(', ')}` : `${r.seat.name}${r.seat.ready ? ' ready' : ''}${r.seat.away ? ' away' : ''}`);
     const six = [person(BRIX, 'Brix', 0, true), ai('a1', 'The Accountant', 1), person(LENA, 'Lena', 2), ai('a2', 'The Baron', 3), person(OSSA, 'Ossa', 4), ai('a3', 'The Grudge', 5)];
     expect(readyRows(six, connectedIn(table(six).seats)).map(line)).toEqual(['Brix ready', 'Lena', 'Ossa away', 'AIs: The Accountant, The Baron, The Grudge']);
     expect(readyRows(players({ brix: true }), connectedIn(table(players()).seats)).map(line), 'four seats: every seat keeps its own row').toEqual(['Brix ready', 'Lena', 'Kai', 'Ossa away']);

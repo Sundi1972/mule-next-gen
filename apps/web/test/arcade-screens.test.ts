@@ -108,7 +108,46 @@ describe('C11: the plots legend in the hall fits above the button', () => {
     const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(7) }), live(mine(4, 6, { space: 'hall' })));
     expect(rows(html)).toBe(4);
     expect(order(html)).toEqual([4, 5, 6, 0]);
-    expect(text(html, 'my-plots-legend')).toContain('+3 more');
+    expect(text(html, 'my-plots-legend')).toContain('+3 more · Plots ▸ shows all');
+  });
+
+  it('C4: at 667 the narrow side room says it short, "+3 more · Plots ▸", so the line keeps to one row', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(7) }), live(mine(4, 6, { space: 'hall' })), 667);
+    expect(text(html, 'legend-more')).toBe('+3 more · Plots ▸');
+  });
+});
+
+describe('C4: the Plots chip in the walking screen\'s status', () => {
+  it.each<[844 | 667, 'map' | 'hall', string]>([
+    [844, 'map', 'phone-status-left'],
+    [844, 'hall', 'phone-status-left'],
+    [667, 'map', 'phone-status-bar'],
+    [667, 'hall', 'phone-status-left'],
+  ])('C4: at %i on the %s the status (%s) carries the Plots chip, its list closed until tapped', (size, where, holder) => {
+    const html = phone(devView(), live(where === 'map' ? mine(5.5, 4.5) : mine(4, 6, { space: 'hall' })), size);
+    expect(inside(html, holder)).toContain('data-testid="plots-chip"');
+    expect(text(html, 'plots-chip')).toBe('Plots ▸');
+    expect(tag(html, 'plots-chip')).toMatch(/aria-expanded="false"/);
+    expect(html).not.toContain('data-testid="plots-panel"');
+  });
+});
+
+describe("C4: the 844 side room keeps its words inside it with the Plots chip in it", () => {
+  it('C4: while the keys hint shows, the month\'s label gives way, so the chip, a three-row chat line and the hint fit', () => {
+    const left = inside(phone(devView(), live(mine(5.5, 4.5))), 'phone-status-left');
+    expect(left).toContain('data-testid="focus-hint"');
+    expect(left).toContain('data-testid="plots-chip"');
+    expect(left).not.toContain('· Development');
+  });
+});
+
+describe("C4: the Plots chip in the laptop's status", () => {
+  it("C4: the laptop's header carries the Plots chip, its list closed until tapped", () => {
+    const html = laptop(devView(), live(mine(5.5, 4.5)));
+    expect(inside(html, 'laptop-game')).toContain('data-testid="plots-chip"');
+    expect(text(html, 'plots-chip')).toBe('Plots ▸');
+    expect(tag(html, 'plots-chip')).toMatch(/aria-expanded="false"/);
+    expect(html).not.toContain('data-testid="plots-panel"');
   });
 });
 
@@ -455,6 +494,34 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
   it('C11 (AM-20): under both of the card\'s places at once, the card is not drawn rather than cover you', () => {
     const html = phone(devView(lenasMe(), { tiles: owning([{ x: 8, y: 2 }]) }), live(mine(8.5, 2.6)));
     expect(tag(html, 'plot-card')).toBeNull();
+  });
+
+  it('C11 (R-2): the plot card reads every good on 3 dots, and a Food/Smithore tie at 3 is best for Food', () => {
+    const ground = { food: 3, water: -2, energy: 0, smithore: 4, crystite: 2, rareEarth: 0 };
+    const tiles = TILES.map((t) => (t.x === 3 && t.y === 0 ? { ...t, ground } : t));
+    const html = phone(devView(lenasMe(), { tiles }), live(mine(3.5, 0.6)));
+    expect(text(html, 'plot-readout')).toBe('Food●●●Water○○○Energy●○○Smithore●●●Crystite●●○Rare earth○○○');
+    expect(text(html, 'plot-best')).toBe('Best here: Food');
+  });
+
+  it('C11 (R-2): a MULE whose good ties the best at 3 dots gets no mismatch; one with fewer dots still does', () => {
+    const ground = { food: 3, water: -2, energy: 0, smithore: 4, crystite: 2, rareEarth: 0 };
+    const at = (extra: object) => TILES.map((t) => (t.x === 3 && t.y === 0 ? { ...t, ground, ...extra } : t));
+    const leading = (good: 'smithore' | 'water') => phone(devView(lenasMe({ carriedMule: good }), { tiles: at({}) }), live(mine(3.5, 0.6)));
+    expect(tag(leading('smithore'), 'plot-mismatch')).toBeNull();
+    expect(text(leading('water'), 'plot-mismatch')).toBe('Your MULE makes Water; this plot is best for Food');
+    const installed = (good: 'smithore' | 'water') => phone(devView(lenasMe(), { tiles: at({ outfit: good }) }), live(mine(3.5, 0.6)));
+    expect(tag(installed('smithore'), 'plot-mismatch')).toBeNull();
+    expect(text(installed('water'), 'plot-mismatch')).toBe('Its Water MULE: this plot is best for Food');
+  });
+
+  it('C11: a plot whose best good draws no dot says it has nothing worth working, in the plot card and the store\'s box', () => {
+    const ground = { food: -2, water: -1, energy: -2, smithore: 0, crystite: 0, rareEarth: 0 };
+    const at = (extra: object) => TILES.map((t) => (t.x === 3 && t.y === 0 ? { ...t, ground, ...extra } : t));
+    expect(text(phone(devView(lenasMe(), { tiles: at({}) }), live(mine(3.5, 0.6))), 'plot-best')).toBe('Nothing worth working here');
+    expect(text(phone(devView(lenasMe(), { tiles: at({ outfit: 'alloy' }) }), live(mine(3.5, 0.6))), 'plot-mismatch')).toBe('Its Alloy MULE: this plot has nothing worth working');
+    const box = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: at({}) }), live(mine(4, 6, { space: 'hall' })));
+    expect(text(box, 'legend-3-0')).toContain('analysed: nothing worth working');
   });
 
   it('C11: a control fades while you stand under it, so it never hides you', () => {

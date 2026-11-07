@@ -25,6 +25,7 @@ import {
 import { goodPlan, outfitName, shortfallHold } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import type { Mind } from '../value.js';
+import { landTargetWithin } from './plan.js';
 import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick, type LeftOutPick } from './draft.js';
 
 /**
@@ -214,12 +215,8 @@ const STRATEGY_ROWS: Record<string, Row> = {
     if (!isObject(v) || typeof v.plots !== 'number' || typeof v.byMonth !== 'number' || !Number.isFinite(v.plots) || !Number.isFinite(v.byMonth)) {
       return refuse('not a land target');
     }
-    const { month, maxMonths } = ctx.state;
-    const byMonth = Math.min(maxMonths, Math.max(month, Math.round(v.byMonth)));
-    const owned = ctx.state.tiles.filter((t) => t.owner === ctx.seat).length;
-    const plots = Math.min(owned + GAME.claimsPerGrant * (byMonth - month), Math.max(owned, Math.round(v.plots)));
-    const target = { plots, byMonth };
-    return plots === v.plots && byMonth === v.byMonth && Object.keys(v).length === Object.keys(target).length
+    const target = landTargetWithin(ctx.state, ctx.seat, { plots: v.plots, byMonth: v.byMonth });
+    return target.plots === v.plots && target.byMonth === v.byMonth && Object.keys(v).length === Object.keys(target).length
       ? ok(v)
       : clamped(target, 'plots owned now to GAME.claimsPerGrant more a month, by this month to the last');
   },

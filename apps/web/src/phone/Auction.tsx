@@ -19,7 +19,9 @@ import {
   ShipWants,
   SIDE_WORD,
   skippedLine,
+  SoldOutNote,
   StatusTable,
+  storeLines,
   toggleSide,
   WaitingToPick,
   walkHint,
@@ -30,8 +32,8 @@ import { useAuctionSound } from '../game/sound';
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
-import { connectedIn, pickedIn, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
-import { ReadyCount } from './hub/ReadyBar';
+import { claudeIn, connectedIn, pickedPlayers, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
+import { ClaudeLines, ReadyCount } from './hub/ReadyBar';
 import { AuctionHeadline } from '../components/AuctionHeadline';
 import { PhoneShell } from './Shell';
 import { stepDir, useWalkIntent } from './useWalkIntent';
@@ -103,10 +105,10 @@ export function Auction() {
     const ship = shipWants(view, auction);
     // A table the room has not listed yet counts every seat as connected.
     const connected = connectedIn(table.seats ?? []);
-    const waiting = stillPicking(view, connected);
+    const waiting = stillPicking(view, connected, claudeIn(table.seats ?? []));
     const others = waiting.filter((s) => s.id !== me.id);
     const isHost = table.hostId === me.id;
-    const picked = view.players.map((p) => ({ ...p, ready: pickedIn(view, p.id) }));
+    const picked = pickedPlayers(view.players, waiting);
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
@@ -162,6 +164,7 @@ export function Auction() {
                 )}
               </div>
             )}
+            <ClaudeLines waiting={waiting} />
           </>
         }
       >
@@ -268,10 +271,12 @@ export function Auction() {
       {closed ? (
         <Hint line={`${GOOD_NAME[good]} is closed.`} how={auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}, buy or sell?` : null} />
       ) : held ? (
-        <Hint tone="ok" {...heldWords(good, need)} testid="held" />
+        // Held, ▼ says "Hold: sell short" itself: on a phone held sideways the how gives its row to the Buy/Sell switch.
+        <Hint tone="ok" {...heldWords(good, need)} testid="held" howTall />
       ) : (
         (lineRail ?? (myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />))
       )}
+      {stage === 'walk' && auction.storeForSale === 0 && <SoldOutNote auction={auction} />}
       {!closed && keeping && (
         <p className="rounded-control border border-warn bg-warn/10 px-2.5 py-1.5 text-xs leading-snug text-warn" data-testid="keep">
           {keepWords(good, have, need)}
@@ -337,7 +342,7 @@ export function Auction() {
           walkers={walkers}
           deals={auction.deals.map((d) => ({ ...d, speed: dealSpeed(d.units) }))}
           storeBuys={auction.storeBuys}
-          storeSells={auction.storeSells}
+          {...storeLines(auction)}
           shipPays={auction.shipPays}
           {...(auction.shipPays !== null ? { shipCaption: `The ship buys ${GOOD_NAME[good]} at ${auction.shipPays}` } : {})}
           storeStock={auction.storeForSale}

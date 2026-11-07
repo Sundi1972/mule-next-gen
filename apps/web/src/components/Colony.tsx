@@ -1,6 +1,6 @@
-import { GOODS, moodBand, type PrestigeId } from '@mule/engine';
+import { GOODS, moodBand, POLLUTION, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
-import { airBandStyle, cx, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
+import { airBandStyle, cx, GOOD_NAME, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
 import { inCollapse, league, winnerWords } from '../game/month-end';
@@ -183,7 +183,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
       <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
-      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={environment.value} pulse={environment.pulse} change={environment.change} />
+      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${Math.round(environment.value)}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
       <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
@@ -338,9 +338,78 @@ export function ProjectRow({ p, players, size, plaque = true }: { p: ColonyProje
   );
 }
 
-/** Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. */
-export function BuildSite({ colony, players, size, action, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; className?: string }) {
+/**
+ * The one figure a project's stage turns on, as the TV month end shows it. Collecting: the share of its credits paid,
+ * or once those are in, the goods it still waits for (it builds only with both). Building: when it stands; the month
+ * end comes after the upkeep that counted this month down, so one month left stands at next month's end.
+ */
+function stageFigure(p: ColonyProjectView): string {
+  if (p.stage === 'building') return p.monthsLeft === 1 ? 'stands next month' : `stands in ${p.monthsLeft} months`;
+  if (p.stage !== 'commissioned') return `+${p.prestige} prestige`;
+  if (p.funded.credits < p.cost.credits) return `${Math.round((p.funded.credits / p.cost.credits) * 100)}% paid`;
+  const short = GOODS.flatMap((g) => {
+    const left = (p.cost.goods[g] ?? 0) - (p.funded.goods[g] ?? 0);
+    return left > 0 ? [`${left} ${GOOD_NAME[g]}`] : [];
+  });
+  return short.length > 0 ? `needs ${short.join(' · ')}` : '100% paid';
+}
+
+/**
+ * A project on one line, for the TV's month end: its name, its stage and the one figure that stage turns on. The
+ * funding bar, the build pips and the plaque are the phones' Colony desk's (PM ruling, 7 Nov: six seats with three
+ * full rows drew at 0.604, under TV-FIT's floor).
+ */
+function ProjectLine({ p }: { p: ColonyProjectView }) {
+  const dead = p.stage === 'closed' || p.stage === 'damaged';
+  const st = STAGE[p.stage];
+  const figure = stageFigure(p);
+  return (
+    <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid={`project-${p.id}`} data-stage={p.stage}>
+      <ObjectGlyph kind={p.id} size={24} className={cx('shrink-0', dead ? 'text-alert' : p.stage === 'standing' ? 'text-ok' : 'text-holo')} />
+      <span className="min-w-0 truncate font-display text-xl font-semibold">{p.name}</span>
+      <span className={cx('shrink-0 rounded-chip border px-1.5 font-mono text-xs font-bold uppercase', st.chip)} data-testid={`stage-${p.id}`}>
+        {st.label}
+      </span>
+      <span data-num className={cx('ml-auto shrink-0 font-mono text-lg font-bold', dead ? 'text-ink-3 line-through' : 'text-holo')} data-testid={`figure-${p.id}`}>
+        {figure}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * Every standing project on one line after the rest, "Standing: Park · Hospital +5 prestige": a long game stands four
+ * or five, and a line each drew six seats under TV-FIT's floor (PM ruling 7 Nov). Each name keeps its own project id;
+ * five names wrap to a second line rather than cut, the fewer lines leaving it the room.
+ */
+function StandingLine({ projects }: { projects: ColonyProjectView[] }) {
+  const prestige = projects.reduce((sum, p) => sum + p.prestige, 0);
+  return (
+    <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid="projects-standing">
+      <span className="min-w-0 font-display text-xl font-semibold leading-tight">
+        <span className="text-ok">Standing:</span>{' '}
+        {projects.map((p, i) => (
+          <span key={p.id} data-testid={`project-${p.id}`} data-stage="standing">
+            {i > 0 && ' · '}
+            {p.name}
+          </span>
+        ))}
+      </span>
+      <span data-num className="ml-auto shrink-0 font-mono text-lg font-bold text-holo" data-testid="figure-standing">
+        +{prestige} prestige
+      </span>
+    </li>
+  );
+}
+
+/**
+ * Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. `compact`
+ * puts each on one line (ProjectLine) and the standing ones together on one after them (StandingLine); the lines have no room
+ * for buttons, so it draws no `action`.
+ */
+export function BuildSite({ colony, players, size, action, compact = false, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; compact?: boolean; className?: string }) {
   const tv = size === 'tv';
+  const standing = colony.projects.filter((p) => p.stage === 'standing');
   return (
     <section className={cx('flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1.5 px-2.5 py-2', className)} aria-label="The colony's projects" data-testid="build-site">
       <header className="flex items-baseline justify-between gap-3">
@@ -355,12 +424,21 @@ export function BuildSite({ colony, players, size, action, className }: { colony
         </p>
       ) : (
         <ul className="flex flex-col">
-          {colony.projects.map((p) => (
-            <div key={p.id} className="flex flex-col">
-              <ProjectRow p={p} players={players} size={size} />
-              {action?.(p)}
-            </div>
-          ))}
+          {compact ? (
+            <>
+              {colony.projects.filter((p) => p.stage !== 'standing').map((p) => (
+                <ProjectLine key={p.id} p={p} />
+              ))}
+              {standing.length > 0 && <StandingLine projects={standing} />}
+            </>
+          ) : (
+            colony.projects.map((p) => (
+              <div key={p.id} className="flex flex-col">
+                <ProjectRow p={p} players={players} size={size} />
+                {action?.(p)}
+              </div>
+            ))
+          )}
         </ul>
       )}
     </section>
@@ -627,12 +705,21 @@ export function PhoneMonthScoreHead({ view }: { view: MuleView }) {
 /** The winner, shorter and horizontal, so the colony's band fits under it on the TV. */
 export function TvWinner({ view, className }: { view: MuleView; className?: string }) {
   const lg = league(view);
-  const top = lg.rows[0];
-  if (!top) return null;
+  if (!lg.rows[0]) return null;
+  // Everyone level at the top shares the win: each gets a mark, smaller when there are several (as WinnerCard's). The
+  // marks keep to two abreast and wrap beyond, so a tie of four to six stays inside the card, the line beside it.
+  const winners = lg.rows.filter((r) => r.rank === 1);
+  const size = winners.length === 1 ? 88 : winners.length === 2 ? 64 : 48;
   return (
     <div className={cx('relative flex items-center gap-5 rounded-panel border-2 border-holo bg-holo-soft px-6 py-4 shadow-glow', className)} data-testid="tv-winner">
-      <PlayerMark slot={top.slot} species={top.player.species} size={88} label={top.player.name} />
-      <span className="flex flex-col gap-1">
+      <ul className="flex max-w-36 shrink-0 flex-wrap items-center gap-3" data-testid="winner-marks">
+        {winners.map((w) => (
+          <li key={w.player.id}>
+            <PlayerMark slot={w.slot} species={w.player.species} size={size} label={w.player.name} />
+          </li>
+        ))}
+      </ul>
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="label-caps text-base!">The game goes to</span>
         <span className="font-display text-3xl font-semibold leading-tight" data-testid="winner-line">
           {winnerWords(view, lg)}

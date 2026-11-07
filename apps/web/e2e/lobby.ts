@@ -3,7 +3,8 @@
  * closes the table. B-AC-7 (lobby): a player and the host each move their seat to another device with a one-time
  * link. Every removed phone lands on the start screen with the reason. B-AC-13: the "make your colonist" lobby at a
  * phone's and a laptop's size. B-AC-8 (lobby): a phone takes an AI's colour and the other phone is refused it; smoke.ts
- * plays a picked colour into the game. Run with `pnpm --filter @mule/web e2e`.
+ * plays a picked colour into the game. B-AC-1 (Claude seat, C1): the host makes a computer seat Claude's and alone
+ * sees its seat code and Copy invite; B-AC-2 (lobby): once its chat is connected, every screen says so. Run with `pnpm --filter @mule/web e2e`.
  */
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
@@ -42,6 +43,7 @@ try {
   await colonistLobby(PHONE, '844x390', false);
   await colonistLobby(LAPTOP, '1440x900', true);
   await colourInTheLobby();
+  await aClaudeSeatInTheLobby();
   check(colourRoomReds.length === 0, `the room takes picked colours:\n  ${colourRoomReds.join('\n  ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e lobby: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
@@ -383,6 +385,61 @@ function heikoOn(rows: Locator): Locator {
 
 function colourRoom(cond: boolean, message: string): void {
   if (!cond) colourRoomReds.push(message);
+}
+
+/**
+ * B-AC-1 (Claude seat spec, C1; the mock's #lobby-b and #tv-lobby): the host opens a computer seat and picks Claude. The
+ * host's phone shows the seat's code and Copy invite, and the seat's chip says it waits for Claude. Mia's phone and the TV show
+ * the seat and its chip, never the code. Negative: Mia has no control to change the kind.
+ */
+async function aClaudeSeatInTheLobby(): Promise<void> {
+  const id = 'B-AC-1 (Claude seat)';
+  const heiko = await phone('heiko');
+  const code = await hostRoom(heiko, base);
+  const mia = await joinRoom(await phone('mia'), base, code, 'Mia');
+  const tv = await phone('tv', TV);
+  await tv.goto(`${base}/table?room=${code}`);
+  await tv.getByTestId('room-code').waitFor();
+  await heiko.getByTestId('add-ai').click();
+  const room = server.registry.get(code);
+  check(room, `${id}: a room ${code} on the server`);
+  await heiko.waitForFunction(() => document.querySelectorAll('[data-testid=seats] li').length === 3);
+  const ai = room.viewFor(null).seats.find((s) => s.isAi)!;
+
+  await heiko.getByTestId(`seat-${ai.id}-open`).click({ timeout: SHOWN_MS });
+  await heiko.getByTestId('sheet-kind-claude').click();
+  const seatCode = (await heiko.getByTestId('sheet-setup-code-text').textContent({ timeout: SHOWN_MS }))?.trim() ?? '';
+  check(/^[A-Z2-9]{4}-\d{2}$/.test(seatCode), `${id}: the host's sheet shows the seat code, got "${seatCode}"`);
+  const held = server.registry.seatForCode(seatCode);
+  check(held?.state === 'live' && held.seatId === ai.id, `${id}: the code on the host's phone is the one the server holds for ${ai.name}, got ${JSON.stringify(held && held.state)}`);
+  check(await shows(heiko.getByTestId('sheet-setup-invite-copy')), `${id}: the host's sheet has Copy invite`);
+  check((await heiko.getByTestId('sheet-setup-invite-text').textContent())?.includes(`Play MULE seat ${seatCode}.`) ?? false, `${id}: the invite carries the code`);
+  check((await heiko.getByTestId('sheet-chip').textContent())?.trim() === 'WAITING FOR CLAUDE', `${id}: the host's sheet says the seat waits for Claude`);
+  // The sheet fits a phone held sideways: Copy invite and Done are on screen, not under its edge.
+  for (const part of ['sheet-setup-invite-copy', 'sheet-done']) {
+    const box = await heiko.getByTestId(part).boundingBox();
+    check(box !== null && box.y >= 0 && box.y + box.height <= PHONE.viewport.height && box.x + box.width <= PHONE.viewport.width, `${id}: ${part} is on the 844×390 screen, got ${JSON.stringify(box)}`);
+  }
+  await heiko.getByTestId('sheet-done').click();
+
+  for (const [who, page, chip] of [['Mia', mia, `chip-${ai.id}`], ['the TV', tv, `tv-chip-${ai.id}`]] as const) {
+    await page.getByTestId(chip).filter({ hasText: 'WAITING FOR CLAUDE' }).waitFor({ timeout: SHOWN_MS });
+    check(!(await page.content()).includes(seatCode), `${id}: ${who} never shows the seat code`);
+  }
+  check(await gone(mia.getByTestId(`seat-${ai.id}-open`)), `${id} (negative): Mia has no control to change ${ai.name}'s kind`);
+  console.log(`✓ ${id}: the host made ${ai.name} Claude's; the host's phone alone shows ${seatCode} and Copy invite; Mia and the TV show WAITING FOR CLAUDE`);
+
+  // B-AC-2: a chat calls with the code. Until WS2's status from calls lands, the test plays that part: the game it
+  // hosts says the seat is connected, and the room sends every screen its view.
+  const b2 = 'B-AC-2 (Claude seat)';
+  const game = (held as { table: { claudeStatus?: (seatId: string) => string | undefined } }).table;
+  game.claudeStatus = (seatId) => (seatId === ai.id ? 'connected' : undefined);
+  room.broadcast();
+  for (const [who, page, chip] of [['the host', heiko, `chip-${ai.id}`], ['Mia', mia, `chip-${ai.id}`], ['the TV', tv, `tv-chip-${ai.id}`]] as const)
+    check(await shows(page.getByTestId(chip).filter({ hasText: 'CLAUDE · CONNECTED' })), `${b2}: ${who} shows ${ai.name} as CLAUDE · CONNECTED`);
+  check(await gone(heiko.getByText('Plays its built-in plan until Claude joins')), `${b2}: once Claude is connected the host's row no longer says it plays built-in`);
+  console.log(`✓ ${b2}: once the game says ${ai.name}'s chat is connected, the host, Mia and the TV all show CLAUDE · CONNECTED`);
+  for (const page of [heiko, mia, tv]) await page.context().close();
 }
 
 async function phone(who: string, size: BrowserContextOptions = PHONE): Promise<Page> {

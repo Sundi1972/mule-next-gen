@@ -2,6 +2,7 @@ import {
   AI_HANDS,
   analysisSeconds,
   doorOutside,
+  floorConfig,
   HALL_DOORS,
   reachOf,
   speedOf,
@@ -9,8 +10,11 @@ import {
   IDLE_INPUT,
   isAssaying,
   isStunned,
+  justSwappedOff,
   MS_PER_SECOND,
+  mulePriceFor,
   observe,
+  outfitCostFor,
   pathTo,
   pressOrder,
   terrainShare,
@@ -29,6 +33,7 @@ import {
   type Good,
   type HallPlace,
   type Outfit,
+  type Player,
   type Rng,
   type WolfFightLevel,
   type WolfPlay,
@@ -40,6 +45,7 @@ import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js'
 import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
+import { adoptedNow, cashReserve, type Mind } from '../value.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
@@ -89,6 +95,19 @@ const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
 const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null && floor.tick + 1 >= floor.moments.glint.untilTick;
 
 /**
+ * Whether colonist `c` can step onto the glint's tile in the coming step: the step gives the glint to a colonist on its
+ * tile before it fades it, so a glint fading this step is won only from within one step of the tile's nearest edge.
+ */
+function onGlintInStep(state: GameState, floor: DevFloor, c: FloorColonist, cfg: FloorConfig): boolean {
+  const g = floor.moments.glint;
+  if (!g) return false;
+  const step = (speedOf(c, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
+  const dx = Math.max(g.x - c.x, 0, c.x - (g.x + 1));
+  const dy = Math.max(g.y - c.y, 0, c.y - (g.y + 1));
+  return Math.hypot(dx, dy) <= step;
+}
+
+/**
  * Whether a rival may take the lit glint before this seat's GRAB applies: the press applies after the coming step, which
  * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order
  * (public: seat order and the tick). So a rival on the map may take it first from within a step of the glint's tile,
@@ -118,6 +137,60 @@ function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: Floo
   return reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, me, cfg, { secondsLeft }).enabled;
 }
 
+/**
+ * Whether lake plot `plot` can never get a MULE on the floor: no spot on its shore offers its install (installable,
+ * the walk the hands price by). Judged as if seat `me` held it; without `me`, for its owner, and a plot nobody holds
+ * as if each seat held it in turn. A seat's own land is no shore for its own install.
+ */
+export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig(), me?: string): boolean {
+  const tile = state.tiles[plot]!;
+  if (tile.terrain !== 'lake') return false;
+  const unreachableFor = (seat: string) => !installable({ ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: seat } : t)) }, cfg, seat, plot);
+  const seat = me ?? tile.owner;
+  return seat !== null ? unreachableFor(seat) : state.players.every((p) => unreachableFor(p.id));
+}
+
+/** One route MULE: the plot it is installed on and the outfit it is fitted with. */
+export interface RouteMule {
+  plot: number;
+  outfit: Outfit | null;
+}
+
+/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the engine's reoutfitMule would fit it again, but the hand never does. */
+const ledOffSwap = (p: Player): boolean => !!p.takenMule?.swapped && p.carriedMule === p.takenMule.outfit;
+
+/**
+ * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's, or has a
+ * MULE it can't swap; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take
+ * the cash under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without
+ * `floor` the game taps, which installs on any lake. See RULE-9 row 3.
+ *
+ * A MULE of another outfit on the plot is swapped (AM-35): the new one goes in and the seat leads the old one, which
+ * the route's next MULE can be, or which goes back to the corral at the turn's end. It pays nothing back, so a swap
+ * costs what any MULE does.
+ */
+export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: DevWalk, floor?: FloorConfig): string | null {
+  const { plot, outfit } = mule;
+  const tile = state.tiles[plot]!;
+  const me = state.players.find((p) => p.id === mind.me)!;
+  const led = me.carriedMule;
+  // The MULE installed is the one the seat leads if fitted already, so a swap needs it fitted for the route's outfit.
+  const swaps = outfit !== null && tile.outfit !== outfit && (led === null || led === 'empty' || led === outfit) && !justSwappedOff(me, tile.x, tile.y);
+  if (tile.owner !== mind.me || (tile.outfit !== null && !swaps)) return `stale: plot ${plot}`;
+  if (floor && unreachablePlot(state, plot, floor, mind.me)) return `lake: no shore reaches plot ${plot}`;
+  // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
+  const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
+  if (cashFloor !== null && outfit !== null) {
+    const fits = led !== outfit && !ledOffSwap(me);
+    const cost = (led === null ? mulePriceFor(state, me.id) : 0) + (fits ? outfitCostFor(state, me.id, outfit) : 0);
+    if (me.money - cost < cashFloor) return `stale: under the cash floor of ${cashFloor} cr`;
+  }
+  // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
+  const legs = outfit === null ? undefined : walk?.floor?.(plot, outfit);
+  const veto = legs && walkVeto(walk!, legs.there, legs.pub);
+  return veto ? `stale: ${veto}` : null;
+}
+
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
 const WOLF_LEVEL: Record<AiLevelId, WolfFightLevel> = { rookie: 'rookie', trader: 'regular', tycoon: 'veteran' };
 
@@ -142,6 +215,8 @@ export interface RoutePlay {
   seed: number;
   /** The strategy's money-maker, the own pick's lean. */
   moneyMaker: Good | null;
+  /** The plan mind the own pick weighs with (RULE-14). */
+  mind: Mind;
   /** The seat's own draft; false for an adopted part, which plays as adopted: no re-pick, no MULE added. See AM-27. */
   own: boolean;
 }
@@ -220,6 +295,8 @@ export class DevelopHand {
   private floorCfg: FloorConfig | null = null;
   /** This month's route, if the seat handed one in; null plays today's list. */
   private route: RouteRun | null = null;
+  /** The good today's picks lean to, and the month it is for. */
+  private lean: { month: number; good: Good | null } = { month: -1, good: null };
   /** The route step last let through, so it is judged once, before its tap or walk starts. */
   private vetted: DevStep | null = null;
   /** The MULE group whose buy was the MULE the seat already led ('led'). */
@@ -256,6 +333,11 @@ export class DevelopHand {
     if (month !== this.month) this.reset(month);
     if (this.stage !== 'start') return;
     this.route = { play, at: 0, mules: 0, soldOut: false, noMore: false, startLeft: null, left: 0, usedMs: 0 };
+  }
+
+  /** Leans today's picks in `month` to `good`; null, or another month, leaves them unleaned. */
+  leanOn(month: number, good: Good | null): void {
+    this.lean = { month, good };
   }
 
   /**
@@ -424,8 +506,9 @@ export class DevelopHand {
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
     // A glint fading in the coming step is walked onto, not pressed for (`sure` is false): the step gives it to a
-    // colonist on its tile before it fades it.
-    if (g && racing && spare) {
+    // colonist on its tile before it fades it. Only from within that step: further off, it is gone before it is reached,
+    // and the tick's walk towards it is a walk off the errand, so the race is given up.
+    if (g && racing && spare && (!fading || onGlintInStep(state, floor, c, cfg))) {
       const input = this.chaser.seek(view, glintMiddle(g), sure ? 'grab' : 'none');
       if (input) return input;
     }
@@ -673,7 +756,7 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        const list = developDecision(obs, mind, this.mules, walk?.());
+        const list = developDecision(obs, mind, this.mules, walk?.(), this.lean.month === state.month ? this.lean.good : null);
         // On the floor the server computes this inside the tick's recorded step, and a replay computes it again: no
         // decider call and no reply to wait for (WS3's condition 1). A Smart seat plays the default pick here.
         this.pending = this.onFloor
@@ -910,8 +993,7 @@ export class DevelopHand {
   /** The seat's own pick for its next MULE on the live state: the draft's seeded pick for that MULE, leaning as the playbook does. */
   private ownPick(state: GameState, walk?: () => DevWalk): DevAction {
     const r = this.route!;
-    const mind = this.brain.mind;
-    const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
+    const input = this.pickInput(state);
     return this.drafting('own MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker));
   }
 
@@ -942,7 +1024,14 @@ export class DevelopHand {
       }
     }
     // A MULE it already leads (won at the land auction) is this MULE: not bought, nor outfitted again as it is.
-    const led = state.players.find((p) => p.id === me)!.carriedMule;
+    const self = state.players.find((p) => p.id === me)!;
+    const led = self.carriedMule;
+    // One a swap put on the lead keeps its outfit: the route's MULE for an idle plot is that one, as it is (AM-35).
+    if (a.type === 'outfit' && this.ledGroup === head.group && a.outfit !== led && ledOffSwap(self)) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'swapped MULE kept its outfit');
+      return false;
+    }
     if (led !== null && (a.type === 'buyMule' || (a.type === 'outfit' && a.outfit === led && this.ledGroup === head.group))) {
       if (a.type === 'buyMule') this.ledGroup = head.group;
       this.queue.shift();
@@ -969,10 +1058,17 @@ export class DevelopHand {
       this.log(head, false, 'skipped', 'already analysed');
       return false;
     }
+    // Nor, on the floor, an analysis of an own plot while it leads a fitted MULE (one a swap put on the lead): Reach
+    // offers INSTALL there first, so the walk would end refused.
+    if (a.type === 'analyse' && this.onFloor && led !== null && led !== 'empty' && state.tiles[plotOf(a)]!.owner === me) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'leading');
+      return false;
+    }
     return true;
   }
 
-  /** Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, or the floor's walk vetoes it. See AM-25. */
+  /** Why the route MULE of `group`, about to be bought, would be refused (routeVeto), or null. */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -981,13 +1077,13 @@ export class DevelopHand {
       if (g === group && a.type === 'outfit') outfit = a.outfit;
     }
     if (plot < 0) return null;
-    const tile = state.tiles[plot]!;
-    if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
-    // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
-    const w = walk?.();
-    const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);
-    const veto = legs && walkVeto(w!, legs.there, legs.pub);
-    return veto ? `stale: ${veto}` : null;
+    return routeVeto(state, this.brain.mind, { plot, outfit }, walk?.(), this.onFloor ? (this.floorCfg ?? undefined) : undefined);
+  }
+
+  /** What the route's own MULE picks are drafted from: the playbook's seed and the plan mind. See RULE-9 row 3, RULE-14. */
+  private pickInput(state: GameState) {
+    const play = this.route!.play;
+    return { state, seat: this.brain.mind.me, mind: play.mind, seed: play.seed, phase: 'development' as const, month: state.month };
   }
 
   /**
@@ -996,8 +1092,7 @@ export class DevelopHand {
    */
   private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
-    const mind = this.brain.mind;
-    const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
+    const input = this.pickInput(state);
     const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
     for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, pick.kind === 'stop' ? 'skipped' : 'replaced', note);
     const rest = this.queue.filter((q) => q.group !== group);

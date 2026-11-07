@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, BudgetLine, DealCard, DealOffer, DevPlace, Election, InquiryRecord, Overrule, OverruleTarget, OverruleWhy, SabotageOrder, SabotageTarget, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -40,6 +40,28 @@ export type MuleIntent =
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
   | { type: 'setTax'; percent: number }
+  /** Planning: offer another player a deal card: a pact (with its months) or your own vote promise. */
+  | { type: 'offerDeal'; offer: DealOffer }
+  /** Planning: take back a card not yet answered. */
+  | { type: 'withdrawDeal'; id: string }
+  /** Planning: accept or decline a card offered to you. */
+  | { type: 'answerDeal'; id: string; accept: boolean }
+  /** Planning: order sabotage against a target, or withdraw this month's order with null (slice 4). */
+  | { type: 'sabotage'; target: SabotageTarget | null }
+  /** The Sheriff, after the votes: the whole list of tiles guarded this month. */
+  | { type: 'guard'; tiles: number[] }
+  /** The Sheriff, after the votes: investigate a public order whose culprit is unknown. */
+  | { type: 'investigate'; order: string }
+  /** The Sheriff: fine an order's culprit; `amount` is the base, before the ban's multiplier. */
+  | { type: 'fine'; order: string; amount: number }
+  /** Planning, once the votes are over: the Governor's whole budget, whole-percent shares per line (slice 5). */
+  | { type: 'setBudget'; shares: Record<BudgetLine, number> }
+  /** Planning, once the votes are over: call this month's overrule vote; null withdraws your call. */
+  | { type: 'callOverrule'; target: OverruleTarget | null }
+  /** The overrule (or no-confidence) ballot: yes undoes it; a later vote replaces it until the ballot closes. */
+  | { type: 'voteOverrule'; yes: boolean }
+  /** After RC. Planning: the Sheriff opens this term's inquiry into the Governor. */
+  | { type: 'openInquiry' }
   /** Planning, after the votes: the Governor commissions a prestige object for the colony. */
   | { type: 'commission'; id: PrestigeId }
   /** Planning: give credits and goods toward the object being funded; the plaque names the donor. */
@@ -48,8 +70,6 @@ export type MuleIntent =
   | { type: 'repair'; id: PrestigeId }
   /** Planning, after the votes: the Governor pays this month's general strikers from the fund. */
   | { type: 'payStrike' }
-  /** Planning, after the votes: the Governor's top bid for a waiting object's plot; null, the colony does not bid. */
-  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
   /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
@@ -133,6 +153,8 @@ export interface PlayerView {
     /** hunger × sickness, 1 is normal; species is not in it (engine pace() adds it). */
     conditionPace: number;
   } | null;
+  /** 0..100, public on every screen, the TV's too (S3-RULE-7). The server always sends it; optional only so hand-built test players still type. */
+  reputation?: number;
 }
 
 /** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */
@@ -276,10 +298,10 @@ export interface MyView {
   /** What this player pays for a MULE and for each outfit. */
   mulePrice: number;
   outfitCosts: Record<Outfit, number>;
-  /** Free plots chosen for the geo drone this month. */
+  /** Free or listed plots the geo drone flew over this month; set until the land grant frees the drone. */
   droneOrder: { x: number; y: number }[];
   /**
-   * The plots this month's drone surveyed, from the land grant until the month ends: the land grant's rail says
+   * The plots this month's drone surveyed, from the moment it is sent until the month ends: the land grant's rail says
    * "Your drone: …" while one is lit (H-3). Only on this player's own view; absent reads as none.
    */
   droneFound?: { x: number; y: number }[];
@@ -289,6 +311,67 @@ export interface MyView {
   installedThisTurn: boolean;
   /** This player's own Worth line by line, the Collapse cut included. Private: no other view carries anyone's parts. */
   worthParts: ScorePartsView;
+  /** This player's own cards; null with politics off. Optional only for older fixtures: the server always sends it. */
+  deals?: MyDealsView | null;
+}
+
+/** A player's own deal cards (slice 3). */
+export interface MyDealsView {
+  /** Every card this player is a party to, newest first (partyTo). Never a card between two others unless broken. */
+  cards: DealCard[];
+  /** Offers this player may still make now: POLITICS.deals.maxOpenOffers minus their open ones. */
+  offersLeft: number;
+  /** The lengths a pact may run (POLITICS.deals.pactMonths). */
+  pactMonths: number[];
+}
+
+/** A public sabotage order as every screen sees it: an incident (slice 4). */
+export interface IncidentView {
+  id: string;
+  month: number;
+  kind: SabotageTarget['kind'];
+  victim: string | null;
+  at: { x: number; y: number } | null;
+  good: Good;
+  dir?: 'up' | 'down';
+  worked: boolean;
+  /** Only when the culprit is public, or on the orderer's own list. */
+  culprit: string | null;
+  how: 'guard' | 'caught' | 'investigation' | null;
+  investigated: boolean;
+  fine: { due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard' } | null;
+}
+
+/** The colony budget as every screen sees it (slice 5). */
+export interface BudgetView {
+  /** The lines offered, in order: the share now and at the month's start, the bounds, and the credits it pays at today's fund. */
+  lines: { line: BudgetLine; share: number; start: number; maxShare: number; step: number; credits: number; maxCredits: number | null }[];
+  /** 100 − Σ shares: stays in the fund. */
+  kept: number;
+  /** Who Welfare would go to now, or null. */
+  welfareTo: string | null;
+  /** The Governor who set it, or null for the default. */
+  setBy: string | null;
+  /** True while the budget holds: never in RC; after RC, from any overrule call until planning ends. */
+  frozen: boolean;
+}
+
+/** An overrule or no-confidence vote as every screen sees it (slice 5). Never holds another player's ballot. */
+export interface OverruleView {
+  target: OverruleTarget;
+  caller: string;
+  stage: Overrule['stage'];
+  /** What a yes restores and what stands now; for 'confidence', the Governor in question. */
+  restores: { tax: number } | { shares: Record<BudgetLine, number> } | { governor: string };
+  stands: { tax: number } | { shares: Record<BudgetLine, number> } | { governor: string };
+  voted: string[];
+  done: string[];
+  waitingFor: string[];
+  clockMs: number;
+  revealMs: number;
+  total: number;
+  needed: number;
+  result: { passed: boolean; yes: number; no: number } | null;
 }
 
 /** Only on the owner's phone: their candidacy, their secret ballot, whether they may run now for each elected office, and what weighs their vote. */
@@ -306,6 +389,36 @@ export interface MyPoliticsView {
    * player a month (RULE-45), keyed `<law>:<setting>` for each enact and `repeal:<law>` for each law in force.
    */
   candidates?: Record<string, Record<string, LawImpact>>;
+  /** This player's promised votes (promisedVotes), for the ballot's "You promised". Optional only for older fixtures. */
+  promised?: { election: Partial<Record<Office, { candidate: string; to: string[] }>>; law: { yes: boolean; to: string[] } | null };
+  /** This player's own sabotage (slice 4), their phone only; null with sabotage off. Optional only for older fixtures. */
+  sabotage?: {
+    /** This month's pending order. */
+    order: SabotageTarget | null;
+    canOrder: true | 'off' | 'notPlanning';
+    /** The crew cost due at this month's upkeep. */
+    owed: number;
+    /** Every order this player made: their culprit is themself, public or not. */
+    mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];
+  } | null;
+  /** The Sheriff's desk (slice 4), only on the sitting Sheriff's view. Optional only for older fixtures. */
+  sheriff?: {
+    canAct: true | 'off' | 'notPlanning' | 'votesOpen';
+    /** Tile indices guarded this month. */
+    guards: number[];
+    max: number;
+    investigationsLeft: number;
+    /** Order ids this Sheriff may fine. */
+    fineable: string[];
+    /** The fine bases allowed. */
+    steps: number[];
+    /** The sabotage ban's multiplier in force now. */
+    multiplier: number;
+  } | null;
+  /** This player's own overrule ballot: true yes, false no, null not cast (slice 5). Optional only for older fixtures. */
+  overruleBallot?: boolean | null;
+  /** Per target, whether this player may call an overrule now, or why not. Optional only for older fixtures. */
+  canOverrule?: Record<OverruleTarget, true | OverruleWhy>;
 }
 
 /** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
@@ -393,6 +506,26 @@ export interface PoliticsView {
   laws?: Partial<Record<LawId, { setting: number; since: number }>>;
   /** For each failed proposal (`kind:law`), the first month it may come back. */
   retry?: Record<string, number>;
+  /** Every broken card of the game, newest first: public (partyTo). Optional only for older fixtures. */
+  brokenDeals?: DealCard[];
+  /** Per player, the public reasons their reputation moved (reputationReasons), for the chip's tap. Optional only for older fixtures. */
+  reputationReasons?: Record<string, ({ kind: 'broken'; id: string } | { kind: 'unrest'; month: number } | { kind: 'caught'; month: number })[]>;
+  /** Sabotage as every screen sees it (slice 4): public orders only; null with sabotage off. Optional only for older fixtures. */
+  sabotage?: {
+    terms: Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
+    incidents: IncidentView[];
+    sheriff: { guards: number; investigations: number; investigationsLeft: number };
+  } | null;
+  /** The colony budget (slice 5); null with politics off. Optional only for older fixtures. */
+  budget?: BudgetView | null;
+  /** This month's overrule or no-confidence vote, or null. Optional only for older fixtures. */
+  overrule?: OverruleView | null;
+  /** After RC: tax and budget overrules passed this term. */
+  overruled?: number;
+  /** After RC: the month of a snap election, or null. */
+  snap?: number | null;
+  /** After RC: this term's inquiry into the Governor, or null. */
+  inquiry?: { record: InquiryRecord; finding: boolean } | null;
 }
 
 /** A player on the auction board. */
@@ -435,9 +568,18 @@ export interface AuctionView {
   slowed: boolean;
   /** Goods still to come after this one. */
   next: Good[];
-  /** What the store pays and charges, or null while it doesn't trade at that line. */
+  /** What the store pays, or null while it doesn't buy. */
   storeBuys: number | null;
+  /**
+   * The store's selling line: what it charges while it has units to sell. Once it is sold out (`storeForSale` 0), the
+   * highest bid a buyer can pay, flagged by `storeSellsBid`, or its old price while no bid is above it; the store sells
+   * nothing there. Null when it is sold out and the line is off.
+   */
   storeSells: number | null;
+  /** Present, as true, while `storeSells` is the highest bid on a sold-out store's line, not a price it sells at. */
+  storeSellsBid?: true;
+  /** The board's rest zones and hard edges, fixed as the good comes up: buyers rest below `buyersTop`, sellers above `sellersBottom`. */
+  zones?: BoardZones;
   /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
@@ -461,6 +603,12 @@ export interface AuctionView {
   upNext: Good | null;
   /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
   receipt: GoodReceipt | null;
+  /**
+   * At the first good's side pick, each Claude seat it waits for, with the server time (epoch ms) the wait ends. A seat
+   * whose plan comes in time leaves the list; one whose wait ends without a plan stays with `builtin` for the rest of
+   * that side pick. Absent when nobody is listed.
+   */
+  waitingForClaude?: { seatId: string; until: number; builtin?: true }[];
   /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
   tally: number | null;
 }
@@ -600,7 +748,7 @@ export interface EventView {
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
-  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  /** The colony's objects it damaged (a riot). */
   objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
@@ -608,6 +756,8 @@ export interface EventView {
   weight: EventWeight;
   /** How long the show plays it, in ms at full pace; the client never computes this itself. */
   playMs: number;
+  /** A sabotage order's effect (slice 4), as MonthEvent.sabotage. */
+  sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean };
 }
 
 /** Production's name for EventView, from before every phase had a show. */
@@ -640,6 +790,16 @@ export interface ProductionView {
   hurry?: ProductionHurryView | null;
 }
 
+/**
+ * The colonists' meal at a month end (needs C6): how many colonists ate, before the month changed their number, and of
+ * Food and of Water what they took of their need, in whole units as the month-end line shows them.
+ */
+export interface ColonistMealView {
+  colonists: number;
+  food: { took: number; need: number };
+  water: { took: number; need: number };
+}
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -664,10 +824,16 @@ export interface MuleView {
   /** The air at last month's end (upkeep), level and band as `air` showed them then; null in month 1. */
   lastAir: MuleView['air'] | null;
   /**
-   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when they
-   * went short, because the store ran out or its price was beyond their wages (the engine's colonistsHungry). Null otherwise.
+   * At the month end (upkeep, and game over after the last): true when that upkeep fed the colonists, false when the
+   * store ran out of their Food or Water (the engine's colonistsHungry). Null otherwise.
    */
   colonistsFed: boolean | null;
+  /**
+   * At the month end, as colonistsFed: how many colonists ate and, of Food and of Water, what they took of their need
+   * (needs C6). Whole units as the line shows them: need rounded up; took equal to it when they got it all, else
+   * rounded down. Null outside the month end or when the report has no meal; absent from an older server.
+   */
+  colonistMeal?: ColonistMealView | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
@@ -715,8 +881,11 @@ export interface ColonyProjectView {
   buildMonths: number;
   /** Upkeeps left until it stands; null unless building. */
   monthsLeft: number | null;
-  /** Its tile index, for an object that needs one; null until sited. */
-  plot: number | null;
+  /**
+   * Its block on the colony's own grounds, in cells: the top-left cell (x right, y down, the town hall on the centre
+   * cell) and its footprint, w × h; null holds none (G-5 RULE-32b).
+   */
+  place: { x: number; y: number; w: number; h: number } | null;
   prestige: number;
   /** Credits a month while it stands. */
   upkeep: number;
@@ -724,8 +893,6 @@ export interface ColonyProjectView {
   repairCost: number | null;
   /** Donors, largest first: credits plus goods at reference price. */
   plaque: { playerId: string; value: number }[];
-  /** The colony's top bid for this object's plot at the land auction; null, it does not bid. Optional, so views built before it still type. */
-  maxBid?: number | null;
 }
 
 /** One object the Governor could commission, and why not when they can't now. */
@@ -735,7 +902,6 @@ export interface ColonyCatalogueView {
   credits: number;
   goods: Partial<Record<Good, number>>;
   buildMonths: number;
-  needsPlot: boolean;
   prestige: number;
   upkeep: number;
   commissionable: boolean;
@@ -760,4 +926,6 @@ export interface ColonyView {
   score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
   /** The colony score's total as the last month ended, for "+N since last month"; null in month 1 or before the colony has a mood (AM-12). */
   lastScore?: number | null;
+  /** This month's Welfare payment (slice 5), or null. Optional, so views built before it still type. */
+  welfare?: { month: number; to: string; paid: number } | null;
 }

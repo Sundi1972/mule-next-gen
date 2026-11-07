@@ -2,6 +2,7 @@ import type { TableView } from '@mule/protocol';
 import { Button, COLOUR_NAME, Creature, cx, SLOT_COLOR, SPECIES, SPECIES_NAME, SPECIES_PERK, type Slot, type Species } from '@mule/ui';
 import { useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
+import { Chip, ClaudeSetup, claudeChip, isClaude, KindChoice, type ChipWord } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { lobbySeatSpecies } from '../game/derive';
@@ -116,7 +117,7 @@ function Frame({ children }: { children: ReactNode }) {
 type Colonist = TableView<unknown>['seats'][number] & { species: Species; slot: Slot };
 
 /** The host's two confirmations, and anyone's move to their phone. */
-type LobbyDialog = { kick: string } | 'close' | 'handoff';
+type LobbyDialog = { kick: string } | { seat: string } | 'close' | 'handoff';
 
 const COLOURS: Slot[] = [0, 1, 2, 3, 4, 5];
 
@@ -163,7 +164,7 @@ export function Lobby() {
   const hostName = seats.find((s) => s.id === view.hostId)?.name ?? 'The host';
   const tv = view.boards > 0;
   // Only the host confirms a removal; a seat that left while the host was deciding has nothing left to remove.
-  const dialog = asked === null || asked === 'handoff' || (host && (asked === 'close' || seats.some((s) => s.id === asked.kick))) ? asked : null;
+  const dialog = asked === null || asked === 'handoff' || (host && (asked === 'close' || seats.some((s) => s.id === ('kick' in asked ? asked.kick : asked.seat)))) ? asked : null;
   const ask = (d: LobbyDialog, from: HTMLElement) => {
     opener.current = from;
     setAsked(d);
@@ -236,7 +237,15 @@ export function Lobby() {
               <h2 className="label-caps @min-[1100px]/shell:text-xs!">At the table · {seats.length} of 6</h2>
               <ul className="flex flex-col overflow-hidden rounded-panel border border-holo-line" data-testid="seats">
                 {seats.map((s) => (
-                  <SeatRow key={s.id} seat={s} me={s.id === me.id} host={s.id === view.hostId} onKick={host && s.id !== me.id ? (e) => ask({ kick: s.id }, e.currentTarget) : undefined} />
+                  <SeatRow
+                    key={s.id}
+                    seat={s}
+                    me={s.id === me.id}
+                    host={s.id === view.hostId}
+                    youHost={host}
+                    onOpen={host && s.isAi ? (e) => ask({ seat: s.id }, e.currentTarget) : undefined}
+                    onKick={host && s.id !== me.id ? (e) => ask({ kick: s.id }, e.currentTarget) : undefined}
+                  />
                 ))}
               </ul>
             </section>
@@ -278,7 +287,14 @@ export function Lobby() {
             )}
           </div>
         </aside>
-        {dialog && (
+        {dialog && typeof dialog === 'object' && 'seat' in dialog && (
+          <SeatSheet
+            seat={seats.find((s) => s.id === dialog.seat)!}
+            onPick={(kind) => client.setSeatKind(dialog.seat, kind)}
+            onClose={closeDialog}
+          />
+        )}
+        {dialog && !(typeof dialog === 'object' && 'seat' in dialog) && (
           <Dialog
             dialog={dialog}
             seats={seats}
@@ -289,7 +305,7 @@ export function Lobby() {
             onConfirm={() => {
               closeDialog();
               if (dialog === 'close') client.closeTable();
-              else if (dialog !== 'handoff') client.kick(dialog.kick);
+              else if (dialog !== 'handoff' && 'kick' in dialog) client.kick(dialog.kick);
             }}
           />
         )}
@@ -396,25 +412,60 @@ function ColourPick({ seats, me, onPick }: { seats: Colonist[]; me: Colonist; on
   );
 }
 
-const CHIP_CLASS = { AI: 'bg-holo-soft text-holo', HOST: 'bg-warn/15 text-warn', PHONE: 'bg-ok/10 text-ok', AWAY: 'bg-warn/15 text-warn' } as const;
-
-/** One seat in the rail: its creature in its colour, its name, what it is (AWAY when its phone has gone), and the host's ✕. */
-function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host: boolean; onKick: ((e: MouseEvent<HTMLButtonElement>) => void) | undefined }) {
-  const kind = seat.isAi ? 'AI' : host ? 'HOST' : seat.connected ? 'PHONE' : 'AWAY';
+/**
+ * One seat in the rail: its creature in its colour, its name, what it is (AWAY when its phone has gone), and the host's
+ * ✕. A computer seat played by Claude says so under its name and wears Claude's chip; the host changes a computer
+ * seat's player from its Change button (Code once Claude plays it), which opens the seat's sheet.
+ */
+function SeatRow({
+  seat,
+  me,
+  host,
+  youHost,
+  onOpen,
+  onKick,
+}: {
+  seat: Colonist;
+  me: boolean;
+  host: boolean;
+  youHost: boolean;
+  onOpen: ((e: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  onKick: ((e: MouseEvent<HTMLButtonElement>) => void) | undefined;
+}) {
+  const claude = isClaude(seat);
+  const word: ChipWord = seat.isAi ? (claude ? claudeChip(seat) : 'AI') : host ? 'HOST' : seat.connected ? 'PHONE' : 'AWAY';
   return (
-    <li className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2">
+    <li className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2" data-testid={`seat-${seat.id}`}>
       <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
         <Creature species={seat.species} color={SLOT_COLOR[seat.slot]} size={22} />
       </span>
       <span className="min-w-0 flex-1 text-sm font-semibold break-words @min-[1100px]/shell:text-base">
         {seat.name}
         {me && ' (you)'}
+        {claude && <span className="block text-[10px] font-normal leading-tight text-ink-3 @min-[1100px]/shell:text-xs">Claude</span>}
+        {/* Start stays enabled while the seat waits; the host is told what happens if they start now. */}
+        {claude && youHost && seat.claude !== 'connected' && (
+          <span className="block text-[10px] font-normal leading-tight text-ink-2 @min-[1100px]/shell:text-xs" data-testid="waiting-note">
+            Plays its built-in plan until Claude joins
+          </span>
+        )}
       </span>
-      <span className={cx('rounded-chip px-1.5 font-mono text-[10px] font-bold', CHIP_CLASS[kind])}>{kind}</span>
+      <Chip word={word} testid={`chip-${seat.id}`} />
+      {onOpen && (
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-haspopup="dialog"
+          className="grid h-8 shrink-0 place-items-center rounded-chip border border-holo-line px-2 text-xs font-semibold text-holo hover:border-holo"
+          data-testid={`seat-${seat.id}-open`}
+        >
+          {claude ? 'Code' : 'Change'}
+        </button>
+      )}
       {onKick && (
         <button
           type="button"
-          className="grid size-8 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
+          className="grid size-8 shrink-0 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
           aria-label={`Remove ${seat.name}`}
           onClick={onKick}
           data-testid={`kick-${seat.id}`}
@@ -423,6 +474,51 @@ function SeatRow({ seat, me, host, onKick }: { seat: Colonist; me: boolean; host
         </button>
       )}
     </li>
+  );
+}
+
+/**
+ * A computer seat's sheet, the host's alone, over the whole lobby as the lobby's dialog is: Built-in or Claude, and for
+ * a Claude seat its code and the invite that carries it. Picking sends at once; the sheet follows the seat's kind.
+ */
+function SeatSheet({ seat, onPick, onClose }: { seat: Colonist; onPick: (kind: 'builtin' | 'claude') => void; onClose: () => void }) {
+  const titleId = useId();
+  useEscape(onClose);
+  const claude = isClaude(seat) && seat.seatCode;
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center bg-void/70 p-4" role="dialog" aria-modal aria-labelledby={titleId} data-testid="seat-sheet">
+      <div className="flex w-full max-w-[640px] flex-col gap-3 rounded-sheet border-2 border-holo bg-panel p-4 shadow-glow">
+        <header className="flex items-center gap-2">
+          <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
+            <Creature species={seat.species} color={SLOT_COLOR[seat.slot]} size={22} />
+          </span>
+          <h2 id={titleId} className="font-display text-xl font-semibold">
+            {claude ? `${seat.name} plays with Claude` : `Who plays ${seat.name}?`}
+          </h2>
+          {claude && <Chip word={claudeChip(seat)} className="ml-auto" testid="sheet-chip" />}
+        </header>
+        {claude ? (
+          <>
+            <p className="text-sm text-ink-2">Send the invite to whoever's Claude should play: yours, or a friend's. The code is this seat's for the whole game.</p>
+            <ClaudeSetup code={claude} testid="sheet-setup" />
+          </>
+        ) : (
+          <KindChoice onChange={onPick} testid="sheet-kind" />
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {claude ? (
+            <Button size="md" variant="ghost" onClick={() => onPick('builtin')} data-testid="sheet-switch-builtin">
+              Switch to Built-in
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button size="md" variant="outline" autoFocus onClick={onClose} data-testid="sheet-done">
+            Done
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -462,7 +558,7 @@ function Dialog({
   onConfirm,
   onCancel,
 }: {
-  dialog: LobbyDialog;
+  dialog: Exclude<LobbyDialog, { seat: string }>;
   seats: Colonist[];
   me: Colonist;
   host: boolean;

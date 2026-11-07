@@ -1,11 +1,11 @@
-import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeLines, storeSellPrice, storeWants, taxSale } from './economy.js';
+import { GOOD_CONFIG, UPKEEP, WALK } from './config.js';
+import { colonyPrice, driftReference, monthlyDemand, shipInPort, shipPrice, storeForSale, storeLines, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock } from './types.js';
-import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
+import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock, type WalkLesson } from './types.js';
+import { houseLineAt, stepBoard, stepWalker, takeSide, topBid, tradePossible, type WalkMarket } from './walk.js';
 
 /**
  * The goods auction, played live as in the original M.U.L.E. Goods come up
@@ -47,6 +47,21 @@ export function storeSellLine(state: GameState): number | null {
   return a?.good && storeForSale(state, a.good) > 0 ? a.storeSell : null;
 }
 
+/**
+ * The store's selling line as every screen shows it. While the store sells, its price. Once it is sold out, the highest
+ * bid a buyer can pay, flagged `bid`, or its old selling price while no bid is above it; the store sells nothing there.
+ * null when it is sold out and soldOutBidding is off: no line, as before.
+ */
+export function shownSellLine(state: GameState): { price: number; bid: boolean } | null {
+  const a = state.auction;
+  if (!a?.good) return null;
+  const selling = storeSellLine(state);
+  if (selling !== null) return { price: selling, bid: false };
+  if (!WALK.soldOutBidding) return null;
+  const top = topBid(a, goodsMarket(state));
+  return top !== null && top > a.zones.sellersBottom ? { price: top, bid: true } : { price: a.zones.sellersBottom, bid: false };
+}
+
 /** The store's buying line, while it still wants the good. The store never runs out of money. */
 export function storeBuyLine(state: GameState): number | null {
   const a = state.auction;
@@ -73,6 +88,25 @@ function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: nu
   a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax - exportTax);
 }
 
+const freshLesson = (): WalkLesson => ({ soldOutHigh: null, highTrade: null, dryBudget: false });
+const higher = (high: number | null, price: number) => Math.max(high ?? price, price);
+
+/** Applies `change` to a good's lesson, starting one if there is none. */
+function teach(state: GameState, good: Good, change: (lesson: WalkLesson) => Partial<WalkLesson>): void {
+  const lesson = state.store.lastWalk?.[good] ?? freshLesson();
+  // A new record, never an edit: every lesson is a fresh object, so no reader holds a reference that changes under it.
+  state.store.lastWalk = { ...state.store.lastWalk, [good]: { ...lesson, ...change(lesson) } };
+}
+
+/**
+ * Notes a unit traded between players on the lesson of the good that is up, while the store's shelf is as that unit
+ * found it: only a unit bought while the store had none to sell counts towards soldOutHigh.
+ */
+function noteBetween(state: GameState, good: Good, price: number): void {
+  const soldOut = storeForSale(state, good) === 0;
+  teach(state, good, (l) => ({ highTrade: higher(l.highTrade, price), soldOutHigh: soldOut ? higher(l.soldOutHigh, price) : l.soldOutHigh }));
+}
+
 /** The good that is up, as a market for the walk board: players' stock and money, the store and the ship, and the sales tax. */
 export function goodsMarket(state: GameState): WalkMarket {
   const a = state.auction!;
@@ -90,12 +124,13 @@ export function goodsMarket(state: GameState): WalkMarket {
       { id: STORE_ID, price: () => storeBuyLine(state) },
     ],
     floor: () => storeBuyLine(state),
+    zones: a.zones,
     first: (id) => players.get(id)?.species === 'quibbit',
     seat: (id) => seats.get(id) ?? 0,
     trade(buyer, seller, price) {
       const b = players.get(buyer);
       const s = players.get(seller);
-      if (b && s) state.store.maxBetween = { ...state.store.maxBetween, [good]: Math.max(state.store.maxBetween?.[good] ?? 0, price) };
+      if (b && s) noteBetween(state, good, price);
       if (b) {
         b.money -= price;
         b.stock[good]++;
@@ -104,6 +139,8 @@ export function goodsMarket(state: GameState): WalkMarket {
         state.store.capital -= price;
         state.store.stock[good]++;
         a.storeBudget--;
+        // The budget only ever falls, by the store's own buys, so emptying it here is "wanted some, now wants none".
+        if (a.storeBudget === 0) teach(state, good, () => ({ dryBudget: true }));
       } else {
         state.ship.hold[good] = (state.ship.hold[good] ?? 0) - 1;
         state.ship.bought[good] = (state.ship.bought[good] ?? 0) + 1;
@@ -135,6 +172,7 @@ export function startAuction(state: GameState, goods: readonly Good[] = WALK.ord
     storeBuy: 0,
     storeSell: 0,
     storeBudget: 0,
+    zones: { buyersTop: 0, sellersBottom: 0, lo: 0, hi: 0 },
     lo: 0,
     hi: 0,
     speed: WALK.minSpeed,
@@ -224,7 +262,6 @@ function skipBefore(state: GameState, good: Good, storeBuy: number, storeBudget:
 /** How a good would come up now: its store lines, budget and board, or why it is skipped. Reads the state only. */
 function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyDemand>) {
   const posted = colonyPrice(state, good);
-  // AFTER-P prototype: the lines come from storeQuotes' storeLines, so the auction and the quotes agree.
   const { buy: storeBuy, sell: storeSell } = storeLines(state, good);
   const budget = storeWants(state, good, demand);
   const reason = skipBefore(state, good, storeBuy, budget);
@@ -263,6 +300,8 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       storeBuy,
       storeSell,
       storeBudget: budget,
+      // The ship's line stays out of the buyers' zone: its price falls with each unit, and sellers follow it down to here.
+      zones: { buyersTop: storeBuy, sellersBottom: storeSell, lo, hi },
       lo,
       hi,
       speed: Math.max(WALK.minSpeed, (hi - lo) / WALK.crossSeconds),
@@ -277,6 +316,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       upNext: null,
       receipts: {},
       } satisfies Partial<LiveAuction>);
+    teach(state, good, freshLesson);
     seedSides(state);
     return;
   }

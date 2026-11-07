@@ -241,6 +241,8 @@ describe('the AI move list (C9)', () => {
 });
 
 const FLOOR_INPUT = 'the AI plays them through FloorInput (AiSeat.developSteer)';
+/** A politics intent whose AiAction WS1 has not added yet: the server refuses it until its slice is built. */
+const NOT_YET_AN_AI_MOVE = 'politics contract only; the AI move comes with its slice';
 
 /** Every phone command, and the AI move that plays it or why none does (AM-2, AM-4). */
 const COVERAGE = {
@@ -267,11 +269,22 @@ const COVERAGE = {
   voteLaw: { move: 'voteLaw' },
   donate: { move: 'donate' },
   repair: { move: 'repair' },
-  setSiteBid: { move: 'setSiteBid' },
   continue: { excluded: 'host only' },
   steer: { excluded: FLOOR_INPUT },
   act: { excluded: FLOOR_INPUT },
   hurry: { excluded: 'a person asks to speed production up; an AI seat counts as yes (ws6-ux AM-19)' },
+  // Politics slices 3-5: the contract commit adds the intents; WS1 adds each AiAction and turns its row into a move.
+  offerDeal: { excluded: NOT_YET_AN_AI_MOVE },
+  withdrawDeal: { excluded: NOT_YET_AN_AI_MOVE },
+  answerDeal: { excluded: NOT_YET_AN_AI_MOVE },
+  sabotage: { excluded: NOT_YET_AN_AI_MOVE },
+  guard: { excluded: NOT_YET_AN_AI_MOVE },
+  investigate: { excluded: NOT_YET_AN_AI_MOVE },
+  fine: { excluded: NOT_YET_AN_AI_MOVE },
+  setBudget: { excluded: NOT_YET_AN_AI_MOVE },
+  callOverrule: { excluded: NOT_YET_AN_AI_MOVE },
+  voteOverrule: { excluded: NOT_YET_AN_AI_MOVE },
+  openInquiry: { excluded: NOT_YET_AN_AI_MOVE },
 } satisfies Record<MuleIntent['type'], { move: AiAction['type'] } | { excluded: string }>;
 
 /** MuleIntent's command names, read from the protocol's source: the compiler's view is gone by the time a test runs. */

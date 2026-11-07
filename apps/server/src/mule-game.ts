@@ -10,9 +10,9 @@ import {
   colonyFailed,
   cover,
   createGame,
-  defaultSpecies,
   createRng,
   declareRole,
+  defaultSpecies,
   leaveBoard,
   electionDone,
   votesDone,
@@ -67,12 +67,12 @@ import {
   repair,
   payStrike,
   goodWords,
-  setSiteBid,
   setWalk,
   shipAnnounced,
   shipInPort,
   shipLine,
   shipPrice,
+  shownSellLine,
   sickPace,
   SPECIES,
   type Species,
@@ -100,7 +100,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type ColonistMealView, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
@@ -185,13 +185,27 @@ function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
 }
 
 /**
- * At the month end (upkeep, or game over after the last): whether that upkeep fed the colonists. They go short when
- * the store runs out or its price is beyond their wages, both in the engine's colonistsHungry. Null otherwise.
+ * At the month end (upkeep, or game over after the last): whether that upkeep fed the colonists. They go short only
+ * when the store runs out (the engine's colonistsHungry): they eat free (needs C1). Null otherwise.
  */
 function colonistsFedAt(state: GameState): boolean | null {
+  const report = monthEndReport(state);
+  return report ? !report.colonistsHungry : null;
+}
+
+/** That month end's meal in whole units, as the line shows it (needs C6): need rounded up; took the need when they got it all, else rounded down. */
+function colonistMealAt(state: GameState): ColonistMealView | null {
+  const meal = monthEndReport(state)?.colonistMeal;
+  if (!meal) return null;
+  const whole = ({ need, took }: { need: number; took: number }) => ({ took: took >= need ? Math.ceil(need) : Math.floor(took), need: Math.ceil(need) });
+  return { colonists: meal.colonists, food: whole(meal.food), water: whole(meal.water) };
+}
+
+/** This month's report at the month end (upkeep, or game over after the last); null otherwise. */
+function monthEndReport(state: GameState): GameState['history'][number] | null {
   if (state.phase !== 'upkeep' && state.phase !== 'gameOver') return null;
   const report = state.history.at(-1);
-  return report && report.month === state.month ? !report.colonistsHungry : null;
+  return report && report.month === state.month ? report : null;
 }
 
 /** A player's Worth before the Collapse cut while the air is in Collapse (scoreParts' total plus its cut); otherwise null. */
@@ -500,7 +514,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.recordPlaybook = options.recordPlaybook ?? (() => {});
   }
 
-  /** What the lobby shows an unpicked seat: the species createGame will give it at this seat count. */
+  /**
+   * The species the lobby shows each seat, picked or not: what createGame gives it at this seat count if it never picks.
+   */
   defaultPick(seat: number, seats: number): Species {
     return defaultSpecies(seat, seats, this.seed);
   }
@@ -659,9 +675,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'repair':
         repair(state, seatId, intent.id);
-        return;
-      case 'setSiteBid':
-        setSiteBid(state, seatId, intent.id, intent.maxBid);
         return;
       case 'payStrike': {
         payStrike(state, seatId);
@@ -1568,11 +1581,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const shortages = report?.shortages ?? [];
     const hungry = state.players.filter((p) => p.hungry).map((p) => p.name);
     this.news = [
-      shortages.length > 0
-        ? `The store ran out of ${shortages.join(' and ')}! Colonists are leaving.`
-        : report?.colonistsHungry
-          ? 'Colonists could not afford their Food and Water. Some are leaving.'
-          : 'The colony is fed and growing.',
+      shortages.length > 0 ? `The store ran out of ${shortages.join(' and ')}! Colonists are leaving.` : 'The colony is fed and growing.',
       ...(hungry.length > 0 ? [`Hungry this month: ${hungry.join(', ')}.`] : []),
     ];
   }
@@ -1638,6 +1647,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           doneDeveloping: p.doneDeveloping,
           colonist: this.steering ? steeredColonistView(state, this.steering.floor, s.id, (tick) => this.steering!.origin + tick * this.realTickMs()) : null,
           condition: this.conditionIn(state, s.id),
+          reputation: p.reputation,
         };
       }),
       me: me
@@ -1686,6 +1696,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       air: { level: Math.round(state.air), band },
       lastAir: lastEnd?.air ?? null,
       colonistsFed: colonistsFedAt(state),
+      colonistMeal: colonistMealAt(state),
       ship: {
         arrives: state.ship.arrives,
         inPort: shipInPort(state),
@@ -1743,6 +1754,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const market = goodsMarket(state);
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
+    // RULE-7: once the store is sold out, its line shows the highest bid a buyer can pay, flagged so a screen labels it.
+    const selling = shownSellLine(state);
     return {
       good: a.good,
       stage: a.stage,
@@ -1752,7 +1765,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),
-      storeSells: storeSellLine(state),
+      storeSells: selling?.price ?? null,
+      ...(selling?.bid ? { storeSellsBid: true as const } : {}),
+      zones: { ...a.zones },
       storeForSale: storeForSale(state, a.good),
       shipPays: shipLine(state),
       shipQuote: shipQuote(state, a.good),

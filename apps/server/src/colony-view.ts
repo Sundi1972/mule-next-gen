@@ -1,5 +1,5 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { allPrices, colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
+import { allPrices, colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, groundsPlace, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
@@ -31,11 +31,10 @@ export function colonyView(state: GameState): ColonyView | null {
         funded: { credits: p.funded.credits, goods: { ...p.funded.goods } },
         buildMonths: row.buildMonths,
         monthsLeft: p.monthsLeft,
-        plot: p.plot,
+        place: groundsPlace(p),
         prestige: row.prestige,
         upkeep: row.upkeep,
         repairCost: p.stage === 'damaged' ? row.repairCost : null,
-        maxBid: p.maxBid,
         plaque: Object.entries(p.plaque)
           .map(([playerId, value]) => ({ playerId, value }))
           .sort((a, b) => b.value - a.value),
@@ -44,7 +43,7 @@ export function colonyView(state: GameState): ColonyView | null {
     catalogue: IDS.map((id): ColonyCatalogueView => {
       const row = PRESTIGE[id];
       const why = commissionRefusal(state, id);
-      return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, needsPlot: row.needsPlot, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
+      return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
     }),
     // The store's price today: what donate() values a gift of goods at on the plaque (AM-13).
     refPrice: Object.fromEntries(NEEDED.map((g) => [g, prices[g]])),

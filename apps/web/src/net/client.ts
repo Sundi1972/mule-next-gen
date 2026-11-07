@@ -484,6 +484,11 @@ export class TableClient {
     this.send({ t: 'kick', seatId });
   }
 
+  /** The host chooses who plays a computer seat, in the lobby: the game's own plan, or a Claude chat with the seat's code. */
+  setSeatKind(seatId: string, kind: 'builtin' | 'claude'): void {
+    this.send({ t: 'setSeatKind', seatId, kind });
+  }
+
   /** The host ends the table for everyone, in the lobby. */
   closeTable(): void {
     this.send({ t: 'close' });

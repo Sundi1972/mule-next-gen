@@ -9,6 +9,7 @@ import {
   stableJson,
   stepAuction,
   STORE_ID,
+  storeForSale,
   WALK,
   type AiLevelId,
   type AiPersonaId,
@@ -24,7 +25,8 @@ import { draftGoodPlaybook, draftPlaybook } from '../src/playbook/draft.js';
 import { validatePlaybook } from '../src/playbook/validate.js';
 import { AiSeat } from '../src/seat.js';
 import { goodPlan } from '../src/strategist.js';
-import { beforeTax } from '../src/value.js';
+import { planMind } from '../src/playbook/plan.js';
+import { beforeTax, type Mind } from '../src/value.js';
 
 /**
  * C7 · RULE-10: on the playbook path the auction hand plays the good's part. The parity half builds today's hand and the
@@ -42,9 +44,15 @@ const SEATS: { persona: AiPersonaId; level: AiLevelId }[] = [
 /** The table's seats, as the sim builds them: fresh for every run, so each run starts from the same seeds. */
 const seatsFor = (seed: number) => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI ${i + 1}`, ...s, seed: seed * 10 + i }));
 
-/** The playbook hand for a seat, its rng seeded as AiSeat seeds its own auction hand, so both hands draw the same noise. */
-const handFor = (seat: AiSeat, play: (state: GameState, good: Good) => GoodPlay | null) =>
-  new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), play); // literal-ok: AiSeat's salt for the auction hand's rng
+/**
+ * The playbook hand for a seat, its rng seeded as AiSeat seeds its own auction hand, so both hands draw the same noise.
+ * Its parts are valued with `mind`, the plan mind; unset, the seat's own.
+ */
+const handFor = (seat: AiSeat, play: (state: GameState, good: Good) => GoodPlay | null, mind: Mind = seat.mind) =>
+  new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), (state, good) => { // literal-ok: AiSeat's salt for the auction hand's rng
+    const p = play(state, good);
+    return p && { play: p, mind };
+  });
 
 /** The seat's own fresh one-good draft at the good's status screen (AM-20). */
 const ownDraft = (seat: AiSeat, state: GameState, good: Good): GoodPlay =>
@@ -154,11 +162,11 @@ const stockOf = (run: GoodRun, id: string, good: Good) => run.state.players.find
  * A walk probe: seat ai1 buys Food by `part`; once the walk starts, ai1 stands at `mine`, ai2 (a rival buyer) at
  * `rival` (or passes), and ai0 asks at `ask`. Only ai1 moves, so what it does is its aim against that board.
  */
-function probe(screen: GameState, part: GoodPlay, board: { mine: number; rival: number | null; ask: number }, ticks = 150) {
+function probe(screen: GameState, part: GoodPlay, board: { mine: number; rival: number | null; ask: number }, ticks = 150, mindOf?: (seat: AiSeat) => Mind) {
   const state = structuredClone(screen);
   state.store.stock.food = 0;
   const seat = seatsFor(5)[1]!;
-  const hand = handFor(seat, () => structuredClone(part));
+  const hand = handFor(seat, () => structuredClone(part), mindOf?.(seat));
   const acts: string[] = [];
   const targets: (number | null)[] = [];
   let top = -Infinity;
@@ -195,10 +203,10 @@ function probe(screen: GameState, part: GoodPlay, board: { mine: number; rival: 
  * `mine`, ai2 (a rival seller) at `rival`, and ai1 bids at `bid`; the store buys nothing. Only ai0 moves. The lowest
  * price it stood at.
  */
-function sellerProbe(screen: GameState, part: GoodPlay, board: { mine: number; rival: number; bid: number }, ticks = 150): number {
+function sellerProbe(screen: GameState, part: GoodPlay, board: { mine: number; rival: number; bid: number }, ticks = 150, mindOf?: (seat: AiSeat) => Mind) {
   const state = structuredClone(screen);
   const seat = seatsFor(5)[0]!;
-  const hand = handFor(seat, () => structuredClone(part));
+  const hand = handFor(seat, () => structuredClone(part), mindOf?.(seat));
   for (let i = 0; i < 200 && state.auction!.stage === 'status'; i++) {
     hand.tick(state, WALK.tickMs, (x) => applyAction(state, seat.id, x));
     for (const p of state.players) if (p.id !== seat.id) applyAction(state, p.id, { type: 'done', done: true });
@@ -219,7 +227,7 @@ function sellerProbe(screen: GameState, part: GoodPlay, board: { mine: number; r
     stepAuction(state, WALK.tickMs);
     bottom = Math.min(bottom, Math.round(state.auction!.walkers.find((w) => w.id === 'ai0')!.price));
   }
-  return bottom;
+  return { bottom, limit: hand.debug()?.limit ?? null };
 }
 
 /**
@@ -280,8 +288,16 @@ describe('AM-20: the one-good draft', () => {
   });
 });
 
+/**
+ * Hands the event loop to vitest's worker. A test that runs synchronously past 60 s fails the run, every test green:
+ * the worker's report of the test's start waits 60 s for its answer, and a blocked worker cannot read it ("Timeout
+ * calling onTaskUpdate"). The parity half below plays every good of five seeds and took 62–75 s on CI (runs 42233998329,
+ * 42242341278, 42246371807, 42246435393), so it yields between screens.
+ */
+const yieldToWorker = () => new Promise<void>((r) => setImmediate(r));
+
 describe('C7 · RULE-10: the auction hand plays the good part', () => {
-  it('T-AC-8: with the draft\'s defaults the acts are today\'s, tick for tick; each binding field moves the walk', { timeout: 120_000 }, () => {
+  it('T-AC-8: with the draft\'s defaults the acts are today\'s, tick for tick; each binding field moves the walk', { timeout: 120_000 }, async () => {
     // ── Parity: each good's own fresh one-good draft, played, sends today's acts tick for tick, from the same seed and screen.
     let compared = 0;
     let picksDiffer = 0;
@@ -308,6 +324,7 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
           expect(playbook.acts, at).toEqual(today.acts);
           expect(playbook.trades, at).toEqual(today.trades);
         }
+        await yieldToWorker();
       }
     }
     expect(compared, 'goods compared tick for tick').toBeGreaterThanOrEqual(60);
@@ -389,8 +406,7 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(sold(turned, 'ai0')).toEqual([]);
 
     // bluff: it declares its side, aims at the far edge, presses Done and trades nothing. The seller's row on a store
-    // with Food to sell all walk: under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk, and ai1, with
-    // no Food and 2,000 cr, then pays the board's top and meets the bluffing seller there.
+    // with Food to sell all walk.
     const stocked = structuredClone(screen);
     stocked.store.stock.food = 30;
     const bluffSeller = runGood(stocked, 5, 0, () => ({ ...seller, bluff: true }));
@@ -398,21 +414,18 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(bluffSeller.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
     expect(sold(bluffSeller, 'ai0')).toEqual([]);
     expect(bluffSeller.path.at(-1)!.price).toBe(screen.auction!.hi);
-    // With the store sold out mid-walk the bluffing seller may sell at the top edge, to a buyer that walks up to it (WS1's
-    // ruling, accepted): each such unit goes at or over the value the hand puts on it (a unit past the table spoils, so is
-    // worth nothing), and over every unit's worth it could give up; it keeps the Food it needs.
+    // Under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk. ai1, with no Food and 2,000 cr, buys its
+    // share at the store's line, then bids on past that line and stops one step under the bluffing seller resting at the
+    // top: walking up never trades with a resting seller, and a bluff never walks down onto a bid, so it sells nothing.
     const soldOut = runGood(screen, 5, 0, () => ({ ...seller, bluff: true }));
-    const topSales = sold(soldOut, 'ai0');
-    expect(topSales.length, 'the store sells out and a buyer meets the bluff at the top').toBeGreaterThan(0);
-    const sellerValues = goodPlan(observe(screen, 'ai0'), seatsFor(5)[0]!.mind, 'food').values;
-    const unitFloor = (h: number) => Math.ceil(beforeTax(screen, sellerValues.keep[h - 1] ?? 0));
-    const dearest = Math.max(...sellerValues.keep.filter((v) => Number.isFinite(v)).map((v) => Math.ceil(beforeTax(screen, v))));
-    topSales.forEach((t, i) => {
-      expect(t.price, `unit ${i + 1}`).toBe(screen.auction!.hi);
-      expect(t.price, `unit ${i + 1}`).toBeGreaterThanOrEqual(unitFloor(had - i));
-      expect(t.price, `unit ${i + 1}`).toBeGreaterThanOrEqual(dearest);
-    });
-    expect(stockOf(soldOut, 'ai0', 'food')).toBeGreaterThanOrEqual(sellerValues.floorUnits);
+    const { sellersBottom } = screen.auction!.zones;
+    expect(soldOut.trades.some((t) => t.seller === STORE_ID && t.buyer === 'ai1'), 'ai1 buys at the store first').toBe(true);
+    expect(storeForSale(soldOut.state, 'food'), 'the store sells out').toBe(0);
+    expect(soldOut.path.at(-1)!.price, 'the bluff rests at the top').toBe(hi);
+    expect(Math.round(soldOut.state.auction!.walkers.find((w) => w.id === 'ai1')!.price), 'ai1 bids past the old line, a step under the bluff').toBe(hi - 1);
+    expect(hi - 1).toBeGreaterThan(sellersBottom);
+    expect(sold(soldOut, 'ai0'), 'the bluff sells nothing').toEqual([]);
+    expect(stockOf(soldOut, 'ai0', 'food')).toBe(had);
     // A bluffing buyer is the buyer it starts as (no declare under the no-Pass auction): it aims at lo, presses Done and
     // buys nothing.
     const bluffBuyer = runGood(screen, 5, 1, () => ({ ...buyer, bluff: true }));
@@ -421,31 +434,47 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(bluffBuyer.path.at(-1)!.price).toBeLessThanOrEqual(screen.auction!.lo);
     expect(bought(bluffBuyer, 'ai1')).toEqual([]);
 
-    // vsRival, against a rival buyer ahead at 20, the seller asking 40: undercut1 aims one over it; hold never does (it
-    // aims and acts as with no rival there); yield stands one behind it; per names the stance for that rival. The aim is
-    // read off the hand's debug view: past the rival, an overtake and the walk on look alike in the acts.
-    const W = 30;
+    // vsRival, against a rival buyer ahead at lo + 6, the seller asking 40: undercut1 aims one over it; hold never does
+    // (it aims and acts as with no rival there); yield stands one behind it; per names the stance for that rival. The aim
+    // is read off the hand's debug view: past the rival, an overtake and the walk on look alike in the acts. The board
+    // sits inside the edges, where the walk keeps every walker and the hand its targets.
+    const W = lo + 10;
     const base: GoodPlay = { ...buyer, hold: buyer.hold + 5, walkAway: W, start: W };
-    const board = { mine: 8, rival: 20, ask: 40 };
+    const board = { mine: lo, rival: lo + 6, ask: 40 };
     const undercut = probe(screen, { ...base, vsRival: 'undercut1' }, board);
     expect(undercut.limit, 'the probe buyer values Food over its walkAway').toBe(W);
-    expect(undercut.targets).toContain(21);
-    expect(undercut.top).toBeGreaterThan(20);
+    expect(undercut.targets).toContain(board.rival + 1);
+    expect(undercut.top).toBeGreaterThan(board.rival);
     const alone = probe(screen, { ...base, vsRival: 'undercut1' }, { ...board, rival: null });
-    expect(alone.targets).not.toContain(21);
+    expect(alone.targets).not.toContain(board.rival + 1);
     const hold = probe(screen, { ...base, vsRival: 'hold' }, board);
     expect(hold.targets).toEqual(alone.targets);
     expect(hold.acts).toEqual(alone.acts);
     const yieldTop = probe(screen, { ...base, vsRival: 'yield' }, board).top;
-    expect(yieldTop).toBe(19);
-    expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board).top).toBe(19);
+    expect(yieldTop).toBe(board.rival - 1);
+    expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board).top).toBe(board.rival - 1);
     expect(probe(screen, { ...base, vsRival: 'yield', per: { ai2: 'undercut1' } }, board).targets).toEqual(undercut.targets);
-    // The seller's mirror, against a rival seller ahead at lo + 8 and a bid at the buyers' edge (a seller walks no lower
-    // than just over it, #291): yield stands one behind the rival, over it; undercut1 goes under it.
+    // The seller's mirror, against a rival seller ahead and a bid at the buyers' edge (a seller walks no lower than just
+    // over it, #291, nor into the buyers' zone under B, RULE-6): yield stands one behind the rival, over it; undercut1
+    // goes under it. The rival stands above B, so there is room under it whatever the store's spread puts B at.
+    const rival = Math.max(lo + 8, screen.auction!.zones.buyersTop + 3);
     const sellBase: GoodPlay = { ...seller, hold: 0, walkAway: lo + 3, start: lo + 3 };
-    const sellBoard = { mine: screen.auction!.hi, rival: lo + 8, bid: lo };
-    expect(sellerProbe(screen, { ...sellBase, vsRival: 'yield' }, sellBoard)).toBe(lo + 9);
-    expect(sellerProbe(screen, { ...sellBase, vsRival: 'undercut1' }, sellBoard)).toBeLessThan(lo + 8);
+    const sellBoard = { mine: screen.auction!.hi, rival, bid: lo };
+    expect(sellerProbe(screen, { ...sellBase, vsRival: 'yield' }, sellBoard).bottom).toBe(rival + 1);
+    expect(sellerProbe(screen, { ...sellBase, vsRival: 'undercut1' }, sellBoard).bottom).toBeLessThan(rival);
+    // RULE-10's unit values come from the plan mind the source hands the hand (RULE-14), not the persona's. Holding 6
+    // Food, its next unit is one to resell, so the cautious seat's speculate weight sets its ceiling; a monopolist's
+    // plan multiplies that weight.
+    const fed = structuredClone(screen);
+    fed.players[1]!.stock.food = 6;
+    const open: GoodPlay = { ...base, hold: 9, walkAway: 10_000, start: 10_000 };
+    const asMonopolist = (s: AiSeat) => planMind(s.mind, { kind: 'monopolist' });
+    const persona = probe(fed, open, board).limit;
+    const planned = probe(fed, open, board, 150, asMonopolist).limit;
+    // The same seat with the monopolist's weights as its own, valued with its own mind.
+    const weighted = probe(fed, open, board, 150, (s) => Object.assign(s.mind.persona, asMonopolist(s).persona) && s.mind).limit;
+    expect(planned).not.toBe(persona);
+    expect(planned).toBe(weighted);
   });
 
   it('T-AC-8 · AM-21: a walkAway edit bounds the line trade too, on the board price; with the draft\'s walkAway the line is today\'s', () => {

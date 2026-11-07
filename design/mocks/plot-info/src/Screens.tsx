@@ -113,7 +113,7 @@ export function PlanningScan({ variant, scan }: { variant: Variant; scan: Return
       rail={
         scan.stage === 'report' ? (
           variant === 'A' ? (
-            <ScanReport tiles={scanned} />
+            <ScanReport tiles={scanned} next="Next drone: month 6." />
           ) : (
             <section className="flex flex-col gap-1 rounded-control border border-holo bg-panel p-2" data-testid="scan-summary">
               <span className="flex items-center justify-between">
@@ -149,12 +149,10 @@ export function PlanningScan({ variant, scan }: { variant: Variant; scan: Return
       }
       footer={
         scan.stage === 'report' ? (
-          <span className="flex items-center justify-between text-[11px] text-ink-3" data-testid="drone-used">
-            One drone each planning: the next in month 6.
-            <button type="button" className="font-mono text-holo underline" onClick={scan.again}>
-              replay
-            </button>
-          </span>
+          // The mock's own replay control; the build's footer holds nothing here, the report closes with the drone line.
+          <button type="button" className="self-end font-mono text-[11px] text-holo underline" onClick={scan.again} data-testid="replay">
+            replay
+          </button>
         ) : (
           <Button size="md" className="w-full" disabled={scan.picked.length === 0 || scan.stage === 'scanning'} onClick={scan.scan} data-testid="scan">
             {scan.stage === 'scanning' ? 'Scanning…' : `Scan · ${scan.picked.length} of 2 plots · 60 cr`}

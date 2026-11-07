@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, LOTS, monthNeeds, observe, stableJson, STRATEGIST, storePaysFor, type GameState, type Outfit } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, LOTS, monthNeeds, observe, postPrices, stableJson, STRATEGIST, storePaysFor, type GameState, type Outfit } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { draftPlaybook, validatePlaybook } from '../src/playbook/index.js';
 import { AiSeat } from '../src/seat.js';
@@ -31,6 +31,9 @@ function holding(money: number, plots: [number, Outfit | null][]): GameState {
   // Species picked as the cases were built: the default turns with the seed (FM-species-by-chair), and ai0 is no Mollox,
   // whose +1 on a working mine would give the dud Smithore MULE a worth.
   const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true, species: BUILT_SPECIES[i] })) });
+  // Energy's shelf is full when the opening prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+  state.store.stock.energy = 200;
+  postPrices(state);
   for (const [index, outfit] of plots) Object.assign(state.tiles[index]!, { owner: 'ai0', outfit });
   const p = state.players[0]!;
   p.money = money;
@@ -90,6 +93,11 @@ describe('selling when short of cash (C10, RULE-12)', () => {
     expect(wanted(holding(40, [[PLAINS, 'food']]))).toEqual([]);
     expect(wanted(holding(40, [[PLAINS, 'energy']]))).toEqual([]);
     expect(wanted(holding(40, []))).toEqual([]);
+    // FM-RULE12-water: a seat with a farm never lists its last Water MULE (an unwatered farm makes half); without a
+    // farm it may, and with two one may go.
+    expect(wanted(holding(40, [[PLAINS, 'food'], [PLAINS_2, 'water']]))).toEqual([]);
+    expect(wanted(holding(40, [[PLAINS_2, 'water']]))).toMatchObject([{ item: 'mule', plot: PLAINS_2 }]);
+    expect(wanted(holding(40, [[PLAINS, 'food'], [PLAINS_2, 'water'], [MOUNTAIN, 'water']]))).toMatchObject([{ item: 'mule', plot: expect.toBeOneOf([PLAINS_2, MOUNTAIN]) }]);
     // With two Food MULEs, one of them may go; a plot with a MULE on it is never a plot lot.
     const twoFarms = holding(40, [[PLAINS, 'food'], [PLAINS_2, 'food']]);
     const farms = wanted(twoFarms);

@@ -1,23 +1,23 @@
 /**
  * LOCAL ONLY (lean CI tier 3, 2026-10-28): CI checks B-AC-9 as a step of the whole game, special-steps.ts in smoke.ts.
  * This script plays its own game to check what the step doesn't: the badge never over the owner's mark of the plot it
- * hangs into (W-I1, the geometry), a plain plot's card, and the special line in the drone's rail, the land grant's lit
- * card and Develop's plot card.
+ * hangs into (W-I1, the geometry), a plain plot's card, the special line in the drone's rail and the land grant's lit
+ * card, and the glyph on the TV's development map.
  * Run it after a build: `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/specials.ts`; another
  * map with `MULE_E2E_SEED=<seed>`.
  *
  * B-AC-9 (MG-2): given a special field on the map, when a player looks at the phone or the TV, the approved glyph
  * (the badge, variant A) shows on that plot; a plain plot shows none. On the phone, tapping a special plot selects
  * it and its plot card says what it does, first under the plot's name; when the land grant lights it, so does the
- * lit card; so do the geo drone's rail and Develop's plot card. The badge never takes a plot's taps: a tap on the part
- * that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
- * owner's mark of the plot it hangs into.
+ * lit card; so does the geo drone's rail; and the TV's arcade map in development draws the glyph. The badge never
+ * takes a plot's taps: a tap on the part that hangs over a neighbour selects the neighbour. Each badge is drawn at its
+ * size (the TV's fixed, the phone's sized with its plot), and never over the owner's mark of the plot it hangs into.
  */
 import { createGame, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { checkGlyphs as checkGlyphsOf, checkSpecialLine as checkSpecialLineOf, plotName, specialsOn, tapOnTheOverhang, tapPlot as tapPlotOf, type Density } from './special-steps';
 
 /** Seed 93 with two seats: a 13×7 map with ruins on the top row (7,0), a crystal cavern inside (10,3) and an oasis on the bottom edge (9,6). */
@@ -71,6 +71,10 @@ try {
   check(state, `a game in room ${code}`);
   check(JSON.stringify(state.tiles.map((t) => t.special ?? null)) === JSON.stringify(dealt.tiles.map((t) => t.special ?? null)), `seed ${SEED}: the server dealt the map the test read`);
 
+  // Month 1's planning opens on its election (POLITICS electionMonths), and the TV shows election day until it is over:
+  // vote through it to planning proper, whose desks the phone shows and whose colony map the TV shows.
+  await voteThroughTheElection(phone, ELECTION_WAIT_MS + READY_MS + SHOWN_MS);
+
   // Planning: the TV's colony map and the phone's hub map (its Look tool).
   const tvMap = tv.locator('[data-phase=planning]');
   await tvMap.waitFor({ timeout: SHOWN_MS });
@@ -84,7 +88,7 @@ try {
   Object.assign(state.tiles[diagonal.y * dealt.width + diagonal.x]!, { owner: 's1' });
   const room = server.registry.get(code) as unknown as { broadcast(): void };
   room.broadcast();
-  const marks = [await checkMarkOnTop(hubMap, 'phone, planning', true), await checkMarkOnTop(tvMap, 'TV, planning', false)];
+  const marks = [await checkMarkOnTop(hubMap, 'phone, planning', false), await checkMarkOnTop(tvMap, 'TV, planning', true)];
 
   // Tap the special plot: it selects, and the plot card says what it is first under its name.
   const look = planning.getByTestId('look-plot');
@@ -109,8 +113,8 @@ try {
   await checkSpecialLine(drone, looked.special.kind, `B-AC-9: the drone rail of ${plotName(looked)}`);
 
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
-  // Through month 1's election first when the table plays politics; with politics off this is one press.
-  await readyThroughTheElection(phone, ELECTION_WAIT_MS + READY_MS + SHOWN_MS);
+  // The election is over, so this is the one press of I'm ready that leaves planning.
+  await readyThroughTheElection(phone, READY_MS + SHOWN_MS);
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: SHOWN_MS });
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });
@@ -119,16 +123,12 @@ try {
   await checkGlyphs(grant, 'phone, land grant', 'phone');
   await checkGlyphs(tv.locator('[data-phase=landGrant]'), 'TV, land grant', 'tv');
 
-  // Development: the plot card of a tapped special plot says what it is.
+  // Development is the arcade (C14, 02bb0500): the TV's map draws each special's glyph; it has no plot card to tap.
   await claimAPlot(phone, CLAIM_MS, 'the phone claims a plot');
   await doneWithLand(phone);
-  const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });
-  const devMap = dev.getByTestId('dev-map');
-  await checkGlyphs(devMap, 'phone, development', 'phone');
-  await tapPlot(phone, devMap, looked);
-  await dev.getByTestId('plot-title').filter({ hasText: plotName(looked) }).waitFor({ timeout: SHOWN_MS });
-  await checkSpecialLine(dev.getByTestId('plot-title').locator('xpath=ancestor::section[1]'), looked.special.kind, `B-AC-9: Develop's plot card of ${plotName(looked)}`);
+  const devMap = tv.locator('[data-phase=development]').getByTestId('tv-map');
+  await devMap.waitFor({ timeout: REACH_DEVELOPMENT_MS });
+  await checkGlyphs(devMap, 'TV, development', 'tv');
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e specials: ok (seed ${SEED}, ${specials.map((t) => `${t.special.kind} ${plotName(t)}`).join(', ')}; ${marks.join('; ')})`);
@@ -157,8 +157,9 @@ function tapPlot(page: Page, map: Locator, p: { x: number; y: number }): Promise
 
 /**
  * The owner's mark of the plot diagonally below-right of the inner special paints above the badge hung into it: a hit
- * test, with the badge made hittable for that one probe, at the middle of where their boxes meet. On the phone the
- * boxes meet (the badge hangs 3.75 px, the mark starts 3 px in); `mustMeet` makes the check fail if they don't.
+ * test, with the badge made hittable for that one probe, at the middle of where their boxes meet. On the TV the boxes
+ * meet, and `mustMeet` makes the check fail if they don't; the phone's badge, sized with its plot, may hang short of
+ * the mark ('apart'), which passes.
  */
 async function checkMarkOnTop(map: Locator, where: string, mustMeet: boolean): Promise<string> {
   const mark = map.locator('[role=img][data-slot]').filter({ visible: true });

@@ -43,10 +43,13 @@ const seatsFor = () => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI 
 /** Upkeep eats the household's Food, half of the rest spoils, and next development is hungry under the household's Food. */
 const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
 
-/** The Food status screen: ai0 and ai1 on three Energy plots each, ai0 holding 3 over what keeps it whole, ai1 none. */
+/**
+ * The Food status screen: ai0 and ai1 on three Energy plots each, ai0 holding 3 over what keeps it whole, ai1 none. The
+ * store posts its prices on that colony, as it does entering the auction.
+ */
 function foodScreen(): GameState {
   const state = createGame({ seed: SEED, players: SEATS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
-  while (state.phase !== 'auction') advancePhase(state);
+  while (state.phase !== 'production') advancePhase(state);
   state.store.stock.food = Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) + 40;
   for (const p of state.players) p.stock.food = Math.max(monthNeeds(state, p.id).food, wholeFood(state, p.id));
   for (const id of [ME, RIVAL]) {
@@ -57,6 +60,7 @@ function foodScreen(): GameState {
     p.stock.food = id === ME ? wholeFood(state, id) + 3 : 0;
     p.money = 3_000;
   }
+  advancePhase(state);
   startAuction(state, ['food']);
   return state;
 }
@@ -115,7 +119,7 @@ describe('RULE-4 AI: a held AI seller presses ▼ again only when it chose to se
     const own = (seat: AiSeat) => draftGoodPlaybook({ state, seat: ME, mind: seat.mind, seed: seat.options.seed }, 'food').auction!.food!;
     const hand = (seat: AiSeat) => {
       const part: GoodPlay = { ...own(seat), role: 'seller', hold: need, bluff: false };
-      return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => structuredClone(part)); // literal-ok: AiSeat's salt for the auction hand's rng
+      return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => ({ play: structuredClone(part), mind: seat.mind })); // literal-ok: AiSeat's salt for the auction hand's rng
     };
 
     const run = play(state, hand);

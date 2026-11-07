@@ -2,7 +2,7 @@ import { POLLUTION, TERRAIN_ODDS as ENGINE_ODDS } from '@mule/engine';
 import type { MuleView, PlayerView, TileView } from '@mule/protocol';
 import { GOOD_NAME, type Good } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
-import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
+import { colonyVerdict, lobbySeatSpecies, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
 
 const p = (id: string, money: number, slot: number, worth = money): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, worth, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
@@ -64,13 +64,12 @@ describe('reading the view', () => {
     expect(bySlot[0]).toBe('gearling');
   });
 
-  it('turns tiles into map tiles: owner slots, outfits as goods, ground on four pips', () => {
+  it('turns tiles into map tiles: owner slots, outfits as goods, ground as 0–3 dots', () => {
     const [a, b] = mapTiles(view());
     expect(a).toMatchObject({ owner: 1, good: 'energy' });
     expect(b!.good).toBeUndefined();
     expect(b).toMatchObject({ owner: 0, pollution: 2 });
-    expect(b!.ground).toEqual({ food: 0, water: 4, energy: 1, smithore: 4, crystite: 0, rareEarth: 1 });
-    expect(groundPips('smithore', 9)).toBe(4);
+    expect(b!.ground).toEqual({ food: 0, water: 3, energy: 1, smithore: 3, crystite: 0, rareEarth: 1 });
   });
 
   it('B-AC-10 (WS4, Worth): standings rank by worth, not cash, and the value is worth, which at game over is the final score', () => {
@@ -128,5 +127,25 @@ describe('the terrain hint', () => {
     expect(sentences).toHaveLength((good.length ? 1 : 0) + (poor.length ? 1 : 0) + 1);
     const listed = new Set([...good, ...poor, GOOD_NAME.smithore]);
     for (const name of Object.values(GOOD_NAME).filter((n) => !listed.has(n))) expect(hint).not.toContain(name);
+  });
+});
+
+describe('B-AC-1 (WS4): the lobby draws the species a seat will play', () => {
+  const seat = (extra: { pick?: string; defaultPick?: string }) => ({ id: 's2', name: 'Brix', isAi: true, connected: true, color: 1, ...extra });
+
+  it('B-AC-1: a seat that has not picked shows the default the server dealt it, not the one its chair had', () => {
+    // The server turns the defaults by the seed (#497): seat 2 may be dealt a Quibbit, though its chair's default is a Bramblet.
+    expect(lobbySeatSpecies(seat({ defaultPick: 'quibbit' }), 1)).toBe('quibbit');
+  });
+
+  it('B-AC-1: a pick beats the default', () => {
+    expect(lobbySeatSpecies(seat({ pick: 'mollox', defaultPick: 'quibbit' }), 1)).toBe('mollox');
+    // A pick the game does not know is no pick, as the server reads it: the dealt default stands.
+    expect(lobbySeatSpecies(seat({ pick: 'dragon', defaultPick: 'quibbit' }), 1)).toBe('quibbit');
+  });
+
+  it('B-AC-1 (negative): with no default from the server, or one the game does not know, the seat shows its chair\'s', () => {
+    expect(lobbySeatSpecies(seat({}), 1)).toBe('bramblet');
+    expect(lobbySeatSpecies(seat({ defaultPick: 'dragon' }), 1)).toBe('bramblet');
   });
 });
