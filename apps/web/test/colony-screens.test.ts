@@ -701,7 +701,7 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     const screen = tv(at('planning', 1, parkAt('building')));
     // A colony event at the month end, its show on the server's clock for the next 4 s.
     const showMs = 4_000;
-    const event = { key: 'festival', kind: 'festival', title: 'Festival', line: 'The colony celebrates.', sign: 'good', scope: 'colony', origin: null, hits: [], phase: 'upkeep', weight: 'minor', playMs: EVENT_SHOW.playMs.minor, objects: [], effects: [] };
+    const event = { key: 'festival', kind: 'festival', title: 'Festival', line: 'The colony celebrates.', sign: 'good', scope: 'colony', origin: null, hits: [], phase: 'upkeep', weight: 'spotlight', playMs: EVENT_SHOW.playMs.spotlight, objects: [], effects: [] };
     screen.send({ ...at('upkeep', 1, parkAt('standing')), events: [event], eventShow: { startsAt: serverMs, showMs, introMs: EVENT_SHOW.introMs, endsAt: serverMs + showMs, held: true } } as unknown as MuleView);
     expect(screen.shows('tv-grounds-opener')).toBe(true);
     pass(3_900);
