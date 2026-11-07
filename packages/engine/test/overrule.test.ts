@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { callOverrule, canOverrule, createGame, RuleError, setSalesTax, type GameState, type OverruleTarget, type OverruleWhy } from '../src/index.js';
+import {
+  callOverrule,
+  canOverrule,
+  closeVotes,
+  createGame,
+  isVotesDone,
+  openOverrule,
+  POLITICS,
+  RuleError,
+  setSalesTax,
+  stepVotes,
+  voteOverrule,
+  votesDone,
+  votesOpen,
+  voteWeight,
+  type GameState,
+  type OverruleTarget,
+  type OverruleWhy,
+} from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 
@@ -104,5 +122,161 @@ describe('S5-C4: the call freezes the tax', () => {
     callOverrule(state, 'brix', null);
     expect(refused(() => setSalesTax(state, 'lena', 7))).toBe('accepted');
     expect(state.treasury.salesTax).toBe(0.07);
+  });
+});
+
+/** Brix called a tax overrule against Lena's 5% -> 10%. */
+function called(): GameState {
+  const state = raised();
+  callOverrule(state, 'brix', 'tax');
+  return state;
+}
+
+describe('S5-C5: the overrule ballot as planning ends', () => {
+  it('S5-T-AC-7: S5-RULE-7\'s transitions — no call opens nothing; called → ballot → reveal → over; a withdrawn call holds no ballot; a call never opened lapses on leaving planning; an open ballot is tallied', () => {
+    // No call: nothing opens and nothing changes.
+    const none = raised();
+    const untouched = structuredClone(none.politics);
+    expect(openOverrule(none)).toBe(false);
+    expect(none.politics).toEqual(untouched);
+
+    // A call that is withdrawn holds no ballot.
+    const withdrawn = called();
+    callOverrule(withdrawn, 'brix', null);
+    expect(openOverrule(withdrawn)).toBe(false);
+    expect(withdrawn.politics!.overrule).toBeNull();
+
+    // Called -> ballot: the caller's yes and the Governor's no are preset, and neither is Done.
+    const state = called();
+    expect(votesOpen(state)).toBe(false);
+    expect(openOverrule(state)).toBe(true);
+    expect(state.politics!.overrule).toMatchObject({ stage: 'ballot', ballots: { brix: true, lena: false }, done: [], result: null });
+    expect(votesOpen(state)).toBe(true);
+    for (const id of SEATS) expect(isVotesDone(state, id), `${id} has not cast`).toBe(false);
+    expect(openOverrule(state)).toBe(false);
+    stepVotes(state, 0);
+    expect(state.politics!.overrule!.stage).toBe('ballot');
+
+    // Ready is Done for the ballot; a cast ballot is Done; nobody closes it until every player is Done.
+    votesDone(state, 'lena');
+    voteOverrule(state, 'brix', true);
+    voteOverrule(state, 'ossa', false);
+    expect(SEATS.map((id) => isVotesDone(state, id))).toEqual([true, true, true, false]);
+    stepVotes(state, POLITICS.overrule.revealMs);
+    expect(state.politics!.overrule!.stage).toBe('ballot');
+    voteOverrule(state, 'kai', false);
+    voteOverrule(state, 'kai', true);
+    expect(state.politics!.overrule!.ballots.kai).toBe(true);
+    stepVotes(state, 0);
+    expect(state.politics!.overrule).toMatchObject({ stage: 'reveal', clockMs: 0 });
+    expect(votesOpen(state)).toBe(true);
+
+    // The reveal runs on the overrule's own clock, not the council's.
+    const council = POLITICS.council as { revealMs: number };
+    const overrule = POLITICS.overrule as { revealMs: number };
+    const kept = { council: council.revealMs, overrule: overrule.revealMs };
+    try {
+      council.revealMs = 1;
+      overrule.revealMs = 5_000;
+      stepVotes(state, 4_999);
+      expect(state.politics!.overrule!.stage).toBe('reveal');
+      stepVotes(state, 1);
+      expect(state.politics!.overrule!.stage).toBe('over');
+    } finally {
+      council.revealMs = kept.council;
+      overrule.revealMs = kept.overrule;
+    }
+    expect(votesOpen(state)).toBe(false);
+
+    // A call that never got its ballot lapses on leaving planning; the tax is not restored.
+    const lapsed = called();
+    closeVotes(lapsed);
+    expect(lapsed.politics!.overrule).toBeNull();
+    expect(lapsed.treasury.salesTax).toBe(0.1);
+
+    // An open ballot is tallied when planning ends, and a ballot in its reveal takes effect.
+    const open = called();
+    openOverrule(open);
+    voteOverrule(open, 'brix', true);
+    closeVotes(open);
+    expect(open.politics!.overrule).toMatchObject({ stage: 'over', result: { total: 4, needed: 3, yes: 1, no: 1, passed: false } });
+    const revealing = called();
+    openOverrule(revealing);
+    for (const id of SEATS) voteOverrule(revealing, id, id !== 'lena');
+    stepVotes(revealing, 0);
+    expect(revealing.treasury.salesTax).toBe(0.1);
+    closeVotes(revealing);
+    expect(revealing.politics!.overrule!.stage).toBe('over');
+    expect(revealing.treasury.salesTax).toBe(0.05);
+
+    // Done reaches the overrule only once the election is over: with an election open, Ready is the election's.
+    const both = called();
+    openOverrule(both);
+    const election = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) }).politics!.election!;
+    both.politics = { ...both.politics!, election };
+    votesDone(both, 'ossa');
+    expect(both.politics!.election!.done).toEqual(['ossa']);
+    expect(both.politics!.overrule!.done).toEqual([]);
+  });
+
+  it('S5-T-AC-8: S5-RULE-8\'s examples — total 9 needs 5; yes 6 and yes 5 overrule, yes 4 stands; the two-player case needs 2; a passed tax overrule restores taxAtStart', () => {
+    // Weights from plots and reputation: lena 2 (10 plots), brix 3 (20 plots), ossa 2 and kai 2 (reputation 80).
+    const weighted = (): GameState => {
+      const state = called();
+      const own = (id: string, n: number) => state.tiles.filter((t) => t.owner === null).slice(0, n).forEach((t) => (t.owner = id));
+      own('lena', 10);
+      own('brix', 20);
+      for (const id of ['ossa', 'kai']) state.players.find((p) => p.id === id)!.reputation = 80;
+      return state;
+    };
+    const total = (state: GameState) => SEATS.reduce((sum, id) => sum + voteWeight(state, id).total, 0);
+    const decide = (state: GameState, yes: string[]) => {
+      openOverrule(state);
+      for (const id of SEATS) voteOverrule(state, id, yes.includes(id));
+      stepVotes(state, 0);
+      stepVotes(state, POLITICS.overrule.revealMs);
+      expect(state.politics!.overrule!.stage).toBe('over');
+      return state.politics!.overrule!.result;
+    };
+
+    const sample = weighted();
+    expect(total(sample)).toBe(9);
+    expect(Math.floor(total(sample) / 2) + 1).toBe(5);
+    const six = weighted();
+    expect(decide(six, ['lena', 'ossa', 'kai'])).toEqual({ passed: true, yes: 6, no: 3, total: 9, needed: 5 });
+    expect(six.treasury.salesTax).toBe(0.05);
+    const five = weighted();
+    expect(decide(five, ['brix', 'ossa'])).toEqual({ passed: true, yes: 5, no: 4, total: 9, needed: 5 });
+    expect(five.treasury.salesTax).toBe(0.05);
+    const four = weighted();
+    expect(decide(four, ['ossa', 'kai'])).toEqual({ passed: false, yes: 4, no: 5, total: 9, needed: 5 });
+    expect(four.treasury.salesTax).toBe(0.1);
+
+    // An absent ballot is an abstention, not a no: only the two preset ballots count at the close.
+    const absent = weighted();
+    openOverrule(absent);
+    closeVotes(absent);
+    expect(absent.politics!.overrule!.result).toEqual({ passed: false, yes: 3, no: 2, total: 9, needed: 5 });
+    expect(absent.treasury.salesTax).toBe(0.1);
+
+    // Four players of one vote each: total 4 needs 3, so half is not enough.
+    const flat = called();
+    expect(decide(flat, ['brix', 'ossa'])).toEqual({ passed: false, yes: 2, no: 2, total: 4, needed: 3 });
+    const flatPass = called();
+    expect(decide(flatPass, ['brix', 'ossa', 'kai'])).toMatchObject({ passed: true, yes: 3, needed: 3 });
+    expect(flatPass.treasury.salesTax).toBe(0.05);
+
+    // Two players, caller 1 vote and Governor 2: total 3, needed 2, the caller alone can't pass it.
+    const two = createGame({ seed: 7, players: ['lena', 'brix'].map((id) => ({ id, name: id, isAi: false })) });
+    two.month = 2;
+    two.politics = { ...two.politics!, governor: 'lena', election: null };
+    two.tiles.filter((t) => t.owner === null).slice(0, 10).forEach((t) => (t.owner = 'lena'));
+    setSalesTax(two, 'lena', 10);
+    callOverrule(two, 'brix', 'tax');
+    openOverrule(two);
+    voteOverrule(two, 'brix', true);
+    voteOverrule(two, 'lena', false);
+    stepVotes(two, 0);
+    expect(two.politics!.overrule!.result).toEqual({ passed: false, yes: 1, no: 2, total: 3, needed: 2 });
   });
 });
