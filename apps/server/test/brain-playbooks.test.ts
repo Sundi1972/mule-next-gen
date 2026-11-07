@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, type GameState, type Playbook } from '@mule/engine';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, STRATEGIST, type GameState, type Playbook } from '@mule/engine';
 import { AiSeat, candidate, consider, defaultManual, seatBounds, shortlist, WRITER_SYSTEM, type ValidatePlan } from '@mule/ai';
 import { createBrain, type BrainService, type MeteredBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
@@ -349,6 +349,14 @@ const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you 
 
 describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
   it('T-AC-A3: phases start on time with a fake model that never answers: each land grant opens as the people press Ready in planning, each planning as they press it at the month end', async () => {
+    // Energy first (STRATEGIST.energyFirst, PR-5a) gives the seat its Energy plant in month 1, so month 1's auction puts
+    // it a real Energy side pick: that call never answers either, and the seat is asked nothing more. Off here, so the
+    // test still sees all four writes cancelled; the rule has its own tests in packages/ai.
+    const energyFirst = STRATEGIST.energyFirst;
+    STRATEGIST.energyFirst = false;
+    onTestFinished(() => {
+      STRATEGIST.energyFirst = energyFirst;
+    });
     const silent = fakeSdk(() => new Promise(() => {}));
     const starts = await phaseStarts(smartOn(silent));
 
