@@ -465,7 +465,7 @@ S4-C11 · ADDED · WS1's valuations for sabotage, the Sheriff and the ban
 today        value.ts prices plots, goods, cash reserves; nothing values sabotage or guards.
              anchors: packages/ai/src/value.ts::Mind, ::cashReserve, ::yieldOf
              verified_by: read
-tomorrow     MUST export sabotageGain, captureCost, guardValue, investigateValue and fineChoice, and value the
+tomorrow     MUST export sabotageGain, captureCost, guardValue, investigateValue, and value the
              ban in the general lawWorth(obs, me, proposal), per §10 (proposed signatures; WS1 owns the final
              shape, `mind` included).
 seam         packages/ai/src/value.ts (WS1)
@@ -921,8 +921,9 @@ SheriffHand (only the sitting Sheriff)
                seeded pick among players' working plots
   investigate  if one is left: the public order with culprit unknown and never investigated with the
                highest investigateValue(obs, me, suspect), if > 0; Rookie: the newest
-  fine         every case it may fine: base = fineChoice(obs, me, order), clamped to the steps; Rookie: the
-               standard fine
+  fine         every case it may fine, a hand rule (no WS1 value): POLITICS.ai.sheriff.fine.leader against
+               the Worth leader, .partner against a pact partner (pactBetween), else the standard fine;
+               Rookie: the standard fine
 VoteHand (in place)
   run          unchanged: runSheriff per persona once the office is elected (RULE-8 / RULE-63)
   law vote     sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0, after the Governor and Rookie rows
@@ -1117,6 +1118,7 @@ ai: { …,
     minEdge: 0,                              // credits, after spite, cost and expected capture
     grudge: 2,                               // weight on a victim caught sabotaging this seat
   },
+  sheriff: { fine: { leader: 300, partner: 50 } },   // the AI Sheriff's base fine; else the standard
 },
 ```
 
@@ -1230,7 +1232,7 @@ Every decision a code hand makes, so WS1 can start from this list. Hands read `o
 | SabotageHand.order | planning proper, once a month, after govern | observe; persona.spite, level.sabotage; orderTerms; captureOdds; public orders; pactBetween | an order or none (S4-RULE-13) | sabotageGain, captureCost; cashReserve (exists) |
 | SheriffHand.guard | same, the sitting Sheriff | observe (politics.guards visible to it); guardsMax | the guard list | guardValue |
 | SheriffHand.investigate | same | public orders with the culprit unknown; investigateOdds | one order or none | investigateValue |
-| SheriffHand.fine | same | fineable orders; steps; pactBetween; the Worth leader | a base per case | fineChoice |
+| SheriffHand.fine | same | fineable orders; steps; pactBetween; the Worth leader | a base per case | none: a hand rule on POLITICS.ai.sheriff.fine |
 | VoteHand.decide (run) | unchanged | runSheriff[persona] | run for Sheriff or not | none (config chance) |
 | VoteHand.lawVote (ban) | the law ballot | the proposal | yes / no | lawWorth |
 | VoteHand.proposeLaw | unchanged | the law candidates | the ban among them | lawWorth |
@@ -1265,11 +1267,6 @@ export function guardValue(obs: GameState, me: string, plot: number): number;
  *  (WS1's parameter name; it is an order, not a player.) */
 export function investigateValue(obs: GameState, me: string, suspect: SabotageOrder): number;
 
-/** Proposed. The base fine (one of POLITICS.sheriff.fine.steps, before the ban's multiplier) `me` as Sheriff
- *  sets on `order`: higher against the Worth leader and a rival, the lowest step against a pact partner
- *  (pactBetween), the standard otherwise. */
-export function fineChoice(obs: GameState, me: string, order: SabotageOrder): number;
-
 /** Proposed duty, not a new function: lawWorth(obs, me, proposal) (WS1's general law value, replacing vote.ts's
  *  lawCost; the ban is just a LawProposal to it) MUST value sabotageBan at setting s as:
  *  the sabotage `me` expects against itself (the public record) × the deterrence of the higher capture cost,
@@ -1295,7 +1292,7 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 | packages/engine/src/politics.ts | WS7 | — | newPolitics's empty sabotage and guards (and rumoured); openPlanning → newSabotageMonth; closeVotes → closeCases; LAW_NAME and enactImpact for the ban; "yet" dropped (S4-C6, C7) |
 | packages/engine/src/diplomacy.ts (slice 3's, new) | WS7 | — | sabotagePossible's body (S4-RULE-5) |
 | packages/engine/src/record.ts | WS3 | yes | NoticeEntry's sabotage, investigation and fine kinds (S4-RULE-12) |
-| packages/engine/src/config.ts, POLITICS block | WS7 | — | offices + sheriff, sabotage, sheriff, reputation.moves.caught, laws.sabotageBan, ai.sabotage |
+| packages/engine/src/config.ts, POLITICS block | WS7 | — | offices + sheriff, sabotage, sheriff, reputation.moves.caught, laws.sabotageBan, ai.sabotage, ai.sheriff |
 | packages/engine/src/config.ts, EVENT_SHOW | WS8 | yes | two weight rows |
 | packages/engine/src/types.ts | WS3 | yes | §3's types (S4-C20) |
 | packages/engine/src/game.ts | WS3 | yes | advancePhase: resolveSabotage (production), applyRumours (auction), endRumours and settleSabotage (upkeep): four lines |
@@ -1309,7 +1306,7 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 | apps/server/src/politics-view.ts | WS7 | — | sabotage views and news (S4-C13) |
 | packages/ai/src/hands/sabotage.ts, sheriff.ts (new) | WS7 | SEAMS row to add | S4-C10 |
 | packages/ai/src/hands/vote.ts | WS7 | — | calls the two hands; the ban vote row |
-| packages/ai/src/value.ts | WS1 | — | sabotageGain, captureCost, guardValue, investigateValue, fineChoice; the ban in lawWorth (S4-C11) |
+| packages/ai/src/value.ts | WS1 | — | sabotageGain, captureCost, guardValue, investigateValue; the ban in lawWorth (S4-C11) |
 | packages/ai/src/actions.ts, play.ts, sim.ts | WS1 | — | four actions, applyAction, the sabotage row, the event budget excludes 'sabotage' (S4-C12) |
 | design/mocks/ws6-ux/** | WS6 | — | P6-P11 mocks for Heiko |
 | apps/web/src/phone/hub/politics/{Secret,Sheriff}.tsx (new), ElectionDay.tsx, words.ts, LawPicker.tsx | WS7 | — | S4-C14..C16, C18 |
