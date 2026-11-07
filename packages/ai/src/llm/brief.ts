@@ -37,6 +37,7 @@ import {
   UPKEEP,
 } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
+import { unreachablePlot } from '../hands/develop.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
 import type { Mind } from '../value.js';
@@ -197,7 +198,13 @@ const GOOD_FIELDS: readonly { field: keyof GoodPlay; to: object }[] = [
   { field: 'concedeCrPerS', to: { type: 'number' } },
 ];
 
-const plotText = (r: { plot: number; value: number }) => `plot ${r.plot} (${r.value} cr)`;
+/** A lake plot no MULE can be walked to (unreachablePlot): the brief marks it wherever the seat might claim or install on it. */
+const LAKE_MARK = 'lake: no MULE can be installed';
+const unreachable = (obs: GameState, plot: number) => unreachablePlot(obs, plot);
+
+/** A ranked plot and its value, marked when no MULE can be installed on it: "plot N lake: no MULE can be installed (V cr)". */
+const plotText = (obs: GameState) => (r: { plot: number; value: number }) =>
+  `plot ${r.plot}${unreachable(obs, r.plot) ? ` ${LAKE_MARK}` : ''} (${r.value} cr)`;
 const goodText = (g: Strategy['moneyMaker']) => (g === null ? 'none' : GOOD_NAME[g]);
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -214,7 +221,13 @@ function ownership(obs: GameState, me: string): string[] {
     const plots = obs.tiles.flatMap((t, i) => (t.owner === p.id ? [{ i, outfit: t.outfit }] : []));
     const who = p.id === me ? `${p.name} (you)` : p.name;
     if (plots.length === 0) return `${who}: no plots`;
-    const named = capped(plots, BRAIN.brief.plotsPerPlayer, (t) => `plot ${t.i} ${t.outfit ? outfitName(t.outfit) : 'idle'}`);
+    // The seat's own lake plot no MULE can reach is marked in place of idle (or after its MULE).
+    const status = (t: { i: number; outfit: Outfit | null }) => {
+      const mark = p.id === me && unreachable(obs, t.i) ? LAKE_MARK : null;
+      if (!t.outfit) return mark ?? 'idle';
+      return mark ? `${outfitName(t.outfit)}, ${mark}` : outfitName(t.outfit);
+    };
+    const named = capped(plots, BRAIN.brief.plotsPerPlayer, (t) => `plot ${t.i} ${status(t)}`);
     return `${who}: ${plural(plots.length, 'plot')} — ${named}`;
   });
   const free = obs.tiles.filter((t) => t.owner === null && t.terrain !== 'store').length;
@@ -483,8 +496,8 @@ function ownStrategyLines(drafted: Strategy, own: OwnStrategy | null | undefined
 }
 
 /** The draft land grant as play reads it: its ranking only (WS9 ruling, 6 Nov). */
-function draftLines(g: LandGrantPlay): string[] {
-  return [`Ranked: ${capped(g.ranked, BRAIN.brief.draftEntries, plotText)}`];
+function draftLines(obs: GameState, g: LandGrantPlay): string[] {
+  return [`Ranked: ${capped(g.ranked, BRAIN.brief.draftEntries, plotText(obs))}`];
 }
 
 function changeLines(): string[] {
@@ -544,12 +557,12 @@ export function landBrief(
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
     'Land plans for this month, best first:',
-    ...options.map((o, i) => `${plotsCounted(mind, optionLine(o))}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText)}`),
+    ...options.map((o, i) => `${plotsCounted(mind, optionLine(o))}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText(obs))}`),
     '',
     'Your draft land grant:',
-    ...draftLines(draft.landGrant),
+    ...draftLines(obs, draft.landGrant),
     '',
-    ...(development ? ['Your draft development:', ...developmentLines(development), ''] : []),
+    ...(development ? ['Your draft development:', ...developmentLines(obs, development), ''] : []),
     'What you may change:',
     ...changeLines(),
     ...(development ? DEV_CHANGES : []),
@@ -574,14 +587,15 @@ const DEV_CHANGES = [
 /** The phase the brief edits: the slack before it is when it is asked (RULE-A2 rows 3-4). */
 export type EditPhase = 'development' | 'auction';
 
-const ACT_TEXT = (s: DevelopmentPlay['route'][number]): string => {
+const ACT_TEXT = (obs: GameState) => (s: DevelopmentPlay['route'][number]): string => {
   switch (s.act) {
     case 'buyMule':
       return 'buy a MULE';
     case 'outfit':
       return s.outfit ? `outfit it for ${s.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[s.outfit]}` : 'outfit it';
     case 'install':
-      return `install it on plot ${s.plot}`;
+      // In brackets: the route is a list of steps between commas.
+      return `install it on plot ${s.plot}${typeof s.plot === 'number' && unreachable(obs, s.plot) ? ` (${LAKE_MARK})` : ''}`;
     case 'analyse':
       return `analyse plot ${s.plot}`;
     case 'filter':
@@ -591,10 +605,10 @@ const ACT_TEXT = (s: DevelopmentPlay['route'][number]): string => {
   }
 };
 
-function developmentLines(d: DevelopmentPlay | undefined): string[] {
+function developmentLines(obs: GameState, d: DevelopmentPlay | undefined): string[] {
   if (!d) return ['No development play is drafted.'];
   return [
-    `Route: ${d.route.length === 0 ? 'none' : d.route.map(ACT_TEXT).join(', ')}.`,
+    `Route: ${d.route.length === 0 ? 'none' : d.route.map(ACT_TEXT(obs)).join(', ')}.`,
     `Time budget: ${Math.round(d.timeBudgetMs / MS_PER_SECOND)} s of your development time.`,
     `If the corral is sold out: ${d.ifSoldOut}.`,
   ];
@@ -649,7 +663,7 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
     `Your draft ${phase}:`,
-    ...(phase === 'development' ? developmentLines(draft.development) : auctionLines(draft.auction)),
+    ...(phase === 'development' ? developmentLines(obs, draft.development) : auctionLines(draft.auction)),
     '',
     'What you may change:',
     ...(phase === 'development'
