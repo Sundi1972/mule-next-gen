@@ -20,7 +20,7 @@ const K = W / FRAME.place;
 const PLATE_5 = { width: 10240, height: 5760, hall: [5120, 3853] as [number, number] };
 const PLATE = {
   '3': { day: 'plate/3-day@800.webp', dusk: 'plate/3-dusk@800.webp', glow: null, frame: { width: 6144, height: 3456, hall: [3072, 2074] as [number, number] } },
-  '5': { day: 'plate/5-day@800.webp', dusk: 'plate/5-dusk@800.webp', glow: null, frame: PLATE_5 },
+  '5': { day: 'plate/5-day@800.webp', dusk: 'plate/5-dusk@800.webp', glow: 'plate/5-glow@800.webp', frame: PLATE_5 },
 };
 const PLATE_BOX: Box = { x: -PLATE_5.hall[0] * K, y: -PLATE_5.hall[1] * K, w: PLATE_5.width * K, h: PLATE_5.height * K };
 
@@ -121,9 +121,9 @@ describe('T-AC-11: the grounds frame the occupied extent like look.html (spec AM
   it("T-AC-11: at 1280×720 the month-12 colony draws at look.html's scale", () => {
     const vb = viewBoxOf(render());
     expect(vb.w / vb.h).toBeCloseTo(TV, 6);
-    // Not 0.9×: the rocket's frame top to the Stadium's front corner is 410 units, plus half a place above and below
-    // makes 470, and at 16:9 that is a view 835 wide, 15.3 px/m. Today's plate framing draws 13.5.
-    expect(pxPerMetre(vb, 1280)).toBeGreaterThanOrEqual(0.87 * LOOK_PX_PER_M);
+    // The rocket's frame top to the Stadium's front corner is 410 units; a quarter place above and below leaves 0.9× in
+    // reach at 16:9, half a place would not (0.876×).
+    expect(pxPerMetre(vb, 1280)).toBeGreaterThanOrEqual(0.9 * LOOK_PX_PER_M);
     expect(pxPerMetre(vb, 1280)).toBeLessThanOrEqual(1.1 * LOOK_PX_PER_M);
   });
 
@@ -170,34 +170,31 @@ describe('T-AC-11: the grounds frame the occupied extent like look.html (spec AM
     expect(emptyShare(MONTH_12, vb)).toBeLessThanOrEqual(1 / 3);
   });
 
-  it("T-AC-11: a soft elliptical vignette fades the framed view's edges to the page background, clear over the buildings", () => {
+  it("T-AC-11: a soft elliptical vignette fades the framed view's ground to the page background, under every building", () => {
     const html = render();
     const vb = viewBoxOf(html);
     const veil = tagsWith(html, 'data-testid="grounds-vignette"');
     expect(veil).toHaveLength(1);
     expect(attrOf(veil[0]!, 'pointer-events')).toBe('none');
     expect([attrOf(veil[0]!, 'x'), attrOf(veil[0]!, 'y'), attrOf(veil[0]!, 'width'), attrOf(veil[0]!, 'height')].map(Number)).toEqual([vb.x, vb.y, vb.w, vb.h]);
-    expect(html.lastIndexOf('data-testid="picture-'), 'over every building').toBeLessThan(html.indexOf('data-testid="grounds-vignette"'));
+    const at = (testid: string) => html.indexOf(`data-testid="${testid}"`);
+    expect(at('plate'), 'over the plate').toBeLessThan(at('glow-plate'));
+    expect(at('glow-plate'), "over the plate's glow").toBeLessThan(at('grounds-vignette'));
+    expect(at('grounds-vignette'), 'under every building').toBeLessThan(html.indexOf('data-testid="picture-'));
+    expect(at('grounds-vignette'), 'under every colonist').toBeLessThan(at('walker'));
 
     const id = attrOf(veil[0]!, 'fill')!.match(/^url\(#(.+)\)$/)![1]!;
     const gradient = html.match(new RegExp(`<radialGradient[^>]*id="${id}"[^>]*>([\\s\\S]*?)</radialGradient>`))!;
-    const r = Number(attrOf(gradient[0], 'r'));
     expect([attrOf(gradient[0], 'cx'), attrOf(gradient[0], 'cy')]).toEqual(['0.5', '0.5']);
-    const stops = (gradient[1]!.match(/<stop[^>]*>/g) ?? []).map((s) => ({ offset: Number(attrOf(s, 'offset')), opacity: Number(attrOf(s, 'stop-opacity')), colour: attrOf(s, 'stop-color') }));
+    const stops = (gradient[1]!.match(/<stop[^>]*>/g) ?? []).map((s) => ({ opacity: Number(attrOf(s, 'stop-opacity')), colour: attrOf(s, 'stop-color') }));
     for (const s of stops) expect(s.colour, 'the page background token').toBe('var(--color-table)');
+    expect(stops[0]!.opacity, 'clear in the middle').toBe(0);
     expect(stops.at(-1)!.opacity, 'opaque at the rim').toBe(1);
-    const clear = Math.max(...stops.filter((s) => s.opacity === 0).map((s) => s.offset));
-    expect(stops.every((s) => s.offset > clear || s.opacity === 0)).toBe(true);
+  });
 
-    // The gradient's ellipse spans the view, so a point's distance in view-relative units over r is its offset.
-    const offsetAt = ([x, y]: Pt) => Math.hypot((x - (vb.x + vb.w / 2)) / vb.w, (y - (vb.y + vb.h / 2)) / vb.h) / r;
-    for (const block of blocksOf(MONTH_12)) {
-      const kind = kindAt(MONTH_12, block);
-      const [cx, ground] = centre(block);
-      const middle: Pt = [cx, (ground + topOf(kind, block)) / 2];
-      expect(offsetAt([cx, ground]), `${kind}'s ground is not dimmed`).toBeLessThanOrEqual(clear);
-      expect(offsetAt(middle), `${kind}'s body is not dimmed`).toBeLessThanOrEqual(clear);
-    }
+  it('T-AC-11: with chips the vignette stays under them', () => {
+    const html = render({ chips: true });
+    expect(html.indexOf('data-testid="grounds-vignette"')).toBeLessThan(html.indexOf('data-testid="callout-'));
   });
 
   it('HC-3: without a plate, framing is unchanged', () => {
