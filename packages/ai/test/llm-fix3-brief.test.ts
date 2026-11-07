@@ -149,17 +149,18 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     const short = land(state);
     expect(short).toContain(
       `Food and Energy in units: Food — you hold 0 and your plots made 1 at the last production, against ${need.food} your household eats a month: short by ${need.food - 1}; ` +
-        `Energy — you hold 0 and your plants made 0 beyond their own use, against ${need.energy} your plots and works use a production: short by ${need.energy}.`,
+        `Energy — you hold 0; at this month's production your plants make 0 beyond their own use on their ground (an event can change that), against the ${need.energy} your plots and works use there: short by ${need.energy}: ` +
+        'production turns plots off, the biggest use first, until the rest fit, and no Energy can be bought before it.',
     );
     p0.stock.food = need.food;
     p0.stock.energy = need.energy;
     const covered = land(state);
     expect(covered).toMatch(/Food — you hold \d+ and your plots made 1 at the last production, against \d+ your household eats a month: covered;/);
-    expect(covered).toMatch(/your plots and works use a production: covered\./);
+    expect(covered).toMatch(/your plots and works use there: covered for 0 more use/);
     expect(auction(state)).toContain('Food and Energy in units: ');
   });
 
-  it('B fix 3: a plant pays its own use as the last production charged it, a cold snap included', () => {
+  it("energy fix: a plant pays its own use from what it makes, and last production's cold snap is not counted again at the next", () => {
     const { state, plots } = table();
     const plant = plots[1]!;
     state.tiles[plant]!.outfit = 'energy';
@@ -169,9 +170,10 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     const last = state.history.at(-1)!;
     last.produced.p0 = { ...emptyStock(), energy: made };
     last.lines = [{ tile: plant, good: 'energy', made, parts: [{ why: 'ground', delta: made }] }];
-    expect(land(state)).toContain(`your plants made ${made - use} beyond their own use`);
+    expect(land(state)).toContain(`your plants make ${made - use} beyond their own use`);
+    // A cold snap is rolled at the production it strikes: the one that struck the last does not carry into the next.
     last.events = [{ key: 'coldSnap' } as MonthEvent];
-    expect(land(state)).toContain(`your plants made ${made - use * factor} beyond their own use`);
+    expect(land(state)).toContain(`your plants make ${made - use} beyond their own use`);
   });
 
   it("B fix 3: the auction brief, asked after production, does not count this month's Food twice: it is in what the seat holds, and upkeep eats next", () => {
