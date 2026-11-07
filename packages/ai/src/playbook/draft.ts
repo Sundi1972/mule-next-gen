@@ -362,24 +362,25 @@ function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk
 }
 
 /**
- * On the floor (`floor`, its config; null where the game taps), `list` with every install on a lake no shore reaches
+ * On the floor (`floor`, its config; null where the game taps), `list` with every install on a plot no shore or walk reaches
  * vetoed, as the hand's live legs price it (no stand, an endless walk) and as RULE-1 P8 refuses it (AM-36). The list
  * as it was when it holds none; developDecision's stop (`decided`'s) when no pick is left, as keepOutfit falls back to it
  * (a led MULE's list holds no stop). When no reachable Energy install is left, Energy first's vetoes (ENERGY_FIRST) are
- * lifted before the lakes are judged, the fallback stop's too: the rule holds only while a reachable plant exists.
+ * lifted before the unreachable plots are judged, the fallback stop's too: the rule holds only while a reachable plant exists.
  * floor-time's installable: the hands' module reaches brain.ts (INV-2).
  */
 function shoreless(obs: GameState, mind: Mind, list: Shortlist<DevAction>, floor: FloorConfig | null, decided: Shortlist<DevAction>): Shortlist<DevAction> {
   if (!floor) return list;
-  const dry = (a: DevAction): a is Extract<DevAction, { kind: 'install' }> => a.kind === 'install' && obs.tiles[a.index]!.terrain === 'lake' && !installable(obs, floor, mind.me, a.index);
+  const dry = (a: DevAction): a is Extract<DevAction, { kind: 'install' }> => a.kind === 'install' && !installable(obs, floor, mind.me, a.index);
   if (!list.all.some((c) => !c.veto && dry(c.action))) return list;
-  // Energy first holds only while an Energy install is allowed; with the floor's lakes out, none may be, so its
+  const why = (index: number) => `${obs.tiles[index]!.terrain === 'lake' ? 'lake: no shore reaches' : 'no walk reaches'} plot ${index}`;
+  // Energy first holds only while an Energy install is allowed; with the plots no walk reaches out, none may be, so its
   // vetoes come off first and the seat's other installs, and "Keep the cash", are judged as if it never fired.
   type Cand = (typeof list.all)[number];
   const plant = (c: Cand) => !c.veto && c.action.kind === 'install' && c.action.outfit === 'energy' && !dry(c.action);
   const lift = (c: Cand) => (c.veto === ENERGY_FIRST ? candidate(c.key, c.label, c.action, c.value, c.considerations) : c);
   const judged = list.all.some(plant) ? list.all : list.all.map(lift);
-  const all = judged.map((c) => (!c.veto && dry(c.action) ? candidate(c.key, c.label, c.action, c.value, c.considerations, `lake: no shore reaches plot ${c.action.index}`) : c));
+  const all = judged.map((c) => (!c.veto && dry(c.action) ? candidate(c.key, c.label, c.action, c.value, c.considerations, why(c.action.index)) : c));
   const left = all.some((c) => !c.veto) ? all : decided.all.filter((c) => c.action.kind === 'stop').map(lift);
   return shortlist(left, mind.level.shortlist, mind.level.shortlistTolerance);
 }

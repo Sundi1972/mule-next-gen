@@ -138,13 +138,13 @@ function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: Floo
 }
 
 /**
- * Whether lake plot `plot` can never get a MULE on the floor: no spot on its shore offers its install (installable,
- * the walk the hands price by). Judged as if seat `me` held it; without `me`, for its owner, and a plot nobody holds
- * as if each seat held it in turn. A seat's own land is no shore for its own install.
+ * Whether plot `plot` can never get a MULE on the floor (installable, the walk the hands price by): a lake no spot on
+ * its shore offers the install from, or a plot no walk from the store reaches (one shut in by lake and the map's edge).
+ * Judged as if seat `me` held it; without `me`, for its owner, and a plot nobody holds as if each seat held it in turn.
+ * A seat's own land is no shore for its own install.
  */
 export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig(), me?: string): boolean {
   const tile = state.tiles[plot]!;
-  if (tile.terrain !== 'lake') return false;
   const unreachableFor = (seat: string) => !installable({ ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: seat } : t)) }, cfg, seat, plot);
   const seat = me ?? tile.owner;
   return seat !== null ? unreachableFor(seat) : state.players.every((p) => unreachableFor(p.id));
@@ -161,7 +161,7 @@ const ledOffSwap = (p: Player): boolean => !!p.takenMule?.swapped && p.carriedMu
 
 /**
  * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's, or has a
- * MULE it can't swap; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take
+ * MULE it can't swap; on the floor (`floor`, its config), a plot no walk or shore reaches (unreachablePlot); it would take
  * the cash under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without
  * `floor` the game taps, which installs on any lake. See RULE-9 row 3.
  *
@@ -177,7 +177,7 @@ export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: 
   // The MULE installed is the one the seat leads if fitted already, so a swap needs it fitted for the route's outfit.
   const swaps = outfit !== null && tile.outfit !== outfit && (led === null || led === 'empty' || led === outfit) && !justSwappedOff(me, tile.x, tile.y);
   if (tile.owner !== mind.me || (tile.outfit !== null && !swaps)) return `stale: plot ${plot}`;
-  if (floor && unreachablePlot(state, plot, floor, mind.me)) return `lake: no shore reaches plot ${plot}`;
+  if (floor && unreachablePlot(state, plot, floor, mind.me)) return `${tile.terrain === 'lake' ? 'lake: no shore reaches' : 'no walk reaches'} plot ${plot}`;
   // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
   const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
   if (cashFloor !== null && outfit !== null) {
