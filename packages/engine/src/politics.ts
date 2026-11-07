@@ -5,7 +5,7 @@
  * stream, so a replay from the seed draws the same and no other draw moves.
  */
 import { fundIn, fundOut } from './colony.js';
-import { POLITICS } from './config.js';
+import { COLONY, POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
@@ -58,6 +58,7 @@ export function openPlanning(state: GameState): void {
   const p = edit(state);
   p.baron = landBaron(state, p.baron);
   p.taxAtStart = state.treasury.salesTax;
+  p.budgetAtStart = p.budget;
   p.election = POLITICS.electionMonths.includes(state.month)
     ? { stage: 'announce', ceremony: null, candidates: noCandidates(), promises: {}, ballots: {}, done: [], result: null }
     : null;
@@ -723,24 +724,59 @@ const notBuilt = (): never => {
   throw new RuleError('Not built yet');
 };
 
-/** The lines the Governor may share the fund between, in order. See S5-RULE-1. */
+/** The lines the Governor may share the fund between, in order. RC offers Projects and Welfare; Security comes with S5-C13. See S5-RULE-1. */
 export function budgetLines(state: GameState): BudgetLine[] {
-  return notBuilt();
+  return state.politics ? ['projects', 'welfare'] : [];
 }
 
 /** The shares in force: the default while none is set, a line not offered as 0. See S5-RULE-1. */
 export function budgetShares(state: GameState): Record<BudgetLine, number> {
-  return notBuilt();
+  const set = state.politics?.budget?.shares ?? POLITICS.budget.default;
+  const offered = budgetLines(state);
+  const shares = { ...set };
+  for (const line of Object.keys(shares) as BudgetLine[]) if (!offered.includes(line)) shares[line] = 0;
+  return shares;
 }
 
-/** What each share pays at today's fund (S5-RULE-3). */
+/** The most credits a month a line pays, or null when only the buildings' needs cap it. */
+export function lineMaxCredits(line: BudgetLine): number | null {
+  return line === 'projects' ? null : POLITICS.budget[line].maxCredits;
+}
+
+/** What each share pays at today's fund: the share of the spare above COLONY.reserve, floored, capped by the line. See S5-RULE-3. */
 export function budgetCredits(state: GameState): Record<BudgetLine, number> {
-  return notBuilt();
+  const spare = Math.max(0, state.treasury.money - COLONY.reserve);
+  const shares = budgetShares(state);
+  const credits = { projects: 0, welfare: 0, security: 0 };
+  for (const line of Object.keys(credits) as BudgetLine[]) {
+    credits[line] = Math.min(Math.floor((shares[line] * spare) / PERCENT), lineMaxCredits(line) ?? Infinity);
+  }
+  return credits;
 }
 
-/** The Governor sets the budget. See S5-RULE-2. */
+/** The Governor sets the budget: a whole-percent share per offered line, at most 100 in all. See S5-RULE-2. */
 export function setBudget(state: GameState, playerId: string, shares: Record<BudgetLine, number>): void {
-  return notBuilt();
+  const { id } = player(state, playerId);
+  const politics = state.politics;
+  if (!politics) throw new RuleError("This game plays without the colony's council");
+  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Set the budget once the votes are over');
+  if (politics.governor !== id) throw new RuleError('Only the Governor sets the budget');
+  const offered = budgetLines(state);
+  const lines = Object.keys(shares) as BudgetLine[];
+  for (const line of lines) {
+    if (shares[line] !== 0 && !offered.includes(line)) throw new RuleError(`The colony has no ${line} line yet`);
+  }
+  const { step } = POLITICS.budget;
+  for (const line of offered) {
+    const max = POLITICS.budget[line].maxShare;
+    const share = shares[line];
+    if (!Number.isInteger(share) || share < 0 || share > max || share % step !== 0) {
+      throw new RuleError(`${line[0]!.toUpperCase()}${line.slice(1)} is 0% to ${max}%, in steps of ${step}`);
+    }
+  }
+  const total = lines.reduce((sum, line) => sum + shares[line], 0);
+  if (total > PERCENT) throw new RuleError(`The shares add up to ${total}%: at most ${PERCENT}%`);
+  edit(state).budget = { month: state.month, setBy: id, shares: { ...shares } };
 }
 
 /** Per target: true, or why the player may not call an overrule now. See S5-RULE-6. */
