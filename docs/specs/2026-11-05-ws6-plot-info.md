@@ -403,6 +403,11 @@ lands at the land grant (droneOrder is kept until then).
   centre dot, SALE a gavel (an upright T); told apart by shape, so in greyscale too. The drone glyph and a coin were
   set aside: at 7×7 the drone reads as the gavel's T and the coin as a plain dot. (b) WS4 measured the inside ring's
   threshold at 24 px, not 16–18: under 24 px the selection ring sits inside the selected plot.
+- 7 Nov, WS6 rulings on WS4's two questions from #640 (SA-1372's build, defcf0d0): (1) the STORE sign, about 33 px
+  wide, is not drawn on plots under 24 px (the ring's measured threshold), where it overhangs into its neighbours' dots;
+  the store plot keeps its terrain look and its label. (2) On a plot without dots, under 16 px, an installed MULE's icon
+  wins over a special's badge: the badge is not drawn there (Look and the label name the special). A flag still replaces
+  what the plot shows while it shows, MULE icon included, as it does the dots; the label names the good.
 
 ## §9 · Ownership Boundaries
 
