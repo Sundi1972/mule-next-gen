@@ -1,4 +1,4 @@
-import { COLONY_SELLER, DEVELOPMENT } from '@mule/engine';
+import { DEVELOPMENT } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { useEffect, useRef } from 'react';
@@ -8,7 +8,7 @@ import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
-import { droneReport, myPlots, nextDroneWords, PlotRow, ScanReport, useScanning } from '../plotInfo';
+import { droneReport, myPlots, MyPlotsList, nextDroneWords, ScanReport, useScanning } from '../plotInfo';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { OnlyYou } from './OnlyYou';
@@ -16,13 +16,12 @@ import { useToday } from './state';
 
 /* Today's map tools: Look, My plots, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
 
-/** A plot the drone may fly over: nobody's, not the store, and not the colony's (a sited object's plot is no player's). */
-export const freeForDrone = (t: MapTile) => t.owner === null && !t.object && t.terrain !== 'store';
+/** A plot the drone may fly over: nobody's and not the store. */
+export const freeForDrone = (t: MapTile) => t.owner === null && t.terrain !== 'store';
 
-/** Whose a plot is, in the Look panel's words: yours, a player's name, the colony's, or free. */
+/** Whose a plot is, in the Look panel's words: yours, a player's name, or free. */
 export function ownerWord(view: MuleView, tile: Pick<TileView, 'owner'>, meId: string): string {
   if (tile.owner === meId) return 'YOURS';
-  if (tile.owner === COLONY_SELLER) return 'COLONY';
   return player(view, tile.owner)?.name.toUpperCase() ?? 'FREE';
 }
 
@@ -44,7 +43,10 @@ export function LookMap() {
   );
 }
 
-/** The plot looked at: where, what ground, whose, and what its MULE makes. */
+/**
+ * The plot looked at: where, what land and whose, then its ground's dots when you know them, above its special and what
+ * its MULE makes; a plot you have not analysed ends with its land's hint.
+ */
 export function LookPanel() {
   const { view, me } = usePhoneGame();
   const { looked, setLooked } = useToday();
@@ -61,11 +63,10 @@ export function LookPanel() {
       <span className="font-display text-lg font-semibold leading-tight">
         {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-xs text-holo">{ownerWord(view, tile, me.id)}</span>
       </span>
+      {tile.ground && <GroundCard ground={tile.ground} />}
       <SpecialLine special={tile.special} />
       {tile.outfit && <span className="text-xs text-ink-2">A MULE here makes {tile.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[tile.outfit]}.</span>}
-      {tile.ground ? (
-        <GroundCard ground={tile.ground} />
-      ) : (
+      {!tile.ground && (
         <span className="text-xs text-ink-2" data-testid="terrain-hint">
           {TERRAIN_ODDS[tile.terrain]}
         </span>
@@ -95,7 +96,6 @@ export function MyPlotsPanel() {
   const { view, me } = usePhoneGame();
   const { looked, setLooked } = useToday();
   const list = useRef<HTMLElement>(null);
-  const mine = myPlots(view, me.id);
   const isLooked = (t: TileView) => looked?.x === t.x && looked.y === t.y;
   // A plot tapped on the map may have its row below the rail's fold.
   useEffect(() => {
@@ -103,14 +103,7 @@ export function MyPlotsPanel() {
   }, [looked]);
   return (
     <section ref={list} className="flex flex-col gap-1.5" data-testid="my-plots">
-      <span className="flex items-center justify-between">
-        <span className="font-display text-sm font-semibold">My plots · {mine.length}</span>
-        <OnlyYou />
-      </span>
-      {mine.length === 0 && <span className="text-[11px] leading-snug text-ink-2">No plots yet: claim one in the land grant.</span>}
-      {mine.map((t) => (
-        <PlotRow key={`${t.x},${t.y}`} t={t} selected={isLooked(t)} onPick={() => setLooked({ x: t.x, y: t.y })} dense />
-      ))}
+      <MyPlotsList tiles={myPlots(view, me.id)} note={<OnlyYou />} picked={isLooked} onPick={(t) => setLooked({ x: t.x, y: t.y })} />
     </section>
   );
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  COLONY,
   colonyPrestige,
   commission,
   createGame,
+  payGrant,
   PRESTIGE,
   repair,
   RuleError,
@@ -48,7 +50,7 @@ function standing(state: GameState, id: PrestigeId): void {
   const row = PRESTIGE[id];
   state.colony = {
     ...state.colony!,
-    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null }],
+    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, since: 1, plaque: {} }],
   };
 }
 
@@ -122,18 +124,71 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(refused(() => commission(state, 'lena', 'castle' as PrestigeId))).toBe("The colony can't build that");
     expect(refused(() => commission(state, 'lena', 'hospital'))).toBe('accepted');
     expect(refused(() => commission(state, 'lena', 'hospital'))).toBe('The colony already has a Hospital');
-    expect(refused(() => commission(state, 'lena', 'park'))).toBe('The colony is already building the Hospital');
+    // COLONY.maxOpen objects may be open at once (3, pace set C, Heiko 6 Nov): the next one is refused.
+    const others: PrestigeId[] = ['observatory', 'stadium', 'spaceport'];
+    for (const id of others.slice(0, COLONY.maxOpen - 1)) expect(refused(() => commission(state, 'lena', id)), id).toBe('accepted');
+    expect(refused(() => commission(state, 'lena', 'park'))).toBe(`The colony already has ${COLONY.maxOpen} buildings under way`);
     const vowel = governedGame();
     commission(vowel, 'lena', 'observatory');
     expect(refused(() => commission(vowel, 'lena', 'observatory')), 'a name with a vowel sound takes "an"').toBe('The colony already has an Observatory');
     expect(project(state, 'hospital')).toMatchObject({ stage: 'commissioned', funded: { credits: 0, goods: {} }, since: state.month, plaque: {} });
   });
 
-  it('T-AC-25: an object that needs a plot waits commissioned with no site, however well funded, and never builds', () => {
-    const state = governedGame(10_000);
-    state.store.stock.alloy = 10;
-    commission(state, 'lena', 'park');
-    for (let i = 0; i < 3; i++) runColony(state, []);
-    expect(project(state, 'park')).toMatchObject({ stage: 'commissioned', plot: null, funded: { credits: PRESTIGE.park.credits, goods: PRESTIGE.park.goods } });
+  it('T-AC-25 (C48): every object, the Park and the Spaceport upgrade included, builds at the first upkeep that funds it in full, with no wait for land', () => {
+    for (const id of ['park', 'stadium', 'spaceport'] as const) {
+      const state = governedGame(10_000);
+      state.store.stock.alloy = 10;
+      state.store.stock.electronics = 10;
+      commission(state, 'lena', id);
+      runColony(state, []);
+      expect(project(state, id), id).toMatchObject({ stage: 'building', monthsLeft: PRESTIGE[id].buildMonths, funded: { credits: PRESTIGE[id].credits, goods: PRESTIGE[id].goods } });
+    }
+  });
+
+  /** A colony with no goods to buy at the store, so only credits move. */
+  function noGoods(fund: number): GameState {
+    const state = governedGame(fund);
+    for (const good of ['alloy', 'electronics', 'crystite'] as const) state.store.stock[good] = 0;
+    return state;
+  }
+
+  it('T-AC-24b (pace set C): a front project paid in credits but waiting for its goods does not starve the ones behind it', () => {
+    const state = noGoods(2_000);
+    commission(state, 'lena', 'spaceport');
+    commission(state, 'lena', 'hospital');
+    for (let i = 0; i < 4; i++) {
+      payGrant(state);
+      runColony(state, []);
+    }
+    expect(project(state, 'spaceport'), 'the Spaceport is paid in credits and waits for its goods').toMatchObject({ stage: 'commissioned', funded: { credits: PRESTIGE.spaceport.credits } });
+    expect(project(state, 'hospital').funded.credits, 'the Hospital behind it is paid too').toBe(PRESTIGE.hospital.credits);
+    expect(state.treasury.money).toBe(2_000 + 4 * COLONY.grant.perMonth - PRESTIGE.spaceport.credits - PRESTIGE.hospital.credits);
+  });
+
+  it('RULE-21 row 4 (pace set C): every open project paid in credits and goods starts building at that upkeep, not only the oldest', () => {
+    const state = noGoods(0);
+    commission(state, 'lena', 'spaceport');
+    commission(state, 'lena', 'hospital');
+    // The Hospital has every credit and good in before the month end; the Spaceport in front of it has no goods.
+    project(state, 'hospital').funded = { credits: PRESTIGE.hospital.credits, goods: { ...PRESTIGE.hospital.goods } };
+    runColony(state, []);
+    expect(project(state, 'spaceport'), 'the Spaceport still waits for its goods').toMatchObject({ stage: 'commissioned' });
+    expect(project(state, 'hospital'), 'the Hospital starts behind it').toMatchObject({ stage: 'building', monthsLeft: PRESTIGE.hospital.buildMonths });
+  });
+
+  it('T-AC-24b (pace set C): with too little for both, the fund pays the earlier project first and keeps its reserve', () => {
+    const spare = PRESTIGE.spaceport.credits - 40;
+    const state = noGoods(COLONY.reserve + spare);
+    commission(state, 'lena', 'spaceport');
+    commission(state, 'lena', 'hospital');
+    runColony(state, []);
+    expect(project(state, 'spaceport').funded.credits, 'the earlier project takes all the fund can spare').toBe(spare);
+    expect(project(state, 'hospital').funded.credits, 'nothing is left for the later one').toBe(0);
+    expect(state.treasury.money, 'the reserve stays').toBe(COLONY.reserve);
+    state.treasury.money += 100;
+    runColony(state, []);
+    expect(project(state, 'spaceport').funded.credits, 'the earlier one is topped up first').toBe(PRESTIGE.spaceport.credits);
+    expect(project(state, 'hospital').funded.credits, 'the rest goes to the later one').toBe(60);
+    expect(state.treasury.money).toBe(COLONY.reserve);
   });
 });
