@@ -164,6 +164,8 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
   const side = t.stage === 'sidepick';
   const ready = t.me === 'ready';
   const host = ME === HOST;
+  // G-7: at the side pick nothing of the others shows before your own Done, a Claude seat's wait included.
+  const others = !side || ready;
   return (
     <div className="h-full @container/shell">
       <div className="relative flex h-full bg-table text-ink" data-testid="game-shell">
@@ -214,7 +216,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
                 {side ? "You've picked" : "You're ready"}
               </span>
             )}
-            {waiting.length > 0 ? (
+            {!others ? null : waiting.length > 0 ? (
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="waiting-for">
                 <span className="text-ink-2">Waiting for</span>
                 {waiting.map((r) => (
@@ -224,7 +226,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
             ) : (
               ready && <span className="text-sm text-ink-2">{side ? 'Everyone has picked.' : 'Everyone is ready.'}</span>
             )}
-            <ClaudeLine row={claudeRow} />
+            {others && <ClaudeLine row={claudeRow} />}
             {!ready ? (
               <Button size="lg" className="w-full" onClick={onReady} data-testid="ready">
                 {side ? 'Done' : "I'm ready"}

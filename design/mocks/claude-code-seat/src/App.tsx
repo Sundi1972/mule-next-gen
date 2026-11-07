@@ -16,6 +16,7 @@ const DECISIONS = [
   'HC-3: a Claude Code seat never holds the table. THINKING is a label only and the seat counts as ready, except at the first good’s side pick: there it is waited for, CLAUDE · THINKING · 0:32, at most 45 s, then plays its built-in plan.',
   'The host can start while a seat is WAITING FOR CLAUDE: in play its row keeps WAITING FOR CLAUDE and says it plays its built-in plan, as an offline seat’s does, until Claude joins.',
   'At the side pick, the host’s Move on for… covers a thinking Claude seat too; it then plays its built-in plan.',
+  'G-7 (PM, 7 Nov): at the side pick a phone shows nothing of the others before its own Done, a waited Claude seat included; after Done the bar names who is still picking, the Claude seat with its clock.',
   'Mid-game, Move my seat gains a second choice: Hand my seat to Claude Code. Its code works 10 minutes (counting down); the phone is let go once Claude joins.',
   SETUP_DECISION,
   'Open: two variants of the host’s lobby row. A opens the seat in place in the rail; B keeps the row one line, with a Code button that opens a sheet.',
