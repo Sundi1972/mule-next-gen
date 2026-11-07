@@ -1219,8 +1219,12 @@ said      AM-5 reads the port "before the keyless rule" and exempts only a candi
 did       on a law ballot the sitting Governor votes yes and the port is not asked, as a candidate votes itself: the
           engine already counts the Governor's ballot as a yes (slice 2a), and the proposal is theirs. For every
           other seat the port is asked first, before the Baron's no on a land tax and the rest of the keyless rows.
+          A candidate always votes itself, also when it holds a card promising its vote to a rival for that office:
+          S3-RULE-10 never overrides the self-vote, and that card breaks (a Rookie too). DealHand never offers a vote
+          card for an office its seat runs for.
 because   a port answering no for the Governor would vote down the Governor's own proposal, against the ballot the
-          engine presets for them
+          engine presets for them; and a candidate voting for its opponent to keep a card is not a choice any player
+          makes
 goal      S3-2 — unchanged; WS2's port is asked for every seat but the Governor on the law
 ```
 
