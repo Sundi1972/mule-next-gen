@@ -21,6 +21,9 @@ describe('the family filter: a matched word is masked, the rest of the line is k
     ['SCHEIẞE', '*******'],
     ['gefickt', '*******'],
     ['🍔Scheiße🍔', '🍔*******🍔'],
+    // Several German words in one line, in the reverse of the list's order: each is masked, none swallowed by another.
+    ['du Arschloch, fick dich, Scheiße', 'du *********, **** dich, *******'],
+    ['Fotze, Scheiße', '*****, *******'],
   ])('masks %j as %j', (line, masked) => {
     expect(familyFilter(line)).toBe(masked);
   });
