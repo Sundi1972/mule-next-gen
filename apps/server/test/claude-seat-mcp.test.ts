@@ -25,7 +25,7 @@ const STEP_MS = 500;
 interface Reply {
   status: number;
   headers: Headers;
-  body: { result?: { structuredContent?: Record<string, unknown>; tools?: { name: string }[] }; error?: { code: number } } | null;
+  body: { result?: { structuredContent?: Record<string, unknown>; content?: { text: string }[]; tools?: { name: string }[] }; error?: { code: number } } | null;
 }
 
 /** A Claude app's MCP client, as little of one as the tools need: one JSON-RPC POST per call, no session, no handshake. */
@@ -48,6 +48,11 @@ function mcpClient(url: string, headers: Record<string, string> = {}) {
       const reply = await rpc('tools/call', { name, arguments: args });
       return reply.body!.result!.structuredContent!;
     },
+    /** What Claude reads of a call's result. */
+    async text(name: string, args: Record<string, unknown>): Promise<string> {
+      const reply = await rpc('tools/call', { name, arguments: args });
+      return reply.body!.result!.content![0]!.text;
+    },
   };
 }
 
@@ -62,6 +67,7 @@ beforeEach(() => {
   }
 });
 afterEach(async () => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   for (const server of servers) {
     server.closeAllConnections();
@@ -224,6 +230,23 @@ describe('/mcp, stateless, the seat code on every call', () => {
       accepted: [],
       refused: strategyEdits.map((e) => ({ edit: e.path, why: 'path_not_offered' })),
     });
+  });
+
+  it('T-AC-2: an open ask whose wait has run out shows ms_left 0 and says it is still open; the answer still plays', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const codes = new SeatCodeBook();
+    const { game, codeA } = startedGame(codes);
+    const client = mcpClient(await serve(codes));
+    expect(await client.text('wait_for_my_turn', { code: codeA })).not.toContain('still open');
+
+    vi.setSystemTime(Date.now() + BRAIN.writeCalls.strategy.timeoutMs + 1_000);
+
+    const ask = await client.call('wait_for_my_turn', { code: codeA });
+    expect(ask).toMatchObject({ kind: 'ask', phase: 'land', ms_left: 0 });
+    const said = await client.text('wait_for_my_turn', { code: codeA });
+    expect(said).toContain('This ask is still open: answer it now with submit_plan.');
+    expect(await client.call('submit_plan', { code: codeA, ask_id: ask.ask_id, edits: [], line: 'Just in time.' })).toMatchObject({ kind: 'accepted' });
+    expect(openPhase(game, 's2')).toBeNull();
   });
 
   it('B-AC-7: after switching to Built-in, the next call gets "seat taken back"', async () => {
