@@ -7,7 +7,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { devView, NOW, tableOf } from './fixtures/arcade';
 
-/** The table chat's ticker, as another screen mounts it (WS6's arcade, in place of its own ChatTicker). */
+/** The table chat's ticker, exported for other screens; the walking screen draws its own (arcade/parts.tsx::ChatTicker). */
 
 const CHAT: ChatMessage[] = [
   { id: 1, from: 's2', text: 'Race you to the corral', at: 0 },
@@ -41,9 +41,9 @@ describe('the table chat ticker, exported for other screens', () => {
     for (const size of ['phone', 'tv'] as const) {
       const lines = linesOf(render({ size, lines: 3 }));
       const kai = lines.find((l) => l.id === 2)!;
-      const lena = lines.find((l) => l.id === 3)!;
+      const ossa = lines.find((l) => l.id === 3)!;
       expect(kai.html, `${size}: Kai is an AI seat`).toMatch(/Kai<span[^>]*data-testid="ai-mark"[^>]*> · AI<\/span>:/);
-      expect(lena.html, `${size}: s2 is a person`).not.toContain('ai-mark');
+      expect(ossa.html, `${size}: Ossa (s2) is a person`).not.toContain('ai-mark');
     }
   });
 

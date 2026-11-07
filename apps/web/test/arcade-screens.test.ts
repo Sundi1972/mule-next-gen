@@ -695,6 +695,17 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     }
   });
 
+  it("C11 (AM-31): a computer seat's line under the clock carries the quiet \"· AI\" after its name, at 844 and 667 (Heiko, 7 Nov)", () => {
+    const kaiLast: ChatMessage[] = [CHAT[1]!, { ...CHAT[0]!, id: 3 }];
+    for (const w of [844, 667] as const) {
+      const html = phone(devView(), live(mine(5.5, 4.5)), w, kaiLast);
+      expect(text(html, 'chat-line-3'), `${w}: Kai is an AI seat`).toBe('Kai · AI: Crystite is up north');
+      expect(tag(inside(html, 'chat-line-3'), 'ai-mark'), `${w}: the mark`).not.toBeNull();
+    }
+    const person = phone(devView(), live(mine(5.5, 4.5)), 844, CHAT);
+    expect(inside(person, 'chat-line-2'), 'Ossa is a person: no mark').not.toContain('ai-mark');
+  });
+
   it('C11 (AM-31): at 667 the status bar over the map carries the newest line on one row, cut, after the pace line', () => {
     const html = phone(devView(), live(mine(5.5, 4.5)), 667, CHAT);
     const bar = inside(html, 'phone-status-bar');
