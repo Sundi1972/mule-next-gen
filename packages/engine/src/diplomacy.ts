@@ -309,7 +309,7 @@ export function reputationReasons(state: GameState, playerId: string): Reputatio
   const broken = (state.politics?.deals ?? []).filter((d) => d.status === 'broken' && d.brokenBy === playerId);
   const reasons: [number, ReputationReason][] = [
     ...broken.map((card): [number, ReputationReason] => [card.settled!, { kind: 'broken', card }]),
-    ...(state.politics?.sabotage ?? []).filter((o) => o.by === playerId && o.culpritPublic).map((o): [number, ReputationReason] => [o.month, { kind: 'caught', month: o.month }]),
+    ...(state.politics?.sabotage ?? []).filter((o) => o.by === playerId && o.culpritPublic).map((o): [number, ReputationReason] => [o.investigated ?? o.month, { kind: 'caught', month: o.investigated ?? o.month }]),
     ...[...unrestMonths(state, playerId)].map((month): [number, ReputationReason] => [month, { kind: 'unrest', month }]),
   ];
   return reasons.sort(([a], [b]) => b - a).map(([, reason]) => reason);

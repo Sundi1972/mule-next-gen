@@ -152,6 +152,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
       { row: '3 not the Sheriff', make: () => sheriffed().state, by: 'lena', then: 'Only the Sheriff posts guards' },
     ];
     for (const { make, by, then } of rows) {
+      POLITICS.sabotage.on = true; // a row may switch it off
       const state = make();
       const before = structuredClone(state.politics);
       expect(refused(() => setGuards(state, by, [0]))).toBe(then);
@@ -202,6 +203,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-7 investigations', () => {
       { row: 'not the Sheriff', make: () => sheriffed().state, by: 'lena', then: 'Only the Sheriff investigates' },
     ];
     for (const { make, by, then } of rows) {
+      POLITICS.sabotage.on = true; // a row may switch it off
       const state = make();
       const order = addCase(state);
       const before = structuredClone(state.politics);
@@ -300,6 +302,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-8 fines', () => {
       { make: () => sheriffed().state, by: 'lena', then: 'Only the Sheriff fines' },
     ];
     for (const { make, by, then } of rows) {
+      POLITICS.sabotage.on = true; // a row may switch it off
       const state = make();
       const order = addCase(state, { culpritPublic: true });
       const before = structuredClone(state.politics);

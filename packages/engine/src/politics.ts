@@ -9,7 +9,7 @@ import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
-import { newSabotageMonth } from './sabotage.js';
+import { closeCases, newSabotageMonth } from './sabotage.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
 import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Overrule, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
@@ -651,6 +651,8 @@ export function closeVotes(state: GameState): ElectionResult | null {
   // A proposal from an earlier month had this planning for its ballot; one that never got it is dropped.
   const pending = state.politics?.proposal;
   if (pending && pending.month < state.month) edit(state).proposal = null;
+  // Last, so the standard fine reads the ban in force once planning's votes have taken effect (S4-C5).
+  closeCases(state);
   return result;
 }
 

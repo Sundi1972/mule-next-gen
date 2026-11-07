@@ -1,10 +1,10 @@
-import { goodWords } from './colony.js';
+import { fundIn, fundOut, goodWords } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { plotEvent, storeEvent } from './events.js';
-import { player } from './game.js';
+import { isGameOver, player } from './game.js';
 import { pactBreach } from './diplomacy.js';
-import { reputationShift, securitySpend } from './politics.js';
+import { reputationShift, securitySpend, votesOpen } from './politics.js';
 import { createRng, seedOf } from './rng.js';
 import { PERCENT } from './units.js';
 import { GOODS, type GameState, type Good, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
@@ -93,19 +93,70 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   edit(state).sabotage = [...kept, order];
 }
 
-/** The Sheriff's guarded plots for this month: the whole list. */
-export function setGuards(_state: GameState, _playerId: string, _tiles: number[]): void {
-  throw new RuleError(NOT_BUILT);
+/** The refusal for a Sheriff's act now, or null when the player may act; `verb` fills the words of rows 2 and 3 (S4-RULE-6 rows 1-3). */
+function refusal(state: GameState, playerId: string, words: { votes: string; sheriff: string }): RuleError | null {
+  const can = sheriffCanAct(state, playerId);
+  if (can === true) return null;
+  if (can === 'off') return new RuleError('This game plays without sabotage');
+  return new RuleError(can === 'notSheriff' ? words.sheriff : words.votes);
 }
 
-/** The Sheriff investigates an order; returns it as it stands afterwards. */
-export function investigate(_state: GameState, _playerId: string, _orderId: string): SabotageOrder {
-  throw new RuleError(NOT_BUILT);
+/** The Sheriff's guarded plots for this month: the whole list (S4-RULE-6). */
+export function setGuards(state: GameState, playerId: string, tiles: number[]): void {
+  const refused = refusal(state, playerId, { votes: 'Guards are posted once the votes are over', sheriff: 'Only the Sheriff posts guards' });
+  if (refused) throw refused;
+  const plots = [...new Set(tiles)];
+  if (plots.some((tile) => (state.tiles[tile]?.owner ?? null) === null)) throw new RuleError("Guards watch players' plots");
+  const max = guardsMax(state);
+  if (plots.length > max) throw new RuleError(`You have ${max} guards`);
+  edit(state).guards = plots;
 }
 
-/** The Sheriff fines an order's culprit `base` credits, before the ban's multiplier. */
-export function fineCulprit(_state: GameState, _playerId: string, _orderId: string, _base: number): void {
-  throw new RuleError(NOT_BUILT);
+/** The Sheriff investigates an order; returns it as it stands afterwards (S4-RULE-7). */
+export function investigate(state: GameState, playerId: string, orderId: string): SabotageOrder {
+  const refused = refusal(state, playerId, { votes: 'Investigations are made once the votes are over', sheriff: 'Only the Sheriff investigates' });
+  if (refused) throw refused;
+  const cases = state.politics!.sabotage;
+  if (cases.filter((o) => o.investigated === state.month).length >= POLITICS.sheriff.investigations) throw new RuleError('One investigation a month');
+  const at = cases.findIndex((o) => o.id === orderId);
+  const found = cases[at];
+  if (!found || !isPublicOrder(found)) throw new RuleError('No such incident');
+  if (found.culpritPublic) throw new RuleError('That one is solved');
+  if (found.investigated != null) throw new RuleError('The trail went cold on that one');
+  // The draw keys on the order's number, its place in the list plus one, which only the engine holds (AM-1), never on the id's text.
+  const solved = createRng(seedOf(state.seed, at + 1, 'investigate', String(POLITICS.sabotage.streamSalt))).chance(POLITICS.sheriff.investigateOdds);
+  edit(state).sabotage[at]!.investigated = state.month;
+  if (solved) reveal(state, orderId);
+  return state.politics!.sabotage[at]!;
+}
+
+/** The Sheriff fines an order's culprit `base` credits, before the ban's multiplier (S4-RULE-8). */
+export function fineCulprit(state: GameState, playerId: string, orderId: string, base: number): void {
+  const refused = refusal(state, playerId, { votes: 'Fines are levied once the votes are over', sheriff: 'Only the Sheriff fines' });
+  if (refused) throw refused;
+  const order = state.politics!.sabotage.find((o) => o.id === orderId);
+  if (!order || !order.culpritPublic) throw new RuleError('Only a revealed culprit is fined');
+  if (order.fine) throw new RuleError('Already fined');
+  if (order.by === playerId) throw new RuleError("You can't fine yourself");
+  const { steps } = POLITICS.sheriff.fine;
+  if (!steps.includes(base)) throw new RuleError(`A fine is ${steps[0]} to ${steps.at(-1)} cr, in steps of ${steps[1]! - steps[0]!}`);
+  levy(state, orderId, base, 'sheriff');
+}
+
+/**
+ * Levy a fine on a revealed case: base times the ban in force now, as much as the culprit has, in through the fund and
+ * the victim's share out through it (S4-HC-3: nobody pays another player directly). Not a tax paid; the rest is waived.
+ */
+function levy(state: GameState, orderId: string, base: number, by: 'sheriff' | 'standard'): void {
+  const order = state.politics!.sabotage.find((o) => o.id === orderId)!;
+  const culprit = player(state, order.by!);
+  const due = base * banMultiplier(state);
+  const paid = Math.max(0, Math.min(culprit.money, due));
+  culprit.money -= paid;
+  fundIn(state, 'fine', paid);
+  const toVictim = order.victim ? fundOut(state, 'restitution', Math.round(paid * POLITICS.sheriff.victimShare)) : 0;
+  if (order.victim) player(state, order.victim).money += toVictim;
+  edit(state).sabotage.find((o) => o.id === orderId)!.fine = { base, due, paid, toVictim, by, month: state.month };
 }
 
 /** Resolve every pending order, once, as production starts. */
@@ -213,11 +264,18 @@ export function endRumours(state: GameState): void {
   edit(state).rumoured = [];
 }
 
+/** The standard fine on every revealed case still unfined, the Sheriff's own included. */
+function fineOpenCases(state: GameState): void {
+  for (const order of state.politics!.sabotage.filter((o) => o.culpritPublic && !o.fine)) levy(state, order.id, POLITICS.sheriff.fine.standard, 'standard');
+}
+
 /** Charge the month's crew costs at upkeep. */
 export function settleSabotage(_state: GameState): void {}
 
-/** Levy the standard fine on cases left unfined, when planning ends and at the last upkeep. */
-export function closeCases(_state: GameState): void {}
+/** Levy the standard fine on cases left unfined, when planning ends (S4-RULE-8); the last upkeep does the same in settleSabotage. */
+export function closeCases(state: GameState): void {
+  if (state.politics) fineOpenCases(state);
+}
 
 /** Reset the month's guards at the start of planning; investigations are read off their month, so they reset themselves. */
 export function newSabotageMonth(state: GameState): void {
@@ -246,18 +304,22 @@ export function guardsMax(state: GameState): number {
 }
 
 /** Whether the player may guard, investigate and fine now, or why not. */
-export function sheriffCanAct(_state: GameState, _playerId: string): true | 'off' | 'notPlanning' | 'votesOpen' | 'notSheriff' {
-  return 'off';
+export function sheriffCanAct(state: GameState, playerId: string): true | 'off' | 'notPlanning' | 'votesOpen' | 'notSheriff' {
+  if (!state.politics || !POLITICS.sabotage.on) return 'off';
+  if (state.phase !== 'planning') return 'notPlanning';
+  if (votesOpen(state)) return 'votesOpen';
+  return state.politics.sheriff === playerId ? true : 'notSheriff';
 }
 
 /** The ids of the orders the Sheriff may fine now. */
-export function fineable(_state: GameState, _playerId: string): string[] {
-  return [];
+export function fineable(state: GameState, playerId: string): string[] {
+  if (sheriffCanAct(state, playerId) !== true) return [];
+  return state.politics!.sabotage.filter((o) => o.culpritPublic && !o.fine && o.by !== playerId).map((o) => o.id);
 }
 
 /** The sabotage ban's multiplier in force now: 1 with no ban. */
-export function banMultiplier(_state: GameState): number {
-  return 1;
+export function banMultiplier(state: GameState): number {
+  return state.politics?.laws.sabotageBan?.setting ?? 1;
 }
 
 /** Whether an order's effect or culprit is known to every seat (S4-RULE-3's public). */

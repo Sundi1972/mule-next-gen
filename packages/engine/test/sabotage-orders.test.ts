@@ -699,7 +699,25 @@ describe('the one reveal', () => {
     expect(reputationReasons(quiet.state, 'lena')).toEqual([]);
   });
 
-  // Red until Task S4-1.7 builds investigate: the order a Sheriff solves months later still carries its own month to pactBreach.
+  it('S4-T-AC-4: an order revealed by an investigation is a "caught" reason in the month it was revealed, not the month it was ordered', () => {
+    let seen = false;
+    for (let seed = 1; seed <= 60 && !seen; seed++) {
+      const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
+      resolveSabotage(state);
+      const order = state.politics!.sabotage[0]!;
+      if (order.outcome !== 'done') continue;
+      expect(reputationReasons(state, 'lena')).toEqual([]);
+      state.politics!.sheriff = 'ossa';
+      state.month = order.month + 2;
+      state.phase = 'planning';
+      if (!investigate(state, 'ossa', order.id).culpritPublic) continue;
+      seen = true;
+      expect(reputationReasons(state, 'lena')).toEqual([{ kind: 'caught', month: order.month + 2 }]);
+    }
+    expect(seen).toBe(true);
+  });
+
+  // Was red until Task S4-1.7 built investigate: the order a Sheriff solves months later still carries its own month to pactBreach.
   it('S4-T-AC-4 (investigation leg, red until S4-1.7): an investigation months later still calls pactBreach with the order\'s month', () => {
     let solved = false;
     for (let seed = 1; seed <= 60 && !solved; seed++) {
