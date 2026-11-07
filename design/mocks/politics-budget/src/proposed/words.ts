@@ -9,10 +9,10 @@ export type LineId = BudgetView['lines'][number]['line'];
 
 export const LINE_NAME: Record<LineId, string> = { projects: 'Projects', welfare: 'Welfare', security: 'Security' };
 
-/** "about 430 cr": a share's credits at today's fund, to the nearest 10. The fund still moves before upkeep. */
-export const about = (credits: number) => `about ${credits < 10 ? credits : Math.round(credits / 10) * 10} cr`;
+/** "432 cr": a share's credits at today's fund (budgetCredits), as §3's worked example states them (AM-5). */
+export const about = (credits: number) => `${credits.toLocaleString('en')} cr`;
 
-/** Where a line's money goes, in a few words: "toward the Stadium", "to Kai, last on Worth". */
+/** Where a line's money goes, in a few words: "toward the Observatory", "to Kai, last on Worth". */
 export function lineGoes(line: LineId, view: Pick<MuleView, 'players' | 'colony'>, welfareTo: string | null, credits: number): string {
   if (credits === 0) return line === 'welfare' ? 'nothing this month' : 'nothing to buildings';
   if (line === 'welfare') {

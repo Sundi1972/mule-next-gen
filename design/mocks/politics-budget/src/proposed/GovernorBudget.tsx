@@ -113,9 +113,16 @@ interface Editor {
   onChange(s: Shares): void;
 }
 
-/** "about 430 cr toward the Stadium", "about 50 cr to Kai, last on Worth": what a share pays, and where. */
+/** "432 cr toward the Observatory", "54 cr to Kai, last on Worth": what a share pays, and where. At Welfare 0%, who it would go to (AM-5). */
 function Pays({ view, budget, id, share, className }: { view: MuleView; budget: BudgetView; id: RcLine; share: number; className?: string }) {
   const credits = creditsOf(id, share, view.politics!.fund);
+  const to = view.players.find((p) => p.id === budget.welfareTo)?.name;
+  if (id === 'welfare' && share === 0 && to)
+    return (
+      <span className={cx('min-w-0 text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm', className)} data-testid="budget-pays-welfare">
+        would go to {to}, last on Worth
+      </span>
+    );
   return (
     <span className={cx('min-w-0 text-[11px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm', className)} data-testid={`budget-pays-${id}`}>
       {credits === 0 ? lineGoes(id, view, budget.welfareTo, 0) : `${about(credits)} ${lineGoes(id, view, budget.welfareTo, credits)}`}

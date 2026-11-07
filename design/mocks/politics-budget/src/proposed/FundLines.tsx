@@ -11,8 +11,9 @@ import { fmt, toSlot } from '../../../../../apps/web/src/game/derive';
  * ColonyView.ledger's out and ColonyView.welfare (S5-C8); month-end.ts's colonyReport gains them.
  *
  * Out only, in the spec's list: office pay, upkeep, Welfare and whom it went to, buildings. One line on the TV, because
- * the month end sits near TV-FIT's floor already (0.746 at four seats as built): a second line, the fund's income, took
- * it to 0.653. The balance beside it is the fund after them. Security is after RC and has no place here.
+ * the month end sits at TV-FIT's floor already. OPEN FINDING (measured 7 Nov): with the Observatory collecting, the month
+ * end is 0.701 as built and 0.663 with this line, under the 0.7 floor (with a Stadium building instead: 0.746 → 0.703).
+ * The balance beside it is the fund after them. Security is after RC and has no place here.
  */
 
 const OUT_ORDER: FundLine[] = ['officePay', 'upkeep', 'repair', 'strikePay', 'welfare', 'project'];

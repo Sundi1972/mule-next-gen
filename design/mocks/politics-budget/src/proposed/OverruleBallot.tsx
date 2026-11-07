@@ -135,19 +135,27 @@ export function OverruleRail() {
 export const OVERRULE_STAGE: StageSlot = { id: 'overrule-ballot', show: ballotOpen, phase: () => 'Overrule vote', Body: OverruleBallot, Rail: OverruleRail };
 
 const STILL = 'Still waiting for';
+/** AM-5's Ready words: open and not cast, "Cast my vote" (as the election's ballot); cast, "Waiting for the overrule vote". */
 const OVERRULE_WORDS: ReadyWords = {
   ready: 'Cast my vote',
-  done: 'You voted',
+  done: 'Waiting for the overrule vote',
   waiting: STILL,
-  all: 'Everyone has voted. The result is shown.',
+  all: 'Everyone has cast. The result is shown.',
   confirm: () => 'Close the vote now? Votes not cast count against undoing it, and the result is shown.',
 };
+/** The reveal's: Continue, then who the land grant waits for. */
+const REVEAL_WORDS: ReadyWords = {
+  ready: 'Continue',
+  done: 'Waiting for the others',
+  waiting: STILL,
+  all: 'Everyone is on. The land grant starts.',
+  confirm: () => 'Go on to the land grant now?',
+};
 
-/** The ready bar in the overrule ballot: Cast my vote, live once this seat has a Yes or No (the caller's and Governor's start set). */
+/** The ready bar in the overrule ballot and its reveal: Cast my vote, live once this seat has a Yes or No (the caller's and Governor's start set); then Continue. */
 export function overruleReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
   const stage = view.politics?.overrule?.stage;
-  // In the reveal nothing waits for anyone: the land grant follows its clock (S5-RULE-7), so the bar says so.
-  if (stage === 'reveal') return { ...OVERRULE_WORDS, done: 'You voted', all: 'The land grant follows the result.', label: 'VOTED', canReady: false };
+  if (stage === 'reveal') return { ...REVEAL_WORDS, label: 'READY', canReady: true };
   if (stage !== 'ballot') return null;
   return { ...OVERRULE_WORDS, label: 'VOTED', canReady: (me.politics?.overruleBallot ?? null) !== null };
 }

@@ -21,7 +21,7 @@ import { frameSlots, OpenDesk } from './slots';
 /** The key decisions, one line each. */
 const DECISIONS: [string, string][] = [
   ['P12', 'The budget sits in the Governor desk right under the tax, before the law picker: the tax fills the fund, the budget spends it.'],
-  ['P12', 'Each line says what it pays at today’s fund and where it goes (“about 430 cr toward the Stadium”, “about 50 cr to Kai, last on Worth”); “about”, because the month’s taxes still add to it.'],
+  ['P12', 'Each line says what it pays at today’s fund and where it goes (“432 cr toward the Observatory”, “54 cr to Kai, last on Worth”: §3’s worked example, 540 cr spare). At Welfare 0% it says who it would go to.'],
   ['P12', 'Welfare’s + takes from what is kept, then from Projects; Projects’ + takes only from what is kept; − always gives back to the fund. So no sum can pass 100.'],
   ['P12', 'Commissioning moves under the Projects line, the real Commission unchanged; the Colony desk no longer shows it.'],
   ['P12', 'A call freezes the tax only (S5-RULE-2 in RC): the tax row turns read-only with who called it; the budget stays live.'],
@@ -29,10 +29,11 @@ const DECISIONS: [string, string][] = [
   ['P13', '“Call an overrule vote” sits at the tax line in the Colony desk’s fund card, only once the tax has moved this month (PM, 7 Nov).'],
   ['P13', 'While a call waits, one line under Now on every phone says who called it; a tap opens the fund card. It is the strike alert’s place: no new tab, no tool.'],
   ['P13', 'The ballot takes the hub’s stage like the law ballot, in its look: the question, “5% at the month’s start → 10% now”, Yes / No, “needs 5 of 9 votes”, Cast my vote in the ready bar.'],
-  ['P13', 'Who has voted counts Cast (done), not the preset ballots: the caller’s Yes and the Governor’s No exist from the start and would read as votes already in.'],
+  ['P13', 'Who has voted is done (who has cast), never the preset ballots: the caller’s Yes and the Governor’s No exist from the start (AM-5).'],
+  ['P13', 'The ready bar: “Cast my vote” until you cast, then “Waiting for the overrule vote”; in the reveal, “Continue” (AM-5).'],
   ['P14', 'The TV’s planning header gains the budget line under the promise line. The call’s banner heads the side column, above who the table waits for: in the header it shrank the body to 0.763 (TV-FIT), in the side the news gives way and it stays at 0.896.'],
   ['P14', 'The overrule panel is TvCouncil’s frame. Its reveal bar is all the table’s votes with the mark at “needed”, not the half-way mark the law’s bar uses: the rules differ.'],
-  ['P15', 'The month end’s colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 120 → Kai, Buildings 430. Out only: TV-FIT is 0.746 as built, 0.703 with this line, 0.653 with an In line too.'],
+  ['P15', 'The month end’s colony panel gains one line, “Paid out this month”: office pay, upkeep, Welfare 54 → Kai, Buildings 432. Out only. TV-FIT, open finding: with the Observatory collecting, 0.701 as built and 0.663 with this line, under the 0.7 floor.'],
 ];
 
 interface StateDef {

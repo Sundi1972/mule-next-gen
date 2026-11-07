@@ -120,6 +120,8 @@ export interface Scene {
   ballots: Record<string, boolean>;
   /** Who has cast (Done). The AI casts as the ballot opens. */
   done: string[];
+  /** In the reveal, who has pressed Continue. */
+  continued?: string[];
 }
 
 const DEFAULT: Shares = { projects: 100, welfare: 0 };
@@ -167,8 +169,7 @@ function budgetView(scene: Scene): BudgetView {
   return {
     lines: LINES.map((line) => ({ line, share: shares[line], start: scene.budgetStart[line], maxShare: BUDGET[line].maxShare, step: BUDGET.step, credits: creditsOf(line, shares[line]), maxCredits: BUDGET[line].maxCredits })),
     kept: 100 - shares.projects - shares.welfare,
-    // FINDING: the spec's welfareTo is null while Welfare's share is 0 (S5-RULE-4 row 1), so a Governor's draft could not
-    // name the player before Set. The mock sends who would get it at any share; the screens name them only above 0.
+    // Sent at every share, 0% included (AM-5): the Governor sees the recipient before setting one.
     welfareTo: welfareTo(BASE_PLAYERS, 'ossa'),
     setBy: scene.budget.setBy,
     // In RC a call freezes the tax only (S5-RULE-2 "in RC"): the budget never holds.
@@ -204,14 +205,14 @@ function canOverrule(scene: Scene, id: string): Record<OverruleTarget, true | Ov
   return { tax, budget: 'notYet', confidence: 'sheriffOnly' };
 }
 
-/** The colony: the Park stands, the Stadium waits for 430 cr (the Projects line's "toward the Stadium"). */
+/** The colony: the Park stands; the Observatory is commissioned and waits for its credits ("toward the Observatory", AM-5). */
 function colonyView(scene: Scene): ColonyView {
   const catalogue = (Object.keys(PRESTIGE) as PrestigeId[]).map((id) => {
     const p = PRESTIGE[id];
-    const open = id === 'park' || id === 'stadium';
-    return { id, name: p.name, credits: p.credits, goods: p.goods, buildMonths: p.buildMonths, prestige: p.prestige, upkeep: p.upkeep, commissionable: !open, why: open ? 'Already commissioned' : null };
+    const open = id === 'park' || id === 'observatory';
+    return { id, name: p.name, credits: id === 'observatory' ? OBSERVATORY.credits : p.credits, goods: p.goods, buildMonths: p.buildMonths, prestige: p.prestige, upkeep: p.upkeep, commissionable: !open, why: open ? 'Already commissioned' : null };
   });
-  const stadium = PRESTIGE.stadium;
+  const obs = { ...PRESTIGE.observatory, ...OBSERVATORY };
   const monthEnd = scene.moment === 'monthEnd';
   return {
     gauges: { wealth: 18_400, environment: 31, prestige: 2, happiness: 58, band: 'content' },
@@ -224,9 +225,9 @@ function colonyView(scene: Scene): ColonyView {
         place: { x: 1, y: 2, w: 1, h: 1 }, prestige: 2, upkeep: 15, repairCost: null, plaque: [{ playerId: 'lena', value: 120 }],
       },
       {
-        id: 'stadium', name: stadium.name, stage: monthEnd ? 'building' : 'commissioned', cost: { credits: stadium.credits, goods: stadium.goods },
-        funded: { credits: monthEnd ? stadium.credits : stadium.credits - STADIUM_NEEDS, goods: stadium.goods }, buildMonths: stadium.buildMonths, monthsLeft: monthEnd ? stadium.buildMonths : null,
-        place: null, prestige: stadium.prestige, upkeep: stadium.upkeep, repairCost: null, plaque: [{ playerId: 'brix', value: 70 }],
+        id: 'observatory', name: obs.name, stage: 'commissioned', cost: { credits: obs.credits, goods: obs.goods },
+        funded: { credits: monthEnd ? MONTH_END.out.project : 0, goods: obs.goods }, buildMonths: obs.buildMonths, monthsLeft: null,
+        place: null, prestige: obs.prestige, upkeep: obs.upkeep, repairCost: null, plaque: [{ playerId: 'brix', value: 70 }],
       },
     ],
     catalogue,
@@ -236,19 +237,22 @@ function colonyView(scene: Scene): ColonyView {
   };
 }
 
-/** The Stadium's credits still to come: what "about 430 cr toward the Stadium" names (Projects 80% of 540 is 432). */
-export const STADIUM_NEEDS = 430;
+/**
+ * The Observatory's credits as WS7 gives them (AM-5, via the PM: 700 cr, so all of Projects' 432 goes to it). Trunk's
+ * config.ts PRESTIGE.observatory says 350 cr (feat/strategist and ws7-politics-rc alike): a fixture value until they agree.
+ */
+export const OBSERVATORY = { credits: 700 } as const;
 
 /**
- * Month 5's upkeep (moment 5). The month's taxes and grant filled the fund; then office pay and the Park's upkeep; then
- * the lines on what is left above the reserve (S5-RULE-3): 1,300 − 100 = 1,200 spare, so Welfare 10% is 120 → Kai and
- * Projects 80% may take 960, of which the Stadium needed its last 430 ("Buildings 430"). The rest, 750, stays.
+ * Month 5's upkeep (moment 5), on §3's worked example as the planning desk shows it (AM-5): after the grant, office pay
+ * and the Park's upkeep the fund holds 640, so 540 spare (S5-RULE-3); Welfare 10% is 54 → Kai, Projects 80% is 432,
+ * all of it to the Observatory ("Buildings 432"); 10% stays. `start` is fixture only: no screen shows it.
  */
 export const MONTH_END = {
-  start: FUND,
-  in: { salesTax: 555, grant: 200 },
-  out: { officePay: 80, upkeep: 15, welfare: 120, project: 430 },
-  balance: FUND + 555 + 200 - 80 - 15 - 120 - 430,
+  start: FUND - 200 + 80 + 15,
+  in: { grant: 200 },
+  out: { officePay: 80, upkeep: 15, welfare: 54, project: 432 },
+  balance: FUND - 54 - 432,
 } as const;
 
 /** The news lines a call, a withdrawal and the result add (S5-C7), none naming a voter (§3.4). */
@@ -279,8 +283,8 @@ const NONE = Object.fromEntries(GOODS.map((g) => [g, 0])) as MyView['stock'];
 function readyIn(scene: Scene, p: PlayerView): boolean {
   if (p.isAi) return true;
   if (scene.moment === 'ballot') return scene.done.includes(p.id);
-  // In the reveal everyone has cast; planning ends at the reveal's close.
-  if (scene.moment === 'reveal') return true;
+  // In the reveal: who has pressed Continue (AM-5's Ready words).
+  if (scene.moment === 'reveal') return (scene.continued ?? []).includes(p.id);
   return false;
 }
 
@@ -349,6 +353,7 @@ export function apply(scene: Scene, from: string, intent: Intent): Scene {
     case 'voteOverrule':
       return scene.moment === 'ballot' ? { ...scene, ballots: { ...scene.ballots, [from]: intent.yes } } : scene;
     case 'ready':
+      if (scene.moment === 'reveal') return (scene.continued ?? []).includes(from) ? scene : { ...scene, continued: [...(scene.continued ?? []), from] };
       return scene.moment === 'ballot' && !scene.done.includes(from) ? { ...scene, done: [...scene.done, from] } : scene;
     default:
       return scene;
