@@ -78,7 +78,7 @@ vitest), `apps/web` (phone/TV screens, Playwright e2e that own their server), `p
 | PR-1b | `ws2-claude-seat-mcp` | WS2 (+ WS3 named edits: server.ts route line, mule-game.ts::start) | Tasks 1.4–1.9 (C2, C3, C4) | B-AC-3, B-AC-4, B-AC-6, B-AC-7, B-AC-9, T-AC-1, T-AC-2, T-AC-3, T-AC-5 (logs), T-AC-8 | MCP tools (§3), `BRAIN.claudeSeat` | Room code lookup | No |
 | PR-1c | `ws3-side-pick-wait` | WS3 | Task 1.10 (C7) | B-AC-5 | — | `BRAIN.claudeSeat.sidePickWaitMs`, ClaudeSeatWriter ask | No |
 | PR-2a | `ws4-claude-seat-chips` | WS4 | Task 2.1 (C6 view + chips) | B-AC-2 | `SeatView.claude` | status method (stub) | Yes |
-| PR-2b | `ws2-claude-seat-status` | WS2 | Tasks 2.2–2.4 (C6 status, C5, C10) | T-AC-4, T-AC-6, T-AC-7 | status method | `SeatView.claude` | No |
+| PR-2b | `ws2-claude-seat-status` | WS2 (+ WS3 named edit: record.ts) | Tasks 2.2–2.5 (C6 status, C5, C10, replay) | T-AC-4, T-AC-6, T-AC-7, T-AC-9 | status method | `SeatView.claude` | No |
 | PR-3a | `ws2-claude-seat-reach` | WS2 | Tasks 3.1–3.2 (C10a) | B-AC-11 | `MULE_PUBLIC_MCP_URL`, `pnpm tunnel` | MCP route | No |
 | PR-3b | `ws4-claude-setup-page` | WS4 | Task 3.3 (C9) | B-AC-10 | — | `MULE_PUBLIC_MCP_URL` | Yes |
 | PR-4 | `ws2-claude-handover` | WS4 (room, web) + WS3 (hook) + WS2 (AiSeat) | Tasks 4.1–4.3 (C8) | B-AC-8 | `handoverToClaude`, `seatBecameComputer` hook | C1, C3, C4 | Yes |
@@ -256,6 +256,7 @@ condition); tell the PM, since it narrows G-1's reach.
 **ACs verified:** B-AC-2 · **ux:** mock `#tv-ready`, `#phone-ready`, `#lobby-b` · GRAFT TARGET TableApp.tsx (TvLobby, TvGame ready list), `apps/web/src/phone/hub/ReadyBar.tsx`, `Lobby.tsx::SeatRow`
 - [ ] **Step 1: Write the failing test `B-AC-2: after a call with the code every screen says connected; while writing, thinking`** — Altitude: promise, front to back (Playwright; the fake MCP client makes the calls).
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement C6's view and chips per the mock** against a stub status. **Step 4: Run** — PASS. **Step 5: Commit** `feat(C6): Claude status chips (verifies B-AC-2)`.
+- [ ] **Step 6: Write the failing test `B-AC-5 (screens): during the first good's side pick a Claude seat with an open ask is listed under "Waiting for" with the seconds left, on the TV and the phone; once Done it is gone`** (RULE-6's last line; mock `#tv-ready`, `#phone-ready`). The deadline is the side pick's open time + `BRAIN.claudeSeat.sidePickWaitMs`, from WS3's game state into the view (a WS3 view field if none carries it). **Step 7:** implement per the mock, run, commit `feat(C6): Waiting for a Claude seat's auction plan, with its countdown (RULE-6)`.
 
 ### Task 2.2: status from the last call — C6 (WS2 half)
 
@@ -274,6 +275,12 @@ condition); tell the PM, since it narrows G-1's reach.
 **ACs verified:** T-AC-7 · **Files:** `packages/ai/src/llm/reply.ts::cleanLine`, Test `packages/ai/test/llm-reply.test.ts`
 - [ ] **Step 1: Write the failing test `T-AC-7: a line under minLineLetters letters is not said; "OK" with min 2 is said`** (chat record).
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement C10** (in_place). **Step 4: Run** — PASS; existing cleanLine tests green. **Step 5: Commit** `feat(C10): drop junk lines (verifies T-AC-7)`.
+
+### Task 2.5: a game with a Claude seat replays — C3, C7 (added 7 Nov, §8)
+
+**Owner:** WS2 (brain/**, claude-seat/**), with a WS3 named edit in `apps/server/src/record.ts` · **ACs verified:** T-AC-9 (new)
+- [ ] **Step 1: Write the failing test `T-AC-9: a recorded game with a Claude seat replays to the same final state`** — Altitude: contract (record then replay, compare final states). Today the record carries no seat kind and the ClaudeSeatWriter is not a recorded brain writer, so the replay plays the seat built-in (WS3's finding, confirmed by WS4's review of #634); with C7 the first side pick can also end up to 45 s later live than in the replay.
+- [ ] **Step 2: Run** — FAIL. **Step 3: Implement:** the record carries each seat's kind; the ClaudeSeatWriter's replies are recorded as the brain writer's are and replayed by the replay brain; the first side pick's Done time for a Claude seat is recorded so the replay ends it on the same tick. **Step 4: Run** — PASS; existing record/replay tests green. **Step 5: Commit** `feat(C3): a game with a Claude seat replays (verifies T-AC-9)`.
 
 ### Gate: End of Phase P2
 - [ ] B-AC-2, T-AC-4, T-AC-6, T-AC-7 green; `pnpm typecheck && pnpm test && pnpm e2e` green; one review per PR; rulebook chapter re-checked.
@@ -346,3 +353,6 @@ Gated by S1's answer (D-1 b's condition, above).
   unusable reply is not an answer; game over decided in claude-seat) came from building and reviewing it. The seat-code
   lookup in production is a one-line swap to WS4's `RoomRegistry.seatForCode` (664983b8) once PR-1a reaches this
   branch.
+- **7 Nov — PR-2 scope from PR-1c's review (#634).** RULE-6's "Waiting for" countdown on TV and phone is made explicit in
+  Task 2.1 (Steps 6–7, WS4; a WS3 view field for the side pick's deadline if none carries it). Replay of a game with a
+  Claude seat is new Task 2.5 (WS2, WS3 named edit in record.ts), with new T-AC-9; spec §6 gains T-AC-9 when PR-2b starts.
