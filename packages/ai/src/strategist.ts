@@ -477,7 +477,22 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
     }
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
+  if (STRATEGIST.energyFirst && needEnergy) energyFirst(cands);
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+const ENERGY_FIRST = 'no Energy plant of my own yet';
+
+/** STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. */
+function energyFirst(cands: Candidate<DevAction>[]): void {
+  const isPlant = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === 'energy';
+  if (!cands.some((c) => isPlant(c) && !c.veto)) return;
+  for (const c of cands) {
+    if (isPlant(c) || c.veto) continue;
+    c.veto = ENERGY_FIRST;
+    c.utility = 0;
+    c.rationale = `Ruled out: ${ENERGY_FIRST}`;
+  }
 }
 
 /**
