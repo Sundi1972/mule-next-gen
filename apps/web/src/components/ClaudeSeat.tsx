@@ -1,6 +1,8 @@
 import type { TableView } from '@mule/protocol';
 import { Button, cx } from '@mule/ui';
 import { useEffect, useState } from 'react';
+import { secondsUntil } from '../game/derive';
+import { useServerNow } from '../net/react';
 
 type Seat = TableView<unknown>['seats'][number];
 
@@ -22,21 +24,56 @@ export const CHIP_CLASS = {
   AWAY: 'bg-warn/15 text-warn',
   'WAITING FOR CLAUDE': 'bg-warn/15 text-warn',
   'CLAUDE · CONNECTED': 'bg-ok/10 text-ok',
+  'CLAUDE · THINKING': 'bg-holo-soft text-holo',
+  'CLAUDE · READY': 'bg-holo-faint text-ink-3',
+  'CLAUDE · OFFLINE': 'bg-warn/15 text-warn',
 } as const;
 
 export type ChipWord = keyof typeof CHIP_CLASS;
 
-/** A Claude seat's chip in the lobby: waiting for its chat until the chat calls in with the code. */
-export const claudeChip = (seat: Seat): ChipWord => (seat.claude === 'connected' ? 'CLAUDE · CONNECTED' : 'WAITING FOR CLAUDE');
+export type ClaudeStatus = NonNullable<Seat['claude']>;
+
+/** A Claude seat's chip for each status the room reports (C6). */
+export const STATUS_CHIP: Record<ClaudeStatus, ChipWord> = {
+  waiting: 'WAITING FOR CLAUDE',
+  connected: 'CLAUDE · CONNECTED',
+  thinking: 'CLAUDE · THINKING',
+  ready: 'CLAUDE · READY',
+  offline: 'CLAUDE · OFFLINE',
+};
+
+/** A Claude seat's chip: waiting for its chat until the chat calls in with the code. */
+export const claudeChip = (seat: Pick<Seat, 'claude'>): ChipWord => STATUS_CHIP[seat.claude ?? 'waiting'];
 
 export const isClaude = (seat: Seat) => seat.kind === 'claude';
 
-export function Chip({ word, className, testid }: { word: ChipWord; className?: string; testid?: string }) {
+/** Seconds as the side pick's countdown shows them: 0:32. */
+export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
+/** `suffix` follows the word, such as the side pick's countdown (CLAUDE · THINKING · 0:32). */
+export function Chip({ word, suffix, className, testid }: { word: ChipWord; suffix?: string | undefined; className?: string | undefined; testid?: string }) {
   return (
-    <span className={cx('shrink-0 whitespace-nowrap rounded-chip px-1.5 font-mono text-[10px] font-bold', CHIP_CLASS[word], className)} data-testid={testid}>
+    <span className={cx('shrink-0 whitespace-nowrap rounded-chip px-1.5 font-mono text-[10px] font-bold', CHIP_CLASS[word], word === 'CLAUDE · THINKING' && 'animate-pulse', className)} data-testid={testid}>
       {word}
+      {suffix && ` · ${suffix}`}
     </span>
   );
+}
+
+/** The seconds left on a Claude seat's side-pick wait, by the server's clock, as 0:32 (RULE-6). */
+function useWaitLeft(until: number): string {
+  const now = useServerNow(250);
+  return clock(Math.ceil(secondsUntil(until, now) ?? 0));
+}
+
+/** A Claude seat the side pick waits for, as a chip: CLAUDE · THINKING · 0:32. */
+export function ClaudeCountdown({ until, className, testid }: { until: number; className?: string | undefined; testid?: string }) {
+  return <Chip word="CLAUDE · THINKING" suffix={useWaitLeft(until)} className={className} testid={testid} />;
+}
+
+/** The same, as a list row's state word. */
+export function ClaudeCountdownWord({ until, className }: { until: number; className?: string }) {
+  return <span className={cx('animate-pulse', className)}>{`CLAUDE · THINKING · ${useWaitLeft(until)}`}</span>;
 }
 
 function useCopied(): [boolean, (text: string) => void] {

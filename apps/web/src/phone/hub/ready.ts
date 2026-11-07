@@ -2,7 +2,18 @@ import type { AuctionView, CouncilView, ElectionView, MuleIntent, MuleView, Play
 
 /** Planning has no clock: who it still waits for, and what the planning footer shows and sends. */
 
-export type Seat = Pick<PlayerView, 'id' | 'name' | 'isAi' | 'ready' | 'slot'> & { away: boolean };
+export type Seat = Pick<PlayerView, 'id' | 'name' | 'isAi' | 'ready' | 'slot'> & {
+  away: boolean;
+  /** A Claude seat the first side pick waits for: the server time its wait ends (RULE-6). */
+  until?: number;
+};
+
+type ClaudeStatus = NonNullable<TableView<MuleView>['seats'][number]['claude']>;
+
+/** A Claude seat's status as the room has it; undefined for every other seat. */
+export function claudeIn(seats: TableView<MuleView>['seats']): (id: string) => ClaudeStatus | undefined {
+  return (id) => seats.find((s) => s.id === id)?.claude;
+}
 
 function seatOf(p: PlayerView, connected: (id: string) => boolean): Seat {
   return { id: p.id, name: p.name, isAi: p.isAi, ready: p.ready, slot: p.slot, away: !connected(p.id) };
@@ -24,14 +35,15 @@ export const FOLD_AIS_FROM = 5;
 
 /**
  * The TV's ready list, in seat order. Every person keeps a row, so the TV names whoever the table waits for; from
- * FOLD_AIS_FROM seats the AIs, always ready, share one row at the end. The seat count decides, not the space left,
- * so the list doesn't jump as news arrives.
+ * FOLD_AIS_FROM seats the built-in AIs, always ready, share one row at the end. A Claude seat keeps its own row, for
+ * its status. The seat count decides, not the space left, so the list doesn't jump as news arrives.
  */
-export function readyRows(players: readonly PlayerView[], connected: (id: string) => boolean): ReadyRow[] {
+export function readyRows(players: readonly PlayerView[], connected: (id: string) => boolean, claude: (id: string) => ClaudeStatus | undefined = () => undefined): ReadyRow[] {
   const seats = players.map((p) => seatOf(p, connected));
-  const ais = seats.filter((s) => s.isAi);
+  const folds = (s: Seat) => s.isAi && !claude(s.id);
+  const ais = seats.filter(folds);
   if (seats.length < FOLD_AIS_FROM || ais.length === 0) return seats.map((seat) => ({ kind: 'seat', seat }));
-  return [...seats.filter((s) => !s.isAi).map((seat): ReadyRow => ({ kind: 'seat', seat })), { kind: 'ais', seats: ais }];
+  return [...seats.filter((s) => !folds(s)).map((seat): ReadyRow => ({ kind: 'seat', seat })), { kind: 'ais', seats: ais }];
 }
 
 /** Whether a seat's screen is connected, as the room has it; a seat the room doesn't list counts as connected. */
@@ -99,10 +111,21 @@ export function sidePick(view: Pick<MuleView, 'phase'> & WithAuction): boolean {
 
 /**
  * At a good's side pick: every person not yet Done, in seat order, ready meaning Done. An AI picks by itself and counts
- * as picked. A dropped phone is still waited for, marked away, as in planning: the host can move on for it.
+ * as picked, except a Claude seat the first side pick still waits for, which carries when its wait ends (RULE-6). A
+ * dropped phone is still waited for, marked away, as in planning: the host can move on for it.
  */
 export function stillPicking(view: Pick<MuleView, 'players' | 'auction'>, connected: (id: string) => boolean): Seat[] {
-  return view.players.map((p) => ({ ...p, ready: pickedIn(view, p.id) })).filter((p) => !p.isAi && !p.ready).map((p) => seatOf(p, connected));
+  const waited = new Map((view.auction?.waitingForClaude ?? []).map((w) => [w.seatId, w.until]));
+  return view.players.flatMap((p) => {
+    const until = waited.get(p.id);
+    if (until !== undefined) return [{ ...seatOf(p, connected), ready: false, until }];
+    return p.isAi || pickedIn(view, p.id) ? [] : [{ ...seatOf(p, connected), ready: false }];
+  });
+}
+
+/** The players for the side pick's PICKED count, `ready` alone saying who has picked: nobody `waiting` is waited for. */
+export function pickedPlayers(players: readonly PlayerView[], waiting: readonly Seat[]): PlayerView[] {
+  return players.map((p) => ({ ...p, isAi: false, ready: !waiting.some((s) => s.id === p.id) }));
 }
 
 /** Whether a seat has pressed Done at the side pick, as the server has it. */
