@@ -315,11 +315,12 @@ export const START = {
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
   /**
-   * The store's Energy at the start, for each seat: 10, so 40 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
-   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov): farms then turn off for Energy in under 15% of
-   * farm-months.
+   * The store's Energy at the start, for each seat: 12, so 48 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
+   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov), first to 10, then to 12 once C49 (a waiting
+   * building's missing goods count in the store's demand) put seed 1 at 16.4% (PM ruling, 8 Nov): farms then turn off
+   * for Energy in under 15% of farm-months on seeds 1, 101 and 201.
    */
-  storeEnergyPerPlayer: 10,
+  storeEnergyPerPlayer: 12,
 };
 
 /** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
