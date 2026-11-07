@@ -21,6 +21,7 @@
     "@mule/engine": "workspace:*",
     "@mule/protocol": "workspace:*",
     "@tabletop/core": "workspace:*",
+    "obscenity": "0.4.6",
     "ws": "^8.18.0"
   },
   "devDependencies": {

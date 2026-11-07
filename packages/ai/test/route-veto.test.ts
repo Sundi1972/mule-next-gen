@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, buildFloor, createGame, mulePriceFor, outfitCostFor, tileAt, tileIndex, type GameState } from '@mule/engine';
-import { floorDevWalk } from '../src/floor-time.js';
+import { advancePhase, AI_PLANS, buildFloor, createGame, mulePriceFor, outfitCostFor, reachOf, tileAt, tileIndex, type GameState } from '@mule/engine';
+import { floorDevWalk, installable, plotWalk, shoreStands } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { routeVeto, unreachablePlot } from '../src/hands/develop.js';
 import { AiSeat } from '../src/seat.js';
@@ -183,5 +183,54 @@ describe('routeVeto on an own plot that has a MULE: a different outfit is a swap
     state.tiles[plot]!.outfit = 'food';
     state.players.find((p) => p.id === ME)!.carriedMule = 'water';
     expect(routeVeto(state, mindOf(), { plot, outfit: 'energy' }, walkOf(state, LONG), simFloorConfig())).toBe(`stale: plot ${plot}`);
+  });
+});
+
+describe('a lake plot whose only shore is a corner: the walk price agrees with unreachablePlot', () => {
+  it('seed 4, plot 25, its only shore the corner (9,2): reachable, priced finite, and played', () => {
+    const state = development(4);
+    const plot = own(state, 10, 1);
+    const walk = walkOf(state, 1_000);
+    const legs = walk.floor!(plot, 'water');
+    expect(unreachablePlot(state, plot, simFloorConfig())).toBe(false);
+    expect([legs.there, legs.pub].every(Number.isFinite)).toBe(true);
+    expect(routeVeto(state, mindOf(), { plot, outfit: 'water' }, walk, simFloorConfig())).toBeNull();
+  });
+});
+
+describe('a lake plot is priced by the stands shoreStands returns for that seat and press', () => {
+  const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
+
+  it("seed 1, every lake plot with one neighbour the seat's own: the priced install walk ends on a stand, where Reach offers that install", () => {
+    // Seed 15, month 4 (FM-hurry-margin): ai3's lake (13,7) was priced through the corner (12,6), where Reach offers
+    // its own lake (12,7) instead; the only stand was over 1 s farther, and the MULE was lost for want of time. Here
+    // every neighbour, land or lake, is in turn the seat's own: no shore for its install, or a nearer lake of its own.
+    const cfg = simFloorConfig();
+    const base = development(1);
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const lake of base.tiles.filter((t) => t.terrain === 'lake')) {
+      for (const [dx, dy] of AROUND) {
+        const n = tileAt(base.tiles, base.width, lake.x + dx, lake.y + dy);
+        if (!n || n.terrain === 'store') continue;
+        const state = structuredClone(base);
+        const plot = own(state, lake.x, lake.y);
+        own(state, n.x, n.y);
+        state.players.find((p) => p.id === ME)!.carriedMule = 'food';
+        if (!installable(state, cfg, ME, plot)) continue;
+        const floor = buildFloor(state, cfg);
+        const c = floor.colonists.find((x) => x.id === ME)!;
+        const walk = plotWalk(state, cfg, { ...c, lead: { good: null, x: c.x, y: c.y } }, plot, 'install');
+        checked++;
+        const stands = shoreStands(state, cfg, ME, lake, 'install').map(({ at }) => `${Math.floor(at.x)},${Math.floor(at.y)}`);
+        const there = { ...floor, colonists: floor.colonists.map((x) => (x.id === ME ? { ...x, space: 'map' as const, x: walk.end.x, y: walk.end.y } : x)) };
+        const reach = reachOf(there, state, ME, cfg);
+        const offered = reach.kind === 'install' && reach.plot.x === lake.x && reach.plot.y === lake.y;
+        const onStand = stands.includes(`${Math.floor(walk.end.x)},${Math.floor(walk.end.y)}`);
+        if (!offered || !onStand) wrong.push(`lake (${lake.x},${lake.y}), own (${n.x},${n.y}): ends on (${Math.floor(walk.end.x)},${Math.floor(walk.end.y)}), stands [${stands.join(' ')}], Reach offers ${reach.kind}${'plot' in reach ? ` (${reach.plot.x},${reach.plot.y})` : ''}`);
+      }
+    }
+    expect(checked, 'lake plots with a neighbour owned that still have a stand').toBeGreaterThan(20);
+    expect(wrong, `of ${checked}`).toEqual([]);
   });
 });
