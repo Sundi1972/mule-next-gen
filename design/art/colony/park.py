@@ -20,7 +20,7 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import frame, kits  # noqa: E402
+from lib import frame, kits, props  # noqa: E402
 from lib.core import (T, ZT, block, bounds, box_uv, bx, coll, cyl, flat, light, link, load, mat, math_, mdims,  # noqa: E402
                       mesh_obj, mix, new_mat, node, pbr, place, recentre, shadow_see_through, sock, tex, unlink)
 
@@ -40,6 +40,10 @@ GR = 0.16
 FALLEN = 1  # the 4.2 m tree, front left: in `damaged` it lies across the south path
 SCORCH = (-1.3, -4.3, 1.9)  # x, y, r of the burn on open lawn in front of the fallen tree, where the camera sees it
 HOLE = (-3.8, -3.75, 0.7)  # x, y, r of the hole the root mass tore out of the lawn
+LND = "kb3d_london"
+KIT_TREES = ["KB3D_LND_PropTree_B", "KB3D_LND_PropTree_C"]  # with KITS_DIR: London plane trees for the spec's two
+KIT_SAPLING = "KB3D_LND_PropShrub_F"  # a 3.1 m upright shrub, scaled to a 1.9 m staked sapling
+KIT_HEDGE = ["KB3D_LND_PropShrub_C", "KB3D_LND_PropShrub_E"]
 
 
 # ---------- layout geometry (shared by mesh, hair and shader) ----------
@@ -599,8 +603,41 @@ def root_plate(x, y, fall):
         lump("hole_lip", (hx + (hr + 0.1) * math.cos(a), hy + (hr + 0.1) * math.sin(a), 0.02), (s_ * 1.4, s_, s_ * 0.5), soil, k + 20, 0.3, 2)
 
 
+def leaves(kit, name):
+    return [m for m in props.materials(kit, name) if "Bark" not in m.name]  # LindenBranch, LeafAtlas, AtlasLeafB, flowers
+
+
+def kit_trees(state):
+    """trees() with London kit trees: the same spots, heights, stakes, fall and root mass."""
+    for i, t in enumerate(SPEC["trees"]):
+        name = KIT_SAPLING if state == "build1" else KIT_TREES[i]
+        h = 1.9 if state == "build1" else t["height"]
+        s = h / props.size(LND, name).z
+        if state == "build1":
+            cyl("tree_stake", t["at"][0] + 0.18, t["at"][1], 0.025, 0.0, 1.4, flat("stake_wood", (0.55, 0.4, 0.24), 0.8), 8)
+        if state == "damaged" and i == FALLEN:
+            fall = Vector((1.0, 0.12, 0.2)).normalized()
+            q = Vector((0, 0, 1)).rotation_difference(fall) @ Quaternion((0, 0, 1), t.get("rotate", 0.0))
+            e = props.place(LND, name, t["at"], z=0.4, scale=s, quat=q)
+            # the kit crown is a dense ball, which lying down still reads as a bush: slumped under its own weight,
+            # squashed along whichever of its sideways axes now points up
+            up = max((0, 1), key=lambda i: abs(q.to_matrix().col[i].z))
+            e.scale[up] = s * 0.55
+            root_plate(t["at"][0], t["at"][1], fall)
+        else:
+            props.place(LND, name, t["at"], t.get("rotate", 0.0), z=-0.02, scale=s)
+        for m in leaves(LND, name):
+            if state == "closed":
+                wilt(m, (0.75, 0.55, 0.3))
+            if not m.get("lit_through"):
+                translucent(m, 0.3, 1.15)
+                m["lit_through"] = True
+
+
 def trees(state):
     """The spec's two trees. build1: saplings on stakes. damaged: the smaller one fallen toward the plaza."""
+    if props.on():
+        return kit_trees(state)
     tpl = load("island_tree_01")[0]
     recentre(tpl)
     lo, hi = bounds([tpl])
@@ -630,7 +667,32 @@ def trees(state):
     translucent(m, 0.35, 1.25)
 
 
+def hedge_spots():
+    ts = [INNER - 0.55 - k * SPEC["hedge"]["spacing"] for k in range(9)]
+    ts = [t for t in ts if t > PW + 0.55] + [-t for t in ts if t > PW + 0.55]
+    return [(t, INNER - 0.42) for t in ts] + [(-(INNER - 0.42), t) for t in ts if t < INNER - 0.6]
+
+
+def kit_hedge(dry=False):
+    """hedge() with London kit shrubs: two per spot, staggered, cut to the hedge height."""
+    rng = random.Random(5)
+    H = SPEC["hedge"]["height"]
+    for i, (x, y) in enumerate(hedge_spots()):
+        along_x = abs(y) > abs(x)
+        for j, (a, b) in enumerate(((-0.28, -0.08), (0.28, 0.08))):
+            name = KIT_HEDGE[(i + j) % 2]
+            s = H / props.size(LND, name).z * rng.uniform(0.85, 1.05)
+            px, py = (x + a, y + b) if along_x else (x + b, y + a)
+            props.place(LND, name, (px, py), rng.uniform(0, 2 * math.pi), scale=s)
+    for name in KIT_HEDGE:
+        for m in leaves(LND, name):
+            if dry:
+                wilt(m, (0.7, 0.55, 0.32))
+
+
 def hedge(dry=False):
+    if props.on():
+        return kit_hedge(dry)
     src = load(SPEC["hedge"]["asset"])[0]
     me = src.data
     co = np.empty(len(me.vertices) * 3)
@@ -656,9 +718,7 @@ def hedge(dry=False):
     unlink(src)
     rng = random.Random(5)
     H = SPEC["hedge"]["height"]
-    ts = [INNER - 0.55 - k * SPEC["hedge"]["spacing"] for k in range(9)]
-    ts = [t for t in ts if t > PW + 0.55] + [-t for t in ts if t > PW + 0.55]
-    spots = [(t, INNER - 0.42) for t in ts] + [(-(INNER - 0.42), t) for t in ts if t < INNER - 0.6]
+    spots = hedge_spots()
     big = sorted(shrubs, key=lambda o: -len(o.data.polygons))[:3]  # the full bushes; the rest are seedlings
     pack = [(-0.36, -0.13), (0.0, -0.15), (0.36, -0.11), (-0.2, 0.12), (0.18, 0.13), (0.5, 0.1)]
     for i, (x, y) in enumerate(spots):
@@ -741,7 +801,7 @@ def gates():
 
 def build(stage):
     if stage == "site":
-        kits.site(0, 0, 9.0, 9.0)
+        kits.site(0, 0, 9.0, 9.0, heaps=not props.on())  # with kits, Construction Zone gear instead (dress)
         return
     rim()
     if stage == "build1":
@@ -772,5 +832,20 @@ def build(stage):
         kits.ember(SCORCH[0] + 0.3, SCORCH[1] - 0.2, 0.05, r=0.22, energy=35)
 
 
+CZ = "kb3d_constructionzone"
+
+
+def dress(stage):
+    """Kit dressing beyond the plants (KITS_DIR set): site gear; a barrow and pallets while it is laid out."""
+    if stage == "site":
+        for name, at, rot in (("KB3D_CSZ_PropSandMound_A", (-2.0, 1.8), 0.4), ("KB3D_CSZ_PropWheelbarrow_A", (0.0, -0.8), 0.7),
+                              ("KB3D_CSZ_PropBrickPallet_B", (2.5, 0.0), 0.0), ("KB3D_CSZ_PropPortaPotty_A", (4.7, 4.7), 0.0),
+                              ("KB3D_CSZ_PropPowerGenerator_B", (-3.0, -4.6), 0.0), ("KB3D_CSZ_PropCableSpool_A", (-4.6, 2.6), 1.57)):
+            props.place(CZ, name, at, rot)
+    elif stage == "build1":
+        props.place(CZ, "KB3D_CSZ_PropWheelbarrow_A", (1.2, -4.5), 1.2)
+        props.place(CZ, "KB3D_CSZ_PropCementBagPallet_A", (4.6, 1.4), 0.0)
+
+
 if __name__ == "__main__":
-    frame.run("park", STAGES, build)
+    frame.run("park", STAGES, build, dress=dress)

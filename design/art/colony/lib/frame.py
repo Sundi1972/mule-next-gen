@@ -86,7 +86,7 @@ def setup(samples, pct=100, fr=None):
         pass
 
 
-def run(kind, stages, build, glowless=("closed",), fr=None):
+def run(kind, stages, build, glowless=("closed",), fr=None, dress=None):
     """blender -b -P <kind>.py -- <out-dir> [samples=256] [stages=all] [lights=day,dusk,glow] [percent=100]
     Writes <out-dir>/<kind>/<stage>-<light>.png. Each stage is built in a fresh scene. fr: the kind's frame if it
     is not the default 1600 x 1600 (publish.sh copies it into the manifest)."""
@@ -96,15 +96,17 @@ def run(kind, stages, build, glowless=("closed",), fr=None):
     want = argv[2].split(",") if len(argv) > 2 and argv[2] not in ("", "all") else list(stages)
     lights = argv[3].split(",") if len(argv) > 3 and argv[3] else list(LIGHTS_ALL)
     pct = int(argv[4]) if len(argv) > 4 else 100
-    if props.on():  # kit-dressed pictures are local looks only: never where publish.sh reads (spec AM-5)
-        out = os.path.join(out, "kit-look")
-        print(f"COLONY KITS_DIR is set: kit props ON, writing to {out} (never published)", flush=True)
+    if props.on():  # kit-dressed pictures go to out/kit; publish.sh ships them only with SRC=out/kit (spec AM-5)
+        out = os.path.join(out, "kit")
+        print(f"COLONY KITS_DIR is set: kit props ON, writing to {out}", flush=True)
     os.makedirs(os.path.join(out, kind), exist_ok=True)
     for stage in want:
         t0 = time.time()
         core.reset()
         props.reset()
         build(stage)
+        if dress and props.on():
+            dress(stage)
         light.rig()
         camera(fr)
         setup(samples, pct, fr)

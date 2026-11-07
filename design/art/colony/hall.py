@@ -11,10 +11,13 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import frame, kits  # noqa: E402
+from lib import frame, kits, props  # noqa: E402
+from lib.props import ATL, CZ, LND, MTM, WDC, kit, site_props  # noqa: E402,F401
 from lib.core import ZT, accent, bx, cyl, flat, mat  # noqa: E402
 
 STAGES = ["standing"]
+
+
 
 
 def build(stage="standing"):
@@ -35,7 +38,8 @@ def build(stage="standing"):
     # a cyan band under the parapet on the two faces the camera sees
     bx(-3.72, 3.72, -3.72, -3.68, top - 0.25, top - 0.12, cyan, 0, "band")
     bx(3.68, 3.72, -3.72, 3.72, top - 0.25, top - 0.12, cyan, 0, "band")
-    kits.rooftop(-1.2, 1.0, top, [(0, 0, 2.2, 1.4, 0.8)])
+    if not props.on():
+        kits.rooftop(-1.2, 1.0, top, [(0, 0, 2.2, 1.4, 0.8)])  # with kits, a solar array takes the roof (dress)
     # two lamps along the south forecourt
     for x in (-2.0, 2.0):
         kits.lamp(x, -4.8, energy=35)  # 110 W washed the whole slab orange in the glow layer
@@ -58,5 +62,14 @@ def build(stage="standing"):
     me.shade_smooth()
 
 
+def dress(stage):
+    """Kit dressing (KITS_DIR set): a solar array on the roof, cypresses at the back corners, a planter, shrubs
+    along the south front. The hologram map (7.5 m) does not fit the 1.6 m forecourt, so it stays out."""
+    props.place(MTM, "KB3D_MTM_PropSolarPanel_A", (-0.2, 0.2), 0.0, z=ZT + 4.1 + 0.32)  # on the roof membrane
+    kit([(ATL, "KB3D_ATL_VegCypressTree_A", (-4.7, 4.7), 0.0),
+         (ATL, "KB3D_ATL_VegCypressTree_A", (4.7, 4.7), 1.0), (LND, "KB3D_LND_PropPlanter_B", (-4.4, -4.75), 0.0)]
+        + [(LND, "KB3D_LND_PropShrub_E" if k % 2 else "KB3D_LND_PropShrub_C", (x, -4.2), k) for k, x in enumerate((-3.0, -0.9, 0.9, 3.0))])
+
+
 if __name__ == "__main__":
-    frame.run("hall", STAGES, build, glowless=())
+    frame.run("hall", STAGES, build, glowless=(), dress=dress)
