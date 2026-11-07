@@ -376,14 +376,15 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
         landed(1, RIVERS)(state);
         hungry(1)(state);
       };
-      const base = playTable({ months: 1, edit: built, seat: () => ({ playbook: false }) });
+      const base = playTable({ months: 2, edit: built, seat: () => ({ playbook: false }) });
       let adoptedRoute: NonNullable<Playbook['development']>['route'] = [];
       const first = once();
       const adopted = playTable({
-        months: 1,
+        months: 2,
         edit: built,
         before: (seat, state, point) => {
-          if (seat.id !== ME || point === 'planning' || !first(seat, state, point)) return;
+          // Month 1's case: the game runs a second month, so month 1 is not the last (where nothing is bought for later, AM-39).
+          if (seat.id !== ME || point === 'planning' || state.month !== 1 || !first(seat, state, point)) return;
           const draft = seat.draft(state, point);
           if (point === 'development') {
             adoptedRoute = draft.development!.route;
@@ -421,12 +422,12 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     };
     const baseAt = new Map<string, string>();
     const edit = hungry(1);
-    const base = playTable({ months: 1, edit, seat: () => ({ playbook: false }), before: statusAt(baseAt) });
+    const base = playTable({ months: 2, edit, seat: () => ({ playbook: false }), before: statusAt(baseAt) });
     const adoptedAt = new Map<string, string>();
     let missing: Good | null = null;
     let kept: Good[] = [];
     const adopted = playTable({
-      months: 1,
+      months: 2,
       edit,
       before: (seat, state, point) => {
         if (point !== 'auction') return;
@@ -461,7 +462,7 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     // auction with no Food and the money to buy it.
     let kept: Good[] | null = null;
     const t = playTable({
-      months: 1,
+      months: 2,
       edit: hungry(1),
       seat: () => ({ ownPhases: true }),
       before: (seat, state, point) => {
@@ -578,12 +579,15 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     // (b) an auction role. The seat's own draft buys Food, and today it buys it; edited to 'out' and adopted ahead of
     // the auction's first status screen, it sits Food out: its declare fact is the buyer everyone starts as, it trades
     // none of it, and its outcome says 'out'.
+    // (b)'s base runs two months, so month 1 is not the last: there nothing is bought for a month that doesn't come (AM-39).
+    const baseB = playTable({ months: 2, edit });
     const firstB = once();
     const b = playTable({
-      months: 1,
+      months: 2,
       edit,
       before: (seat, state, point) => {
-        if (seat.id !== ME || point !== 'auction' || !firstB(seat, state, point)) return;
+        // Month 1's case: the game runs a second month, so month 1 is not the last (where nothing is bought for later, AM-39).
+        if (seat.id !== ME || point !== 'auction' || state.month !== 1 || !firstB(seat, state, point)) return;
         const draft = seat.draft(state, 'auction');
         expect(draft.auction!.food!.role, 'the draft buys Food').toBe('buyer');
         const { playbook, rejected } = seat.validator()(state, ME, draft, [{ path: '/auction/food/role', to: 'out', reason: 'Sit this one out.' }]);
@@ -591,8 +595,8 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
         seat.adopt(playbook);
       },
     });
-    expect(base.declared.get(key(ME, 1, 'food')), 'the draft alone buys it').toBe('buyer');
-    expect(base.traded(ME, 1, 'food'), 'the draft alone trades it').toBeGreaterThan(0);
+    expect(baseB.declared.get(key(ME, 1, 'food')), 'the draft alone buys it').toBe('buyer');
+    expect(baseB.traded(ME, 1, 'food'), 'the draft alone trades it').toBeGreaterThan(0);
     expect(b.declared.get(key(ME, 1, 'food')), 'the declare fact: the buyer everyone starts as').toBe('buyer');
     expect(b.traded(ME, 1, 'food'), 'the edited role: it trades none of it').toBe(0);
     const roleItem = b.outcomes.get(key(ME, 1, 'auction'))!.items.find((i) => i.path === '/auction/food/role')!;
