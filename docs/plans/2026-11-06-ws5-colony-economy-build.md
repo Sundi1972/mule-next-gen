@@ -439,26 +439,27 @@ Test: `packages/engine/test/off-world.test.ts` (new).
 - [ ] OKs: WS1 (economy, config, events if seedOf is exported there), WS3 (game.ts). One independent review. Rulebook.
 
 ### Gate: end of milestone A (the PM's batch to trunk)
-- [ ] PR-1 … PR-4 merged into `ws5-colony-economy`, each through its gate.
-- [ ] `pnpm typecheck && pnpm test` exit 0 on the integration branch; CI green on the batch (check, e2e,
+**Done 7 Nov:** milestone A is on trunk, batch 79 (#673, 7ecddae5), from #630 at 326696a1. That head had `Review: APPROVE at 326696a1` from a fresh integration review, and full CI green (check, e2e, e2e-regression, sim). The gate's 40-game table is in #630's body. Heiko kept C6 and picked the MULE at 4× with a 25% climb (AM-8). WS9 was told C17 is on trunk, and WS1 re-measures the MULE price.
+- [x] PR-1 … PR-4 merged into `ws5-colony-economy`, each through its gate.
+- [x] `pnpm typecheck && pnpm test` exit 0 on the integration branch; CI green on the batch (check, e2e,
   e2e-regression, sim).
-- [ ] The report on the integration head vs the base (Task 1.0) in the batch body: prices, sold-out months,
+- [x] The report on the integration head vs the base (Task 1.0) in the batch body: prices, sold-out months,
   colonists short, colonists at the end, Electronics.
-- [ ] PR-1 never reaches trunk without PR-2 (PM, 6 Nov): with the real PR-2 merged, the same 10 seed-1 games, politics
+- [x] PR-1 never reaches trunk without PR-2 (PM, 6 Nov): with the real PR-2 merged, the same 10 seed-1 games, politics
   on, against Task 1.6's table: colonists at the end, months short of Food or Water, hungry seat-months, mood, and
   AI Food sold (WS9's watch row). Run it twice, with and without pricing C6 (Task 1.5's three commits reverted
   locally): on 40 games, C6 cut farm-months without power from 40.4% to 31.8% but colonists at the end fell from
   77.5 to 71.7 (politics on, PR-1 without PR-2). Both runs on 40 games, seed 1, politics off and on, with the
   colony score median beside the colony rows (PM, 6 Nov). Heiko keeps or drops C6 from that pair.
-- [ ] The MULE price (WS1, 6 Nov; WS1 re-measures after the batch lands): on 40 games, seed 1, base vs head, the
+- [x] The MULE price (WS1, 6 Nov; WS1 re-measures after the batch lands): on 40 games, seed 1, base vs head, the
   MULE price p90 (the sim's target is under 500; the base gives 679 on trunk 773f96b5); a MULE's Worth price at
   the game's end (month 12, after the auction re-posts Smithore: what a MULE counts in the final score) ÷ the
   month-1 development price (the base median is 9.99×, 18 of 40 games at 10× or more, max 83×; not the last
   development price, which reads 6.0×); and the MULEs' share of a seat's Worth, month 1 vs month 12 (base 10% →
   46%). Definitions: WS1's `.handover/ws1-findings/2026-11-07-mule-value.md`, "Month-12 to month-1 ratio". The cap comes from
-  PR-1's Smithore ceiling (12× reference) and PR-4's `MULE.maxFactor` 2.0 together.
-- [ ] Every rulebook chapter the milestone touched reads "In the game" for what it built.
-- [ ] The PM batches it to trunk; WS5 tells WS9 that C17 is on trunk.
+  PR-1's Smithore ceiling (12× reference) and PR-4's `MULE.maxFactor` together: 2.0 as built, 4.0 with `MULE.scarcityUp` 0.25 since AM-8 (Heiko's pick, #637).
+- [x] Every rulebook chapter the milestone touched reads "In the game" for what it built.
+- [x] The PM batches it to trunk; WS5 tells WS9 that C17 is on trunk.
 
 ---
 
