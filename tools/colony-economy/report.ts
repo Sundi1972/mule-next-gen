@@ -10,7 +10,7 @@ import { colonyScore, GOODS, GOOD_CONFIG, moodBand, mulePrice, scoreParts, SHIP_
 import { simSeats } from '../../packages/ai/src/lineup.ts';
 import { playGameAsync } from '../../packages/ai/src/play.ts';
 import { applySets, winnerOf } from '../../packages/ai/src/sim.ts';
-import { score } from '../../packages/engine/src/index.ts';
+import { score, HEALTH } from '../../packages/engine/src/index.ts';
 import type { PhaseFact } from '../../packages/ai/src/playbook/index.ts';
 
 const CEILING_TIMES = 12;
@@ -92,6 +92,13 @@ interface GameRecord {
   /** S1 spike: the winner's engine score. */
   winnerScore: number;
   moodMonths: Record<MoodBand, number> | null;
+  /** S2 spike: each month's sick share after upkeep and the colonists' Medicine short share. */
+  hs: number[];
+  sMs: number[];
+  /** S2 spike: Medicine works producing (line-months), Medicine made, MULE price in Electronics-dear months. */
+  medWorksMonths: number;
+  elecWorksMonths: number;
+  dearMulePrices: number[];
 }
 
 /** Units of a good the store keeps back for colonists now: what storeForSale withholds however much it holds. */
@@ -120,6 +127,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
   const bands: Partial<Record<Good, PriceBand>>[] = [];
   const electronicsPosted: number[] = [];
   let hungrySeatMonths = 0;
+  const healthRows = new Map<number, NonNullable<GameState['health']>>();
   const crystiteOffWorld: number[] = [];
   let month1Shares: number[] = [];
   const moods: MoodBand[] = [];
@@ -174,6 +182,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
       // Upkeep has run by the time its phase is reported; the last month's upkeep goes straight to game over.
       if (s.phase === 'upkeep' && s.month === 1) month1Shares = muleShares(s);
       if (s.phase === 'upkeep' && s.colony) moods.push(moodBand(s.colony.happiness));
+      if (s.phase === 'upkeep' && s.health?.month === s.month) healthRows.set(s.month, { ...s.health });
     },
     // Wrapping seat 0's tick sees the board before every step; it reads and changes nothing.
     onSeats: (seats) => {
@@ -212,6 +221,15 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
       }
     }
   }
+  if (state.health && !healthRows.has(state.health.month)) healthRows.set(state.health.month, { ...state.health });
+  const hrows = [...healthRows.entries()].sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+  let medWorksMonths = 0;
+  let elecWorksMonths = 0;
+  for (const h of state.history) for (const l of h.lines ?? []) {
+    if (l.good === 'medicine') medWorksMonths++;
+    if (l.good === 'electronics') elecWorksMonths++;
+  }
+  const dearMulePrices = state.history.filter((h) => h.prices.electronics >= 2 * GOOD_CONFIG.electronics.refPrice).map((h) => h.mulePrice);
   const worksEnd: Record<string, number> = {};
   for (const t of state.tiles) if (t.owner && t.outfit) worksEnd[t.outfit] = (worksEnd[t.outfit] ?? 0) + 1;
   // colony.monthEnds keeps only the last two months, so the month ends are read as they pass.
@@ -249,6 +267,11 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
     muleShareOfWorth: { month1: month1Shares, end: muleShares(state) },
     colonyScoreEnd: colonyScore(state)?.total ?? null,
     moodMonths,
+    hs: hrows.map((r) => r.h),
+    sMs: hrows.map((r) => r.sM),
+    medWorksMonths,
+    elecWorksMonths,
+    dearMulePrices,
   };
 }
 
@@ -354,6 +377,14 @@ const METRICS: Metric[] = [
   { name: "colonists short of Food or Water (months, the sim's figure)", value: (gs) => String(sum(gs.map((x) => x.colonistsHungryMonths))) },
   { name: 'S1 colony Food made a month (mean over game-months)', value: (gs) => fmt(sum(gs.map((x) => x.made.food)) / sum(gs.map((x) => x.months)), 1) },
   { name: 'S1 winner score median', value: (gs) => fmt(quantile(gs.map((x) => x.winnerScore), 0.5)) },
+  { name: 'S2 health rows (game-months)', value: (gs) => String(sum(gs.map((x) => x.hs.length))) },
+  { name: 'S2 Medicine-short months (sM > 0)', value: (gs) => String(sum(gs.map((x) => x.sMs.filter((v) => v > 1e-9).length))) },
+  { name: 'S2 Medicine-short months, >10% short', value: (gs) => String(sum(gs.map((x) => x.sMs.filter((v) => v > 0.1).length))) },
+  { name: 'S2 mean sick share h', value: (gs) => fmt(sum(gs.map((x) => sum(x.hs))) / Math.max(1, sum(gs.map((x) => x.hs.length))), 3) },
+  { name: 'S2 months at the cap (h >= max)', value: (gs) => String(sum(gs.map((x) => x.hs.filter((h) => h >= HEALTH.max - 1e-9).length))) },
+  { name: 'S2 Medicine works line-months / Medicine made', value: (gs) => `${sum(gs.map((x) => x.medWorksMonths))} / ${sum(gs.map((x) => x.made.medicine))}` },
+  { name: 'S2 Electronics works line-months / made', value: (gs) => `${sum(gs.map((x) => x.elecWorksMonths))} / ${sum(gs.map((x) => x.made.electronics))}` },
+  { name: 'S2 MULE price p50/p90/max in months Electronics posted >= 2x ref', value: (gs) => { const p = pooled(gs, (x) => x.dearMulePrices); return p.length ? `${p50p90max(p)} (n=${p.length})` : 'n=0'; } },
   { name: 'hungry seat-months', value: (gs) => String(sum(gs.map((x) => x.hungrySeatMonths))) },
   { name: 'colonists at the end (mean)', value: (gs) => fmt(sum(gs.map((x) => x.colonistsEnd)) / gs.length, 1) },
   { name: 'farm-months switched off for Energy', value: (gs) => share(sum(gs.map((x) => x.farmMonthsOffForEnergy)), sum(gs.map((x) => x.farmMonths))) },
@@ -450,6 +481,9 @@ async function main() {
   const sets: string[] = [];
   process.argv.forEach((a, i) => { if (a === '--set') sets.push(process.argv[i + 1]!); });
   if (sets.length) process.stderr.write(`config: ${applySets(sets).join(' ')}\n`);
+  const healthMode = flag('health');
+  if (healthMode) HEALTH.mode = healthMode as typeof HEALTH.mode;
+  process.stderr.write(`HEALTH.mode ${HEALTH.mode}\n`);
   const name = flag('label') ?? process.argv[2] ?? '?';
   const games = Number(flag('games', '10'));
   const first = Number(flag('seed', '1'));
@@ -468,12 +502,13 @@ async function main() {
     }
     played[column] = recs;
   }
+  if (engine.S2_SPIKE.debug) process.stderr.write(`S2 stats ${JSON.stringify(engine.S2_SPIKE.stats)}\n`);
   process.stderr.write(`elapsed ${((Date.now() - t0) / 1000).toFixed(0)} s\n`);
   const heads = columns.map((c) => `politics ${c}`);
   const rows = METRICS.map((m) => [m.name, ...columns.map((c) => m.value(played[c]!))]);
   const widths = heads.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i + 1]!.length)));
   const w0 = Math.max(...rows.map((r) => r[0]!.length));
-  console.log(`colony-economy report: ${name} (${games} games from seed ${first}, 4 trader seats, walking on)${sets.length ? ` config: ${sets.join(' ')}` : ''}\n`);
+  console.log(`colony-economy report: ${name} (${games} games from seed ${first}, 4 trader seats, walking on, HEALTH.mode ${HEALTH.mode})${sets.length ? ` config: ${sets.join(' ')}` : ''}\n`);
   console.log(`${''.padEnd(w0)}  ${heads.map((h, i) => h.padStart(widths[i]!)).join('  ')}`);
   for (const [n, ...vs] of rows) console.log(`${n!.padEnd(w0)}  ${vs.map((v, i) => v.padStart(widths[i]!)).join('  ')}`);
   if (json) writeFileSync(json, JSON.stringify({ label: name, games, firstSeed: first, ...played }, null, 1));

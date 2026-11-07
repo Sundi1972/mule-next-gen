@@ -2166,3 +2166,10 @@ export const BRAIN = {
 
 /** S1 spike (throwaway): the AI's first MULE is an Energy plant while it has none. */
 export const S1_SPIKE = { energyFirst: false, alsoNoStop: false };
+
+/**
+ * S2 spike (throwaway): Medicine levers. medWorks > 0: while the colony has fewer Medicine works than this, a seat with
+ * none (and its Energy plant, under S1) installs one next. medFeedAny: canFeed never refuses a Medicine works.
+ * medValue: the AI's monthly revenue from Medicine x this. debug: tally the Medicine candidate's fate per decision.
+ */
+export const S2_SPIKE = { medWorks: 0, medFeedAny: false, medValue: 1, debug: false, stats: {} as Record<string, number> };

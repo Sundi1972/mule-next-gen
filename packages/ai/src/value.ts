@@ -2,6 +2,7 @@ import {
   addStock,
   AI_PLANS,
   AI_VALUE,
+  S2_SPIKE,
   airPoints,
   ceilUse,
   CONSUMPTION,
@@ -142,10 +143,10 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
   // A plant pays its own use from what it makes (AM-17 R2): only the rest is its to sell or to use.
   const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : y.made;
-  let revenue = afterTax(obs, made * P(outfit, made));
+  let revenue = afterTax(obs, made * P(outfit, made)) * (outfit === 'medicine' ? S2_SPIKE.medValue : 1);
   // Output is sold at its own month's auction, before upkeep spoils it: held 0 months.
   const each = AI_VALUE.unit ? carrySell(obs, outfit, mind, P(outfit, made), 0) : 0;
-  if (AI_VALUE.unit) revenue = made * each;
+  if (AI_VALUE.unit) revenue = made * each * (outfit === 'medicine' ? S2_SPIKE.medValue : 1);
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy') && AI_VALUE.unit) {
     revenue += ownUseGain(obs, o, outfit, made, each, mind);
   } else if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
@@ -206,6 +207,7 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
+  if (outfit === 'medicine' && S2_SPIKE.medFeedAny) return true;
   const lasts = inputLasts(obs, me, outfit);
   // Stops at the first input it can't feed: each input's check may roll a production out.
   return inputRuns(outfit).find(([g, q]) => !lasts(g, q)) === undefined;

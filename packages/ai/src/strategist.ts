@@ -18,6 +18,7 @@ import {
   RAW_GOODS,
   STRATEGIST,
   S1_SPIKE,
+  S2_SPIKE,
   UPKEEP,
   scoreParts,
   shipInPort,
@@ -486,6 +487,32 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       c.veto = 'no Energy plant yet (S1)';
       c.utility = 0;
       c.rationale = `Ruled out: ${c.veto}`;
+    }
+  }
+  // S2 spike: labs from early months. While the colony has fewer Medicine works than S2_SPIKE.medWorks, a seat with none
+  // (and, under S1, its Energy plant) makes its next MULE a Medicine works.
+  const medCount = obs.tiles.filter((t) => t.outfit === 'medicine').length;
+  const ownMed = obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'medicine');
+  const medOk = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === 'medicine' && !c.veto;
+  if (S2_SPIKE.medWorks > medCount && !ownMed && !(S1_SPIKE.energyFirst && needEnergy) && cands.some(medOk)) {
+    for (const c of cands) {
+      if (c.action.kind === 'install' && c.action.outfit === 'medicine') continue;
+      c.veto = 'no Medicine works yet (S2)';
+      c.utility = 0;
+      c.rationale = `Ruled out: ${c.veto}`;
+    }
+  }
+  if (S2_SPIKE.debug) {
+    const tally = (k: string) => (S2_SPIKE.stats[k] = (S2_SPIKE.stats[k] ?? 0) + 1);
+    tally('decisions');
+    const meds = cands.filter((c) => c.action.kind === 'install' && c.action.outfit === 'medicine');
+    const open = meds.filter((c) => !c.veto);
+    if (meds.length === 0) tally('med: no candidate');
+    else if (open.length === 0) tally(`med vetoed: ${(meds[0]!.veto ?? '').replace(/[0-9,]+/g, 'N').slice(0, 40)}`);
+    else {
+      const best = Math.max(...open.map((c) => c.utility));
+      const all = cands.filter((c) => !c.veto).map((c) => c.utility).sort((a, b) => b - a);
+      tally(`med open, rank ${Math.min(5, all.indexOf(best) + 1)}`);
     }
   }
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
