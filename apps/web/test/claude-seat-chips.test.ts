@@ -8,8 +8,9 @@ import { MuleGame } from '../../server/src/mule-game.js';
 import { Chip, claudeChip } from '../src/components/ClaudeSeat';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
-import { Auction } from '../src/phone/Auction';
+import { Auction, MoveOn, sideWords } from '../src/phone/Auction';
 import { PhoneGameProvider } from '../src/phone/game';
+import { readyRows, stillPicking } from '../src/phone/hub/ready';
 import { ReadyBar } from '../src/phone/hub/ReadyBar';
 import { TableApp } from '../src/table/TableApp';
 
@@ -24,9 +25,12 @@ const seats = [
   { id: 's4', name: 'The Baron', isAi: true, color: 3 },
 ];
 const JUNO = 's3';
+const BARON = 's4';
+/** A full table: Heiko and Kai, and four computer seats. */
+const sixSeats = [...seats, { id: 's5', name: 'Ossa', isAi: true, color: 4 }, { id: 's6', name: 'Brix', isAi: true, color: 5 }];
 
 /** The real game on a manual clock; `toSidePick` plays it on to the first good's side pick, Heiko having picked. */
-function aGame({ toSidePick = false } = {}): MuleGame {
+function aGame({ toSidePick = false, at = seats } = {}): MuleGame {
   let now = 0;
   const timers: { at: number; fn: () => void }[] = [];
   const ctx: GameContext = {
@@ -44,9 +48,9 @@ function aGame({ toSidePick = false } = {}): MuleGame {
     hostId: () => 's1',
   };
   const game = new MuleGame(ctx, 7);
-  game.start(seats);
+  game.start(at);
   if (!toSidePick) return game;
-  for (const s of seats) if (!s.isAi) game.handle(s.id, { type: 'ready' });
+  for (const s of at) if (!s.isAi) game.handle(s.id, { type: 'ready' });
   for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'status'; i++) {
     now += WALK.tickMs;
     for (let due = timers.filter((t) => t.at <= now); due.length > 0; due = timers.filter((t) => t.at <= now))
@@ -62,21 +66,30 @@ function aGame({ toSidePick = false } = {}): MuleGame {
   return game;
 }
 
-/** The room's seats, Juno played by Claude with this status. */
-const tableOf = (game: MuleView, juno: Status): TableView<MuleView> => ({
-  code: 'MULE',
-  status: 'playing',
-  hostId: 's1',
-  seats: seats.map((s) => ({ ...s, connected: true, ...(s.id === JUNO ? { kind: 'claude' as const, claude: juno } : s.isAi ? { kind: 'builtin' as const } : {}) })),
-  boards: 1,
-  game,
-});
+/** The room's seats: Juno played by Claude with this status, or each seat named played by Claude with its own; `away` dropped. */
+const tableOf = (game: MuleView, claude: Status | Partial<Record<string, Status>>, away: readonly string[] = []): TableView<MuleView> => {
+  const of: Partial<Record<string, Status>> = typeof claude === 'string' ? { [JUNO]: claude } : claude;
+  return {
+    code: 'MULE',
+    status: 'playing',
+    hostId: 's1',
+    seats: game.players.map((p) => {
+      const status = of[p.id];
+      return { id: p.id, name: p.name, isAi: p.isAi, color: p.slot, connected: !away.includes(p.id), ...(status ? { kind: 'claude' as const, claude: status } : p.isAi ? { kind: 'builtin' as const } : {}) };
+    }),
+    boards: 1,
+    game,
+  };
+};
 
 /** The server's clock, as every screen reads it. */
 const SERVER_NOW = 1_000_000;
 
-/** Juno waited for at the side pick, its wait ending `seconds` from now. */
-const waitedFor = (view: MuleView, seconds: number): MuleView => ({ ...view, auction: { ...view.auction!, waitingForClaude: [{ seatId: JUNO, until: SERVER_NOW + seconds * 1000 }] } });
+/** Juno, or each seat named, waited for at the side pick, its wait ending that many seconds from now. */
+const waitedFor = (view: MuleView, seconds: number | Record<string, number>): MuleView => {
+  const left = typeof seconds === 'number' ? { [JUNO]: seconds } : seconds;
+  return { ...view, auction: { ...view.auction!, waitingForClaude: Object.entries(left).map(([seatId, s]) => ({ seatId, until: SERVER_NOW + s * 1000 })) } };
+};
 
 /** Text with tags dropped, as a reader sees it. */
 const words = (html: string) =>
@@ -112,16 +125,16 @@ function render(el: ReactElement): string {
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: el })).replaceAll('<!-- -->', '');
 }
 
-function onTv(view: MuleView, juno: Status): string {
-  state = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: tableOf(view, juno), notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+function onTv(view: MuleView, claude: Parameters<typeof tableOf>[1], away: readonly string[] = []): string {
+  state = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: tableOf(view, claude, away), notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
   return render(createElement(TableApp, { room: 'MULE' }));
 }
 
 /** `seat`'s phone, showing `screen`. */
-function onPhone(view: MuleView, juno: Status, screen: () => ReactElement, seat = 's1'): string {
+function onPhone(view: MuleView, claude: Parameters<typeof tableOf>[1], screen: () => ReactElement, seat = 's1'): string {
   const self = view.players.find((p) => p.id === seat)!;
   const me = { id: seat, stock: { food: 0, energy: 0, smithore: 0, crystite: 0 } } as unknown as MyView;
-  return render(createElement(PhoneGameProvider, { value: { table: tableOf(view, juno), view, me, self, slot: self.slot as Slot }, children: screen() }));
+  return render(createElement(PhoneGameProvider, { value: { table: tableOf(view, claude), view, me, self, slot: self.slot as Slot }, children: screen() }));
 }
 
 describe("C6: a Claude seat's chip says its status", () => {
@@ -184,15 +197,45 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
     const view = waitedFor(aGame({ toSidePick: true }).viewFor(null), 32);
     const html = onTv(view, 'thinking');
     expect(part(html, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · THINKING · 0:32');
-    expect(part(html, 'waiting-to-pick')).toContain('Juno CLAUDE · THINKING · 0:32');
+    // The countdown shows once on the TV, in the picked list: the waiting box beside it is too narrow for it (TV-FIT).
+    expect(part(html, 'waiting-to-pick')).toBe('Waiting for Kai Juno to pick');
     expect(part(html, 'ready-count'), 'Heiko and The Baron have picked; Kai and Juno have not').toBe('2 / 4 PICKED');
   });
 
-  it("once its plan is taken Juno leaves the list: the TV shows its side, and the count has it picked", () => {
-    const html = onTv(aGame({ toSidePick: true }).viewFor(null), 'ready');
-    expect(part(html, `tv-picked-${JUNO}`)).toMatch(/^Juno (BUY|SELL|PASS) ✓$/);
-    expect(part(html, 'waiting-to-pick')).not.toContain('Juno');
-    expect(part(html, 'ready-count')).toBe('3 / 4 PICKED');
+  it('once its plan is taken Juno leaves the list: the same TV then shows its side, and the count has it picked', () => {
+    const view = aGame({ toSidePick: true }).viewFor(null);
+    const waited = onTv(waitedFor(view, 32), 'thinking');
+    expect(part(waited, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · THINKING · 0:32');
+    expect(part(waited, 'ready-count')).toBe('2 / 4 PICKED');
+    const taken = onTv(view, 'ready');
+    expect(part(taken, `tv-picked-${JUNO}`)).toMatch(/^Juno (BUY|SELL|PASS) ✓$/);
+    expect(part(taken, 'waiting-to-pick')).not.toContain('Juno');
+    expect(part(taken, 'ready-count')).toBe('3 / 4 PICKED');
+  });
+
+  it('two Claude seats waited for: each counts down its own seconds beside its own status; only THINKING pulses', () => {
+    const view = waitedFor(aGame({ toSidePick: true }).viewFor(null), { [JUNO]: 32, [BARON]: 9 });
+    const statuses = { [JUNO]: 'thinking', [BARON]: 'offline' } as const;
+    const tv = onTv(view, statuses);
+    expect(part(tv, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · THINKING · 0:32');
+    expect(part(tv, `tv-picked-${BARON}`)).toBe('The Baron CLAUDE · OFFLINE · 0:09');
+    expect(part(tv, 'ready-count'), 'only Heiko has picked').toBe('1 / 4 PICKED');
+    const phone = onPhone(view, statuses, () => createElement(Auction));
+    expect(part(phone, 'waiting-to-pick')).toBe('Waiting for Kai Juno CLAUDE · THINKING · 0:32 The Baron CLAUDE · OFFLINE · 0:09 to pick');
+    expect(part(phone, `waiting-${BARON}`)).toBe('The Baron CLAUDE · OFFLINE · 0:09');
+    expect(phone).not.toMatch(new RegExp(`data-testid="waiting-${BARON}".*?animate-pulse[^>]*>CLAUDE · OFFLINE`));
+  });
+
+  it("the host's Move on confirm, Kai away and Juno waited for, says Kai sits out and Juno starts on the side shown", () => {
+    const view = waitedFor(aGame({ toSidePick: true }).viewFor('s1'), 32);
+    const left = stillPicking(view, (id) => id !== 's2').filter((s) => s.id !== 's1');
+    expect(left.map((s) => s.name)).toEqual(['Kai', 'Juno']);
+    const juno = sideWords(view.auction!, left[1]!, view.auction!.good).line;
+    const text = words(renderToStaticMarkup(createElement(MoveOn, { auction: view.auction!, seats: left, onNow: () => {}, onKeep: () => {} })));
+    expect(text).toContain('Move on without Kai and Juno?');
+    expect(text).toContain('Kai is away and sits');
+    expect(text).toContain(juno);
+    expect(text).toContain('The others start on the side shown; the walk starts.');
   });
 
   it("the host's phone, once picked, waits for Kai and Juno, Juno's chip counting down; the host can move on for them", () => {
@@ -202,5 +245,29 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
     expect(part(html, 'move-on')).toBe('Move on for them');
     expect(part(html, 'ready-count')).toBe('2 / 4 PICKED');
     expect(html, 'shown once: in the waiting line, not on a line of its own').not.toContain('data-testid="claude-line"');
+  });
+});
+
+describe('HC-3 at a full table: the TV keeps its ready list short (B-AC-19)', () => {
+  it('from five seats a Claude seat that is READY or CONNECTED folds into the AI row; THINKING, OFFLINE or WAITING keeps its own', () => {
+    const view = aGame({ at: sixSeats }).viewFor(null);
+    const claude = { s3: 'thinking', s4: 'ready', s5: 'connected', s6: 'offline' } as const;
+    const rows = readyRows(view.players, () => true, (id) => claude[id as keyof typeof claude]);
+    expect(rows.map((r) => (r.kind === 'ais' ? r.seats.map((s) => s.name) : r.seat.name))).toEqual(['Heiko', 'Kai', 'Juno', 'Brix', ['The Baron', 'Ossa']]);
+    const tv = onTv(view, claude);
+    expect(tv).toMatch(/data-testid="tv-ready-ais" data-count="2"/);
+    for (const id of ['s3', 's6']) expect(tv, id).toContain(`data-testid="tv-ready-${id}"`);
+    for (const id of ['s4', 's5']) expect(tv, id).not.toContain(`data-testid="tv-ready-${id}"`);
+  });
+});
+
+describe('the Claude line shows where a Claude seat can be waited for or not: planning proper and the side pick', () => {
+  it('never on the election or law ballot, which share the ready bar', () => {
+    const view = aGame().viewFor(null);
+    expect(onPhone(view, 'thinking', () => createElement(ReadyBar))).toContain('data-testid="claude-line"');
+    for (const politics of [{ election: { stage: 'ballot' } }, { election: { stage: 'announce' } }, { council: { stage: 'ballot' } }]) {
+      const html = onPhone({ ...view, politics } as unknown as MuleView, 'thinking', () => createElement(ReadyBar));
+      expect(html, JSON.stringify(politics)).not.toContain('data-testid="claude-line"');
+    }
   });
 });

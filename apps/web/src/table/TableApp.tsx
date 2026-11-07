@@ -344,7 +344,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                     {ordinal(places.get(s.id) ?? game.players.length)}
                   </span>
                   <PlayerMark slot={toSlot(s.slot)} size={22} glow={!dim} />
-                  <span className="flex-1 truncate font-display text-xl font-semibold">
+                  <span className="flex-1 truncate font-display text-xl font-semibold" data-testid="tv-ready-name">
                     {s.name}
                     {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
                   </span>
@@ -599,7 +599,9 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                   return (
                     <li key={p.id} className="flex items-center gap-3" data-testid={`tv-picked-${p.id}`}>
                       <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} glow={!done} />
-                      <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+                      <span className="flex-1 truncate font-display text-xl font-semibold" data-testid="tv-picked-name">
+                        {p.name}
+                      </span>
                       {until !== undefined ? (
                         <ClaudeCountdownWord until={until} className="font-mono text-lg font-bold text-holo" />
                       ) : (

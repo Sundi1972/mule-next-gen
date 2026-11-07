@@ -28,7 +28,7 @@ export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { se
       {viewerFirst(seats, me).map((s) => (
         <span key={s.id} className="flex items-center gap-1 font-semibold" data-testid={`waiting-${s.id}`}>
           <PlayerMark slot={toSlot(s.slot)} size={tv ? 30 : 14} glow={!s.away} />
-          {s.id === me ? 'you' : s.name}
+          <span data-testid="waiting-name">{s.id === me ? 'you' : s.name}</span>
           {s.away && <span className={cx('rounded-chip border border-warn/60 font-mono font-bold text-warn', tv ? 'px-2 text-lg' : 'px-1 text-[10px] @min-[1100px]/shell:text-xs')}>AWAY</span>}
           {s.until !== undefined && <ClaudeCountdown until={s.until} className={tv ? 'px-2! text-lg!' : undefined} testid="waiting-chip" />}
         </span>

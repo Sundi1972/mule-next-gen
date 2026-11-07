@@ -342,9 +342,13 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
 
 /**
  * B-AC-19 at six seats: one person and five AIs, the TV in planning with a busy month's news. The ready list stays on
- * the canvas, the market tiles whole, and the newest news line, the election result, shows whole beside them.
+ * the canvas, the market tiles whole, and the newest news line, the election result, shows whole beside them. With
+ * `claude`, the five are Claude seats the game reports in that status (C6).
  */
-export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Browser; base: string; server: MuleServer }, timeout = 5_000): Promise<string> {
+export async function sixSeatsOnTheTv(
+  { browser, base, server, claude }: { browser: Browser; base: string; server: MuleServer; claude?: 'waiting' | 'connected' | 'thinking' | 'ready' | 'offline' },
+  timeout = 5_000,
+): Promise<string> {
   const phone = await (await browser.newContext(PHONE)).newPage();
   const tv = await (await browser.newContext(TV)).newPage();
   try {
@@ -357,6 +361,14 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
       await phone.getByRole('button', { name: 'Add AI player' }).click();
       await phone.locator('[data-testid=seats] li').nth(i).waitFor({ timeout });
     }
+    const ais = server.registry.get(code)!.viewFor(null).seats.filter((s) => s.isAi).map((s) => s.id);
+    if (claude)
+      for (const id of ais) {
+        await phone.getByTestId(`seat-${id}-open`).click({ timeout });
+        await phone.getByTestId('sheet-kind-claude').click({ timeout });
+        await phone.getByTestId('sheet-setup-code-text').waitFor({ timeout });
+        await phone.getByTestId('sheet-done').click({ timeout });
+      }
     await phone.getByRole('button', { name: 'Start game' }).click();
     await tv.goto(`${base}/table?room=${code}`);
     const board = tv.locator('[data-phase=planning]');
@@ -370,6 +382,14 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
       await phone.waitForTimeout(100);
     }
     await board.getByTestId('tv-ready-list').waitFor({ timeout });
+    if (claude) {
+      const room = server.registry.get(code)!;
+      Object.assign((room as unknown as { game: object }).game, { claudeStatus: () => claude });
+      room.broadcast();
+      // A Claude seat with nothing to report folds into the AI row from five seats; the others keep their rows.
+      if (claude === 'ready' || claude === 'connected') await board.locator('[data-testid=tv-ready-ais][data-count="5"]').waitFor({ timeout });
+      else await board.getByTestId(`tv-ready-list`).getByText(claude === 'waiting' ? 'WAITING FOR CLAUDE' : `CLAUDE · ${claude.toUpperCase()}`).first().waitFor({ timeout });
+    }
     busyNews(server.registry.get(code));
     const newest = board.getByTestId('tv-news').locator('li').first();
     // The election's own line was already newest: wait for a line only busyNews adds, so the busy month is on the TV.
@@ -394,6 +414,11 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
         return { top, bottom, height: r.height };
       });
       check(shown.height > 0 && shown.top && shown.bottom, `B-AC-19 (six seats${when}): the election result shows whole in the TV's news, got ${JSON.stringify(shown)}`);
+      // A Claude seat's row carries its chip, and maybe its built-in note: its name still shows whole.
+      for (const name of await board.getByTestId('tv-ready-name').all()) {
+        const { shown, needs, text } = await name.evaluate((el) => ({ shown: el.clientWidth, needs: el.scrollWidth, text: el.textContent }));
+        check(shown > 0 && needs <= shown + 1, `TV-FIT (six seats${when}): the ready list shows "${text}" whole, got ${shown} of ${needs} px`);
+      }
       // TV-FIT's floor holds at the fullest table (PM ruling 6 Nov).
       const scale = await theTvScaleHolds(tv, `six-seat planning${when}`);
       return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}`;
@@ -403,7 +428,8 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
     room.chat(room.seats[0]!.id, 'Six of us at one table, then.');
     await tv.getByText('Six of us at one table, then.').first().waitFor({ timeout });
     const talking = await fits(', with a chat line');
-    return `six seats: ${quiet}, ${talking} with a chat line showing; the market whole, the election result whole in the news`;
+    const rows = await board.getByTestId('tv-ready-list').locator(':scope > li').count();
+    return `six seats${claude ? `, five Claude seats ${claude}` : ''}, ${rows} rows: ${quiet}, ${talking} with a chat line showing; the market whole, the election result whole in the news`;
   } finally {
     await phone.context().close();
     await tv.context().close();
