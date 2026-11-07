@@ -940,6 +940,19 @@ folded    UBER-AC-3 legs A and C → slice 3 (S3-1, S3-2), leg B → slice 4's c
           and rumoured through its own copy-on-write edit() (slice 4 §9). politics.ts writes the rest.
 ```
 
+```
+AM-23 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recommended" · slices 3-5 ruled
+
+target    AM-22's open decisions
+did       D-S3-1 A (campaign law promises after RC); D-S4-1 B (an investigation finds the culprit half the
+          time); D-S4-2 A (no separate sabotage switch in RC); D-S5-2 A (the overrule is held as planning ends);
+          D-S5-3 A (a snap election after two overrules, after RC); D-S5-4 A (the inquiry examines the
+          Governor's public breaches, after RC). The broken-card reveal stands as recorded. Each slice spec
+          records its own (slice 3 AM-4, slice 4 AM-3, slice 5 AM-4). The build plan is
+          docs/plans/2026-11-07-ws7-politics-slices-3-5.md.
+goal      P-2, P-3 — designed and ruled, not in the game yet
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state

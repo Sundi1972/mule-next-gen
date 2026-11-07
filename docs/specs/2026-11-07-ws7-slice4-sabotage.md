@@ -356,7 +356,8 @@ today        POLITICS.offices = ['governor'] (AM-19). The election, appointment,
 tomorrow     MUST set POLITICS.offices = ['governor', 'sheriff']: both are elected every term, a Sheriff is
              appointed when nobody runs (RULE-3 row 2: the richest player who is not the new Governor), and
              paid POLITICS.pay.sheriff (30) at upkeep (RULE-7). MUST drop "yet" from the Sheriff-promise
-             refusal. MUST add the Sheriff's job line.
+             refusal. MUST add the Sheriff's job line. The config defaults (this list, and
+             POLITICS.sabotage.on true) land with the screens (AM-2); until then tests set them.
 logic        → §2 S4-RULE-11 (existing rules, restated)
 seam         config.ts POLITICS (WS7); words.ts (WS7); the refusal text in packages/engine/src/politics.ts::checkPromise (WS7)
              and the matching legalWhen line in packages/ai/src/actions.ts (WS1 named edit)
@@ -504,8 +505,8 @@ today        mule-game.ts handles the politics intents and builds each screen's 
 tomorrow     MUST accept sabotage, guard, investigate and fine; MUST add the public sabotage view, the
              orderer's and the Sheriff's private views, and copy MonthEvent.sabotage into EventView; MUST
              add news lines at production (catches, unseen cuts, rumours), at an investigation and at a fine;
-             MUST emit the record's sabotage notices (S4-RULE-12, leak points) through the server's
-             partyTo(viewerId, secret) helper.
+             MUST emit the record's sabotage notices (S4-RULE-12, leak points) through one order-visibility
+             test in politics-view.ts (AM-2; slice 3's partyTo takes a card, not an order).
 logic        → §2 S4-RULE-12
 seam         mule-game.ts handle cases and monthEventView's copy, server.ts isIntent, record.ts NoticeEntry
              (WS3 named edits); politics-view.ts sabotageView, mySabotageView, sabotageNews,
@@ -884,8 +885,8 @@ S4-RULE-12 · Who sees what, and every leak point                     shape: dec
   an investigation's result                  yes       yes       yes            yes          yes
   a fine (due, paid, to the victim, by whom) yes       yes       yes            yes          yes
   * unless the orderer is the Sheriff.
-the server   every view and notice goes through partyTo(viewerId, secret): an order's party is its `by`,
-             the guards' party is the sitting Sheriff.
+the server   every view and notice goes through politics-view.ts's one order-visibility test (AM-2): an
+             order's party is its `by`, the guards' party is the sitting Sheriff.
 leak points (the frozen rule's list)
   news       lines only for public facts: a worked cut or rumour ("someone"), a catch (the name), an
              investigation's result, a fine. Never a pending order, a guard, a failed unseen order, a crew cost.
@@ -896,8 +897,9 @@ leak points (the frozen rule's list)
              parties [by] for the orderer's own failed or void order and its culprit),
              { kind: 'investigation'; order: string; solved: boolean; culprit: PlayerId | null } (public),
              { kind: 'fine'; order: string; culprit: PlayerId; due: number; paid: number; toVictim: number }
-             (public). No notice for an order placed or a guard posted. Slice 3's reputation notice carries
-             the 'caught' move (public).
+             (public). No notice for an order placed or a guard posted. The 'caught' move shows through
+             PlayerView.reputation and reputationReasons' 'caught' entry (public); there is no reputation
+             notice (AM-2).
   WS2's brain  reads notices only and MUST skip one whose `parties` excludes its seat (slice 3's rule).
   MonthReport  report.events carry MonthEvent.sabotage with the culprit only if attributed by then; a later
              investigation does not rewrite an old report (screens read culpritPublic from the view).
@@ -1229,6 +1231,32 @@ because   a sequential id told a seat that someone else had ordered this month; 
 goal      S4-1, S4-2 — still met
 ```
 
+```
+AM-2 · 2026-11-07 · WS7 (plan time: the slice 4 plan writer's drift findings) · before build
+
+target    S4-C6, S4-C13, S4-RULE-12 (the server line and the notices line)
+said      the engine PR sets POLITICS.offices = ['governor', 'sheriff']; views and notices go through "the
+          server's partyTo(viewerId, secret)"; "slice 3's reputation notice carries the 'caught' move"
+did       (1) The engine PR builds the Sheriff and sabotage with the defaults off (offices ['governor'],
+          POLITICS.sabotage.on false); tests, and WS1's sim row in its own code, switch them on. The
+          screen PR (S4-PR-6) flips both defaults once WS6's mock is approved, and restates there the
+          "Governor only" checks that pin AM-19. (2) Slice 3's partyTo(viewerId, card) is for cards; orders
+          and guards use one visibility test in politics-view.ts with the same parties. (3) Slice 3 has no
+          reputation notice: the 'caught' move shows through PlayerView.reputation and reputationReasons.
+because   (1) S4-HC-8: no screen shows the Sheriff or the ban before its mock; the election and council
+          screens are generic over the offices and laws, so the defaults are a screen change. (2), (3): the
+          spec named helpers and notices slice 3 does not define
+goal      S4-1, S4-2 — still met
+```
+
+```
+AM-3 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recommended"
+
+target    the decisions for Heiko
+did       D-S4-1 → B (investigateOdds 0.5), D-S4-2 → A (no lobby switch in RC). The build builds the spec as written.
+goal      S4-1, S4-2 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: sabotage state
@@ -1368,6 +1396,9 @@ approved by 13 Nov.
 ## §13 · Decisions for Heiko `[review-only]`
 
 **D-S4-1 · Does an investigation always find the culprit?**
+
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** B, an investigation finds the culprit half the time (`POLITICS.sheriff.investigateOdds` 0.5).
+
 At the table: Brix, the Sheriff, taps Investigate on "Month 3: Kai's power line cut, culprit unknown".
 - **A · Always** (design 05: "The culprit is revealed to everyone"). *For:* the Sheriff's job is satisfying;
   simple. *Against:* with one investigation a month and few incidents, nearly every unseen sabotage is solved
@@ -1381,6 +1412,9 @@ At the table: Brix, the Sheriff, taps Investigate on "Month 3: Kai's power line 
 Recommendation: B. The number is config, so WS1's rows can move it.
 
 **D-S4-2 · Does sabotage get its own switch in the lobby?**
+
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** A, no separate sabotage switch in RC.
+
 At the table: the host's lobby shows one Politics switch today.
 - **A · No: sabotage comes with politics** (recommended for RC). *For:* no lobby work; the sim keeps a
   `POLITICS.sabotage.on` switch for measurement. *Against:* a family table that wants elections without

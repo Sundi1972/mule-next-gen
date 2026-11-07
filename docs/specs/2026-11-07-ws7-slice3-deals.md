@@ -117,6 +117,8 @@ campaigns ("law promises with slice 2", AM-11; AM-16 moved them to slice 3); the
   propose it, at the same reputation cost as a broken vote promise. About +1 day, most of it WS6 reworking the picker.
 - *Borrowed votes and the tax promise's reputation* are later options too (non-goals), not asked now.
 
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** A, campaign law promises after RC.
+
 *Recorded, implemented by the frozen contract (Heiko may overrule):* a broken card is public, whole: who promised what
 to whom ("Lena broke her promise to Brix: to vote for Brix"). It tells the table one thing about Lena's secret ballot
 (she did not vote as promised), never what she voted instead. She accepted that check when she signed; no other ballot
@@ -1111,6 +1113,26 @@ did       'deal-<tag>', six base-36 characters from createRng over a hash of (st
 because   a sequential id told any seat how many cards other pairs had made, which observe() otherwise hides
           (the frozen HC-4 rule). Humans' views carry the same ids, so this closes it for both
 goal      S3-1, S3-2 — still met
+```
+
+```
+AM-3 · 2026-11-07 · WS7 (plan time: §0.1 re-checked against trunk e1e4794a) · before build
+
+target    §0.1's thin baseline, its second reason
+said      "reputation on every screen ... PlayerView lacks today (packages/protocol/src/index.ts::PlayerView)"
+did       Now false: the contract (#662) added PlayerView.reputation (optional) and viewFor fills it. The first
+          reason stands (S3-2 needs AI seats that offer and break cards; the baseline's never do), so the
+          baseline still loses and the plan keeps the chosen design.
+because   the self-review checks each rejection reason before planning against it
+goal      S3-1, S3-2 — unchanged
+```
+
+```
+AM-4 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recommended"
+
+target    the decisions for Heiko
+did       D-S3-1 → A (campaign law promises after RC). The recorded reveal rule stands: Heiko did not overrule it, so a broken card is public in full and never shows the vote cast. The build builds the spec as written.
+goal      S3-1, S3-2 — unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

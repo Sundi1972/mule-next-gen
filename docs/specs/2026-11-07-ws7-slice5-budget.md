@@ -242,6 +242,8 @@ name and the target show on every screen. The vote itself happens:
   - *Against:* it restores only from then on. This month's auctions were already taxed at the Governor's
     rate.
 
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** A, the overrule vote is held as planning ends.
+
 **D-S5-3 · Does a second overrule in a term call a snap election?** [after RC] *At the table:* "Overruled
 twice: snap election next month" on every screen. The next planning opens with an election, as in months
 1, 4, 7 and 10.
@@ -251,6 +253,8 @@ twice: snap election next month" on every screen. The next planning opens with a
     same snap election anyway.
   - *Against:* one more ceremony in a game.
 - **B: no snap after overrules.** Only a no-confidence vote calls one.
+
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** A, a second overrule in a term calls a snap election (after RC).
 
 **D-S5-4 · What does the Sheriff's inquiry look into?** [after RC] *At the table:* once a term the Sheriff
 can open an inquiry into the Governor. Every screen shows the Governor's record for the term, and
@@ -264,6 +268,8 @@ Sheriff places the guards.
   - *For:* every input is already public. It ties slices 3, 4 and 5 together.
   - *Against:* it is not the design doc's wording.
 - **B: drop the inquiry.** *Against:* it is in plan A's full part.
+
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** A, the inquiry looks into the Governor's public breaches this term (after RC).
 
 ---
 
@@ -841,7 +847,7 @@ inputs    line ∈ BudgetLine ('projects' | 'welfare' | 'security'); 'sheriff' �
   #   line       offered when                                   share bounds (whole %)                       credit cap a month
   1   projects   politics on                         [RC]       0 ..= 100, multiple of POLITICS.budget.step (5)   none (the open buildings' needs cap it)
   2   welfare    politics on                         [RC]       0 ..= POLITICS.budget.welfare.maxShare (20)      POLITICS.budget.welfare.maxCredits (200)
-  3   security   'sheriff' ∈ POLITICS.offices        [after RC] 0 ..= POLITICS.budget.security.maxShare (30)     POLITICS.budget.security.maxCredits (300)
+  3   security   S5-C13 built and 'sheriff' ∈ POLITICS.offices [after RC] 0 ..= POLITICS.budget.security.maxShare (30)     POLITICS.budget.security.maxCredits (300)
   4   (kept)     never a setting                                100 − Σ shares stays in the fund
 default    politics.budget = null means POLITICS.budget.default = { projects: 100, welfare: 0, security: 0 }:
            exactly today's runColony (S5-HC-5)
@@ -1316,15 +1322,16 @@ No other player's view holds Lena's or ai1's ballot.
 This slice supplies, and slice 4 (ws7-slice4-sabotage) decides:
 - `securitySpend(state): number`, new in politics.ts, the name slice 4 calls. It is the Security line's
   credits this month: what its share pays at today's fund, after any overrule. Slice 4 reads it when the
-  sabotage orders resolve. It is 0 while `'sheriff'` is not in `POLITICS.offices`. Slice 4 turns it into its own
+  sabotage orders resolve. It is 0 while `'sheriff'` is not in `POLITICS.offices`, and 0 in RC whatever
+  the offices (AM-3): S5-PR-1 exports it returning 0, and S5-C13 gives it its body after RC. Slice 4 turns it into its own
   numbers: guards, investigations, detection and the escort, in slice 4's config. Design 05 gives 1 guard
   plus 1 per 100 cr, 2 investigations at 200 cr, and the escort at 200 cr.
 - **Read it when sabotage resolves, not when the guards are placed.** The fund moves between planning and
   upkeep, and after RC a budget overrule as planning ends can lower the Security share after the Sheriff
   has placed guards. Slice 4's rule must say which guards count when the allowance falls. WS7 suggests the
   latest placed drop first.
-- Slice 4 restores the Sheriff by putting `'sheriff'` back in `POLITICS.offices`. Security and the inquiry
-  then appear with no other change here.
+- Slice 4 restores the Sheriff by putting `'sheriff'` back in `POLITICS.offices`, in RC (plan A). Security
+  and the inquiry still wait for their after-RC changes, S5-C13 and S5-C16 (AM-3).
 - The inquiry needs `Politics.sheriff`, and slice 4's Sheriff desk for its button (P16).
 
 ### §3.2 · Hand decisions and the values they need (the WS7 ↔ WS1 contract) `[handoff]`
@@ -1585,6 +1592,27 @@ did       the design of 3c1f030c is kept as it was (the frozen BudgetLine with '
           WS7 confirmed: Politics.budget null = POLITICS.budget.default (Projects 100), and the per-line
           credit caps.
 because   S5-1: the names and places must match the lanes and the approved layout they build against
+goal      S5-1 — unchanged
+```
+
+```
+AM-3 · 2026-11-07 · WS7 (plan time: the slice 5 plan writer's finding) · before build
+
+target    S5-RULE-1 row 3, §3.1
+said      Security is offered whenever 'sheriff' is in POLITICS.offices; slice 4 restoring the Sheriff makes
+          Security appear "with no other change here"
+did       Slice 4 restores the Sheriff in RC (Heiko's plan A, 7 Nov), and plan A puts Security after RC. Row 3
+          now also needs S5-C13 built, so RC's budgetLines are Projects and Welfare whatever the offices.
+          securitySpend is exported in S5-PR-1 returning 0 (slice 4 reads it in RC); S5-C13 gives it its body.
+because   without it the RC cut would offer a Security line plan A left out
+goal      S5-1 — unchanged
+```
+
+```
+AM-4 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recommended"
+
+target    the decisions for Heiko
+did       D-S5-2 → A (as planning ends), D-S5-3 → A (snap election after two overrules, after RC), D-S5-4 → A (the Governor's public breaches, after RC). The build builds the spec as written.
 goal      S5-1 — unchanged
 ```
 
