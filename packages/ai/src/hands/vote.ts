@@ -3,6 +3,7 @@ import {
   commissionRefusal,
   createRng,
   lawImpact,
+  lawOffered,
   moodBand,
   nextElectionMonth,
   observe,
@@ -317,7 +318,7 @@ export class VoteHand {
       return failedIn !== undefined && obs.month <= failedIn + retryMonths;
     };
     const candidates: { proposal: LawProposal; gain: number }[] = [];
-    for (const law of Object.keys(POLITICS.laws) as LawId[]) {
+    for (const law of (Object.keys(POLITICS.laws) as LawId[]).filter(lawOffered)) {
       const inForce = politics.laws[law];
       const { settings } = POLITICS.laws[law];
       const proposal: LawProposal = inForce

@@ -167,7 +167,7 @@ function refusal(why: Exclude<CanRun, true>, office: Office | null): string {
 function checkPromise(office: Office, promise: TaxPromise | undefined): TaxPromise | null {
   const { min, max } = POLITICS.tax;
   if (office === 'sheriff') {
-    if (promise) throw new RuleError('Sheriff candidates make no promise yet');
+    if (promise) throw new RuleError('Sheriff candidates make no promise');
     return null;
   }
   switch (promise?.kind) {
@@ -491,6 +491,11 @@ function inWords(settings: readonly number[]): string {
   return settings.length === 1 ? `${settings[0]}` : `${settings.slice(0, -1).join(', ')} or ${settings.at(-1)}`;
 }
 
+/** Whether a law is on the colony's book right now: the sabotage ban only while sabotage is on (S4-C7, AM-2). The one place that rule lives. */
+export function lawOffered(law: LawId): boolean {
+  return law !== 'sabotageBan' || POLITICS.sabotage.on;
+}
+
 /** The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. See slice 2a RULE-41. */
 export function proposeLaw(state: GameState, playerId: string, proposal: LawProposal | null): void {
   const politics = state.politics;
@@ -502,6 +507,7 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
     return;
   }
   if (!Object.hasOwn(POLITICS.laws, proposal.law)) throw new RuleError("That law is not in the colony's book");
+  if (!lawOffered(proposal.law)) throw new RuleError('This game plays without sabotage');
   const { retryMonths, maxInForce } = POLITICS.council;
   const failedIn = politics.failed[`${proposal.kind}:${proposal.law}`];
   if (failedIn !== undefined && state.month <= failedIn + retryMonths) {

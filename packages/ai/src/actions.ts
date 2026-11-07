@@ -206,7 +206,7 @@ const DESCRIBED = {
       'Candidates are closed until the result',
       `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`,
       'The {office} is not elected yet',
-      'Sheriff candidates make no promise yet',
+      'Sheriff candidates make no promise',
       `A tax promise is ${POLITICS.tax.min}% to ${POLITICS.tax.max}%`,
       'Pick a promise to run for Governor',
     ],
