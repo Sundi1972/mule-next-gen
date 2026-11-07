@@ -239,7 +239,8 @@ describe('the AI move list (C9)', () => {
     expect(s.players[0]!.money).toBe(before - DEVELOPMENT.droneFee);
   });
 
-  it("B-AC-9: the AI's setBudget, callOverrule and voteOverrule moves reach politics.ts through applyAction, and a refused one returns false, writes nothing and carries S5-RULE-2, -6 and -7's words in MOVES' legalWhen", () => {
+  // trace-allow: WS1's AiAction coverage contract for slice 5 S5-C9; the plan (Task S5-1.8) gives it no AC id
+  it("the AI's setBudget, callOverrule and voteOverrule moves reach politics.ts through applyAction, and a refused one returns false, writes nothing and carries S5-RULE-2, -6 and -7's words in MOVES' legalWhen", () => {
     // Month 2's planning with p0 governing and no election open.
     const governed = (politics = true): GameState => {
       const g = createGame({ seed: 7, players: IDS.map((id) => ({ id, name: id, isAi: true })), politics });
