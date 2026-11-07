@@ -4,8 +4,8 @@
  * GameState.politics. A tie nothing else breaks is drawn by lot on its own seeded
  * stream, so a replay from the seed draws the same and no other draw moves.
  */
-import { fundIn, fundOut } from './colony.js';
-import { COLONY, POLITICS } from './config.js';
+import { fundIn, fundOut, spare } from './colony.js';
+import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
@@ -602,7 +602,7 @@ function takeEffect(state: GameState, politics: Politics): void {
 /**
  * Advances whichever vote is open by dt ms: the election (returning its result in the step its ballot closes), then
  * the law ballot, which opens once the election is over and closes at the step after every player is Done; only its
- * reveal has a clock. See slice 2a RULE-40.
+ * reveal has a clock. Once both are over it steps the overrule vote: the ballot closes after every player is Done, and only its reveal has a clock (S5-RULE-7). See slice 2a RULE-40.
  */
 export function stepVotes(state: GameState, dt: number): ElectionResult | null {
   if (state.phase !== 'planning' || !state.politics) return null;
@@ -623,7 +623,7 @@ export function stepVotes(state: GameState, dt: number): ElectionResult | null {
   return null;
 }
 
-/** Leaving planning: closes the election, then tallies an open law ballot and lets its result take effect. See slice 2a RULE-40. */
+/** Leaving planning: closes the election, then tallies an open law ballot and lets its result take effect, then tallies an open overrule ballot and lets its result take effect, and a call that never got its ballot lapses (S5-RULE-7). See slice 2a RULE-40. */
 export function closeVotes(state: GameState): ElectionResult | null {
   const result = closeElection(state);
   if (councilLive(state)) {
@@ -751,11 +751,11 @@ export function lineMaxCredits(line: BudgetLine): number | null {
 
 /** What each share pays at today's fund: the share of the spare above COLONY.reserve, floored, capped by the line. See S5-RULE-3. */
 export function budgetCredits(state: GameState): Record<BudgetLine, number> {
-  const spare = Math.max(0, state.treasury.money - COLONY.reserve);
+  const room = spare(state);
   const shares = budgetShares(state);
   const credits = { projects: 0, welfare: 0, security: 0 };
   for (const line of Object.keys(credits) as BudgetLine[]) {
-    credits[line] = Math.min(Math.floor((shares[line] * spare) / PERCENT), lineMaxCredits(line) ?? Infinity);
+    credits[line] = Math.min(Math.floor((shares[line] * room) / PERCENT), lineMaxCredits(line) ?? Infinity);
   }
   return credits;
 }

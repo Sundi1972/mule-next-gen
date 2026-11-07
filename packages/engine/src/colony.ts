@@ -8,7 +8,7 @@ import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { budgetCredits, taxAsPlanningEnds, votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
-import { createRng } from './rng.js';
+import { createRng, seedOf } from './rng.js';
 import { score, scoreParts } from './game.js';
 import { GOODS, type Colony, type ColonyGauges, type FundLedger, type FundLine, type FundSource, type GameState, type Good, type MoodBand, type PrestigeId, type Project } from './types.js';
 
@@ -280,7 +280,7 @@ export function lastGauges(state: GameState): ColonyGauges | null {
 }
 
 /** What the fund can spend on a project: everything above the reserve it keeps for office pay. */
-function spare(state: GameState): number {
+export function spare(state: GameState): number {
   return Math.max(0, state.treasury.money - COLONY.reserve);
 }
 
@@ -491,12 +491,9 @@ export function payStrike(state: GameState, playerId: string): void {
   colony.strike = { ...strike, paid: true };
 }
 
-/** The rng salt of Welfare's tie draw: its own stream, apart from the offices' lots (salts 1 and 2). */
-const WELFARE_SALT = 97; // literal-ok: rng salt, reshuffle replays only
-
 /**
  * Who Welfare would go to now: the non-Governor with strictly the lowest Worth; a tie is drawn on a stream from the
- * game, the month and Welfare's salt, so no election draw moves. Named at a 0% share too; the payment is what the share sets (AM-8). Nobody with politics off. See S5-RULE-4.
+ * game, the month and the name 'welfare', so no election draw moves. Named at a 0% share too; the payment is what the share sets (AM-8). Nobody with politics off. See S5-RULE-4.
  */
 export function welfareRecipient(state: GameState): string | null {
   const politics = state.politics;
@@ -506,8 +503,7 @@ export function welfareRecipient(state: GameState): string | null {
   const lowest = Math.min(...worths.map((w) => w.worth));
   const tied = worths.filter((w) => w.worth === lowest).map((w) => w.id);
   if (tied.length === 1) return tied[0]!;
-  // literal-ok: rng salts, reshuffle replays only
-  return createRng((state.seed * 7_481 + state.month * 9_337 + WELFARE_SALT * 1_013) >>> 0).pick(tied);
+  return createRng(seedOf(state.seed, state.month, 'welfare')).pick(tied);
 }
 
 /** Pays Welfare out of the fund to the player in last place, as far as the fund reaches, and records it. */

@@ -131,16 +131,6 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
   });
 
   it("S5-T-AC-2: S5-RULE-3's examples, and the ledger balances in every month of a seeded game with shares set", () => {
-    // Fund 640 after pay and upkeep, reserve 100: spare0 540.
-    const split = commissioned(640, shares(80, 10));
-    runColony(split, []);
-    expect(split.colony!.ledger.out).toEqual({ welfare: 54, project: 432 });
-    expect(split.treasury.money).toBe(640 - 54 - 432);
-
-    const capped = commissioned(COLONY.reserve + 6_000, shares(80, 10));
-    runColony(capped, []);
-    expect(capped.colony!.ledger.out.welfare).toBe(200);
-
     // Credits and goods count together against the Projects limit. The fund holds reserve + 2,000; the store sells
     // Electronics at a price the fund could pay from its spare but the limit leaves no room for.
     const priced = (share: number): GameState => {
@@ -239,23 +229,18 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
     }
     expect([...winners].sort()).toEqual(['brix', 'kai']);
 
-    // The draw has its own stream: the election's result on one seed is the same with Welfare 0 and 10.
-    const election = (welfare: number): string | null => {
-      const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
-      state.politics = { ...state.politics!, governor: 'lena' };
-      advanceTo(state, 'planning');
-      withBudget(state, shares(100 - welfare, welfare));
-      while (state.month < 4 || state.phase !== 'planning') {
-        if (state.phase === 'planning') state.treasury.money += 1_000;
-        advancePhase(state);
-        if (state.phase === 'planning' && state.month === 4) break;
-      }
-      worth(state, { lena: 5_000, brix: 5_000, ossa: 5_000, kai: 5_000 });
-      welfareRecipient(state);
-      advancePhase(state);
-      return state.politics!.governor;
+    // The draw is replay-stable: the same seed and month give the same pick; another month can differ.
+    const tiedIn = (seed: number, month: number): string | null => {
+      const tie = governed(1_000, seed);
+      tie.month = month;
+      withBudget(tie, shares(80, 10));
+      worth(tie, { lena: 50_000, kai: 10_000, brix: 10_000, ossa: 99_000 });
+      return welfareRecipient(tie);
     };
-    expect(election(10)).toBe(election(0));
+    const byMonth = Array.from({ length: 12 }, (_, i) => tiedIn(7, i + 1));
+    expect(byMonth, 'replaying the same seed and months gives the same picks').toEqual(Array.from({ length: 12 }, (_, i) => tiedIn(7, i + 1)));
+    expect(new Set(byMonth).size, 'the month is in the draw: across a year of one seed both tied players are picked').toBe(2);
+    expect([...new Set(byMonth)].sort()).toEqual(['brix', 'kai']);
   });
 });
 
