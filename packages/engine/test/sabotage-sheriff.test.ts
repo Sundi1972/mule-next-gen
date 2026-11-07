@@ -6,8 +6,10 @@ import {
   councilDone,
   createGame,
   fineable,
+  banMultiplier as banMultiplierOf,
   fineCulprit,
   investigate,
+  lawImpact,
   lawOffered,
   openPlanning,
   orderSabotage,
@@ -541,5 +543,119 @@ describe('S4-B-AC-6 (engine): the crew is paid at the month end', () => {
     // Last month's fine aside (the case was caught), month 3 held no second crew charge.
     const fine = ordered.politics!.sabotage[0]!.fine;
     expect(diff).toBe(cost + (fine?.paid ?? 0));
+  });
+});
+
+describe('S4-B-AC-8 / S4-T-AC-12: the sabotage ban', () => {
+  sabotage(true);
+
+  /** The ban at `setting`, passed the way the colony passes a law: proposed, voted yes by all four, closed. Month 5's planning, Ossa the Sheriff. */
+  function banned(setting: number): GameState {
+    const { state } = sheriffed();
+    proposeLaw(state, 'lena', { kind: 'enact', law: 'sabotageBan', setting });
+    state.month++;
+    openPlanning(state);
+    for (const id of SEATS) castLawVote(state, id, true);
+    for (const id of SEATS) councilDone(state, id);
+    stepVotes(state, 0);
+    closeVotes(state);
+    expect(state.politics!.laws.sabotageBan?.setting).toBe(setting);
+    expect(state.phase).toBe('planning');
+    return state;
+  }
+  const reputationOf = (state: GameState, id: string) => state.players.find((p) => p.id === id)!.reputation;
+
+  it('S4-B-AC-8: with the ban at 2 in force, a case revealed and fined 150 owes 300 and costs 20 reputation; a fine levied before the ban passed was x1', () => {
+    const { state: before } = sheriffed();
+    const early = addCase(before, { culpritPublic: true, victim: 'brix' });
+    before.players.find((p) => p.id === 'lena')!.money = 1_000;
+    fineCulprit(before, 'ossa', early.id, 150);
+    expect(orderOf(before, early.id).fine).toMatchObject({ due: 150, paid: 150 });
+
+    // The same game, the ban passing next: the earlier fine keeps its x1, and a new case pays double.
+    const state = structuredClone(before);
+    proposeLaw(state, 'lena', { kind: 'enact', law: 'sabotageBan', setting: 2 });
+    state.month++;
+    openPlanning(state);
+    for (const id of SEATS) castLawVote(state, id, true);
+    for (const id of SEATS) councilDone(state, id);
+    stepVotes(state, 0);
+    closeVotes(state);
+    expect(banMultiplierOf(state)).toBe(2);
+    expect(orderOf(state, early.id).fine).toMatchObject({ base: 150, due: 150, paid: 150 });
+
+    const fresh = addCase(state, { by: 'kai', culpritPublic: true, victim: 'brix' });
+    state.players.find((p) => p.id === 'kai')!.money = 1_000;
+    const brix = moneyOf(state, 'brix');
+    fineCulprit(state, 'ossa', fresh.id, 150);
+    expect(orderOf(state, fresh.id).fine).toMatchObject({ base: 150, due: 300, paid: 300, toVictim: 150 });
+    expect(moneyOf(state, 'kai')).toBe(700);
+    expect(moneyOf(state, 'brix')).toBe(brix + 150);
+
+    // The reputation: an investigation that names Lena under the ban costs 2 x the caught move.
+    const open = addCase(state, { by: 'lena', victim: null });
+    const rep = reputationOf(state, 'lena');
+    const saved = POLITICS.sheriff.investigateOdds;
+    POLITICS.sheriff.investigateOdds = 1;
+    try {
+      investigate(state, 'ossa', open.id);
+    } finally {
+      POLITICS.sheriff.investigateOdds = saved;
+    }
+    expect(reputationOf(state, 'lena')).toBe(rep - 20);
+    expect(-POLITICS.reputation.moves.caught * 2).toBe(20);
+  });
+
+  it('S4-B-AC-8: the standard fine at planning\'s end reads the ban that planning\'s votes have just put in force', () => {
+    const { state } = sheriffed();
+    addCase(state, { culpritPublic: true, victim: null });
+    state.players.find((p) => p.id === 'lena')!.money = 1_000;
+    proposeLaw(state, 'lena', { kind: 'enact', law: 'sabotageBan', setting: 3 });
+    state.month++;
+    openPlanning(state);
+    for (const id of SEATS) castLawVote(state, id, true);
+    for (const id of SEATS) councilDone(state, id);
+    stepVotes(state, 0);
+    closeVotes(state);
+    expect(state.politics!.sabotage[0]!.fine).toMatchObject({ base: standard, due: standard * 3, by: 'standard' });
+  });
+
+  it('S4-B-AC-8: the multiplier is never stored on a case; repealing the ban puts the next fine back to x1', () => {
+    const state = banned(2);
+    const first = addCase(state, { culpritPublic: true });
+    expect(JSON.stringify(first)).not.toContain('multiplier');
+    state.politics = { ...state.politics!, laws: {} };
+    state.players.find((p) => p.id === 'lena')!.money = 1_000;
+    fineCulprit(state, 'ossa', first.id, 100);
+    expect(orderOf(state, first.id).fine).toMatchObject({ due: 100 });
+  });
+
+  it('S4-T-AC-12: the ban\'s preview is attributed / months played x the standard fine x (setting - 1), from revealed cases only', () => {
+    const { state } = sheriffed();
+    state.month = 5;
+    addCase(state, { by: 'lena', culpritPublic: true });
+    addCase(state, { by: 'lena', month: 2, outcome: 'caught', culpritPublic: true });
+    const monthsPlayed = state.month - 1;
+    for (const setting of POLITICS.laws.sabotageBan.settings) {
+      const impact = lawImpact(state, { kind: 'enact', law: 'sabotageBan', setting });
+      expect(impact.lena!.cost).toBe(Math.round((2 / monthsPlayed) * standard * (setting - 1)));
+      expect(impact.brix!.cost).toBe(0);
+    }
+    expect(lawImpact(state, { kind: 'enact', law: 'sabotageBan', setting: 2 }).lena!.cost).toBe(75);
+  });
+
+  it('S4-T-AC-12 negative: an unrevealed incident adds nothing; a repeal shows the same figure as a saving', () => {
+    const { state } = sheriffed();
+    state.month = 5;
+    addCase(state, { by: 'lena', culpritPublic: true });
+    addCase(state, { by: 'lena' });
+    addCase(state, { by: 'brix', outcome: 'failed', worked: false });
+    const enact = lawImpact(state, { kind: 'enact', law: 'sabotageBan', setting: 2 });
+    expect(enact.lena!.cost).toBe(Math.round((1 / 4) * standard));
+    expect(enact.brix!.cost).toBe(0);
+    state.politics = { ...state.politics!, laws: { sabotageBan: { setting: 2, since: 4 } } };
+    const repeal = lawImpact(state, { kind: 'repeal', law: 'sabotageBan' });
+    expect(repeal.lena!.cost).toBe(-enact.lena!.cost);
+    expect(repeal.brix!.cost).toBe(0);
   });
 });
