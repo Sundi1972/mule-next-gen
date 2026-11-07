@@ -134,7 +134,8 @@ describe('vote cards at their ballot', () => {
 
   it.each(ELECTION_ROWS)('S3-T-AC-2: S3-RULE-4 election row $row ($why)', ({ declared, before, picks, then }) => {
     const { state, id } = electionWithCard(declared);
-    // A card for the next ballot (a card made during the ceremony has until 4): this result must leave it alone.
+    // A card's until is fixed when it is offered, and only cards for this ballot settle here; one bound for a
+    // later ballot (until 4, set by hand: no offer can be made during the ceremony) must be left alone.
     const later = deal(state, 'kai', GOV('mia', 'brix'));
     cardOf(state, later).until = 4;
     before?.(state);
