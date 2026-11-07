@@ -348,7 +348,7 @@ tomorrow     MUST let a Smart or Claude Code seat's recorded reasoning set its v
 logic        → §2 RULE-B6 · evaluated at each ballot VoteHand casts · inputs bind from the seat's playbook in effect ·
              writes nothing but the vote intent VoteHand already sends
 seam         packages/ai/src/hands/vote.ts::VoteHand (WS7: an optional third constructor argument, read in `choose`'s
-             caller `vote` and in `lawVote`); packages/engine/src/playbook.ts::Playbook (WS3: the optional field);
+             caller `vote` and in `lawVote`); packages/engine/src/playbook.ts::Playbook (WS1's file; WS3 writes the optional field as a named edit);
              apps/server/src/mule-game.ts::MuleGame.start (WS3: passes the one port to the seat's VoteHand and DealHand)
 senior       junior would: let the reply cast the vote intent itself, or add a second vote path beside VoteHand ·
              senior does: one port in DealPort's style, so the vote stays where WS7's timing, ballot checks and
@@ -486,7 +486,7 @@ examples → §6: Claude recorded "governor: Kai", Kai on the ballot → votes K
   | { rule: AiAction['type'] }`. `messages` is never recorded. Non-breaking for WS3: RecordedWrite is unchanged.
 - **Playbook edits** (MODIFIED, WS1's validatePlan, C3, C6): `/strategy/stances/<player>`, `/rivalReads/<player>` and,
   with C6, `/politics/...`. Each is clamped or refused by validatePlan, as every edit is.
-- **`Playbook.politics?: PoliticsPlay`** (ADDED, additive; WS3's type in engine playbook.ts, WS9's clamps, WS1 OK'd the
+- **`Playbook.politics?: PoliticsPlay`** (ADDED, additive; engine playbook.ts is WS1's, WS3 writes the type as a named edit with WS1's OK by SHA; WS9's clamps; WS1 OK'd the
   shape, AM-B5; the ONE politics field: RC carries `votes` and `law` for C12, WS9's later politics part extends it; C6):
   `{ run: { office: Office; promise?: TaxPromise } | null; votes: Partial<Record<Office, PlayerId | null>>;
   taxTarget?: number }`. Playbook stays `v: 1` (optional field); a playbook without it plays as today.
@@ -560,7 +560,7 @@ Code-only; no existing state to reach. The mute starts unset for every player.
 - **R-B3 · the paired tournament costs money.** UBER-AC-B3 and B5 need it: about 8 seeds × 2 arms, roughly $7.6 for
   the social arm at 4 AI seats plus $3.3 for the off arm, about $11. Mitigation: B-6's paid runs go to the PM with the
   cost stated first; a smaller first pass (4 seeds, about $5.5) shows direction before the full run.
-- **R-B4 · upstream contracts:** WS3 (the playbook's optional `politics` and `offers`, engine playbook.ts), WS9
+- **R-B4 · upstream contracts:** WS3 (writes the playbook's optional `politics` and `offers` in WS1's engine playbook.ts, named edits), WS9
   (validatorFor clamps for stances, rivalReads, politics), WS1 (the shapes' OK; values), WS7 (VoteHand plays the politics section; cards in slice 3), WS6 (the mute control, card
   screens), WS3 (C5's and C9's named edits in mule-game.ts and protocol, C8's in record.ts and replay.ts).
   Mitigation: B-1 needs only WS1's stances/rivalReads clamps; the rest gate later PRs.
@@ -609,7 +609,8 @@ Code-only; no existing state to reach. The mute starts unset for every player.
   **The vote seam (C12) and who builds it.** The smallest shape that keeps HC-B3: Claude's vote is a recorded playbook
   value (`politics.votes`, `politics.law`), and VoteHand asks a port for it at the ballot, in WS7's DealPort style, null
   meaning the keyless rule. Lane split (PM, 7 Nov: WS1 OK'd the shape; owners corrected to the files' owners):
-  - **WS3** (about 0.25 day): `Playbook.politics?` with `votes?` and `law?` (packages/engine/src/playbook.ts, additive,
+  - **WS3** (about 0.25 day): `Playbook.politics?` with `votes?` and `law?` (packages/engine/src/playbook.ts, WS1's file:
+    a named edit with WS1's OK by SHA; additive,
     playbook v1 rule). No new values.
   - **WS9** (about 0.25 day): their clamps in the validator (packages/ai/src/playbook/validate.ts::validatorFor).
   - **WS7** (about 0.5 day, OK'd 7 Nov; built in S3-PR-4 as slice 3 AM-5): `VotePort` in
