@@ -2,7 +2,6 @@
 import { document, FakeElement } from './fake-dom';
 import type { ColonyProjectView, ColonyView, MuleView, MyView, PoliticsView, TableView } from '@mule/protocol';
 import { COLONY_SCORE } from '@mule/engine';
-import type { GroundsColony } from '@mule/ui';
 import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
 import { flushSync } from 'react-dom';
@@ -529,17 +528,14 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
 });
 
 describe('HC-3: the grounds when the art manifest fails', () => {
-  type Place = { x: number; y: number; w: number; h: number };
-  /** A project as WS7's view will carry it, with its block on the 5×5 grounds (AM-18). */
-  const at = (p: ColonyProjectView, place: Place | null): ColonyProjectView => Object.assign({}, p, { place });
   /** Month 12: the Park stands, the Stadium has 1 of its 3 months left, the Hospital is closed, the Spaceport only commissioned. */
   const MONTH_12: ColonyView = {
     ...MIDGAME,
     projects: [
-      at(PARK, { x: 1, y: 2, w: 1, h: 1 }),
-      at({ ...STADIUM, stage: 'building', monthsLeft: 1 }, { x: 0, y: 0, w: 2, h: 2 }),
-      at({ ...HOSPITAL, stage: 'closed', monthsLeft: null }, { x: 3, y: 2, w: 1, h: 1 }),
-      at({ ...DAMAGED, stage: 'commissioned', repairCost: null }, { x: 3, y: 3, w: 2, h: 2 }),
+      { ...PARK, place: { x: 1, y: 2, w: 1, h: 1 } },
+      { ...STADIUM, stage: 'building', monthsLeft: 1, place: { x: 0, y: 0, w: 2, h: 2 } },
+      { ...HOSPITAL, stage: 'closed', monthsLeft: null, place: { x: 3, y: 2, w: 1, h: 1 } },
+      { ...DAMAGED, stage: 'commissioned', repairCost: null, place: { x: 3, y: 3, w: 2, h: 2 } },
     ],
   };
   const MANIFEST_URL = '/art/colony/manifest.json';
@@ -572,7 +568,7 @@ describe('HC-3: the grounds when the art manifest fails', () => {
     const fresh = await import('../src/components/Grounds');
     serveManifest(body);
     await expect(fresh.loadGroundsManifest()).resolves.toBeNull();
-    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12 as GroundsColony, size: 'phone' }));
+    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12, size: 'phone' }));
     expect(has(html, 'colony-grounds')).toBe(true);
     expect(html).not.toContain('<image');
     for (const n of [1, 2, 3, 4]) expect(has(html, `shape-${n}`), `place ${n} is drawn`).toBe(true);
