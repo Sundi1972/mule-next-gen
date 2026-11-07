@@ -46,8 +46,8 @@ describe('ClaudeSeatWriter', () => {
 
     const result = await writer.submit(ask.id, { edits: [{ path: OFFER, to: 40, reason: 'cheap' }, { path: '/strategy/kind', to: 'spoiler', reason: 'x' }], line: 'Food for all.' });
 
-    expect(result).toEqual({ kind: 'accepted', accepted: [{ path: OFFER, to: 40, reason: 'cheap' }], refused: [{ path: null, cause: 'path_not_offered' }] });
-    expect(await written).toEqual({ reply: { edits: [{ path: OFFER, to: 40, reason: 'cheap' }], line: 'Food for all.' }, refused: [{ path: null, cause: 'path_not_offered' }] });
+    expect(result).toEqual({ kind: 'accepted', accepted: [{ path: OFFER, to: 40, reason: 'cheap' }], refused: [{ path: '/strategy/kind', cause: 'path_not_offered' }] });
+    expect(await written).toEqual({ reply: { edits: [{ path: OFFER, to: 40, reason: 'cheap' }], line: 'Food for all.' }, refused: [{ path: '/strategy/kind', cause: 'path_not_offered' }] });
     expect(await writer.submit(ask.id, { edits: [], line: '' })).toEqual({ kind: 'answered' });
     expect(await writer.submit('no-such-ask', { edits: [], line: '' })).toEqual({ kind: 'unknown_ask' });
   });
