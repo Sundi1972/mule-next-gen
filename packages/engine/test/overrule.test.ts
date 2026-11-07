@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advancePhase,
   callOverrule,
   canOverrule,
   closeVotes,
@@ -241,7 +242,6 @@ describe('S5-C5: the overrule ballot as planning ends', () => {
 
     const sample = weighted();
     expect(total(sample)).toBe(9);
-    expect(Math.floor(total(sample) / 2) + 1).toBe(5);
     const six = weighted();
     expect(decide(six, ['lena', 'ossa', 'kai'])).toEqual({ passed: true, yes: 6, no: 3, total: 9, needed: 5 });
     expect(six.treasury.salesTax).toBe(0.05);
@@ -278,5 +278,52 @@ describe('S5-C5: the overrule ballot as planning ends', () => {
     voteOverrule(two, 'lena', false);
     stepVotes(two, 0);
     expect(two.politics!.overrule!.result).toEqual({ passed: false, yes: 1, no: 2, total: 3, needed: 2 });
+  });
+
+  it('S5-T-AC-8: the Governor\'s cap promise is checked on the tax that stands as planning ends — an overrule that passes keeps it, one that fails breaks it, on the normal path and on the host\'s Continue', () => {
+    // Lena promised a 6% cap and raised the tax to 10%; Brix called the overrule.
+    const promised = (): GameState => {
+      const state = called();
+      state.politics!.promise = { kind: 'cap', percent: 6 };
+      state.politics!.promiseFrom = 5;
+      return state;
+    };
+    const open = (yes: string[]): GameState => {
+      const state = promised();
+      openOverrule(state);
+      for (const id of SEATS) voteOverrule(state, id, yes.includes(id));
+      return state;
+    };
+    const record = (state: GameState) => state.colony!.promises.map((p) => p.kept);
+    const YES = ['brix', 'ossa', 'kai'];
+
+    // (a) Normal path: the vote is tallied and revealed, then the month moves on.
+    const passedA = open(YES);
+    stepVotes(passedA, 0);
+    stepVotes(passedA, POLITICS.overrule.revealMs);
+    advancePhase(passedA);
+    expect(passedA.treasury.salesTax).toBe(0.05);
+    expect(record(passedA)).toEqual([true]);
+    const failedA = open(['brix']);
+    stepVotes(failedA, 0);
+    stepVotes(failedA, POLITICS.overrule.revealMs);
+    advancePhase(failedA);
+    expect(record(failedA)).toEqual([false]);
+
+    // (b) Host Continue: the ballot is still open when the phase advances, and the close tallies it after the promise is checked.
+    const passedB = open(YES);
+    expect(passedB.politics!.overrule!.stage).toBe('ballot');
+    advancePhase(passedB);
+    expect(passedB.treasury.salesTax).toBe(0.05);
+    expect(record(passedB)).toEqual([true]);
+    const failedB = open(['brix']);
+    advancePhase(failedB);
+    expect(failedB.treasury.salesTax).toBe(0.1);
+    expect(record(failedB)).toEqual([false]);
+
+    // A call that never got its ballot lapses: the raised tax stands and the promise is broken.
+    const lapsed = promised();
+    advancePhase(lapsed);
+    expect(record(lapsed)).toEqual([false]);
   });
 });
