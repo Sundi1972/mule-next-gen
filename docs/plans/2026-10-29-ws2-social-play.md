@@ -103,6 +103,15 @@ B-4 (G-B4, G-B5).
 | B-5 | `ws2-b2-pr5-cards` | Tasks 5.1-5.2 (C10) | B-AC-B7 | card proposals as planning edits | WS7 slice 3, WS6 card screens, WS1 `offers` | Yes (WS6's card screens; driven front to back) |
 | B-6 | `ws2-b2-pr6-proof` | Tasks 6.1-6.3 (C11) | UBER-AC-B1..B5 | trial report social rows | B-1..B-5 | No |
 
+**AM-B5 (7 Nov): the RC slice** (spec §8 AM-B5; RC 18 Nov). **In the RC:** B-1, B-2, B-2b, B-3, plus two new PRs:
+**B-4a** (`ws2-b2-pr4a-vote-seam`: C12, the vote seam, RULE-B6; B-AC-B8, T-AC-B9; needs WS1's `politics.votes`/`law`
+type and clamps, WS7's VotePort in VoteHand, WS3's mule-game.ts named edit) and **B-7** (`ws2-b2-pr7-claude-code`:
+C13, the Claude Code seat's social part and `answer_whisper`; T-AC-B10; separable: it moves after the RC on its own
+if it threatens the date). B-1 also takes C5's AM-B5 note (TableTalk `to`). HC-B7's "· AI" mark (B-AC-B9) is WS6's
+and WS4's build, not a WS2 PR. **After the RC:** B-4 (C6 beyond the votes), B-5 (C10, through WS7's DealPort),
+B-6 (C11, the proof). Tasks for B-4a and B-7 are written when the lane schedules them; the vote seam is about 2.25
+lane-days across WS1, WS7, WS3 and WS2 (spec AM-B5, unproven).
+
 ### Per-PR authority
 
 Every handoff carries this line verbatim:
