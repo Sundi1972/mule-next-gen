@@ -122,11 +122,11 @@ function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
 export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
-  const [failedPlate, setFailedPlate] = useState<string | null>(null);
+  const [failedPlates, setFailedPlates] = useState<ReadonlySet<string>>(() => new Set());
   const entry = manifest?.plate?.[R <= 1 ? '3' : '5'];
   const named = manifest && entry ? { href: hrefOf(entry[light], manifest, size), glow: entry.glow && hrefOf(entry.glow, manifest, size), box: plateBox(entry, manifest.frame) } : null;
   // A plate that fails to load leaves the grounds as they are without one, never blank (HC-3).
-  const plate = named && named.href !== failedPlate ? named : null;
+  const plate = named && !failedPlates.has(named.href) ? named : null;
   const inBack = (a: { col: number; row: number }, b: { col: number; row: number }) => a.col + a.row - (b.col + b.row);
   const scene = [{ n: 0, col: 0, row: 0, p: undefined as GroundsProject | undefined, block: undefined as GridPlace | undefined }, ...placed].sort(inBack);
   const mood = colony.gauges.happiness ?? 0;
@@ -170,7 +170,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
     >
       {plate ? (
         <>
-          <image href={plate.href} {...plate.box} data-testid="plate" onError={() => setFailedPlate(plate.href)} />
+          <image href={plate.href} {...plate.box} data-testid="plate" onError={() => setFailedPlates((failed) => new Set(failed).add(plate.href))} />
           {plate.glow && plateGlow > 0 && <Glow key={plate.glow} href={plate.glow} opacity={plateGlow} box={plate.box} testid="glow-plate" />}
         </>
       ) : (
