@@ -77,6 +77,15 @@
 <p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvGame, TvAuction, TvMonthEnd, TvGameOver</code> · <code>apps/web/src/table/TvElection.tsx, TvCouncil.tsx, TvLandAuction.tsx, TvDevelop.tsx, TvProduction.tsx</code> · <code>apps/web/src/events/TvEventLayer.tsx</code> · <code>apps/web/src/game/sound.ts</code></p>
 <p class="owner">Kept current by: the Table team (WS4); WS7 for the election and law screens, WS8 for the event layer, WS3 for the auction's content.</p>
 
+<h3 id="tv-politics">Politics on the TV <span class="pill designed">Designed, not in the game yet, WS4</span></h3>
+<ul>
+<li><strong>A broken deal card</strong> is public: the month end's colony panel and the news say a signed card was broken and whose reputation fell. Who made which card stays secret.</li>
+<li><strong>A caught saboteur</strong> plays in production's event show ("Caught!"), the cut plot goes dark on the map, and the month end has a line for it. A sabotage that is not caught never shows.</li>
+<li><strong>The budget</strong> shows in planning's side column, under the offices line: how the Governor split the fund. The month end says what each line spent, and which player Welfare helped.</li>
+<li><strong>An overrule vote's reveal</strong> is the council's reveal as it is today.</li>
+<li><strong>Reputation</strong> shows after each name in the ready list and the league, as on the phones.</li>
+</ul>
+<p class="owner">Designed, not in the game yet, WS4 (the TV), with WS7 for the broken-card line (TvDeals.tsx, which WS4 places) and WS8 for the event show · the layout: WS6, approved by Heiko on 7 Nov · see <a href="#politics-phone">Politics on the phone</a></p>
 <h2 id="tv-fit">The TV fits a real table <span class="pill built">In the game</span></h2>
 <p>Played at a real table, some TV screens ran out of room. Three rules now hold on every TV screen, and every screen below is checked at 1920 × 1080 with three chat lines said: nothing runs off the bottom, every row it promises is shown whole, and nothing is drawn under seven tenths of its size, at six players for the screens of the first two months.</p>
 <ul>
@@ -129,6 +138,10 @@
 <li><strong>The selection ring is drawn inside the plot you selected</strong>, on plots under 24 px. It may cover that plot's own dots, which the rail beside the map shows in full (Look, My plots), but never a neighbour's.</li>
 </ul>
 <p>A plot without dots keeps every mark as before, except a flag: under 16 px it is the same small sign there too, its word in the plot's label and the rail.</p>
+<ul>
+<li><strong>The store's sign</strong> is not drawn on plots under 24 px: it is wider than its plot and would cover its neighbours' dots. The store keeps its own look on the map, and its label names it.</li>
+<li><strong>A plot with a MULE</strong> keeps the MULE's icon whole: under 16 px a special's badge is not drawn on it (Look and the plot's label still name the special). A flag still takes the icon's place while it shows, as it does the dots'.</li>
+</ul>
 <div class="box why"><h4>Why it is like this</h4><p>No mark may hide a rating (PM, 7 Nov). A bigger map on the small phone was turned down: the roadmap, needs and agenda above it are what planning is for, and a full-height map is still too narrow for 16 px plots on the biggest map. Hiding the tab or the gem outright was turned down too: they answer whose plot it is and where the Crystite is. WS6 ruling on Jira SA-1372, 7 Nov.</p></div>
 <p class="code-ref">In the code: <code>packages/ui/src/components/HoloMap.tsx::smallStrip, RING_INSIDE_PLOT, FlagGlyph</code> · checked by <code>apps/web/e2e/table-steps.ts::theMarksStayClearOfTheDots</code> at 667 × 375 ((f) no mark meets a chip, (g) marks at 3 px or more, (h) a flag in the chip's place) and <code>apps/web/test/holo-map.test.ts</code></p>
 <p class="owner">In the game, WS4 (HoloMap), 7 Nov · the rule: the UX team (WS6) · Spec: <code>docs/specs/2026-11-05-ws6-plot-info.md</code> §8, 7 Nov.</p>
@@ -161,6 +174,21 @@
 <p>At the foot, "I'm ready". Once you are, it shows who the table still waits for; the host can then continue without them after one confirming tap ("End planning for everyone now? … stop where they are, and the land grant starts.").</p>
 <p class="code-ref">In the code: <code>apps/web/src/phone/hub/today.tsx::HUB_SLOTS</code> · <code>apps/web/src/phone/hub/Hub.tsx</code> · <code>apps/web/src/phone/hub/Roadmap.tsx, NeedsStrip.tsx, desks.tsx, tools.tsx, ReadyBar.tsx, ready.ts</code> · <code>apps/web/src/phone/hub/politics/</code></p>
 <p class="owner">Kept current by: the UX team (WS6); the Politics team (WS7) for the politics slots.</p>
+
+<h2 id="politics-phone">Politics on the phone: where each piece lives <span class="pill designed">Designed, not in the game yet, WS6</span></h2>
+<p>The full politics (deal cards and reputation, sabotage and the Sheriff, the Governor's budget and the overrule) fits the planning hub as it is: no new tab, and no new button beside the map. A phone shows at most five desks: Colony, Talk, Council, Market and the seat's own office. Nobody holds Governor and Sheriff at once, so a seat has one office desk at most. An action starts where its target is.</p>
+<ul>
+<li><strong>Deal cards, in Talk.</strong> Talk has two parts, Chat and My cards. You attach a card to a whisper ("Attach a card": its type, terms and months). A card offered to you arrives in that whisper, with the proposer's reputation and Accept or Decline, and the Now card says who offers it. My cards lists yours: offered, active, kept and broken. Only you see them.</li>
+<li><strong>Reputation</strong> is a small number after a player's name wherever names are listed with room: the standings, the ready list, the ballots, the whispers, a card's proposer, and the TV's ready list and league. Not in one-line tickers or the walking screen's names.</li>
+<li><strong>Sabotage, where its target is, Only you.</strong> A power-line cut starts from Look: look at a rival's plot and press "Sabotage this plot". A market rumour starts on the Market desk. Either opens the secret order in the rail, with its cost and its odds. One order a month; the TV never shows it.</li>
+<li><strong>The Sheriff's desk</strong> is the holder's alone and comes first, as the Governor's does: investigate one case a month, fine a revealed culprit. Opening it turns the map to Guard: tap a plot to guard it this month. The guard marks show on the Sheriff's map only.</li>
+<li><strong>The Governor's desk</strong> gains the budget: Projects, Security, Welfare and the reserve split the month's fund; commissioning a building moves under Projects.</li>
+<li><strong>The Council desk</strong> gains "Call an overrule vote" on the tax or the budget, once a month; the vote is the law ballot as it is today. The sabotage ban is the fifth law in the Governor's list and the ballot.</li>
+<li><strong>Election day</strong> elects the Sheriff in the rows it already has.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>A fifth button beside the map, such as a Sabotage tool, measured too costly: on the small phone (667 × 375) it squeezed the map from 157 px wide to 65, and at 844 × 390 from 372 to 230. Starting sabotage from the plot it targets, and Guard from the Sheriff's own desk, keeps the map whole. A separate "Shadows" tab would be a sixth tab for one act a month, and Talk holds other people's words. Heiko approved this layout on 7 Nov (option A).</p></div>
+<p class="code-ref">Mock: <code>design/mocks/politics-frame</code> (the real hub with a slot for each piece; the slice mocks fill them) · In the code: <code>apps/web/src/phone/hub/slots.ts</code>, <code>apps/web/src/phone/hub/today.tsx::HUB_SLOTS</code>, <code>apps/web/src/phone/hub/politics/</code></p>
+<p class="owner">Designed, not in the game yet, WS6 (the phone and laptop; WS8 draws and builds sabotage and the Sheriff in this frame) · rules: WS7, <a href="colony-and-politics.html">Colony and politics</a></p>
 
 <h2 id="phone-phases">The phone, phase by phase <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
