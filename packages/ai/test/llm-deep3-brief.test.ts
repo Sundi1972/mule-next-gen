@@ -163,3 +163,23 @@ describe("deep3 fix 2: what a MULE counts for in Worth", () => {
     expect(land(state)).toContain(`now ${mulePrice(state)} cr`);
   });
 });
+
+describe('deep3 fix 4: the strategy the seat set itself', () => {
+  const own: Strategy = { ...STRATEGY, kind: 'specialist', moneyMaker: 'smithore', reason: 'Smithore alone; the mines pay best.' };
+
+  it("deep3 fix 4: the land brief quotes the seat's own strategy since its month in place of the draft's; with none set it shows the draft's", () => {
+    const { state } = table();
+    const text = landBrief(state, mind, PERSONAS.trader, { ...draft, strategy: { ...own, reason: 'The persona line.' } }, [], { ownStrategy: { month: 3, strategy: own } }).text;
+    expect(text).toContain('Your strategy since month 3: specialist, moneyMaker Smithore. "Smithore alone; the mines pay best."');
+    expect(text).not.toContain('The persona line.');
+    expect(text).not.toContain("This month's draft plays");
+    expect(land(state)).toContain('Your strategy: builder, moneyMaker Food. "Grow steady."');
+  });
+
+  it("deep3 fix 4: when the draft's kind or money-maker differs from the seat's own, the brief says what the draft plays unless the seat sets its strategy again", () => {
+    const { state } = table();
+    const text = landBrief(state, mind, PERSONAS.trader, draft, [], { ownStrategy: { month: 3, strategy: own } }).text;
+    expect(text).toContain('Your strategy since month 3: specialist, moneyMaker Smithore. "Smithore alone; the mines pay best."');
+    expect(text).toContain("This month's draft plays builder, moneyMaker Food, unless you set your strategy again.");
+  });
+});

@@ -93,3 +93,53 @@ describe("deep3 fix 3: the land brief shows what became of last month's route", 
     expect(next).toMatch(new RegExp(`/development/route/2: planned \\{"act":"install","plot":${plot}\\}, got (skipped|replaced) \\(stale: plot ${plot}\\)`));
   });
 });
+
+/** The game at the next month's upkeep, its land grant taken on the way, as the game runs the asks between. */
+function nextUpkeep(state: GameState, playbooks: Playbooks): void {
+  advancePhase(state);
+  advanceTo(state, 'landGrant');
+  playbooks.takeEffect(state);
+  advanceTo(state, 'upkeep');
+}
+
+describe('deep3 fix 4: the land brief quotes the strategy the seat set itself', { timeout: 30_000 }, () => {
+  const OWN = { kind: 'builder', moneyMaker: 'smithore', reason: 'Mine Smithore early; MULEs climb with it and I keep mine.' };
+
+  /** Month 1's land write asked at game start and taken at its land grant; the game at month 1's upkeep. */
+  async function firstMonth(replies: readonly object[]) {
+    const t = table(replies);
+    t.playbooks.ask(t.state, 1);
+    await vi.advanceTimersByTimeAsync(10);
+    advanceTo(t.state, 'landGrant');
+    t.playbooks.takeEffect(t.state);
+    advanceTo(t.state, 'upkeep');
+    return t;
+  }
+
+  it("deep3 fix 4: after Claude's strategy is adopted, the next land brief quotes its kind, money-maker and reason verbatim as its strategy since that month; a write that leaves it out keeps that month", async () => {
+    const { state, playbooks, landBriefs } = await firstMonth([{ strategy: OWN, edits: [], line: '' }, { edits: [], line: '' }]);
+    expect(playbooks.playbookFor('p0', 1)?.by).toBe('llm');
+
+    playbooks.ask(state, 2);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(landBriefs()[0]).not.toContain('Your strategy since month');
+    expect(landBriefs()[1]).toContain(`Your strategy since month 1: builder, moneyMaker Smithore. "${OWN.reason}"`);
+
+    nextUpkeep(state, playbooks);
+    playbooks.ask(state, 3);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(landBriefs()[2]).toContain(`Your strategy since month 1: builder, moneyMaker Smithore. "${OWN.reason}"`);
+  });
+
+  it('deep3 fix 4: a newer strategy replaces the quote, with its own month', async () => {
+    const later = { ...OWN, kind: 'specialist', reason: 'Smithore alone now; the mines pay best.' };
+    const { state, playbooks, landBriefs } = await firstMonth([{ strategy: OWN, edits: [], line: '' }, { strategy: later, edits: [], line: '' }]);
+    playbooks.ask(state, 2);
+    await vi.advanceTimersByTimeAsync(10);
+    nextUpkeep(state, playbooks);
+    playbooks.ask(state, 3);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(landBriefs()[2]).toContain(`Your strategy since month 2: specialist, moneyMaker Smithore. "${later.reason}"`);
+    expect(landBriefs()[2]).not.toContain(OWN.reason);
+  });
+});
