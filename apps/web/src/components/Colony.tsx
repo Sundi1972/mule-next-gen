@@ -1,6 +1,6 @@
 import { GOODS, moodBand, POLLUTION, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
-import { airBandStyle, cx, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
+import { airBandStyle, cx, GOOD_NAME, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
 import { inCollapse, league, winnerWords } from '../game/month-end';
@@ -339,17 +339,30 @@ export function ProjectRow({ p, players, size, plaque = true }: { p: ColonyProje
 }
 
 /**
- * A project on one line, for the TV's month end with politics on: the grounds opener has just shown the colony's
- * buildings full screen, so the month end names each with its stage and the one figure that stage turns on (how much
- * is paid, the months left, its prestige), and leaves the funding bar, the build pips and the plaque to the phones'
- * Colony desk (PM ruling, 7 Nov: six seats with three projects drew at 0.604).
+ * The one figure a project's stage turns on, as the TV month end shows it. Collecting: the share of its credits paid,
+ * or once those are in, the goods it still waits for (it builds only with both). Building: when it stands; the month
+ * end comes after the upkeep that counted this month down, so one month left stands at next month's end.
+ */
+function stageFigure(p: ColonyProjectView): string {
+  if (p.stage === 'building') return p.monthsLeft === 1 ? 'stands next month' : `stands in ${p.monthsLeft} months`;
+  if (p.stage !== 'commissioned') return `+${p.prestige} prestige`;
+  if (p.funded.credits < p.cost.credits) return `${Math.round((p.funded.credits / p.cost.credits) * 100)}% paid`;
+  const short = GOODS.flatMap((g) => {
+    const left = (p.cost.goods[g] ?? 0) - (p.funded.goods[g] ?? 0);
+    return left > 0 ? [`${left} ${GOOD_NAME[g]}`] : [];
+  });
+  return short.length > 0 ? `needs ${short.join(' · ')}` : '100% paid';
+}
+
+/**
+ * A project on one line, for the TV's month end: its name, its stage and the one figure that stage turns on. The
+ * funding bar, the build pips and the plaque are the phones' Colony desk's (PM ruling, 7 Nov: six seats with three
+ * full rows drew at 0.604, under TV-FIT's floor).
  */
 function ProjectLine({ p }: { p: ColonyProjectView }) {
   const dead = p.stage === 'closed' || p.stage === 'damaged';
   const st = STAGE[p.stage];
-  const share = p.cost.credits === 0 ? 100 : Math.round((p.funded.credits / p.cost.credits) * 100);
-  const figure =
-    p.stage === 'commissioned' ? `${share}% paid` : p.stage === 'building' ? (p.monthsLeft === 1 ? 'stands this month' : `stands in ${p.monthsLeft} months`) : `+${p.prestige} prestige`;
+  const figure = stageFigure(p);
   return (
     <li className="flex items-center gap-3 border-t border-holo-faint py-1.5 first:border-t-0 first:pt-0" data-testid={`project-${p.id}`} data-stage={p.stage}>
       <ObjectGlyph kind={p.id} size={24} className={cx('shrink-0', dead ? 'text-alert' : p.stage === 'standing' ? 'text-ok' : 'text-holo')} />
@@ -366,7 +379,7 @@ function ProjectLine({ p }: { p: ColonyProjectView }) {
 
 /**
  * Every project the Governor has commissioned, at its stage; `action` draws a project's buttons under its row. `compact`
- * puts each on one line (ProjectLine).
+ * puts each on one line (ProjectLine), which has no room for buttons, so it draws no `action`.
  */
 export function BuildSite({ colony, players, size, action, compact = false, className }: { colony: ColonyView; players: PlayerView[]; size: Size; action?: (p: ColonyProjectView) => ReactNode; compact?: boolean; className?: string }) {
   const tv = size === 'tv';

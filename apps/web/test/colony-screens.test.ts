@@ -10,6 +10,7 @@ import { GameOver } from '../src/phone/GameOver';
 import { Results } from '../src/phone/Results';
 import { ColonyPanel, LeagueTable } from '../src/components/MonthEnd';
 import { TableApp, TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableApp';
+import { BuildSite } from '../src/components/Colony';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
@@ -317,12 +318,12 @@ describe('C34: the four gauges in the TV header', () => {
   });
 });
 
-describe('C34: the build site at the month end', () => {
-  const tv = onTv(game(MIDGAME), TvMonthEnd);
-  const row = (id: string) => element(tv, `project-${id}`);
+describe("C34: the build site on the phones' Colony desk", () => {
+  const desk = renderToStaticMarkup(createElement(BuildSite, { colony: MIDGAME, players: PLAYERS, size: 'phone' }));
+  const row = (id: string) => element(desk, `project-${id}`);
 
   it('B-AC-34-4: one row per project, each at its stage', () => {
-    const stages = [...element(tv, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => [m[1], m[2]]);
+    const stages = [...element(desk, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => [m[1], m[2]]);
     expect(stages).toEqual([
       ['stadium', 'commissioned'],
       ['hospital', 'building'],
@@ -360,17 +361,30 @@ describe('C34: the build site at the month end', () => {
     expect(has(empty, 'no-projects')).toBe(true);
     expect(has(empty, 'project-park')).toBe(false);
   });
+});
 
-  it('PM ruling 7 Nov (TV-FIT, six seats): with politics on, the grounds opener has shown the buildings, so the month end puts each project on one line: name, stage and the figure its stage turns on; no funding bar, build pips or plaque', () => {
-    const politics = { governor: 's1', sheriff: null, term: [4, 6], next: 7, baron: null, tax: { percent: 5, start: 5, low: 0, high: 10 }, fund: 0, pay: { governor: 50 }, weights: [], candidates: { governor: [] }, promises: {}, promise: null, promiseFrom: null, election: null } as unknown as NonNullable<MuleView['politics']>;
-    const html = onTv(game(MIDGAME, { politics }), TvMonthEnd);
-    const line = (id: string) => text(element(html, `project-${id}`));
+describe('C34: the build site at the TV month end, one line a project (PM ruling 7 Nov, TV-FIT)', () => {
+  const tv = (colony: ColonyView) => onTv(game(colony), TvMonthEnd);
+  const line = (html: string, id: string) => text(element(html, `project-${id}`));
+  const at = (over: Partial<ColonyProjectView>) => ({ ...MIDGAME, projects: MIDGAME.projects.map((p) => (p.id === over.id ? { ...p, ...over } : p)) });
+
+  it("B-AC-34-4: each project is one line, name, stage and the figure its stage turns on; the funding bar, build pips and plaque are the phones'", () => {
+    const html = tv(MIDGAME);
     expect([...element(html, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => m[1])).toEqual(['stadium', 'hospital', 'park', 'observatory', 'spaceport']);
     for (const id of ['stadium', 'hospital', 'park', 'observatory', 'spaceport']) expect(element(html, `project-${id}`)).not.toMatch(/data-testid="(funding|build|plaque)-/);
-    expect(line('stadium')).toMatch(/^Stadium Collecting \d+% paid$/);
-    expect(line('hospital')).toMatch(/^Hospital Building stands (this month|in \d+ months)$/);
-    expect(line('park')).toMatch(/^Park Standing \+\d+ prestige$/);
+    expect(line(html, 'stadium')).toBe('Stadium Collecting 61% paid');
+    expect(line(html, 'park')).toBe('Park Standing +2 prestige');
     expect(element(html, 'figure-spaceport')).toMatch(/line-through/);
+  });
+
+  it('B-AC-34-4: a project paid in credits but short of goods names the goods it waits for, never "100% paid"', () => {
+    const html = tv(at({ id: 'stadium', funded: { credits: 1_400, goods: { alloy: 4, electronics: 1 } } }));
+    expect(line(html, 'stadium')).toBe('Stadium Collecting needs 1 Electronics');
+  });
+
+  it('B-AC-34-4: the month end has run the upkeep, so one month left stands next month, two in 2 months', () => {
+    expect(line(tv(MIDGAME), 'hospital')).toBe('Hospital Building stands next month');
+    expect(line(tv(at({ id: 'hospital', monthsLeft: 2 })), 'hospital')).toBe('Hospital Building stands in 2 months');
   });
 
   it('B-AC-34-4 (negative): without politics the month end has no build site', () => {

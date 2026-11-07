@@ -770,8 +770,8 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
             <div className="flex flex-col gap-4">
               <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
               <ColonyPanel view={game} density="tv" />
-              {/* With politics on, the grounds opener has just shown the buildings full screen: one line each here. */}
-              <BuildSite colony={game.colony} players={game.players} size="tv" compact={game.politics != null} />
+              {/* One line a project, so six seats fit TV-FIT's floor; the funding, pips and plaques are on the phones. */}
+              <BuildSite colony={game.colony} players={game.players} size="tv" compact />
             </div>
           </div>
         ) : (
