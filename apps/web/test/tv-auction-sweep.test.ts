@@ -115,6 +115,13 @@ describe('SWEEP-C1: one gap number on the TV screen', () => {
     expect(panel).toContain('NEAREST TRADE 16 apart');
     expect(chip).toBe('16 APART');
   });
+
+  it('SWEEP-C1: with no player price facing one (the only seller has sold out, the rest passed), the side panel shows no gap and the chart no chip, though the store and the ship still face each other', () => {
+    const pass = (id: string) => ({ ...walker(id, 'buyer', 66, 0), side: 'pass' as const });
+    const html = tvScreen(tvView({ ...alloyWalk, walkers: [pass('s1'), pass('s2'), walker('s3', 'seller', 115, 0), pass('s4')] }));
+    expect(textOf(inside(html, 'tv-readout'))).toContain('NEAREST TRADE —');
+    expect(html).not.toContain('data-testid="gap-label"');
+  });
 });
 
 describe('SWEEP-C3: the TV names the same next good as the phone', () => {
