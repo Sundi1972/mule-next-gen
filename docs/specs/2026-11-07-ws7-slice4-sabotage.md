@@ -8,6 +8,12 @@ three in one sitting. Spec only: no code, no screen.
 Ids carry the slice prefix so slices 3, 4 and 5 never collide: goals S4-1, S4-2; proofs S4-UBER-AC-n; changes
 S4-C1+; rules S4-RULE-1+; constraints S4-HC-n; ACs S4-B-AC-n / S4-T-AC-n.
 
+**Binding inputs (WS7, 7 Nov):** the frozen contract types for slices 3-5 (`SabotageTarget`, `SabotageOrder`,
+`Politics.sabotage` as the whole game's orders, `Politics.guards`, `captureOdds`, the HC-4 observe rule) and slice
+3's spec (`docs/specs/2026-11-07-ws7-slice3-deals.md` on `ws7-slice3-deals` @ 8ebc6857: `diplomacy.ts`'s
+`pactBreach`, `pactBetween`, `sabotagePossible`, `moveReputation`, `RepCause`). This spec adopts them as written,
+and §3 lists the few additive fields it asks for.
+
 ---
 
 ## §0 · Business Goals & Value `[handoff: goal lines and proofs]` `[review-only: who / today / value / cost]`
@@ -91,8 +97,9 @@ half-day contract commit (§12). The thin baseline is about 3 PRs (§0.1).
 ban as the fifth law.** Orders are secret and resolve when production starts, in a new
 `packages/engine/src/sabotage.ts` (already a WS7 path in SEAMS). The effect rides the existing event pipeline
 (a power cut is a production event that takes the plot's output to 0, as a flood does), so the production
-show, the per-plot lines and the TV event layer carry it. Captures call `reputationShift` and slice 3's pact
-hook. Fines move through `colony.ts`'s fund. AI seats act through two new hands called from `VoteHand`'s
+show, the per-plot lines and the TV event layer carry it. Captures move reputation through slice 3's
+`moveReputation` (diplomacy.ts, designed; cause `'caught'`) and call its `pactBreach`. Fines move through
+`colony.ts`'s fund. AI seats act through two new hands called from `VoteHand`'s
 planning step. About 9 PRs.
 
 **Thin baseline: sabotage with automatic fines and no Sheriff** (`POLITICS.offices` stays Governor only; a
@@ -142,7 +149,7 @@ same two.
 
 ```
 S4-HC-1  packages/engine stays pure. Order outcomes draw from their own stream seeded from (seed, month);
-         an investigation from (seed, incident id). No election, council, event or AI draw moves.
+         an investigation from (seed, the order's number). No election, council, event or AI draw moves.
          source: CLAUDE.md, parent HC-1, slice 2a HC-41                        breach: fatal
 S4-HC-2  Every number lives in config.ts's POLITICS block: POLITICS.sabotage, POLITICS.sheriff,
          POLITICS.laws.sabotageBan, POLITICS.ai.sabotage. No literal in rules, AI, server or screens.
@@ -208,15 +215,16 @@ today        no order, no sabotage state. Politics is one object written only by
              verified_by: read
 tomorrow     MUST let any player, in planning with politics and POLITICS.sabotage.on, place one order a month
              (a power cut on another player's working plot, or a rumour on a good, up or down), replace it or
-             withdraw it until planning ends (S4-RULE-2). MUST keep orders, guards, incidents and crew costs
-             in Politics.sabotage, cleared for the month when planning opens (guards, investigations) and
-             when production resolves (orders).
-logic        → §2 S4-RULE-1, S4-RULE-2 · evaluated at the intent · writes politics.sabotage.orders
+             withdraw it until planning ends (S4-RULE-2). MUST keep every order of the game in
+             Politics.sabotage (the frozen SabotageOrder, outcome 'pending' until production) and this
+             month's guards in Politics.guards, emptied when planning opens.
+logic        → §2 S4-RULE-1, S4-RULE-2 · evaluated at the intent · writes politics.sabotage (a pending
+             order, replaced or removed until planning ends)
 seam         packages/engine/src/sabotage.ts (new; listed for WS7 in SEAMS) with its own private edit()
              (the one-line structuredClone of politics.ts and colony.ts); packages/engine/src/politics.ts::newPolitics creates
-             the empty record and ::openPlanning calls the new sabotage.ts's newSabotageMonth
+             the empty list and ::openPlanning calls the new sabotage.ts's newSabotageMonth (guards emptied)
 senior       junior would: add the orders to Player, or a GameState.sabotage beside politics · senior does:
-             one field of Politics, so politics:false removes it with no new check, cloneForSim's deep copy
+             fields of Politics (frozen), so politics:false removes them with no new check, cloneForSim's deep copy
              of politics already covers it (FM-WS3-4), and observe() hides it in one place
 mechanism    sprout
 call sites   orderSabotage: apps/server/src/mule-game.ts::MuleGame (handle 'sabotage'),
@@ -237,8 +245,8 @@ tomorrow     MUST resolve every order in seat order when production starts (S4-R
              two seeded draws (works, seen). MUST file one production event per public outcome (S4-RULE-4):
              a power cut that worked hits its plot and takes its output to 0; a caught one names the
              culprit; a failed, unseen one files nothing. MUST do nothing on a what-if copy.
-logic        → §2 S4-RULE-3, S4-RULE-4 · evaluated once, before runProduction · writes
-             politics.sabotage.incidents, .owed; clears .orders
+logic        → §2 S4-RULE-3, S4-RULE-4 · evaluated once, before runProduction · writes each of the
+             month's pending orders' outcome, victim, worked, culpritPublic; removes a void order
 seam         packages/engine/src/game.ts::advancePhase production branch: one line `resolveSabotage(state)` before
              runProduction (WS3 named edit). packages/engine/src/production.ts::runProduction: one line
              `events.push(...sabotageEvents(state))` right after the strike's push (WS1 named edit), the
@@ -270,7 +278,7 @@ tomorrow     MUST shift store.posted for each worked rumour's good by POLITICS.s
              up or down, after postPrices and before startAuction, and MUST put the posted price back to
              what postPrices set when the auction ends (S4-RULE-4).
 logic        → §2 S4-RULE-4 · evaluated at auction open and auction end · writes store.posted (second
-             writer, §9), politics.sabotage.rumours
+             writer, §9), politics.rumoured
 seam         packages/engine/src/game.ts::advancePhase: `applyRumours(state)` after postPrices, `endRumours(state)` right after
              endAuction (WS3 named edits, one line each)
 senior       junior would: a rumour field read inside economy.ts's pricing, or leave the shifted price in
@@ -287,12 +295,16 @@ depends_on   S4-C2 (data: worked rumours)
 S4-C4 · ADDED · a revealed saboteur loses reputation, breaks pacts and opens a case
 
 today        reputationShift moves a player's reputation within POLITICS.reputation (used by the blamed-for-
-             unrest event). There is no pact.
+             unrest event). Slice 3 (designed, ws7-slice3-deals @ 8ebc6857) wraps it in diplomacy.ts's
+             moveReputation(state, id, delta, cause, withId?, cardId?) as the only caller, adds pacts with
+             pactBreach / pactBetween, and a sabotagePossible(state) that returns false until this slice.
              anchors: packages/engine/src/politics.ts::reputationShift, ::voteWeight
-             verified_by: read
-tomorrow     MUST, at every reveal (guard, caught, investigation): take reputation off the culprit
-             (S4-RULE-5), call slice 3's breakPacts(state, culprit, victim, 'sabotage') when there is a
-             victim, and record the case (revealed, the ban's multiplier now) for a fine.
+             verified_by: read (trunk); slice 3's spec §3 (designed, not built)
+tomorrow     MUST, at every attribution (guarded, caught on the spot, or revealed by an investigation): set
+             culpritPublic, move the culprit's reputation by moveReputation(state, culprit,
+             POLITICS.reputation.moves.caught × the ban's multiplier, 'caught', victim), and, when there is a
+             victim, call pactBreach(state, culprit, victim, order.month) (S4-RULE-5). MUST add 'caught' to
+             RepCause and POLITICS.reputation.moves. MUST replace sabotagePossible's body (S4-RULE-5).
 logic        → §2 S4-RULE-5 · evaluated at resolution and at an investigation
 seam         the new sabotage.ts's private reveal(), the one place every reveal goes through
 senior       junior would: apply the reputation loss in three places (production, investigation, the view)
@@ -300,8 +312,8 @@ senior       junior would: apply the reputation loss in three places (production
              same, and slice 3's hook has one caller
 mechanism    sprout
 call sites   resolveSabotage, investigate
-depends_on   S4-C2 · slice 3's breakPacts (contract, stubbable: a no-op with the signature in the contract
-             commit until slice 3 lands)
+depends_on   S4-C2 · slice 3's diplomacy.ts (moveReputation, pactBreach; contract, stubbable if slice 3's
+             engine PR lands later: pactBreach returns false, moveReputation calls reputationShift)
 ```
 
 ```
@@ -315,7 +327,8 @@ tomorrow     MUST let the sitting Sheriff, in planning once the votes are over: 
              guards (S4-RULE-6); investigate one public, unsolved incident a month on its seeded odds
              (S4-RULE-7); fine each revealed case once within the allowed steps (S4-RULE-8). MUST levy the
              standard fine on a case still unfined when the next planning ends, or at the last upkeep.
-logic        → §2 S4-RULE-6, -7, -8 · writes politics.sabotage.guards, .incidents; money through colony.ts
+logic        → §2 S4-RULE-6, -7, -8 · writes politics.guards and an order's investigated, culpritPublic and
+             fine; money through colony.ts
 seam         the new sabotage.ts's setGuards, investigate, fineCulprit, closeCases (called from
              packages/engine/src/politics.ts::closeVotes, which game.ts already calls when planning ends), settleSabotage
              (S4-C8's upkeep call levies the last month's)
@@ -373,12 +386,12 @@ today        four laws in POLITICS.laws; the council's machinery, lawImpact, the
 tomorrow     MUST add sabotageBan with settings [2, 3] (a multiplier on the fine and the reputation loss of a
              capture revealed while it is in force), through the existing council (propose, vote, three in
              force, retry months). MUST give it a public "For you" preview (S4-RULE-10).
-logic        → §2 S4-RULE-10 · read at every reveal (multiplier) and every preview
+logic        → §2 S4-RULE-10 · read at every attribution (reputation), every fine and every preview
 seam         config.ts POLITICS.laws; LawId (WS3 named edit); politics.ts LAW_NAME and enactImpact's switch
              (WS7); words in LawPicker.tsx and TvCouncil.tsx (WS7)
 senior       junior would: a separate "ban" flag beside the laws · senior does: one more law row, so propose,
-             vote, retry and repeal need no new code; the multiplier is fixed on the case at reveal, so a
-             ban passed later does not reach back
+             vote, retry and repeal need no new code; the multiplier is read when it applies (the reputation
+             at the attribution, the fine at its levy), so no case stores it
 mechanism    in_place
 call sites   lawImpact: politics-view.ts, vote.ts; LAW_NAME: LawPicker.tsx, TvCouncil.tsx, politics-view.ts
 pin          slice 2a's council tests (T-AC-40..51) pass unchanged
@@ -393,7 +406,7 @@ today        upkeep runs the month end, collects the law taxes, pays the grant a
              anchors: packages/engine/src/game.ts::advancePhase (upkeep branch),
              packages/engine/src/politics.ts::collectLawTaxes, packages/engine/src/types.ts::FundSource, ::FundLine
              verified_by: read
-tomorrow     MUST charge each player's crew costs owed this month at upkeep, what they have at most, to
+tomorrow     MUST charge each player's crew costs for this month's resolved orders at upkeep, what they have at most, to
              nobody (S4-RULE-9); MUST levy the standard fine on open cases at the last month's upkeep. MUST add
              fund source 'fine' and line 'restitution'.
 logic        → §2 S4-RULE-8, S4-RULE-9
@@ -411,9 +424,11 @@ S4-C9 · MODIFIED · observe() hides orders, guards and unrevealed culprits
 today        observe() hides other seats' ballots, stock, analyses, the seed and the coming grant order.
              anchors: packages/engine/src/observe.ts::observe
              verified_by: read
-tomorrow     MUST, for a seat that is not the owner: drop other players' orders and crew costs; drop the
-             guards unless the seat is the Sheriff; drop incidents that are not public unless the seat
-             ordered them; blank the culprit (by: null) on unrevealed incidents unless the seat ordered them.
+tomorrow     MUST filter, per the frozen HC-4 rule: keep the seat's own orders whole; keep another seat's
+             order only when its effect or its culprit is public (outcome 'done' or 'caught', or
+             culpritPublic), with `by` set to null unless culpritPublic, and `cost` 0; drop every other
+             order (pending, or failed unseen). Keep politics.guards only for the sitting Sheriff (else []).
+             Keep politics.rumoured (public: the posted prices before the auction's shift).
 logic        → §2 S4-RULE-12
 seam         observe.ts (WS1 named edit), beside the ballot hiding
 mechanism    in_place
@@ -431,7 +446,7 @@ today        VoteHand runs, votes, sets the tax and, as Governor in planning pro
              verified_by: read
 tomorrow     MUST add SabotageHand.order and SheriffHand.guard / investigate / fine (S4-RULE-13), each with
              its own seat-salted stream, called by VoteHand in planning proper right after govern (no new
-             construction site in the server or the sim). MUST vote on the ban by banLawValue (S4-RULE-13).
+             construction site in the server or the sim). MUST vote on the ban by lawWorth (S4-RULE-13).
 logic        → §2 S4-RULE-13 · once per month in planning proper · reads observe() and WS1's values
 seam         packages/ai/src/hands/sabotage.ts and sheriff.ts (new, WS7: "new hands for the Sheriff,
              sabotage and budget", the PM's AI split); vote.ts calls them
@@ -445,13 +460,13 @@ depends_on   S4-C11 (contract, stubbable), S4-C20
 ```
 
 ```
-S4-C11 · ADDED · WS1's six valuations for sabotage and the Sheriff
+S4-C11 · ADDED · WS1's valuations for sabotage, the Sheriff and the ban
 
 today        value.ts prices plots, goods, cash reserves; nothing values sabotage or guards.
              anchors: packages/ai/src/value.ts::Mind, ::cashReserve, ::yieldOf
              verified_by: read
-tomorrow     MUST export sabotageGain, captureCost, guardValue, investigateValue, fineChoice and banLawValue
-             with the signatures in §10 (Hand decisions).
+tomorrow     MUST export sabotageGain, captureCost, guardValue, investigateValue (WS1's confirmed names) and
+             value the ban in lawWorth, with the signatures and duties in §10 (Hand decisions).
 seam         packages/ai/src/value.ts (WS1)
 mechanism    sprout
 depends_on   S4-C20 (types)
@@ -484,10 +499,13 @@ today        mule-game.ts handles the politics intents and builds each screen's 
              verified_by: read
 tomorrow     MUST accept sabotage, guard, investigate and fine; MUST add the public sabotage view, the
              orderer's and the Sheriff's private views, and copy MonthEvent.sabotage into EventView; MUST
-             add news lines at production (catches, unseen cuts, rumours), at an investigation and at a fine.
+             add news lines at production (catches, unseen cuts, rumours), at an investigation and at a fine;
+             MUST emit the record's sabotage notices (S4-RULE-12, leak points) through the server's
+             partyTo(viewerId, secret) helper.
 logic        → §2 S4-RULE-12
-seam         mule-game.ts handle cases and monthEventView's copy, server.ts isIntent (WS3 named edits);
-             politics-view.ts sabotageView, mySabotageView, sabotageNews (WS7)
+seam         mule-game.ts handle cases and monthEventView's copy, server.ts isIntent, record.ts NoticeEntry
+             (WS3 named edits); politics-view.ts sabotageView, mySabotageView, sabotageNews,
+             sabotageNotices (WS7)
 mechanism    in_place
 pin          apps/server/test/politics.test.ts rows pass unchanged; the board view's privacy test gains
              the new keys
@@ -578,9 +596,9 @@ tomorrow     MUST land first, in one commit, everything in §3: engine types (WS
              (WS3), the POLITICS config blocks with placeholders (WS7), and sabotage.ts with every export's
              signature: the flow functions (newSabotageMonth, resolveSabotage, applyRumours, endRumours,
              settleSabotage, closeCases) are no-ops and sabotageEvents returns [], the intent functions throw
-             RuleError('Sabotage is not built yet'), so every existing test passes; plus a no-op breakPacts
-             and a securitySpend returning 0, with slice 3's and slice 5's signatures, if those slices have
-             not landed them. PR-0 wires no call into game.ts or production.ts.
+             RuleError('Sabotage is not built yet'), and captureOdds returns 0, so every existing test passes;
+             plus, if slice 3's or slice 5's engine PRs have not landed: pactBreach returning false and a
+             securitySpend returning 0, with their signatures. PR-0 wires no call into game.ts or production.ts.
 mechanism    sprout
 depends_on   none
 ```
@@ -641,7 +659,9 @@ first match wins
   6   rumour, good not a good                                  refuse "Pick a good"
   7   money < the order's cost                                 refuse "A crew costs C cr; you have M"
   8   otherwise                                                the order (replacing any earlier one this month)
-unknown   no earlier order → a new one. The victim is fixed now: the tile's owner at the moment of the order.
+unknown   no earlier order → a new one. The order gets id 'sab-<n>' (a counter: the orders' count + 1),
+          month, cost = the kind's cost now, outcome 'pending', culpritPublic false. Its victim is fixed only
+          when it resolves (the frozen rule: the tile's owner then).
 examples  power cut on Brix's Food plot, Lena has 300 → valid · on her own plot → row 4 · on a free plot →
           row 4 · rumour with 40 cr against cost 60 → row 7 · a second order → replaces the first
 ```
@@ -649,27 +669,31 @@ examples  power cut on Brix's Food plot, Lena has 300 → valid · on her own pl
 ```
 S4-RULE-3 · Resolving an order                                      shape: decision table
 
-evaluated_at  production starts (resolveSabotage), each order in seat order; not on a what-if copy
+evaluated_at  production starts (resolveSabotage), each pending order in seat order; not on a what-if copy
 draws         per order, from createRng over (seed, month, POLITICS.sabotage.streamSalt): first works =
-              chance(success), then seen = chance(detect + security share), both drawn for every
-              non-void order so the stream never depends on a guard
-inputs        target (powerCut): owner now = victim? (yes | no) · makes a good now (yes | no) · guarded
-              (the tile index in politics.sabotage.guards: yes | no) · works (yes | no) · seen (yes | no)
-first match wins
-  #   when                                                   then
-  1   powerCut, owner now ≠ victim or makes no good now        void: no incident, no charge, the orderer's
-                                                               own result says "the crew found nothing"
-  2   powerCut, guarded                                        fails; revealed 'guard' (S4-RULE-5)
-  3   works and seen                                           works; revealed 'caught'
-  4   works, not seen                                          works; unrevealed; public (its effect shows)
-  5   not works, seen                                          fails; revealed 'caught'
-  6   not works, not seen                                      fails; unrevealed; not public (only the
-                                                               orderer learns)
-charge    rows 2-6 owe the order's cost at upkeep (owed[orderer] += cost); row 1 owes nothing
-security  Security spend (slice 5's line this month) adds POLITICS.sheriff.securityDetect per 100 cr to
-          detect; unknown until slice 5 = 0
-examples  guarded → row 2 whatever the draws · works 0.6 drawn 0.31, detect 0.3 drawn 0.72 → row 4 · the
-          plot sold at the land auction to someone else → row 1
+              chance(success), then seen = chance(captureOdds(state, order)), both drawn for every non-void
+              order so the stream never depends on a guard
+captureOdds   the one formula (frozen export, sabotage.ts): 1 when the target tile is in politics.guards;
+              else min(1, detect + floor(securitySpend / 100) × POLITICS.sheriff.securityDetect).
+              securitySpend unknown until slice 5 = 0. Called on observe()'s copy it sees no guards (except
+              the Sheriff's own view), so the AI's odds are the public ones (HC-4).
+inputs        target (powerCut): owner now (another player | the orderer | nobody) · makes a good now
+              (yes | no) · guarded (yes | no) · works (yes | no) · seen (yes | no)
+first match wins                                      outcome   worked   culpritPublic   victim
+  1   powerCut, owner now is the orderer or nobody,   void: the order is removed from politics.sabotage;
+      or makes no good now                            no charge; the orderer's private notice "the crew
+                                                      found nothing to cut"
+  2   powerCut, guarded                               caught    false    true (S4-RULE-5)   owner now
+  3   works and seen                                  caught    true     true               owner now / null
+  4   works, not seen                                 done      true     false              owner now / null
+  5   not works, seen                                 caught    false    true               owner now / null
+  6   not works, not seen                             failed    false    false              owner now / null
+                                                      (rumour: victim null)
+charge    rows 2-6 owe the order's `cost` at this month's upkeep (S4-RULE-9); row 1 owes nothing
+public    an order is public when its outcome is 'done' or 'caught', or culpritPublic: its effect or its
+          culprit is known. A 'failed' order with culpritPublic false is the orderer's alone.
+examples  guarded → row 2 whatever the draws · works 0.6 drawn 0.31, captureOdds 0.3 drawn 0.72 → row 4 · the
+          plot bought at the land auction by the orderer → row 1 · bought by Kai → Kai is the victim
 ```
 
 ```
@@ -699,22 +723,29 @@ examples  Brix's Food plot would make 4 → makes 0, its line's last part {why '
 ```
 
 ```
-S4-RULE-5 · A reveal                                                 shape: sequence
+S4-RULE-5 · An attribution                                          shape: sequence
 
-on every reveal (guard, caught, investigation), in this order:
-  1  incident.revealed = how; revealedMonth = month; multiplier = the ban's setting in force, else 1
-  2  reputationShift(culprit, −POLITICS.sabotage.orders[kind].reputation × multiplier)
-  3  victim ≠ null → breakPacts(state, culprit, victim, 'sabotage')  (slice 3's; a no-op until it lands)
+on every attribution (guarded, caught on the spot, or revealed by an investigation), in this order:
+  1  culpritPublic = true (on the spot, outcome 'caught'; an investigation leaves the outcome 'done')
+  2  moveReputation(state, culprit, POLITICS.reputation.moves.caught × multiplier, 'caught', victim)
+     (slice 3's only writer; multiplier = the ban's setting in force now, else 1)
+  3  victim ≠ null → pactBreach(state, culprit, victim, order.month)  (slice 3, S3-RULE-5: breaks a pact
+     that bound in the order's month, once per card; −20 pactBroken on top)
   4  the case is open for a fine (S4-RULE-8)
-unknown   no ban in force → multiplier 1. Politics off never reaches here (no orders).
-examples  power cut caught, no ban: reputation 50 → 40 · under ban ×2 → 30 · rumour caught, ×3: −15
+sabotagePossible   this slice replaces slice 3's diplomacy.ts sabotagePossible's body with:
+                   state.politics !== null && POLITICS.sabotage.on   (and, if Heiko picks D-S4-2 B, the
+                   host's sabotage switch). Slice 3's pact expiry earns `kept` only while it is true.
+unknown   no ban in force → multiplier 1. Politics off never reaches here (no orders). A rumour has no
+          victim: no pactBreach.
+examples  a power cut caught, no ban, no pact: reputation 50 → 40 · under ban ×2 → 30 · caught against a pact
+          partner, no ban: −10 caught, then −20 pactBroken → 20 · a rumour caught under ×3: −30, no pact check
 ```
 
 ```
 S4-RULE-6 · The Sheriff's guards are valid                           shape: decision table
 
-inputs    actor (the Sheriff | other) · votes open (election or law ballot: yes | no) · plots (list of
-          {x,y}) · each tile's owner (a player | nobody) · count vs max
+inputs    actor (the Sheriff | other) · votes open (election or law ballot: yes | no) · tiles (a list of
+          tile indices) · each tile's owner (a player | nobody) · count vs max
 max       POLITICS.sheriff.guards (2) + floor(security / 100) × POLITICS.sheriff.guardsPerHundred;
           security unknown until slice 5 = 0
 first match wins
@@ -724,7 +755,7 @@ first match wins
   3   actor ≠ the Sheriff                            refuse "Only the Sheriff posts guards"
   4   a tile owned by nobody                         refuse "Guards watch players' plots"
   5   more than max distinct plots                   refuse "You have N guards"
-  6   otherwise                                      guards = the list (replaces the earlier list)
+  6   otherwise                                      politics.guards = the list (replaces the earlier one)
 effect    for this month's production only; cleared when the next planning opens
 examples  2 plots → set · 3 plots → row 5 · the Sheriff's own plot → allowed (design 05: any owner's)
 ```
@@ -732,31 +763,34 @@ examples  2 plots → set · 3 plots → row 5 · the Sheriff's own plot → all
 ```
 S4-RULE-7 · An investigation                                         shape: decision table
 
-inputs    actor · votes open · investigations made this month (0..n) vs POLITICS.sheriff.investigations
-          (1) · the incident: public (yes | no), revealed (yes | no), investigated (yes | no)
+inputs    actor · votes open · investigations this month (orders with investigated = this month: 0..n) vs
+          POLITICS.sheriff.investigations (1) · the order: public (yes | no), outcome, culpritPublic,
+          investigated (a month | null)
 first match wins
   #   when                                           then
   1   politics off, sabotage off, not planning,      refuse as S4-RULE-6 rows 1-3, "investigates"
       vote open, or actor ≠ the Sheriff
   2   no investigation left this month               refuse "One investigation a month"
-  3   incident not public or unknown                 refuse "No such incident"
-  4   already revealed                               refuse "That one is solved"
-  5   already investigated                           refuse "The trail went cold on that one"
-  6   otherwise                                      investigated = true; a draw from createRng over
-                                                     (seed, incident id, salt): < POLITICS.sheriff.
-                                                     investigateOdds → reveal 'investigation'
+  3   order unknown, or not public                   refuse "No such incident"
+  4   culpritPublic already                          refuse "That one is solved"
+  5   investigated ≠ null                            refuse "The trail went cold on that one"
+  6   otherwise (outcome 'done', culprit unknown)    investigated = month; a draw from createRng over
+                                                     (seed, the order's number n of 'sab-<n>', salt):
+                                                     < POLITICS.sheriff.investigateOdds → attribution
                                                      (S4-RULE-5); else cold
-public    the result, solved (with the name) or cold, is public at once (news, the incidents list)
+public    the result, solved (with the name) or cold, is public at once (news, the incidents list, a notice)
 odds      D-S4-1: 0.5 recommended; design 05 says the culprit is always revealed (1.0)
 examples  month 4: Brix investigates "month 3, Kai's Food plot, culprit unknown" → drawn 0.22 → solved,
-          Lena named, her reputation −10 · a second one in month 4 → row 2
+          Lena named, her reputation −10 (and −20 if she held a pact with Kai in month 3) · a second one in
+          month 4 → row 2
 ```
 
 ```
 S4-RULE-8 · Fines                                                    shape: decision table + formula
 
-inputs    actor · the case: revealed (yes | no), fined (yes | no), culprit = actor (yes | no) · base ∈
-          POLITICS.sheriff.fine.steps (50, 100, …, 300) · multiplier (fixed at reveal) · culprit's money
+inputs    actor · the case (an order): culpritPublic (yes | no), fine (null | set), by = actor (yes | no) ·
+          base ∈ POLITICS.sheriff.fine.steps (50, 100, …, 300) · multiplier (the ban in force at the levy,
+          else 1) · culprit's money
 first match wins (the Sheriff's fine, in planning once the votes are over)
   #   when                                           then
   1   not the Sheriff, not planning, vote open,      refuse as S4-RULE-6 rows 1-3, "fines"
@@ -767,8 +801,7 @@ first match wins (the Sheriff's fine, in planning once the votes are over)
                                                      applies when planning ends)
   5   base not a step                                refuse "A fine is 50 to 300 cr, in steps of 50"
   6   otherwise                                      levy base × multiplier, by 'sheriff'
-standard  closeCases at planning's end: every case revealed before this planning opened, or during it,
-          and not fined → levy POLITICS.sheriff.fine.standard (150) × multiplier, by 'standard'. At the last
+standard  closeCases at planning's end: every order with culpritPublic and no fine → levy POLITICS.sheriff.fine.standard (150) × multiplier, by 'standard'. At the last
           month's upkeep (isGameOver), the same for every open case.
 levy      due = base × multiplier; paid = min(culprit's money, due) → fundIn(state, 'fine', paid);
           toVictim = victim ? fundOut(state, 'restitution', round(paid × POLITICS.sheriff.victimShare)) to
@@ -781,9 +814,10 @@ examples  base 150, no ban, Lena has 500 → Lena −150, fund +150 −75, Brix 
 S4-RULE-9 · The crew's cost                                          shape: formula
 
 at upkeep, after collectLawTaxes (settleSabotage), each player in seat order:
-  paid = min(money, owed[player]); money −= paid; owed[player] = 0. The money goes to nobody (a sink).
-unknown   no entry → 0.
-examples  owed 120, money 500 → 380 · owed 120, money 90 → 0, 30 waived
+  due = Σ cost of the player's orders with month = this month and outcome ≠ 'pending' (void ones were
+  removed); paid = min(money, due); money −= paid. The money goes to nobody (a sink).
+unknown   no such order → 0. It runs once a month, so an order is never charged twice.
+examples  one order, cost 120, money 500 → 380 · money 90 → 0, 30 waived
 ```
 
 ```
@@ -791,10 +825,11 @@ S4-RULE-10 · The sabotage ban                                        shape: dec
 
 law       sabotageBan, settings POLITICS.laws.sabotageBan.settings = [2, 3], through slice 2a's council
           (RULE-40..42 unchanged; it takes one of the three places)
-effect    the multiplier fixed on each case at its reveal (S4-RULE-5): the fine and the reputation loss
-          × setting. A case revealed before the ban passed keeps multiplier 1.
-preview   lawImpact(sabotageBan at s)[player].cost = round(revealedCases(player) / monthsPlayed ×
-          POLITICS.sheriff.fine.standard × (s − 1)), from public facts only (revealed cases); 0 for a
+effect    the setting multiplies the reputation move at the attribution (S4-RULE-5) and the fine at its
+          levy (S4-RULE-8), whichever ban is in force at that moment.
+preview   lawImpact(sabotageBan at s)[player].cost = round(attributed(player) / monthsPlayed ×
+          POLITICS.sheriff.fine.standard × (s − 1)), attributed = the player's orders with culpritPublic,
+          from public facts only; 0 for a
           player never caught. A repeal shows the same as a saving.
 words     "Sabotage ban ×2: a caught saboteur pays twice the fine and loses twice the reputation" ·
           For you: "Nothing, unless you are caught" or "About N cr a month on your record"
@@ -813,20 +848,42 @@ pin       slice 1's and the untimed election's tests, run with both offices (AM-
 ```
 
 ```
-S4-RULE-12 · Who sees what                                           shape: decision table
+S4-RULE-12 · Who sees what, and every leak point                     shape: decision table
 
   item                                       orderer   Sheriff   other phones   TV / board   observe()
-  an order, its target, its crew cost        yes       no        no             no           own only
-  the guards                                 no*       yes       no             no           Sheriff only
-  an incident that worked, or was revealed   yes       yes       yes            yes          yes
-  its culprit, unrevealed                    yes       no        no             no           own only
-  its culprit, revealed                      yes       yes       yes            yes          yes
+  a pending order, its target, its cost      yes       no        no             no           own only
+  politics.guards                            no*       yes       no             no           Sheriff only
+  an order that worked (done), or caught     yes       yes       yes            yes          yes, by null
+                                                                                             unless public
+  its culprit, not public                    yes       no        no             no           own only
+  its culprit, culpritPublic                 yes       yes       yes            yes          yes
   a failed, unseen order                     yes       no        no             no           own only
   the order terms (cost, works %, caught %)  yes       yes       yes            yes          yes
   investigations left, guards' max           yes       yes       yes            yes          yes
   an investigation's result                  yes       yes       yes            yes          yes
   a fine (due, paid, to the victim, by whom) yes       yes       yes            yes          yes
   * unless the orderer is the Sheriff.
+the server   every view and notice goes through partyTo(viewerId, secret): an order's party is its `by`,
+             the guards' party is the sitting Sheriff.
+leak points (the frozen rule's list)
+  news       lines only for public facts: a worked cut or rumour ("someone"), a catch (the name), an
+             investigation's result, a fine. Never a pending order, a guard, a failed unseen order, a crew cost.
+  notices    record.ts NoticeEntry gains (WS3 named edit):
+             { kind: 'sabotage'; order: string; target: SabotageTarget['kind']; victim: PlayerId | null;
+               outcome: 'done' | 'failed' | 'caught' | 'void'; culprit: PlayerId | null; parties?: [PlayerId] }
+             (public, culprit null unless culpritPublic, for a done or caught order; private with
+             parties [by] for the orderer's own failed or void order and its culprit),
+             { kind: 'investigation'; order: string; solved: boolean; culprit: PlayerId | null } (public),
+             { kind: 'fine'; order: string; culprit: PlayerId; due: number; paid: number; toVictim: number }
+             (public). No notice for an order placed or a guard posted. Slice 3's reputation notice carries
+             the 'caught' move (public).
+  WS2's brain  reads notices only and MUST skip one whose `parties` excludes its seat (slice 3's rule).
+  MonthReport  report.events carry MonthEvent.sabotage with the culprit only if attributed by then; a later
+             investigation does not rewrite an old report (screens read culpritPublic from the view).
+             report.ledger shows 'fine' and 'restitution'. No order, guard or crew cost in the report.
+  the record  the intent entries hold orders and guards (needed for replay). The record is server-side; no
+             reader that serves a seat (WS2's memory, the playbook outcome reader) reads intent entries of
+             another seat. WS3 to confirm.
 accepted  a player's money is public, so a crew cost at upkeep can be inferred by arithmetic against the
           public taxes and pay (as AM-8 accepted for vote totals). A guard is revealed only by the catch it
           makes (design 05).
@@ -836,27 +893,33 @@ accepted  a player's money is public, so a crew cost at upkeep can be inferred b
 S4-RULE-13 · The AI's sabotage and Sheriff acts                       shape: decision table
 
 when      VoteHand's planning-proper step (stage over or none), once a month, after govern; each hand's
-          draws from its own stream: createRng over (mind.salt ^ hand salt, month), never state.seed
+          draws from its own stream: createRng over (mind.salt ^ hand salt, month), never state.seed. Every
+          input is observe(state, me) (HC-4); `me` = mind.me.
 SabotageHand.order (every seat)
-  gate    level.sabotage and persona.spite > 0 and orderTerms show sabotage on and no order this month
-  cands   powerCut on each working plot of each other player (minus the seat's own guards, if Sheriff);
-          rumour on each good, up and down
-  net(c)  spite × sabotageGain(obs, mind, c) × (grudge if c's victim has a revealed case against this
-          seat: POLITICS.ai.sabotage.grudge, else 1) − cost(c) − detect(c) × captureCost(obs, mind, c)
-  1   best net ≥ POLITICS.ai.sabotage.minEdge, cost ≤ money − cashReserve(obs, mind), and
+  gate    level.sabotage and persona.spite > 0 and sabotagePossible(obs) and no pending order of its own
+  cands   powerCut on each working plot of each other player (minus obs.politics.guards: only a Sheriff
+          sees any); rumour on each good, up and down. Each candidate is a SabotageOrder literal (id '',
+          outcome 'pending', cost the kind's cost) for WS1's values and captureOdds.
+  net(c)  spite × sabotageGain(obs, me, c) × (POLITICS.ai.sabotage.grudge if c's victim is the culprit of
+          a public order against this seat, else 1) − c.cost − captureOdds(obs, c) × captureCost(obs, me, c)
+          captureCost counts the pact break when pactBetween(obs, me, victim) holds, so slice 3's "S4's
+          SabotageHand · pact check" row is this term (no separate breakGain call).
+  1   best net ≥ POLITICS.ai.sabotage.minEdge, c.cost ≤ money − cashReserve(obs, mind), and
       chance(POLITICS.ai.sabotage.orderChance[persona])                      order the best
   2   otherwise                                                              nothing
 SheriffHand (only the sitting Sheriff)
-  guard        the max plots with the highest guardValue (a tie: a draw); Rookie: a seeded pick among
-               players' working plots
-  investigate  if one is left: the public, unsolved, uninvestigated incident with the highest
-               investigateValue, if > 0; Rookie: the newest
-  fine         every case it may fine: base = fineChoice, clamped to the steps; Rookie: the standard fine
+  guard        the guardsMax plots with the highest guardValue(obs, me, plot) (a tie: a draw); Rookie: a
+               seeded pick among players' working plots
+  investigate  if one is left: the public order with culprit unknown and never investigated with the
+               highest investigateValue(obs, me, suspect), if > 0; Rookie: the newest
+  fine         every case it may fine, a hand rule (no WS1 value): POLITICS.ai.sheriff.fine.leader against
+               the Worth leader, .partner against a pact partner (pactBetween), else the standard fine;
+               Rookie: the standard fine
 VoteHand (in place)
   run          unchanged: runSheriff per persona once the office is elected (RULE-8 / RULE-63)
-  law vote     sabotageBan: yes iff banLawValue(obs, mind, setting) ≥ 0, after the Governor and Rookie rows
-               and before the median row (slice 2a RULE-46)
-  propose      unchanged: the ban enters the candidates through POLITICS.laws and lawImpact's preview
+  law vote     sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0, after the Governor and Rookie rows
+               (lawWorth replaces lawCost for every law, WS7's ruling; the ban's duties are in §10)
+  propose      unchanged rule; the ban enters the candidates through POLITICS.laws, valued by lawWorth
 examples  a Tycoon Saboteur, second on Worth, the leader's Crystite plot worth 400 a month: net 1.5 × 240 −
           120 − 0.3 × 300 = 150 ≥ 0, coin 0.6 → orders · a Trader (spite 0) → never · a Rookie → never
 ```
@@ -892,134 +955,131 @@ byte-identical.
 All ADDED, none breaking (new optional fields, new union members). Every name below lands in the contract
 commit (S4-C20) so engine, server, AI and screens build in parallel from day one.
 
-**Engine types** (`packages/engine/src/types.ts`, WS3 named edit):
+**Engine types** (`packages/engine/src/types.ts`, WS3 named edit). The frozen types, as WS7 froze them:
 
 ```ts
-export type SabotageKind = 'powerCut' | 'rumour';
-/** A secret order: a power cut on a plot (by its coordinates), or a rumour moving a good's opening price. */
-export type SabotageOrder =
-  | { kind: 'powerCut'; x: number; y: number }
+export type SabotageTarget =
+  | { kind: 'powerCut'; tile: number }                        // the victim is the tile's owner when the order resolves
   | { kind: 'rumour'; good: Good; dir: 'up' | 'down' };
-export type Revealed = 'guard' | 'caught' | 'investigation';
-export interface SabotageFine {
-  base: number; due: number; paid: number; toVictim: number;
-  by: 'sheriff' | 'standard'; month: number;
-}
-/** One resolved order. Public once it worked or was revealed; only its orderer knows it otherwise. */
-export interface Incident {
-  id: number;                     // 1, 2, … in resolution order, for the game
+export interface SabotageOrder {
+  id: string;               // 'sab-<n>'
+  by: string;
   month: number;
-  kind: SabotageKind;
-  order: SabotageOrder;
-  /** The orderer. null only in an observed copy where it is hidden (S4-RULE-12). */
-  by: string | null;
-  victim: string | null;          // the plot's owner at the order; null for a rumour
-  plot: number | null;            // tile index; null for a rumour
-  good: Good;                     // the plot's good, or the rumour's
-  worked: boolean;
-  public: boolean;                // worked or revealed
-  revealed: Revealed | null;
-  revealedMonth: number | null;
-  multiplier: number;             // the ban's setting at reveal; 1 without, and until revealed
-  investigated: boolean;
-  fine: SabotageFine | null;
+  target: SabotageTarget;
+  cost: number;
+  outcome: 'pending' | 'done' | 'failed' | 'caught';
+  culpritPublic: boolean;   // true once caught, or later revealed by an investigation
 }
-export interface Sabotage {
-  /** Secret, per player: this month's order and its victim, until production resolves it. */
-  orders: Record<string, { order: SabotageOrder; victim: string | null }>;
-  /** Secret, the Sheriff's: tile indices guarded for this month's production. */
-  guards: number[];
-  investigations: number;         // made this month
-  incidents: Incident[];
-  /** Secret, per player: crew costs due at this month's upkeep. */
-  owed: Record<string, number>;
-  /** Worked rumours live in this auction: the good and its posted price before the shift. */
-  rumours: { good: Good; from: number }[];
+// Politics.sabotage: SabotageOrder[] (the whole game). Politics.guards: number[] (this month's guarded tiles).
+```
+
+**Requested additions to the frozen types (all additive and optional, so WS1's stubs still compile; raised with
+WS7 on 7 Nov):**
+
+```ts
+export interface SabotageOrder {
+  // … the frozen fields, plus:
+  /** Set when it resolves: the tile's owner then; null for a rumour, and while pending. Needed later: a plot
+   *  changes hands, and an investigation months on must still name the victim for pactBreach and the fine. */
+  victim?: string | null;
+  /** Set when it resolves: whether the effect happened. 'caught' alone cannot say whether the plot went dark. */
+  worked?: boolean | null;
+  /** The month the Sheriff investigated it; null never. Once-only, and the month's count (S4-RULE-7). */
+  investigated?: number | null;
+  /** The fine levied on it, once (S4-RULE-8). */
+  fine?: SabotageFine | null;
 }
-// Politics gains:  sabotage: Sabotage
+export interface SabotageFine { base: number; due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard'; month: number }
+// observe() (and only observe) sets `by` to null on another seat's public order whose culprit is not public.
+// Requested: `by: string | null` on SabotageOrder for that. Fallback if WS7 keeps `by: string`: observe drops
+// those orders, and the hands read the public incidents from the view-shaped list politicsIncidents(obs) instead.
+// Politics gains (requested): rumoured: { good: Good; from: number }[] — worked rumours live in this auction and
+// the posted price before each shift, so endRumours restores it exactly (a ratio cannot invert the rounding).
+// A void order is removed from Politics.sabotage, so no 'void' outcome is needed.
+
+// RepCause (slice 3) gains: | 'caught'          POLITICS.reputation.moves gains: caught: -10
 // LawId gains:     | 'sabotageBan'
 // EventKey gains:  | 'powerCut' | 'marketRumour'      EventKind gains: | 'sabotage'
-// MonthEvent gains: sabotage?: { incident: number; culprit: string | null; worked: boolean; guarded: boolean }
+// MonthEvent gains: sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean }
 // FundSource gains: | 'fine'                           FundLine gains:  | 'restitution'
+// NoticeEntry (record.ts) gains the three kinds in S4-RULE-12
 ```
 
 **Engine exports** (`packages/engine/src/sabotage.ts`, WS7; re-exported from index.ts like politics.ts):
-`orderSabotage(state, playerId, order: SabotageOrder | null): void` · `setGuards(state, playerId, plots:
-{ x: number; y: number }[]): void` · `investigate(state, playerId, incidentId: number): Incident` ·
-`fineCulprit(state, playerId, incidentId: number, base: number): void` · `resolveSabotage(state): void` ·
-`sabotageEvents(state): MonthEvent[]` · `applyRumours(state): void` · `endRumours(state): void` ·
-`settleSabotage(state): void` · `closeCases(state): void` · `newSabotageMonth(state): void` ·
-`orderTerms(state): Record<SabotageKind, { cost: number; success: number; detect: number }>` ·
-`canOrder(state, playerId): true | 'off' | 'notPlanning'` · `guardsMax(state): number` ·
-`sheriffCanAct(state, playerId): true | 'off' | 'notPlanning' | 'votesOpen' | 'notSheriff'` ·
-`fineable(state, playerId): number[]` · `banMultiplier(state): number`.
+`captureOdds(state, order: SabotageOrder): number` (frozen; 0..1, S4-RULE-3) ·
+`orderSabotage(state, playerId, target: SabotageTarget | null): void` · `setGuards(state, playerId, tiles:
+number[]): void` · `investigate(state, playerId, orderId: string): SabotageOrder` · `fineCulprit(state,
+playerId, orderId: string, base: number): void` · `resolveSabotage(state): void` · `sabotageEvents(state):
+MonthEvent[]` · `applyRumours(state): void` · `endRumours(state): void` · `settleSabotage(state): void` ·
+`closeCases(state): void` · `newSabotageMonth(state): void` · `orderTerms(state): Record<SabotageTarget['kind'],
+{ cost: number; success: number; detect: number }>` · `canOrder(state, playerId): true | 'off' |
+'notPlanning'` · `guardsMax(state): number` · `sheriffCanAct(state, playerId): true | 'off' | 'notPlanning' |
+'votesOpen' | 'notSheriff'` · `fineable(state, playerId): string[]` · `banMultiplier(state): number` ·
+`isPublicOrder(order): boolean` (S4-RULE-3's public).
 `events.ts` (WS1) exports `storeEvent(state, key, phase, player?)` (today's private `offMapAtStore`).
-
-**Slice 3's hook (named here; slice 3 provides it):** `breakPacts(state: GameState, by: string, against:
-string, cause: 'sabotage'): void`, exported from the engine (slice 3's file; `diplomacy.ts` is the WS7 path
-SEAMS already lists). It applies slice 3's pact-break reputation loss for every pact between the two and ends
-them. Until slice 3 lands it, S4-C20 ships a no-op with this signature. WS7 reconciles the name with the
-slice-3 writer at the merge.
+`diplomacy.ts` (slice 3, WS7): this slice replaces `sabotagePossible`'s body (S4-RULE-5) and calls
+`moveReputation` and `pactBreach`; `pactBetween` feeds the order screen's warning and captureCost.
 
 **Slice 5's input (named here; slice 5 provides it):** `securitySpend(state: GameState): number`, the credits
-on the Security line this month. S4-RULE-3 and S4-RULE-6 read it; until slice 5 lands, 0.
+on the Security line this month (the frozen Budget has a 'security' line that joins after slice 4). S4-RULE-3
+and S4-RULE-6 read it; until slice 5 lands, 0.
 
 **Protocol** (`packages/protocol/src/index.ts`, WS3 named edits; `apps/server/src/server.ts::isIntent`):
 
 ```ts
 // MuleIntent gains (AiAction gains the same four, WS1's actions.ts):
-| { type: 'sabotage'; order: SabotageOrder | null }        // planning; null withdraws
-| { type: 'guard'; plots: { x: number; y: number }[] }     // the Sheriff, after the votes; the whole list
-| { type: 'investigate'; incident: number }                // the Sheriff, after the votes
-| { type: 'fine'; incident: number; amount: number }       // the Sheriff; amount = base, before the ban
+| { type: 'sabotage'; target: SabotageTarget | null }     // planning; null withdraws
+| { type: 'guard'; tiles: number[] }                      // the Sheriff, after the votes; the whole list
+| { type: 'investigate'; order: string }                  // the Sheriff, after the votes
+| { type: 'fine'; order: string; amount: number }         // the Sheriff; amount = base, before the ban
 
-/** An incident as every screen sees it. */
+/** A public order as every screen sees it: an incident. */
 export interface IncidentView {
-  id: number; month: number; kind: SabotageKind;
+  id: string; month: number; kind: SabotageTarget['kind'];
   victim: string | null; at: { x: number; y: number } | null; good: Good; dir?: 'up' | 'down';
   worked: boolean;
-  culprit: string | null;                 // only once revealed (or on the orderer's own list)
-  revealed: Revealed | null;
+  culprit: string | null;                 // only when culpritPublic (or on the orderer's own list)
+  how: 'guard' | 'caught' | 'investigation' | null;
   investigated: boolean;
-  multiplier: number;
   fine: { due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard' } | null;
 }
 // PoliticsView gains (public, every screen and the board):
 sabotage?: {
-  terms: Record<SabotageKind, { cost: number; success: number; detect: number }>;
-  incidents: IncidentView[];               // public ones only
+  terms: Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
+  incidents: IncidentView[];               // public orders only
   sheriff: { guards: number; investigations: number; investigationsLeft: number };
 } | null;                                   // null with sabotage off
 // MyPoliticsView gains (the owner's phone only):
 sabotage?: {
-  order: SabotageOrder | null;
+  order: SabotageTarget | null;            // this month's pending order
   canOrder: true | 'off' | 'notPlanning';
   owed: number;                            // crew cost due at this month's upkeep
-  mine: (IncidentView & { public: boolean })[];  // every order this player made, culprit = them
+  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];  // culprit = them
 } | null;
 sheriff?: {                                 // only on the sitting Sheriff's view
   canAct: true | 'off' | 'notPlanning' | 'votesOpen';
-  guards: { x: number; y: number }[];
+  guards: number[];                        // tile indices
   max: number;
   investigationsLeft: number;
-  fineable: number[];                      // incident ids
+  fineable: string[];                      // order ids
   steps: number[];                         // fine bases allowed
-  multiplier: number;                      // the ban in force now (a case keeps its own)
+  multiplier: number;                      // the ban in force now
 } | null;
-// EventView gains: sabotage?: { incident: number; culprit: string | null; worked: boolean; guarded: boolean }
+// EventView gains: sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean }
 ```
 
-Visibility is S4-RULE-12; the board's key allow-list (the server's privacy test) gains `sabotage` with
-`terms`, `incidents`, `sheriff` and nothing else.
+`how` is derived for the view: 'guard' from that month's production event (`guarded`), 'caught' for any other
+outcome 'caught', 'investigation' when culpritPublic with outcome 'done'. Visibility is S4-RULE-12; the board's
+key allow-list (the server's privacy test) gains `sabotage` with `terms`, `incidents`, `sheriff` and nothing else.
 
 Worked example (Brix's phone, month 4 planning, Brix is Sheriff, after the votes):
 `politics.sabotage: { terms: { powerCut: { cost: 120, success: 0.6, detect: 0.3 }, rumour: { cost: 60,
-success: 0.8, detect: 0.15 } }, incidents: [{ id: 1, month: 3, kind: 'powerCut', victim: 'kai', at: { x: 4,
-y: 2 }, good: 'food', worked: true, culprit: null, revealed: null, investigated: false, multiplier: 1, fine:
-null }], sheriff: { guards: 2, investigations: 1, investigationsLeft: 1 } }`, `me.politics.sheriff: { canAct:
-true, guards: [], max: 2, investigationsLeft: 1, fineable: [], steps: [50, 100, 150, 200, 250, 300],
-multiplier: 1 }`, `me.politics.sabotage: { order: null, canOrder: true, owed: 0, mine: [] }`. Lena's phone
-carries incident 1 in `mine` with `culprit: 'lena'`; Brix's, Kai's and the TV's carry `culprit: null`.
+success: 0.8, detect: 0.15 } }, incidents: [{ id: 'sab-1', month: 3, kind: 'powerCut', victim: 'kai', at: { x:
+4, y: 2 }, good: 'food', worked: true, culprit: null, how: null, investigated: false, fine: null }], sheriff: {
+guards: 2, investigations: 1, investigationsLeft: 1 } }`, `me.politics.sheriff: { canAct: true, guards: [],
+max: 2, investigationsLeft: 1, fineable: [], steps: [50, 100, 150, 200, 250, 300], multiplier: 1 }`,
+`me.politics.sabotage: { order: null, canOrder: true, owed: 0, mine: [] }`. Lena's phone carries sab-1 in
+`mine` with `culprit: 'lena'`; Brix's, Kai's and the TV's carry `culprit: null`.
 
 **Config** (`packages/engine/src/config.ts`, the POLITICS block, WS7; placeholders until WS1 tunes, HC-25):
 
@@ -1028,8 +1088,8 @@ sabotage: {
   on: true,                                  // a sim/test switch (--set POLITICS.sabotage.on=false)
   streamSalt: 0x5ab07a6e,                    // literal-ok: the order stream's salt
   orders: {
-    powerCut: { cost: 120, success: 0.6, detect: 0.3, reputation: 10 },
-    rumour:   { cost: 60,  success: 0.8, detect: 0.15, reputation: 5, shift: 0.25 },
+    powerCut: { cost: 120, success: 0.6, detect: 0.3 },
+    rumour:   { cost: 60,  success: 0.8, detect: 0.15, shift: 0.25 },
   },
 },
 sheriff: {
@@ -1038,12 +1098,16 @@ sheriff: {
   fine: { steps: [50, 100, 150, 200, 250, 300], standard: 150 },
   victimShare: 0.5,
 },
+reputation: { …, moves: { …slice 3's, caught: -10 } },  // × the ban's setting
 laws: { …, sabotageBan: { settings: [2, 3] } },          // fine and reputation multiplier
-ai: { …, sabotage: {
-  orderChance: { trader: 0, cautious: 0, aggressive: 0.2, saboteur: 0.6 },
-  minEdge: 0,                                // credits, after spite, cost and expected capture
-  grudge: 2,                                 // weight on a victim who was caught sabotaging this seat
-} },
+ai: { …,
+  sabotage: {
+    orderChance: { trader: 0, cautious: 0, aggressive: 0.2, saboteur: 0.6 },
+    minEdge: 0,                              // credits, after spite, cost and expected capture
+    grudge: 2,                               // weight on a victim caught sabotaging this seat
+  },
+  sheriff: { fine: { leader: 300, partner: 50 } },   // the AI Sheriff's base fine; else the standard
+},
 ```
 
 EVENT_SHOW.weight (WS8's block) gains `powerCut: 'headline', marketRumour: 'headline'`.
@@ -1054,7 +1118,7 @@ EVENT_SHOW.weight (WS8's block) gains `powerCut: 'headline', marketRumour: 'head
 
 | Question | |
 |---|---|
-| Dependency unavailable? | None: orders, rolls and the AI hands are in-process and seeded. Slice 3's breakPacts and slice 5's securitySpend are stubbed (no-op, 0) until they land (S4-C20). |
+| Dependency unavailable? | None: orders, rolls and the AI hands are in-process and seeded. Slice 3's pactBreach (false) and slice 5's securitySpend (0) are stubbed until their engine PRs land (S4-C20). |
 | Retry / poison? | A refused intent throws RuleError and reaches the player as a message; nothing retries. |
 | Idempotency | sabotage and guard set a value (the order, the list); investigate and fine are refused the second time (S4-RULE-7 rows 2, 5; S4-RULE-8 row 3). |
 | Races | An order arriving after planning ended is refused (row 2). The server runs intents and phase changes on one loop. resolveSabotage runs once, in advancePhase's production branch. |
@@ -1077,13 +1141,13 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-B-AC-5 | Given a worked rumour on Food, up · When the auction opens · Then Food's store lines come from the shifted price; after the auction the posted price is what it was | S4-C3 | store.posted and the auction's lines (engine test) | a failed rumour moves nothing |
 | S4-B-AC-6 | Given Lena's order and Brix's guards in planning · When any other screen or the board gets a view · Then neither appears; Lena's money does not move before upkeep | S4-C1 S4-C9 S4-C13 | each view's JSON in planning (server test) | Lena's own view has her order; Brix's has the guards |
 | S4-B-AC-7 | Given month 1 · When the election ends · Then a Governor and a Sheriff hold office, the ceremony showed both, and the Sheriff is paid 30 at upkeep | S4-C6 S4-C16 | the views and money (engine + server tests; the politics e2e's month 1) | one player never holds both offices |
-| S4-B-AC-8 | Given the ban at 2 in force · When a case is revealed and fined 150 · Then the culprit owes 300 and loses 20 reputation; a case revealed before the ban passed keeps ×1 | S4-C7 S4-C4 | engine state | — |
+| S4-B-AC-8 | Given the ban at 2 in force · When a case is revealed and fined 150 · Then the culprit owes 300 and loses 20 reputation (a fine levied before the ban passed was ×1) | S4-C7 S4-C4 | engine state | — |
 | S4-B-AC-9 | Given only Classic AI seats and no API key · When a game is simulated · Then S4-UBER-AC-3 holds | S4-C10 S4-C11 S4-C12 | `pnpm sim` | Rookie and Trader personas never order |
 | S4-B-AC-10 | Given two phones and AI seats, Brix the Sheriff and Lena not · When the e2e step of S4-UBER-AC-2 runs · Then Lena's Secret desk shows her order, Brix's Sheriff desk his guard on the map, the TV the "Caught!" story with Lena's name, and after Brix's fine the month end shows it; the ban shows in the law picker and on the TV council panel | S4-C14 S4-C15 S4-C17 S4-C18 S4-C19 | the phone and TV DOM in apps/web/e2e/politics.ts | Brix's phone never shows Lena's order before production |
 | S4-T-AC-1 (serves S4-B-AC-6) | S4-RULE-2's eight rows, each verdict and message | S4-C1 | engine test | — |
 | S4-T-AC-2 (serves S4-B-AC-1, S4-B-AC-2) | S4-RULE-3's six rows; both draws are made for every non-void order whatever the guard | S4-C2 | engine test, seeded | — |
 | S4-T-AC-3 (serves S4-B-AC-2) | the cut's part is the plot line's last (why 'event', event 'powerCut'); the plot's runMonths still counts | S4-C2 | the production line | — |
-| S4-T-AC-4 (serves S4-B-AC-1, S4-B-AC-8) | S4-RULE-5's order: reputation × multiplier, breakPacts called once with (culprit, victim, 'sabotage'), not for a rumour | S4-C4 | engine test with a spy hook | — |
+| S4-T-AC-4 (serves S4-B-AC-1, S4-B-AC-8) | S4-RULE-5's order: moveReputation(culprit, caught × multiplier, 'caught', victim), then pactBreach called once with (culprit, victim, order.month), not for a rumour; an investigation months later still calls pactBreach with the order's month; sabotagePossible is true exactly when politics and POLITICS.sabotage.on | S4-C4 | engine test with a spy hook | — |
 | S4-T-AC-5 (serves S4-B-AC-3, S4-B-AC-4) | S4-RULE-6, -7, -8 rows; the standard fine at planning's end and at the last upkeep; a short culprit pays what they have; fines never enter treasury.paid | S4-C5 S4-C8 | engine test | — |
 | S4-T-AC-6 (serves S4-B-AC-5) | after endRumours every posted price equals postPrices's; two opposite rumours cancel | S4-C3 | engine test | — |
 | S4-T-AC-7 (serves S4-B-AC-6) | observe() for each seat follows S4-RULE-12's observe column | S4-C9 | engine test | — |
@@ -1109,8 +1173,11 @@ offices; no order and no guard in any view but its owner's or the Sheriff's.
   event table rolls; kind 'sabotage' is excluded (S4-C12).
 - **The crew cost can be inferred from public money at upkeep.** Accepted, recorded in S4-RULE-12, as AM-8
   accepted for vote totals.
-- **Slice 3's pact hook or slice 5's Security spend is late or named differently.** Mitigation: stubs in
-  PR-0; WS7 reconciles both names at the merge of the three specs.
+- **Slice 3's engine PR or slice 5's Security spend lands after this slice's.** Mitigation: stubs in PR-0
+  (pactBreach false, securitySpend 0); slice 3's names are adopted as written.
+- **A caught saboteur under a pact loses 30, not 20.** Slice 3's moment table (§0, "Lena is caught sabotaging
+  Brix during a pact ... her chip −20") predates the 'caught' move; this spec stacks −10 caught and −20
+  pactBroken. WS7 settles the merged wording.
 - **Restoring the Sheriff moves WS1's politics rows** (pay 30 a month from the fund; the AI Governor's
   low-fund bump now counts 80). Mitigation: rows re-measured in PR-3, to Heiko with the sabotage rows (D3).
 - **Election months get longer** (two offices in the ceremony). Mitigation: the ceremony's beats are config
@@ -1151,49 +1218,47 @@ Every decision a code hand makes, so WS1 can start from this list. Hands read `o
 
 | Hand · method | When | Inputs | Output | WS1 value it calls |
 |---|---|---|---|---|
-| SabotageHand.order | planning proper, once a month, after govern | observe; mind (persona.spite, level.sabotage); orderTerms; public incidents; its own guards if Sheriff | an order or none (S4-RULE-13) | sabotageGain, captureCost; cashReserve (exists) |
-| SheriffHand.guard | same, the sitting Sheriff | observe (guards visible to it); guardsMax | the guard list | guardValue |
-| SheriffHand.investigate | same | public unsolved incidents; investigateOdds | one incident or none | investigateValue |
-| SheriffHand.fine | same | fineable cases; steps; multiplier | a base per case | fineChoice |
+| SabotageHand.order | planning proper, once a month, after govern | observe; persona.spite, level.sabotage; orderTerms; captureOdds; public orders; pactBetween | an order or none (S4-RULE-13) | sabotageGain, captureCost; cashReserve (exists) |
+| SheriffHand.guard | same, the sitting Sheriff | observe (politics.guards visible to it); guardsMax | the guard list | guardValue |
+| SheriffHand.investigate | same | public orders with the culprit unknown; investigateOdds | one order or none | investigateValue |
+| SheriffHand.fine | same | fineable orders; steps; pactBetween; the Worth leader | a base per case | none: a hand rule on POLITICS.ai.sheriff.fine |
 | VoteHand.decide (run) | unchanged | runSheriff[persona] | run for Sheriff or not | none (config chance) |
-| VoteHand.lawVote (ban) | the law ballot | the proposal's setting | yes / no | banLawValue |
-| VoteHand.proposeLaw | unchanged | lawImpact (public preview, S4-RULE-10) | the ban among the candidates | none (lawImpact) |
+| VoteHand.lawVote (ban) | the law ballot | the proposal | yes / no | lawWorth |
+| VoteHand.proposeLaw | unchanged | the law candidates | the ban among them | lawWorth |
 
-WS1's functions, all in `packages/ai/src/value.ts`, all pure, all returning credits (none a probability: the
-hands apply the public odds from `orderTerms`):
+WS1's functions, with the names WS7 confirmed (7 Nov), in `packages/ai/src/value.ts`, pure, credits (none a
+probability: the hands apply `captureOdds` and the public success odds). `me` is the seat's id; `obs` is
+`observe(state, me)`. A function that needs persona weights reads them as WS1's existing values do.
 
 ```ts
-/** Credits this seat expects to gain on the table if the order works, before its cost, its odds and capture:
- *  for a power cut, the victim's lost output this month at the prices the seat expects (unitValues / the
- *  posted price), weighted by the victim's Worth lead over the seat (more against the leader, little against
- *  a trailing player); for a rumour, the seat's own expected trades in that good at the shifted opening price
- *  minus the same for the leader. Never negative for a cut; a rumour may be. */
-export function sabotageGain(obs: GameState, mind: Mind, order: SabotageOrder): number;
+/** Credits `me` expects to gain on the table if the order works, before its cost, its odds and capture: for a
+ *  power cut, the victim's lost output this month at the prices `me` expects, weighted by the victim's Worth
+ *  lead over `me` (more against the leader, little against a trailing player); for a rumour, `me`'s own expected
+ *  trades in that good at the shifted opening price minus the same for the leader. Never negative for a cut;
+ *  a rumour may be. Slice 3's pactWorth reads it as "slice 4's expected-damage value". */
+export function sabotageGain(obs: GameState, me: string, order: SabotageOrder): number;
 
-/** Credits a capture would cost the seat, not weighted by the odds: the standard fine × the ban's multiplier
- *  in force, plus the reputation loss (orders[kind].reputation × multiplier) valued as the votes it costs
- *  (POLITICS.weight.repHigh/repLow thresholds) times what a vote is worth to this seat, plus slice 3's
- *  pact-break loss when the victim holds a pact with the seat. */
-export function captureCost(obs: GameState, mind: Mind, order: SabotageOrder): number;
+/** Credits an attribution would cost `me`, not weighted by the odds: the standard fine × the ban's multiplier in
+ *  force; the 'caught' move (POLITICS.reputation.moves.caught × multiplier) through slice 3's reputationCost;
+ *  and, when pactBetween(obs, me, victim, now) holds, the pactBroken move through reputationCost too. */
+export function captureCost(obs: GameState, me: string, order: SabotageOrder): number;
 
-/** Credits a guard on this plot is expected to save this month: the plot's output value × the chance it is
- *  targeted, estimated from public facts only (its owner's Worth rank, the public incident record against
- *  that owner, how much the plot makes). The Sheriff's own plots are valued like anyone's. */
-export function guardValue(obs: GameState, mind: Mind, plot: number): number;
+/** Credits a guard on tile `plot` is expected to save this month: the plot's output value × the chance it is
+ *  targeted, from public facts only (its owner's Worth rank, the public orders against that owner, how much the
+ *  plot makes). The Sheriff's own plots count like anyone's. */
+export function guardValue(obs: GameState, me: string, plot: number): number;
 
-/** Credits solving this incident is worth to the seat as Sheriff, already × POLITICS.sheriff.investigateOdds:
- *  the victim's half of the standard fine if the seat is the victim, the reputation a rival culprit would
- *  lose valued as votes, and a deterrence term. ≤ 0: leave it. */
-export function investigateValue(obs: GameState, mind: Mind, incident: Incident): number;
+/** Credits solving `suspect` (a public order whose culprit `me` cannot see: by null) is worth to `me` as Sheriff,
+ *  already × POLITICS.sheriff.investigateOdds: the victim's half of the standard fine if `me` is the victim, the
+ *  'caught' (and possible pactBroken) loss to a rival culprit valued as votes, a deterrence term. ≤ 0: leave it.
+ *  (WS1's parameter name; it is an order, not a player.) */
+export function investigateValue(obs: GameState, me: string, suspect: SabotageOrder): number;
 
-/** The base fine (one of POLITICS.sheriff.fine.steps, before the multiplier) the seat as Sheriff sets: higher
- *  against the leader and a rival, the lowest step against a pact partner (slice 3), the standard otherwise. */
-export function fineChoice(obs: GameState, mind: Mind, incident: Incident): number;
-
-/** Credits a month the ban at `setting` is worth to the seat: the sabotage it expects against itself
- *  (the public record) × the deterrence of a higher fine, minus the extra fines and reputation it expects to
- *  pay for its own orders (its persona's order rate × detect × standard fine × (setting − 1)). ≥ 0 votes yes. */
-export function banLawValue(obs: GameState, mind: Mind, setting: number): number;
+/** lawWorth(obs, me, proposal) (WS1's, replacing vote.ts's lawCost) MUST value sabotageBan at setting s as:
+ *  the sabotage `me` expects against itself (the public record) × the deterrence of the higher capture cost,
+ *  minus the extra fines and reputation `me` expects for its own orders (its own past orders, which observe
+ *  keeps whole, × captureOdds × standard fine and the caught move × (s − 1)). ≥ 0 votes yes. A repeal is the
+ *  negative. */
 ```
 
 Smart seats use the same code hands in RC; WS2's brain may take these decisions later (non-goal).
@@ -1210,8 +1275,10 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 | File | Owner | Named edit | Change |
 |---|---|---|---|
 | packages/engine/src/sabotage.ts (new) | WS7 | — | orders, resolution, events, rumours, reveal, guards, investigation, fines, settle (S4-C1..C5, C8) |
-| packages/engine/src/politics.ts | WS7 | — | newPolitics's empty sabotage; openPlanning → newSabotageMonth; closeVotes → closeCases; LAW_NAME and enactImpact for the ban; "yet" dropped (S4-C6, C7) |
-| packages/engine/src/config.ts, POLITICS block | WS7 | — | offices + sheriff, sabotage, sheriff, laws.sabotageBan, ai.sabotage |
+| packages/engine/src/politics.ts | WS7 | — | newPolitics's empty sabotage and guards (and rumoured); openPlanning → newSabotageMonth; closeVotes → closeCases; LAW_NAME and enactImpact for the ban; "yet" dropped (S4-C6, C7) |
+| packages/engine/src/diplomacy.ts (slice 3's, new) | WS7 | — | sabotagePossible's body (S4-RULE-5) |
+| packages/engine/src/record.ts | WS3 | yes | NoticeEntry's sabotage, investigation and fine kinds (S4-RULE-12) |
+| packages/engine/src/config.ts, POLITICS block | WS7 | — | offices + sheriff, sabotage, sheriff, reputation.moves.caught, laws.sabotageBan, ai.sabotage, ai.sheriff |
 | packages/engine/src/config.ts, EVENT_SHOW | WS8 | yes | two weight rows |
 | packages/engine/src/types.ts | WS3 | yes | §3's types (S4-C20) |
 | packages/engine/src/game.ts | WS3 | yes | advancePhase: resolveSabotage (production), applyRumours (auction), endRumours and settleSabotage (upkeep): four lines |
@@ -1225,7 +1292,7 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 | apps/server/src/politics-view.ts | WS7 | — | sabotage views and news (S4-C13) |
 | packages/ai/src/hands/sabotage.ts, sheriff.ts (new) | WS7 | SEAMS row to add | S4-C10 |
 | packages/ai/src/hands/vote.ts | WS7 | — | calls the two hands; the ban vote row |
-| packages/ai/src/value.ts | WS1 | — | the six values (S4-C11) |
+| packages/ai/src/value.ts | WS1 | — | sabotageGain, captureCost, guardValue, investigateValue; the ban in lawWorth (S4-C11) |
 | packages/ai/src/actions.ts, play.ts, sim.ts | WS1 | — | four actions, applyAction, the sabotage row, the event budget excludes 'sabotage' (S4-C12) |
 | design/mocks/ws6-ux/** | WS6 | — | P6-P11 mocks for Heiko |
 | apps/web/src/phone/hub/politics/{Secret,Sheriff}.tsx (new), ElectionDay.tsx, words.ts, LawPicker.tsx | WS7 | — | S4-C14..C16, C18 |
@@ -1241,7 +1308,7 @@ and phone Production.tsx take WS6's named edits per the same ruling).
 
 | PR | Owner | Days | Starts after | Contents |
 |---|---|---|---|---|
-| PR-0 contract | WS3 + WS7 | 0.5 | — | S4-C20: types, protocol, isIntent, config, sabotage.ts stubs, breakPacts stub |
+| PR-0 contract | WS3 + WS7 | 0.5 | — | S4-C20: types (frozen + §3's requested fields), protocol, isIntent, NoticeEntry, config, sabotage.ts stubs |
 | PR-1 engine | WS7 (+ WS3/WS1 named edits) | 2 | PR-0 | S4-C1..C8 + game.ts, production.ts, events.ts lines |
 | PR-2 observe | WS1 | 0.5 | PR-0 | S4-C9 |
 | PR-3 values + sim | WS1 | 2 | PR-0 (rows need PR-1, PR-4) | S4-C11, S4-C12 |
