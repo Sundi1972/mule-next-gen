@@ -342,8 +342,9 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   return {
     deciderFor: (seat) => (isClaude(seat) ? null : deciderFor(seat)),
     writerFor: (seat) => (isClaude(seat) ? claude.writerFor(seat) : writerFor(seat)),
-    // Every AI seat of a Smart brain gets a decider, so its routine top picks stay quiet.
-    chatter: (seat, say) => chatter(seat.id, say, 'smart'),
+    // Every builtin AI seat of a Smart brain gets a decider, so its routine top picks stay quiet. A claude seat has none,
+    // so it speaks as it would on a keyless host.
+    chatter: (seat, say) => (isClaude(seat) ? chatter(seat.id, say) : chatter(seat.id, say, 'smart')),
     finish() {
       claude.finish();
       countedAtFinish ??= counted();
