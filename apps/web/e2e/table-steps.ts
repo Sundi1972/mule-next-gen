@@ -578,9 +578,13 @@ async function aFlagTakesTheChipsPlace(planning: Locator, plot: { x: number; y: 
     const [[flag] = [], chips = []] = await rectsOf(map, [`[data-testid=map-flag-${at}]`, '[data-testid^=map-dots-]']);
     check(flag, `${id}: the flag on ${at} is drawn`);
     for (const c of chips) check(!covers(c, flag), `${id}: the SCAN flag on ${at} (${px(flag.left)}–${px(flag.right)}, ${px(flag.top)}–${px(flag.bottom)}) meets a neighbour's dots chip (${px(c.left)}–${px(c.right)}, ${px(c.top)}–${px(c.bottom)})`);
+    // PM ruling A, WS6's glyphs: a 7×7 glyph chip, its word in the plot's label.
+    check(Math.abs(flag.right - flag.left - 7) <= SLACK_PX && Math.abs(flag.bottom - flag.top - 7) <= SLACK_PX && (await map.locator(`[data-testid=map-flag-${at}] svg`).count()) === 1, `${id}: the flag on ${at} is a 7×7 glyph chip, got ${px(flag.right - flag.left)}×${px(flag.bottom - flag.top)}`);
+    const label = (await map.getByTestId(`map-plot-${at}`).getAttribute('aria-label')) ?? '';
+    check(label.includes('drone scan'), `${id}: the flagged plot's label says "drone scan", got "${label}"`);
     await map.getByTestId(`map-plot-${at}`).click({ timeout: PRESS_MS });
     await map.getByTestId(`map-flag-${at}`).waitFor({ state: 'detached', timeout: PRESS_MS });
-    return `the SCAN flag on ${at} takes its chip's place, ${px(flag.right - flag.left)}×${px(flag.bottom - flag.top)}, clear of ${chips.length} chips`;
+    return `the SCAN flag on ${at}, a ${px(flag.right - flag.left)}×${px(flag.bottom - flag.top)} glyph chip, takes its chip's place, clear of ${chips.length} chips`;
   } finally {
     await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
   }

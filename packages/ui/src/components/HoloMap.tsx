@@ -245,6 +245,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 3`),
             ...gems.map((g) => `${GOOD_NAME[g]} here`),
             t.pollution ? `pollution ${t.pollution} of 3` : '',
+            t.flag ? FLAG_WORDS[t.flag] : '',
           ]
             .filter(Boolean)
             .join(', ');
@@ -363,13 +364,24 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   )}
                 </span>
               )}
-              {t.flag && (
+              {t.flag && small && (
+                // Under 16 px a flag is a 7×7 glyph chip in the dots chip's place, on any plot (PM ruling A, WS6's glyphs, SA-1372):
+                // its word would cover a neighbour's dots. The plot's label carries the word.
+                <span
+                  className={cx('absolute left-1/2 z-[4] grid size-[7px] -translate-x-1/2 place-items-center rounded-[1.5px] shadow-chip', FLAG_TONE[t.flag], fade)}
+                  style={{ bottom: SMALL_STRIP.chipFoot }}
+                  data-testid={`map-flag-${at}`}
+                >
+                  <FlagGlyph flag={t.flag} />
+                </span>
+              )}
+              {t.flag && !small && (
                 // z-[4], after the tab: above the disc and the tab.
                 <span
                   className={cx(
                     'absolute right-0.5 top-0.5 z-[4] rounded-chip font-mono font-bold leading-tight shadow-chip',
                     tv ? 'px-1 text-[11px]' : 'px-0.5 text-[10px]',
-                    t.flag === 'sabotage' ? 'bg-alert text-white' : t.flag === 'sale' ? 'bg-warn text-void' : 'bg-holo text-on-holo',
+                    FLAG_TONE[t.flag],
                     fade,
                   )}
                   data-testid={`map-flag-${at}`}
@@ -471,6 +483,34 @@ function bestGoods(dots: Dots, count: number): [Good, number][] {
     delete left[best];
   }
   return out;
+}
+
+/** A plot's flag: its chip's colours, and the words its plot's label says it with (WS6, SA-1372). */
+const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo' } as const;
+const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan' } as const;
+
+/**
+ * A flag's glyph on a small plot, 7×7 in the chip's text colour (WS6's paths, Jira SA-1372 comment 15290): OFF a cross,
+ * SCAN a ring with a centre dot, SALE a gavel drawn as an upright T. They differ by shape, so they read in greyscale.
+ */
+function FlagGlyph({ flag }: { flag: 'survey' | 'sabotage' | 'sale' }) {
+  return (
+    <svg aria-hidden viewBox="0 0 7 7" width={7} height={7}>
+      {flag === 'sabotage' && <path d="M2.1 2.1L4.9 4.9M4.9 2.1L2.1 4.9" stroke="currentColor" strokeWidth={1.15} strokeLinecap="round" />}
+      {flag === 'survey' && (
+        <>
+          <circle cx="3.5" cy="3.5" r="2.05" fill="none" stroke="currentColor" strokeWidth={0.95} />
+          <circle cx="3.5" cy="3.5" r="0.75" fill="currentColor" />
+        </>
+      )}
+      {flag === 'sale' && (
+        <>
+          <rect x="1.4" y="1.5" width="4.2" height="1.6" rx="0.3" fill="currentColor" />
+          <rect x="3" y="3.1" width="1" height="2.5" fill="currentColor" />
+        </>
+      )}
+    </svg>
+  );
 }
 
 /** A found Crystite or Rare earth, `size` wide (a share of the plot, or px in the small strip); a second gem overlaps the first by half. */
