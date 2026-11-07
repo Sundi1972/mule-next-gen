@@ -243,9 +243,9 @@ export function closePlanningDeals(state: GameState): void {
   for (const card of editPolitics(state).deals.filter(open)) Object.assign(card, { status: 'expired', settled: state.month });
 }
 
-/** Whether a sabotage can happen in this game, so a pact can be broken: false until slice 4 replaces this body. */
-export function sabotagePossible(_state: GameState): boolean {
-  return false;
+/** Whether a sabotage can happen in this game, so a pact can be broken: politics is on and so is POLITICS.sabotage.on (S4-RULE-5, D-S4-2 A: no lobby switch). */
+export function sabotagePossible(state: GameState): boolean {
+  return state.politics !== null && POLITICS.sabotage.on;
 }
 
 /** The pact that binds these two players in a month (default: this one), active or already ended kept; null when none. */
@@ -302,13 +302,14 @@ function unrestMonths(state: GameState, playerId: string): Set<number> {
 }
 
 /**
- * Why a player's reputation fell, from what is already public (S3-RULE-7): the cards they broke and the months they
- * were blamed for unrest, newest first (a card's month is the month it broke; on a tie the card first). Nothing is stored.
+ * Why a player's reputation fell, from what is already public (S3-RULE-7): the cards they broke, the months an order of theirs
+ * was attributed (slice 4) and the months they were blamed for unrest, newest first (a card's month is the month it broke; on a tie the card first). Nothing is stored.
  */
 export function reputationReasons(state: GameState, playerId: string): ReputationReason[] {
   const broken = (state.politics?.deals ?? []).filter((d) => d.status === 'broken' && d.brokenBy === playerId);
   const reasons: [number, ReputationReason][] = [
     ...broken.map((card): [number, ReputationReason] => [card.settled!, { kind: 'broken', card }]),
+    ...(state.politics?.sabotage ?? []).filter((o) => o.by === playerId && o.culpritPublic).map((o): [number, ReputationReason] => [o.month, { kind: 'caught', month: o.month }]),
     ...[...unrestMonths(state, playerId)].map((month): [number, ReputationReason] => [month, { kind: 'unrest', month }]),
   ];
   return reasons.sort(([a], [b]) => b - a).map(([, reason]) => reason);

@@ -1,15 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// S4-T-AC-4's spy: a pass-through that records the two hooks in the order they run. vi.spyOn on an ESM namespace would
-// not intercept sabotage.ts's own import of them; vi.mock replaces the module sabotage.ts imports.
-const hooks = vi.hoisted(() => ({ calls: [] as { fn: 'reputationShift' | 'pactBreach'; args: unknown[] }[] }));
+// S4-T-AC-4's spy: a pass-through that records pactBreach with the saboteur's reputation at the moment of the call, so
+// the order of the two hooks shows (reputationShift has already run if the reputation has moved). vi.spyOn on an ESM
+// namespace would not intercept sabotage.ts's own import; vi.mock replaces the module sabotage.ts imports. politics.js
+// cannot be wrapped the same way (it imports sabotage.js, so its mock factory would load a cycle), hence the reading.
+const hooks = vi.hoisted(() => ({ calls: [] as { fn: 'pactBreach'; args: unknown[]; reputation: number }[] }));
 vi.mock('../src/diplomacy.js', async (original) => {
   const real = await original<typeof import('../src/diplomacy.js')>();
-  return { ...real, pactBreach: (...args: Parameters<typeof real.pactBreach>) => (hooks.calls.push({ fn: 'pactBreach', args }), real.pactBreach(...args)) };
-});
-vi.mock('../src/politics.js', async (original) => {
-  const real = await original<typeof import('../src/politics.js')>();
-  return { ...real, reputationShift: (...args: Parameters<typeof real.reputationShift>) => (hooks.calls.push({ fn: 'reputationShift', args }), real.reputationShift(...args)) };
+  return {
+    ...real,
+    pactBreach: (...args: Parameters<typeof real.pactBreach>) => {
+      hooks.calls.push({ fn: 'pactBreach', args, reputation: args[0].players.find((p) => p.id === args[1])!.reputation });
+      return real.pactBreach(...args);
+    },
+  };
 });
 import {
   advancePhase,
@@ -515,11 +519,6 @@ describe('a sabotage month through advancePhase', () => {
 
 // --- Task S4-1.4: the one reveal -----------------------------------------------------------------------------------
 
-/** What the two hooks were called with since the last reset, as [fn, culprit-or-saboteur, ...] for the calls about `who`. */
-function hookCalls(who: string) {
-  return hooks.calls.filter((c) => c.args[1] === who);
-}
-
 /** A pact between Lena and Brix that binds months 1 to 3. */
 function pactLenaBrix(state: GameState): void {
   state.politics!.deals.push({ id: 'deal-pact001', from: 'lena', to: 'brix', terms: { kind: 'pact' }, offered: 1, until: 3, status: 'active', brokenBy: null, settled: null });
@@ -531,13 +530,16 @@ describe('the one reveal', () => {
 
   const caughtMove = () => POLITICS.reputation.moves.caught;
 
-  it('S4-T-AC-4: a guarded cut: reputationShift(culprit, caught x multiplier) first, then pactBreach once with (culprit, victim, order.month)', () => {
+  it('S4-T-AC-4: a guarded cut: reputationShift(culprit, caught x multiplier) first (seen in the reputation pactBreach is called with), then pactBreach once with (culprit, victim, order.month)', () => {
     const { state } = monthOfSabotage(4, [{ by: 'lena', target: cutBrix }], (p) => [p.food]);
     resolveSabotage(state);
     const order = state.politics!.sabotage[0]!;
-    expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach']);
-    expect(hooks.calls[0]!.args.slice(1)).toEqual(['lena', caughtMove() * 1]);
-    expect(hooks.calls[1]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
+    const before = 50;
+    expect(state.players[0]!.reputation).toBe(before + caughtMove());
+    expect(hooks.calls).toHaveLength(1);
+    expect(hooks.calls[0]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
+    // The caught move was already made when pactBreach was called: reputationShift first, then the pact.
+    expect(hooks.calls[0]!.reputation).toBe(before + caughtMove() * 1);
     expect(order.culpritPublic).toBe(true);
   });
 
@@ -547,8 +549,9 @@ describe('the one reveal', () => {
       const seed = seedFor({ works: worked, seen: true }, cutBrix);
       const { state } = monthOfSabotage(seed, [{ by: 'lena', target: cutBrix }]);
       resolveSabotage(state);
-      expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach']);
-      expect(hooks.calls[1]!.args.slice(1, 4)).toEqual(['lena', 'brix', state.month]);
+      expect(hooks.calls).toHaveLength(1);
+      expect(hooks.calls[0]!.args.slice(1, 4)).toEqual(['lena', 'brix', state.month]);
+      expect(hooks.calls[0]!.reputation).toBe(50 + caughtMove());
     }
   });
 
@@ -557,8 +560,7 @@ describe('the one reveal', () => {
     const { state } = monthOfSabotage(seed, [{ by: 'lena', target: () => rumourFood }]);
     const before = state.players[0]!.reputation;
     resolveSabotage(state);
-    expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift']);
-    expect(hooks.calls[0]!.args.slice(1)).toEqual(['lena', caughtMove()]);
+    expect(hooks.calls).toEqual([]);
     expect(state.players[0]!.reputation).toBe(before + caughtMove());
   });
 
@@ -578,7 +580,8 @@ describe('the one reveal', () => {
     resolveSabotage(state);
     expect(state.players[0]!.reputation).toBe(before + caughtMove() + POLITICS.reputation.moves.pactBroken);
     expect(state.politics!.deals[0]).toMatchObject({ status: 'broken', brokenBy: 'lena' });
-    expect(hookCalls('lena').map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach', 'reputationShift']);
+    expect(hooks.calls).toHaveLength(1);
+    expect(hooks.calls[0]!.reputation).toBe(before + caughtMove());
   });
 
   it('S4-T-AC-4: sabotagePossible is true exactly when politics is on and POLITICS.sabotage.on', () => {
@@ -618,8 +621,9 @@ describe('the one reveal', () => {
       state.politics!.deals[0]!.until = state.month;
       if (investigate(state, 'ossa', order.id).culpritPublic) {
         solved = true;
-        expect(hooks.calls.map((c) => c.fn)).toEqual(['reputationShift', 'pactBreach']);
-        expect(hooks.calls[1]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
+        expect(hooks.calls).toHaveLength(1);
+        expect(hooks.calls[0]!.args.slice(1, 4)).toEqual(['lena', 'brix', order.month]);
+        expect(hooks.calls[0]!.reputation).toBe(50 + caughtMove());
       }
     }
     expect(solved).toBe(true);

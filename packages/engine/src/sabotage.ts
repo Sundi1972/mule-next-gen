@@ -3,7 +3,8 @@ import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { plotEvent, storeEvent } from './events.js';
 import { player } from './game.js';
-import { securitySpend } from './politics.js';
+import { pactBreach } from './diplomacy.js';
+import { reputationShift, securitySpend } from './politics.js';
 import { createRng, seedOf } from './rng.js';
 import { PERCENT } from './units.js';
 import { GOODS, type GameState, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
@@ -143,9 +144,16 @@ function pendingOrders(state: GameState): SabotageOrder[] {
   return state.politics!.sabotage.filter((o) => o.outcome === 'pending' && o.month === state.month).sort((a, b) => seat(a) - seat(b));
 }
 
-/** The one place a culprit becomes known: guard, catch on the spot, or investigation (S4-RULE-5). */
+/**
+ * The one place a culprit becomes known: a guard, a catch on the spot, or an investigation (S4-RULE-5). The order's
+ * month goes to pactBreach, not the month of the reveal, so a pact is judged as it stood when the sabotage was ordered.
+ */
 function reveal(state: GameState, orderId: string): void {
-  edit(state).sabotage.find((o) => o.id === orderId)!.culpritPublic = true;
+  const order = edit(state).sabotage.find((o) => o.id === orderId)!;
+  order.culpritPublic = true;
+  const { by, victim, month } = order;
+  reputationShift(state, by!, POLITICS.reputation.moves.caught * banMultiplier(state));
+  if (victim) pactBreach(state, by!, victim, month);
 }
 
 const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1);
