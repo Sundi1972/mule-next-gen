@@ -85,14 +85,15 @@ from Heiko's ruling (Sizing). Thin baseline about 5 PRs (§0.1).
 
 ## What the table sees `[review-only]`
 
-Places only; WS6 mocks every layout (`ux: mock: WS6, to come`). "Laptop" is the phone app at wide width (the shell's
+Places only; WS6 mocks every layout (`ux: mock: WS6, to come`), within politics layout P0 option A (Heiko 7 Nov): no new
+tab, at most five sections per phone screen, an action starts where its target is. "Laptop" is the phone app at wide width (the shell's
 1100 px layout), so it shows what the phone shows.
 
 | Moment | The two parties' phones | Other phones | TV |
 |---|---|---|---|
-| Lena whispers Brix and taps **+ Deal** | Lena: the Talk desk's whisper to Brix opens the card composer (P1): a pact (1, 3 or 6 months), or her vote promise (for a candidate in the next election for an office, or yes/no on the next law ballot) | nothing | nothing |
+| Lena whispers Brix and taps **+ Deal** | Lena: the card composer (P1) opens from its target player: her whisper to Brix, or Brix's avatar or name: a pact (1, 3 or 6 months), or her vote promise (for a candidate in the next election for an office, or yes/no on the next law ballot) | nothing | nothing |
 | The card arrives | Brix: the card in the whisper thread and on the agenda ("1 deal offer"), with Lena's and his own reputation, **Accept / Decline** (P2). Lena: "Waiting for Brix", **Withdraw** | nothing | nothing |
-| Brix accepts | both: the card in **My cards** as active, with what it binds and until when (P3) | nothing | nothing |
+| Brix accepts | both: the card in **My cards** (one section of the Talk desk, no new tab) as active, with what it binds and until when (P3) | nothing | nothing |
 | Planning ends with the card unanswered | both: "expired" | nothing | nothing |
 | A candidate wants a vote | Brix asks in a whisper; Lena, if willing, sends the vote card (a card is always its proposer's own promise) | — | — |
 | The ballot opens and Lena holds a vote promise | Lena: "You promised Brix your vote", Brix preselected; she still casts | nothing | nothing |
@@ -486,19 +487,21 @@ depends_on   S3-C13, S3-C15
 ```
 S3-C17 · ADDED · P1: "+ Deal" on a whisper opens the card composer
 ux           mock: WS6, to come (from PlanningHub.tsx's `add-deal` and `deal-card` placeholders at c312e7cb) ·
-             GRAFT TARGET: new apps/web/src/phone/hub/politics/Deals.tsx (DealComposer), mounted from
-             apps/web/src/chat/Chat.tsx's whisper input
+             GRAFT TARGET: new apps/web/src/phone/hub/politics/Deals.tsx (DealComposer), opened from its target player
+             (politics layout P0 option A, Heiko 7 Nov): apps/web/src/chat/Chat.tsx's whisper input, and the player's
+             avatar or name (apps/web/src/phone/hub/politics/parts.tsx::Who, the standings row)
 tomorrow     MUST offer a pact (POLITICS.deals.pactMonths) or the player's own vote (a candidate for each elected
              office's next election, from the declared candidates; or yes/no on the next law ballot when one is up), send
              offerDeal, and show the engine's refusal words.
-seam         Deals.tsx (WS7 path); Chat.tsx one mount (WS4 named edit)
+seam         Deals.tsx (WS7 path); Chat.tsx one mount (WS4 named edit); the Who and standings entry (WS7; WS4 named edit)
 mechanism    fill_scaffold
 depends_on   S3-C10 (contract), WS6's approved mock (not stubbable)
 ```
 
 ```
 S3-C18 · ADDED · P2 and P3: the incoming card and My cards
-ux           mock: WS6, to come · GRAFT TARGET: Deals.tsx (IncomingDeal, MyDeals); the thread mount in Chat.tsx (WS4);
+ux           mock: WS6, to come · GRAFT TARGET: Deals.tsx (IncomingDeal, MyDeals); My cards is one section inside the
+             Talk desk, no new tab (politics layout P0 option A, Heiko 7 Nov); the thread mount in Chat.tsx (WS4);
              the agenda entry "N deal offers" in apps/web/src/phone/hub/today.tsx (WS6, the mock's `deals` row)
 tomorrow     MUST show an offered card in the pair's whisper thread and on the agenda with both reputations and Accept /
              Decline (one tap each); MUST list every card of mine: offered (Withdraw), incoming, active (what it binds,
@@ -562,7 +565,7 @@ depends_on   S3-C10, WS6's mock
 | `packages/ai/src/{actions,play,sim}.ts` | WS1 | three AiActions; DealHand in the planning windows; the deals row | C16 |
 | `apps/web/src/phone/hub/politics/{Deals,parts,ElectionDay,LawBallot}.tsx` | WS7 path (build lane: PM's piece list) | composer, incoming card, My cards, Who chip, "You promised" | C17-C19, C21 |
 | `apps/web/src/chat/Chat.tsx` | WS4 | mount the composer on a whisper and the card in the thread | C17, C18 |
-| `apps/web/src/phone/hub/{desks,today}.tsx` | WS6 | the Talk desk's card list; the agenda's "N deal offers" | C18 |
+| `apps/web/src/phone/hub/{desks,today}.tsx` | WS6 | My cards as one section of the Talk desk (no new tab, P0 option A); the agenda's "N deal offers" | C18 |
 | `apps/web/src/phone/hub/Standings.tsx`, `apps/web/src/table/TableApp.tsx`, `apps/web/src/components/MonthEnd.tsx` | WS4 | the chip; the TV strip's chip and TvDeals route; the month end's broken cards | C19, C20 |
 | `apps/web/src/table/TvDeals.tsx` (new) | WS7 (PM to confirm, as TvElection.tsx) | the break banner | C20 |
 | `apps/web/e2e/politics.ts` | WS7 | S3-UBER-AC-1's step and UBER-AC-3 legs A and C | ACs |
