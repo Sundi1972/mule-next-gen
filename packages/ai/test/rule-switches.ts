@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, onTestFinished } from 'vitest';
 import { STRATEGIST } from '@mule/engine';
 
-/** The PM's on-by-default strategist rules (S1's Energy first, S2's Medicine despite its inputs). */
+/** The PM's strategist rule switches: S1's Energy first (on by default), S2's Medicine despite its inputs (off until PR-13). */
 type RuleSwitch = 'energyFirst' | 'medicineDespiteInputs';
 
 /**
- * Turns the named rules off for the calling test file, and back on after it. For files that pin a behaviour the rule
+ * Turns the named rules off for the calling test file, and restores what they were after it. For files that pin a behaviour the rule
  * would override (a seat with no Energy plant weighing other installs, canFeed's block on a Medicine works); each rule
  * has its own tests with it on (energy-first.test.ts, medicine-despite-inputs.test.ts).
  */

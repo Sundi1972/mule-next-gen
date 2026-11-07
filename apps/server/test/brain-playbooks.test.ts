@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, STRATEGIST, type GameState, type Playbook } from '@mule/engine';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, type GameState, type Playbook } from '@mule/engine';
 import { AiSeat, candidate, consider, defaultManual, seatBounds, shortlist, WRITER_SYSTEM, type ValidatePlan } from '@mule/ai';
 import { createBrain, type BrainService, type MeteredBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
@@ -349,27 +349,18 @@ const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you 
 
 describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
   it('T-AC-A3: phases start on time with a fake model that never answers: each land grant opens as the people press Ready in planning, each planning as they press it at the month end', async () => {
-    // Energy first (STRATEGIST.energyFirst, PR-5a) gives the seat its Energy plant in month 1, so month 1's auction puts
-    // it a real Energy side pick: that call never answers either, and the seat is asked nothing more. Off here, so the
-    // test still sees all four writes cancelled; the rule has its own tests in packages/ai.
-    const energyFirst = STRATEGIST.energyFirst;
-    STRATEGIST.energyFirst = false;
-    onTestFinished(() => {
-      STRATEGIST.energyFirst = energyFirst;
-    });
-    const silent = fakeSdk(() => new Promise(() => {}));
+    // A silent model, like the SDK, gives up when its call is cancelled or its wait runs out.
+    const silent = fakeSdk((_n, _params, options) => neverAnswers(options));
     const starts = await phaseStarts(smartOn(silent));
 
     const opened = (month: number, phase: string) => starts.find(([m, p]) => m === month && p === phase)?.[2];
     expect(starts.at(-1)?.[1]).toBe('gameOver');
     for (const month of [1, 2]) expect(opened(month, 'landGrant')! - opened(month, 'planning')!, `month ${month}'s land grant`).toBe(READ_MS);
     expect(opened(2, 'planning')! - opened(1, 'upkeep')!, "month 2's planning").toBe(READ_MS);
-    // The model was asked to write four times and never answered; the phase each write was for cancelled it: month 1's
-    // land grant (asked at game start), month 1's auction (asked in the production show, AM-A16), month 2's land grant
-    // (asked at month 1's end) and month 2's auction. Every side pick of month 1 leaves the seat one option, so its
-    // first decision put to the model is month 2's Food side pick, a call that stays open to game over.
-    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, true, true, true, false]);
-    for (const [i, r] of silent.requests.slice(0, 4).entries()) expect(r.options.signal?.aborted, `write ${i + 1}`).toBe(true);
+    // An unanswered call never mutes the next one: each write is cancelled by the phase it was for, each decision ends
+    // at its wait, so both months' land and auction writes are asked and no call is still open at game over.
+    expect(silent.requests.filter((r) => isWrite(r.params)), "months 1 and 2: the land's and the auction's writes").toHaveLength(4);
+    for (const [i, r] of silent.requests.entries()) expect(r.options.signal?.aborted, `call ${i + 1}`).toBe(true);
   });
 });
 

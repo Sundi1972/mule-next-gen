@@ -351,7 +351,9 @@ function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk
   const kept = list.all.flatMap((c) =>
     c.action.kind === 'install' && c.action.outfit === outfit ? [candidate(c.key, c.label, c.action, c.value, c.considerations, walkOf(c.action.index))] : [],
   );
-  const stop = list.all.filter((c) => c.action.kind === 'stop');
+  // The stop sheds the purchase's vetoes too (Energy first rules out "Keep the cash"): a led MULE no plot takes has
+  // nothing else to do.
+  const stop = list.all.filter((c) => c.action.kind === 'stop').map((c) => candidate(c.key, c.label, c.action, c.value, c.considerations));
   return shortlist(kept.some((c) => !c.veto) ? kept : stop, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
