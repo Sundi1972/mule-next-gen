@@ -1,10 +1,12 @@
 import { ceremonyBeats, POLITICS, type CanRun, type CeremonyBeat, type ElectionHow, type ElectionResult, type Office, type TaxPromise } from '@mule/engine';
-import type { ColonyView, ElectionView, MuleView, MyView, OfficeReveal, PlayerView, PoliticsView, TableView } from '@mule/protocol';
+import type { ColonyProjectView, ColonyView, ElectionView, MuleView, MyView, OfficeReveal, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
+import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
+import { loadGroundsManifest } from '../src/components/Grounds';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { ColonyDesk } from '../src/phone/hub/desks';
@@ -855,6 +857,30 @@ describe('the Colony desk (C11, H-5, A-3)', () => {
     expect(html.indexOf('data-testid="fund-card"')).toBeLessThan(html.indexOf('data-testid="colony-desk-card"'));
     expect(html.indexOf('data-testid="colony-desk-card"')).toBeLessThan(html.indexOf(desk));
     expect(onPhone(view(politics({ governor: 's2', fund: 840 })), ColonyWithFacts), 'no colony, no card').not.toContain('colony-desk-card');
+  });
+
+  it('T-AC-5 (phone): colony-grounds is shown politics on, absent politics off', async () => {
+    const manifest = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === '/art/colony/manifest.json' ? new Response(manifest) : new Response('', { status: 404 }))));
+    await loadGroundsManifest();
+    vi.unstubAllGlobals();
+    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'standing', cost: { credits: 900, goods: {} }, funded: { credits: 900, goods: {} }, buildMonths: 1, monthsLeft: null, plot: null, prestige: 2, upkeep: 30, repairCost: null, plaque: [] };
+    const colony: ColonyView = {
+      gauges: { wealth: 26_400, environment: 34, prestige: 2, happiness: 64, band: 'content' },
+      lastGauges: null,
+      fund: 840,
+      ledger: null,
+      // As WS7's view will carry it: the Park's block on the grounds (AM-18).
+      projects: [Object.assign({}, park, { place: { x: 1, y: 2, w: 1, h: 1 } })],
+      catalogue: [],
+      score: null,
+    };
+    const on = onPhone(view(politics({ governor: 's2', fund: 840 }), me(), { colony }), ColonyWithFacts);
+    expect(on).toContain('data-testid="colony-grounds"');
+    expect(on, 'the standing Park in its phone-size picture').toContain('href="/art/colony/park/standing-day@400.webp"');
+    expect(on.indexOf('data-testid="colony-grounds"'), 'above the colony card').toBeLessThan(on.indexOf('data-testid="colony-desk-card"'));
+    const off = onPhone(view(null, { ...me(), politics: null }, { colony }), ColonyWithFacts);
+    expect(off).not.toContain('data-testid="colony-grounds"');
   });
 });
 
