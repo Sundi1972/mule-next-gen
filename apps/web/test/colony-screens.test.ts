@@ -727,6 +727,19 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     expect(screen.shows('tv-monthend')).toBe(false);
   });
 
+  it('T-AC-8: the phase moving on ends the full opener, on a page whose frame clock has no cancelAnimationFrame too', () => {
+    const screen = tv(at('planning', 1, parkAt('commissioned')));
+    screen.send(at('upkeep', 1, parkAt('building')));
+    pass(3_100);
+    screen.send(at('planning', 2, parkAt('building')));
+    vi.stubGlobal('cancelAnimationFrame', undefined);
+    screen.send(at('upkeep', 2, parkAt('standing')));
+    pass(1_000);
+    expect(screen.opener()?.getAttribute('data-opener')).toBe('full');
+    expect(() => screen.send(at('planning', 3, parkAt('standing')))).not.toThrow();
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+  });
+
   it('T-AC-8: a TV that reloads into the month end shows TvMonthEnd at once, no opener (RULE-5)', () => {
     const screen = tv(at('upkeep', 2, parkAt('standing')));
     expect(screen.shows('tv-grounds-opener')).toBe(false);
