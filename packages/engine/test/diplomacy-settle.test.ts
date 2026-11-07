@@ -14,7 +14,9 @@ import {
   pactBetween,
   pactBreach,
   POLITICS,
+  promisedVotes,
   proposeLaw,
+  reputationReasons,
   runFor,
   stepElection,
   stepVotes,
@@ -23,6 +25,8 @@ import {
   type DealOffer,
   type ElectionResult,
   type GameState,
+  type MonthEvent,
+  type MonthReport,
 } from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai', 'mia'];
@@ -390,5 +394,50 @@ describe('pacts', () => {
     expect(cardOf(state, vote)).toMatchObject({ status: 'expired', brokenBy: null, settled: 1 });
     expect(cardOf(state, declined).status).toBe('declined');
     expect([rep(state, 'lena'), rep(state, 'brix'), rep(state, 'kai')]).toEqual([53, 53, 50]);
+  });
+});
+
+describe('what the table can read', () => {
+  const unrest = (player: string) => ({ key: 'blamedForUnrest', player }) as unknown as MonthEvent; // only key and player are read
+
+  it('S3-T-AC-4: reputationReasons lists a player\'s broken cards (as breaker) and their unrest months, newest first, never a kept or active card', () => {
+    const state = newGame();
+    state.month = 5;
+    const card = (id: string, from: string, to: string, status: DealCard['status'], settled: number | null, brokenBy: string | null): DealCard => ({
+      id, from, to, terms: { kind: 'pact' }, offered: 1, until: 3, status, brokenBy, settled,
+    });
+    state.politics!.deals.push(
+      card('deal-old000', 'lena', 'brix', 'broken', 2, 'lena'),
+      card('deal-kept00', 'lena', 'kai', 'kept', 3, null),
+      card('deal-theirs', 'brix', 'ossa', 'broken', 4, 'brix'),
+      card('deal-victim', 'ossa', 'lena', 'broken', 4, 'ossa'),
+      card('deal-live00', 'lena', 'mia', 'active', null, null),
+      card('deal-new000', 'mia', 'lena', 'broken', 5, 'lena'),
+    );
+    state.history = [3, 5].map((month) => ({ month, events: [unrest('lena'), unrest('brix')] }) as unknown as MonthReport); // only month and events are read
+    // The month's own list repeats the events its report filed at upkeep: month 5 must count once.
+    state.monthEvents = [unrest('lena')];
+    const reasons = reputationReasons(state, 'lena');
+    expect(reasons.map((r) => (r.kind === 'broken' ? `broken ${r.card.id} ${r.card.settled}` : `${r.kind} ${r.month}`))).toEqual(['broken deal-new000 5', 'unrest 5', 'unrest 3', 'broken deal-old000 2']);
+    expect(reputationReasons(state, 'kai'), 'a kept card gives no reason').toEqual([]);
+    expect(reputationReasons(state, 'mia').map((r) => r.kind), 'the victim of a break has none').toEqual([]);
+  });
+
+  it("S3-B-AC-2: promisedVotes names Lena's promised candidate with Brix as receiver while her card is active, and nothing once it settles", () => {
+    const state = newGame();
+    declare(state, 'ossa', 'mia');
+    deal(state, 'lena', GOV('brix', 'ossa'));
+    deal(state, 'lena', GOV('kai', 'ossa'));
+    expect(promisedVotes(state, 'lena')).toEqual({ election: { governor: { candidate: 'ossa', to: ['brix', 'kai'] } }, law: null });
+    expect(promisedVotes(state, 'brix'), 'the receiver takes on no promise').toEqual({ election: {}, law: null });
+    const offered = offerDeal(state, 'lena', GOV('mia', 'ossa'));
+    expect(promisedVotes(state, 'lena').election.governor!.to, 'an unanswered offer is no promise').toEqual(['brix', 'kai']);
+    answerDeal(state, 'mia', offered, false);
+    closeBallot(state, { lena: 'ossa' });
+    finishCeremony(state);
+    expect(promisedVotes(state, 'lena')).toEqual({ election: {}, law: null });
+    const law = proposalPending();
+    deal(law, 'brix', LAW('ossa', false));
+    expect(promisedVotes(law, 'brix')).toEqual({ election: {}, law: { yes: false, to: ['ossa'] } });
   });
 });

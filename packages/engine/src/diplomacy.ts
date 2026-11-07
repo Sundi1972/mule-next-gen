@@ -166,6 +166,15 @@ export function answerDeal(state: GameState, to: string, id: string, accept: boo
   Object.assign(card, { status, settled: status === 'active' ? null : state.month });
 }
 
+/** One public reason a player's reputation moved: a card they broke, or a month they were blamed for unrest. Slice 4 adds 'caught'. */
+export type ReputationReason = { kind: 'broken'; card: DealCard } | { kind: 'unrest'; month: number } | { kind: 'caught'; month: number };
+
+/** A player's active vote promises: per office the candidate and who was promised, and the law ballot's yes or no. */
+export interface PromisedVotes {
+  election: Partial<Record<Office, { candidate: string; to: string[] }>>;
+  law: { yes: boolean; to: string[] } | null;
+}
+
 type Verdict = 'kept' | 'broken' | 'expired';
 
 /**
@@ -280,4 +289,12 @@ export function monthEndDeals(state: GameState, gameOver: boolean, possible: boo
     }
     Object.assign(card, { status: 'kept', settled: state.month });
   }
+}
+
+export function reputationReasons(_state: GameState, _playerId: string): ReputationReason[] {
+  throw new Error('NotImplemented: reputationReasons');
+}
+
+export function promisedVotes(_state: GameState, _playerId: string): PromisedVotes {
+  throw new Error('NotImplemented: promisedVotes');
 }
