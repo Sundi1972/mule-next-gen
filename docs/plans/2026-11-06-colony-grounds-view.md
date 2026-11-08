@@ -494,7 +494,10 @@ The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK)
 
 ## Follow-ups (after the 8 Nov play-test; none blocks #535)
 
-- **Far-to-near shadows** across neighbouring layers.
+- **Far-to-near shadows** across neighbouring layers: **parked** (PM ruling (a), 8 Nov) as Jira **SA-1386**, a day-only look
+  limitation. A far building's shadow stops at a nearer occupied place's paving; no cut visible on the month-12 opener.
+  Un-park if Heiko sees a cut on 13 Nov: first a 1 h count over the visibility spike's 120 layouts, then the fix (a
+  ground pass and a body pass per picture, ~2× files).
 - **Inner lamp heads** → Task 2.2e (8 Nov).
 - **Task 2.2b** smoke and haze — mock first (above), build after the PM's OK.
 - **WS4's SHOULD:** poll for the plate request in `apps/web/e2e/grounds-opener.ts` rather than a fixed wait (WS4's file).
