@@ -308,13 +308,19 @@ export const START = {
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
    * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
-   * storeStockFor adds them.
+   * storeStockFor adds them. Medicine 40, up from 4: spike S2's lever B with STRATEGIST.medicineDespiteInputs (PM
+   * ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.
    */
-  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
-  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
-  storeEnergyPerPlayer: 5,
+  /**
+   * The store's Energy at the start, for each seat: 12, so 48 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
+   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov), first to 10, then to 12 once C49 (a waiting
+   * building's missing goods count in the store's demand) put seed 1 at 16.4% (PM ruling, 8 Nov): farms then turn off
+   * for Energy in under 15% of farm-months on seeds 1, 101 and 201.
+   */
+  storeEnergyPerPlayer: 12,
 };
 
 /** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
@@ -1858,7 +1864,26 @@ export const STRATEGIST = {
     canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
     /** "Hurts the leader": what the plan that fences in the leader scores. */
     hurtsLeader: 0.7,
+    /**
+     * A plan worth under this share of the best plan's worth is not offered to the decider (T-AC-14). The shortlist's
+     * utility tolerance alone let a plan at 43% of the best through once lever B valued Medicine works (PR-5).
+     */
+    offerShare: 0.5,
   },
+  /**
+   * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
+   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 12 (PM rulings,
+   * 7 and 8 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
+   */
+  energyFirst: true as boolean,
+  /**
+   * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
+   * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
+   * START.storeStock.medicine 40 (PM ruling, 8 Nov). OFF until health is on: without sick colonists it only diverts
+   * seats from their Energy plant (seed 1's Energy gate 9.6% -> 15.8%); PR-13 switches it on with health (PM ruling,
+   * 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=true`.
+   */
+  medicineDespiteInputs: false as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
     /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */

@@ -81,11 +81,15 @@ describe('createGame', () => {
   });
 
   it.each([
-    [2, 10],
-    [4, 20],
-    [6, 30],
-  ])("a %i-seat game's store starts with %i Energy, 5 a seat (Heiko, 5 Nov)", (n, energy) => {
+    [2, 24],
+    [4, 48],
+    [6, 72],
+  ])("a %i-seat game's store starts with %i Energy, 12 a seat (S1 lever (c), PM rulings 7 and 8 Nov)", (n, energy) => {
     expect(newGame(n).store.stock.energy).toBe(energy);
+  });
+
+  it("the store starts with 40 Medicine (S2 lever B, PM ruling 8 Nov)", () => {
+    expect(newGame(4).store.stock.medicine).toBe(40);
   });
 
   describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {
