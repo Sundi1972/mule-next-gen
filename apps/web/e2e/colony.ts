@@ -107,10 +107,14 @@ async function main(): Promise<void> {
     await planning.getByTestId(`donate-hint-${PROJECT}`).filter({ hasText: `Your plaque ${fmt(DONATION)} cr` }).waitFor({ timeout: PRESS_MS });
     console.log(`✓ B-AC-35-2: Lena gives ${DONATION} cr through the chips; the server's plaque and her phone both read ${DONATION} cr`);
 
-    // 1. The TV's header carries the four gauges, its wealth the server's, happiness "not yet" while it has none.
+    // 1. The TV's header carries the four gauges (five with the colony's health, PR-11: Health after Happiness), its
+    // wealth the server's, happiness "not yet" while it has none.
     const gauges = tv.getByTestId('colony-gauges');
     await gauges.waitFor({ timeout: PRESS_MS });
-    check((await gauges.locator('[data-testid^=gauge-]').count()) === 4, 'B-AC-34-3: the TV header shows four gauges');
+    const health = board().colonyHealth ?? null;
+    const cells = health ? 5 : 4;
+    check((await gauges.locator('[data-testid^=gauge-]').count()) === cells, `B-AC-34-3: the TV header shows ${cells} gauges${health ? ', Health the fifth' : ''}`);
+    if (health) await gauges.getByTestId('health-value').filter({ hasText: `${health.health}%` }).waitFor({ timeout: PRESS_MS });
     const wealth = `${fmt(colony().gauges.wealth)} cr`;
     await gauges.getByTestId('gauge-wealth').locator('[data-num]').filter({ hasText: wealth }).waitFor({ timeout: PRESS_MS });
     // The mood (C23) has its first value once planning opens; the gauge shows the server's, or "not yet" while it is null.
@@ -118,7 +122,7 @@ async function main(): Promise<void> {
     const happiness = gauges.getByTestId('gauge-happiness');
     if (mood === null) await happiness.filter({ hasText: 'not yet' }).waitFor({ timeout: PRESS_MS });
     else await happiness.locator('[data-num]').filter({ hasText: String(mood) }).waitFor({ timeout: PRESS_MS });
-    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
+    console.log(`✓ B-AC-34-3: the TV header shows the ${cells} gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
 
     await theGovernorPaysTheStrike({ server, code, phone, tv, lenaId, room, colony });
 
