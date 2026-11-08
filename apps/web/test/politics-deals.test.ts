@@ -291,6 +291,18 @@ const hub = () => createElement(Planning);
 const offers = () => sent.filter((i) => (i as { type: string }).type === 'offerDeal');
 
 describe('the deal composer (S3-C17)', () => {
+  it("S3-B-AC-1: a pact's months in the composer stop at the game's last month, as S3-RULE-1's until does: month 11 of 12", () => {
+    const longest = Math.max(...POLITICS.deals.pactMonths);
+    mount(gameFor(myView(LENA, []), politics(), { month: 11, maxMonths: 12 }), hub);
+    tap('desk-talk');
+    tap(`chat-to-${OSSA}`);
+    tap('add-deal');
+    tap(`composer-a-months-${longest}`);
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, months 11 to 12.');
+    tap('composer-a-months-1');
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, in month 11.');
+  });
+
   it("S3-B-AC-1: the composer opened from Lena's whisper to Brix offers a pact of POLITICS.deals pactMonths lengths or her own vote, sends offerDeal, and shows the engine's refusal words", () => {
     // The lengths are the view's, not the phone's: a table playing other lengths gets those. Ossa and Lena are running
     // for Governor; Kai and Brix are not.
