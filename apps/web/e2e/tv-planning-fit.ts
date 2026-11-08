@@ -72,7 +72,7 @@ async function planningReads(tv: Page, table: number, state: string): Promise<Re
 
 /**
  * SB-5a: stages a pact broken this month between the table's first two people, reads planning with its banner over the
- * map, then takes the card back. The banner must sit inside the map box, its top on the map's.
+ * map, then takes the card back. The banner must lie inside the map box (over its top, inset by the overlay's padding).
  */
 async function aBreakMoment(server: Parameters<typeof held>[0], code: string, tv: Page, table: number): Promise<Read> {
   type Room = { game: { state: GameState }; broadcast(): void };
