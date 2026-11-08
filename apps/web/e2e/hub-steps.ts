@@ -292,7 +292,7 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     await header.filter({ hasText: count }).waitFor({ timeout });
     const waiting = planning(p).getByTestId('waiting-for');
     await waiting.getByTestId(`waiting-${leftId}`).waitFor({ timeout });
-    const named = (await waiting.getByTestId(`waiting-${leftId}`).innerText()).trim();
+    const named = (await waiting.getByTestId(`waiting-${leftId}`).getByTestId('waiting-name').innerText()).trim();
     check(named === (p === left ? 'you' : left.name), `B-AC-19: ${p.name}'s phone names ${p === left ? 'her as "you"' : left.name} as still planning, got "${named}"`);
     const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
     check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);

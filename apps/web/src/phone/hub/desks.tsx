@@ -1,12 +1,13 @@
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
-import { useEffect, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { NewsWords } from '../../components/SeatWords';
 import { useClientState } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { Chat, ShipLine } from '../parts';
+import { Chat, ShipLine, type Composing } from '../parts';
 import { SellRail } from '../Sell';
 import { useHub } from './Hub';
 import { needRows } from './needs';
+import { IncomingDealSheet, incomingOf, MyDeals, type DraftKind } from './politics/Deals';
 import { useToday } from './state';
 
 function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
@@ -81,26 +82,109 @@ export function News() {
   );
 }
 
-/** Talk: the table chat. Opening it reads what was said. */
+type TalkSection = 'chat' | 'cards';
+
+/**
+ * Where a door's focus lands the Talk desk: `whisper:<id>`, `compose:<id>[:pact|vote]`, `card:<id>`, `cards`, or
+ * `deals` (the agenda's door: one card offered to me opens over the rail and in its thread; more open My cards).
+ */
+function landing(focus: string, offered: { id: string; from: string }[]): { section: TalkSection; to?: string; compose?: Composing; card?: boolean; answer?: string } | null {
+  const [kind, id, sub] = focus.split(':');
+  if (kind === 'whisper' && id) return { section: 'chat', to: id };
+  if (kind === 'compose' && id) return { section: 'chat', to: id, compose: { to: id, ...(sub ? { kind: sub as DraftKind } : {}) } };
+  if (kind === 'card' && id) return { section: 'chat', to: id, card: true };
+  if (kind === 'cards') return { section: 'cards' };
+  if (kind === 'deals') return offered.length === 1 ? { section: 'chat', to: offered[0]!.from, answer: offered[0]!.id } : { section: 'cards' };
+  return null;
+}
+
+/** Talk: the table chat and whispers, and My cards. Opening it reads what was said. */
 export function TalkDesk() {
   const { chat } = useClientState();
+  const { me } = usePhoneGame();
   const { setSeenChat } = useToday();
+  const { focus, takeFocus } = useHub();
+  const [section, setSection] = useState<TalkSection>('chat');
+  const [to, setTo] = useState<string | null>(null);
+  const [composing, setComposing] = useState<Composing | null>(null);
+  const [card, setCard] = useState(false);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const closeAnswer = useCallback(() => setAnswer(null), []);
   useEffect(() => setSeenChat(chat.length), [chat.length, setSeenChat]);
+  useEffect(() => {
+    if (!focus) return;
+    const at = landing(focus, incomingOf(me));
+    takeFocus();
+    if (!at) return;
+    setSection(at.section);
+    if (at.to) setTo(at.to);
+    setComposing(at.compose ?? null);
+    setCard(at.card ?? false);
+    setAnswer(at.answer ?? null);
+  }, [focus, takeFocus, me]);
+  const incoming = incomingOf(me).length;
   return (
-    <div className="flex h-[240px] flex-col @min-[1100px]/shell:h-[420px]" data-testid="channels">
-      <Chat />
+    <div ref={root} className="flex flex-col gap-2" data-testid="talk-desk">
+      {me.deals && (
+        <div role="tablist" aria-label="Talk" className="grid grid-cols-2 gap-1">
+          {(['chat', 'cards'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={section === v}
+              onClick={() => setSection(v)}
+              data-testid={`talk-${v}`}
+              className={cx('relative h-11 rounded-control border text-sm font-semibold', section === v ? 'border-holo bg-holo-soft text-ink' : 'border-holo-line text-ink-2')}
+            >
+              {v === 'chat' ? 'Chat' : 'My cards'}
+              {v === 'cards' && incoming > 0 && (
+                <span className="absolute -right-1 -top-1 size-4 rounded-full bg-holo text-center font-mono text-[10px] font-bold leading-4 text-on-holo" data-testid="talk-cards-badge">
+                  {incoming}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {section === 'chat' || !me.deals ? (
+        <div className="flex h-[240px] flex-col @min-[1100px]/shell:h-[420px]" data-testid="channels">
+          <Chat
+            focus={{
+              to,
+              setTo: (id) => {
+                setTo(id);
+                setComposing(null);
+              },
+              composing,
+              setComposing,
+              card,
+              setCard,
+            }}
+          />
+        </div>
+      ) : (
+        <MyDeals />
+      )}
+      {answer && <IncomingDealSheet id={answer} onClose={closeAnswer} anchor={root.current} />}
     </div>
   );
 }
 
-/** Unread table chat, on the Talk desk's tab. */
-export function ChatBadge() {
+/** The Talk tab's badge: unread table chat, and cards waiting for my answer. */
+export function TalkBadge() {
   const { chat } = useClientState();
+  const { me } = usePhoneGame();
   const { seenChat } = useToday();
   const { desk } = useHub();
-  const unread = desk === 'talk' ? 0 : chat.length - seenChat;
+  const unread = (desk === 'talk' ? 0 : chat.length - seenChat) + incomingOf(me).length;
   if (unread <= 0) return null;
-  return <span className="absolute -right-1 -top-1 size-4 rounded-full bg-holo text-center font-mono text-[10px] font-bold leading-4 text-on-holo">{unread}</span>;
+  return (
+    <span className="absolute -right-1 -top-1 size-4 rounded-full bg-holo text-center font-mono text-[10px] font-bold leading-4 text-on-holo" data-testid="talk-badge">
+      {unread}
+    </span>
+  );
 }
 
 /** Market: put a plot or a MULE up for the auction after planning; the month's line-up; on a phone, the prices. */
