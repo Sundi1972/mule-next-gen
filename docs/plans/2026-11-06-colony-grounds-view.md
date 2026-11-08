@@ -246,7 +246,14 @@ sprites are used, the phone's heaviest colony measured < 1 MB in the PR body.
   3db1bc56d (3 of 5). Implement: `live.ts` (RULE-7/8, bands from `POLLUTION`), `LiveLayer.tsx::AirLayer` (its own clock, the
   walkers' clock extracted as `useSeconds`), `ColonyGrounds` (`gauges.environment?`, the layer under the chips). Green; mutants
   (haze on clean, closed smokes, reduced ignored, haze over chips) each fail one test. ui 294/294.
-- [ ] Shots TV and phone, day and dusk; review; PR into ws10-visual.
+- [x] Shots TV and phone, day and dusk; review; PR into ws10-visual. **MERGED** #811 → 13b26385 (`Review: APPROVE at
+  7dc353812`; round 1 fixed: smoke fades with its building in the lean-in, one `useSeconds` in `grounds/clock.ts`). Trunk:
+  #817 → c934cd05 (PM, 8 Nov), with the phone frame gate: 4× CPU, heaviest colony with smoke, p95 16.8 ms, 0 frames > 25 ms.
+- [x] Follow-up (review #811 findings 3, 5, 6): plumes move into `WalkingScene`'s depth list, just after their building, on
+  the walkers' clock (one rAF loop; `AirLayer` split into `Plume` + a static `Haze`). Red 74ceb5935; mutants (plumes last,
+  reduced ignored) each fail one test. Main thread per frame at 4× CPU: 5.2 → 3.6 ms (2 plumes), 7.2 → 4.7 ms (5). The
+  jsdom wiring test is not built: the repo has no jsdom (apps/web uses its own fake-dom, WS4's), and the smoke's reduced
+  motion now comes through the same `t` as the walkers'.
 
 **Tasks 2.1–2.2 MERGED** as PR #603 → 71555ddd (`Review: APPROVE` at 5599ad02). Task 2.2b is still open (after Heiko's session).
 

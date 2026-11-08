@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ColonyGrounds, type GroundsColony, type GroundsProject } from '../src/grounds/ColonyGrounds';
 import { centreOf } from '../src/grounds/layout';
-import { AirPicture } from '../src/grounds/LiveLayer';
+import { Plume } from '../src/grounds/LiveLayer';
 import { iso, W } from '../src/grounds/projection';
 
 const SMOGGY = POLLUTION.bands.find((b) => b.name === 'smoggy')!.from;
@@ -62,11 +62,24 @@ describe('T-AC-15: smoke over a damaged building, a haze by the air (RULE-7, RUL
   });
 
   it('T-AC-15: the plume moves with time, and with reduced motion stands still', () => {
-    const at = (seconds: number, reduced: boolean) =>
-      renderToStaticMarkup(<svg><AirPicture view={{ x: 0, y: 0, w: 100, h: 100 }} environment={0} light="dusk" smoke={[{ n: 2, x: 0, y: 0 }]} seconds={seconds} reduced={reduced} /></svg>);
+    const at = (seconds: number, reduced: boolean) => renderToStaticMarkup(<svg><Plume source={{ n: 2, x: 0, y: 0, depth: 1 }} light="dusk" seconds={seconds} reduced={reduced} /></svg>);
     expect(at(2.5, false)).not.toBe(at(0, false));
     expect(at(2.5, true)).toBe(at(0, false));
     expect(at(7, true)).toBe(at(0, false));
+  });
+
+  it('T-AC-15: a plume is drawn just after its own building, so a building or colonist nearer the camera covers it and one behind does not', () => {
+    // The Hospital (place 2, col + row 1) is damaged; the Stadium (place 3, col + row 2) stands nearer the camera. One
+    // colonist stands behind the Hospital (col + row 0.5), one in front of it (1.5).
+    const html = renderToStaticMarkup(<ColonyGrounds colony={colony(40, 'damaged')} size="tv" manifest={null} light="day" routes={[[[-0.5, 1], [-0.5, 1]], [[0.5, 1], [0.5, 1]]]} />);
+    const at = (testid: string) => html.indexOf(`data-testid="${testid}"`);
+    const walkers = [...html.matchAll(/data-testid="walker"/g)].map((m) => m.index!);
+    expect(walkers).toHaveLength(2);
+    expect(at('smoke-2')).toBeGreaterThan(at('place-2'));
+    expect(at('smoke-2')).toBeGreaterThan(at('place-1'));
+    expect(at('smoke-2')).toBeLessThan(at('place-3'));
+    expect(walkers[0]).toBeLessThan(at('smoke-2'));
+    expect(walkers[1]).toBeGreaterThan(at('smoke-2'));
   });
 
   it('T-AC-12, T-AC-15: during the lean-in a damaged building in front of the named place fades its smoke with it; one level with the place keeps its smoke whole', () => {
@@ -84,12 +97,13 @@ describe('T-AC-15: smoke over a damaged building, a haze by the air (RULE-7, RUL
     /** Each puff's drawn opacity in place n's plume (the ember over it included), at `lean`. */
     const plumeOf = (lean: number, n: number) => {
       const html = renderToStaticMarkup(<ColonyGrounds colony={c} size="tv" manifest={null} light="dusk" chips={false} framing={{ aspect: 16 / 9, leanOn: [SITE], lean }} />);
-      const g = new RegExp(`data-testid="smoke-${n}">(.*?)</g></g>(?=<g data-testid="smoke-|<rect|</g>)`).exec(html)![1]!;
-      return [...g.matchAll(/<circle[^>]*opacity="([\d.e-]+)"/g)].map((m) => Number(m[1]));
+      return [...html.matchAll(new RegExp(`<circle[^>]*opacity="([\\d.e-]+)"[^>]*data-plume="${n}"`, 'g'))].map((m) => Number(m[1]));
     };
     const [still, leant] = [plumeOf(0, 1), plumeOf(1, 1)];
+    expect(still.length).toBeGreaterThan(0);
     expect(leant.length).toBe(still.length);
     leant.forEach((o, k) => expect(o).toBeCloseTo(still[k]! / 3, 3));
+    expect(plumeOf(0, 2).length).toBeGreaterThan(0);
     expect(plumeOf(1, 2)).toEqual(plumeOf(0, 2));
   });
 });

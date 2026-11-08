@@ -4,7 +4,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
 import { frontOpacity, leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
-import { AirLayer, Glow, WalkingScene, type PictureBox } from './LiveLayer';
+import { Glow, Haze, WalkingScene, type PictureBox } from './LiveLayer';
 import { occluderOf } from './occlusion';
 import type { Spot } from './walks';
 import { glowOpacity, SMOKE, smokes, walkersOut } from './live';
@@ -198,7 +198,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   // A damaged building's smoke leaves the top of its picture (RULE-8).
   const smoke = placed.filter((q) => smokes(q.p.stage)).map(({ n, p, block, col, row }) => {
     const [x, y] = iso(col, row, MASSING[p.id].height * SMOKE.height);
-    return { n, x, y, fade: fade(block) };
+    return { n, x, y, depth: col + row, fade: fade(block) };
   });
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
@@ -266,10 +266,12 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         players={players}
         routes={routes}
         sprite={manifest?.walker && { entry: manifest.walker, light, href: (src) => hrefOf(src, manifest, size), oneTrim: size === 'phone' }}
+        smoke={smoke}
+        light={light}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
-      {/* Over the buildings and colonists, under the chips, so a plot's number reads through any haze. */}
-      <AirLayer view={vb} environment={colony.gauges.environment ?? 0} light={light} smoke={smoke} />
+      {/* Over the buildings, colonists and smoke, under the chips, so a plot's number reads through any haze. */}
+      <Haze view={vb} environment={colony.gauges.environment ?? 0} light={light} />
       {chips &&
         placed.sort(inBack).map(({ n, p, col, row }) => (
           <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />
