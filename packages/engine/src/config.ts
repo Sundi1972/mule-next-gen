@@ -1451,6 +1451,9 @@ export const EVENT_SHOW = {
     ratsInSilo: 'bulletin',
     crookedAccountant: 'bulletin',
     packageFromHome: 'bulletin',
+    // Slice 4's sabotage (S4-C17): every order done or caught takes the screen ("Caught!" names the culprit).
+    powerCut: 'headline',
+    marketRumour: 'headline',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },

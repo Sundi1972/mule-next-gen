@@ -29,6 +29,7 @@ import {
   useEventReducedMotion,
   useEventShow,
 } from '@mule/ui';
+import { sabotageSeat, withSabotageDetail } from '../events/sabotage';
 import { mapTiles, slotOf } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
 import { connectedIn } from './hub/ready';
@@ -48,7 +49,9 @@ const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareE
 export function Production({ production }: { production: ProductionView }) {
   const client = useClient();
   const { table, view, me, self } = usePhoneGame();
-  const show: ShowData = production;
+  // WS8's named edit (S4-C17): a rumour's good and direction from the public incidents; this phone's own sabotage seat.
+  const show: ShowData = useMemo(() => ({ ...production, events: withSabotageDetail(production.events, view.politics?.sabotage?.incidents) }), [production, view.politics]);
+  const seat = sabotageSeat(view);
   const serverT = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const solo = table.boards === 0;
   // A skip is this phone's alone: it moves the phone's show ahead of the server's clock, never the clock itself. With
@@ -73,7 +76,7 @@ export function Production({ production }: { production: ProductionView }) {
 
   return (
     // One show for the whole screen: the map, the rail, the skip hint and the buzz read the same script.
-    <EventShow {...productionShowProps(production, t, { reduced, mode, players, tiles, width: view.width, height: view.height })}>
+    <EventShow {...productionShowProps(show, t, { reduced, mode, players, tiles, width: view.width, height: view.height })}>
       <AnnounceBuzz on={!solo} />
       <PhoneShell
         phase="Production"
@@ -83,7 +86,7 @@ export function Production({ production }: { production: ProductionView }) {
             {production.events.length === 0 ? (
               <span className="label-caps">Your plots are working</span>
             ) : (
-              <EventBoundary>{solo ? <EventSoloRail me={me.id} /> : <EventTvPhoneRail me={me.id} />}</EventBoundary>
+              <EventBoundary>{solo ? <EventSoloRail me={me.id} sabotage={seat} /> : <EventTvPhoneRail me={me.id} sabotage={seat} />}</EventBoundary>
             )}
             <AfterTheShow solo={solo}>
               <ul className="flex flex-col gap-1" data-testid="harvest">
