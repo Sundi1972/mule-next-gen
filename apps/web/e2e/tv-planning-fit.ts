@@ -9,6 +9,7 @@
  * them"), then with all but one ready.
  */
 import type { DealCard, GameState } from '@mule/engine';
+import type { BudgetView, MuleView, OverruleView } from '@mule/protocol';
 import type { Browser, Page } from 'playwright';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, voteThroughTheElection } from './politics-steps';
@@ -99,6 +100,84 @@ async function aBreakMoment(server: Parameters<typeof held>[0], code: string, tv
   }
 }
 
+/**
+ * SB-5b: stages an overrule call in every view (the engine opens one only on a Governor's tax), reads planning with the
+ * call over the map and the promise row folded to "Overrule called: tax frozen", then takes it back.
+ */
+async function aCallMoment(server: Parameters<typeof held>[0], code: string, tv: Page, table: number): Promise<Read> {
+  type Room = { game: { state: GameState; viewFor(seat: string | null): MuleView }; broadcast(): void };
+  const room = server.registry.get(code) as unknown as Room | undefined;
+  check(room?.game.state.politics, `the ${table}-seat game has politics on, for its overrule`);
+  const game = room.game;
+  const viewFor = game.viewFor;
+  const caller = game.state.players[0]!.id;
+  const call: OverruleView = { target: 'tax', caller, stage: 'called', restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: [], clockMs: 4000, revealMs: 4000, total: table, needed: Math.floor(table / 2) + 1, result: null };
+  await held(server, code, async () => {
+    game.viewFor = (seat) => {
+      const view = viewFor.call(game, seat);
+      return view.politics ? { ...view, politics: { ...view.politics, overrule: call } } : view;
+    };
+    room.broadcast();
+  });
+  try {
+    const moment = tv.locator('[data-phase=planning] [data-testid=tv-map-box] [data-testid=tv-moment] [data-testid=tv-overrule-call]');
+    await moment.waitFor({ timeout: PRESS_MS });
+    await tv.locator('[data-phase=planning] [data-testid=tv-promise-row] [data-testid=tv-overrule-called-line]').waitFor({ timeout: PRESS_MS });
+    const [c, m] = await Promise.all([moment.boundingBox(), tv.locator('[data-phase=planning] [data-testid=tv-map-box]').boundingBox()]);
+    check(c && m && c.y >= m.y - 1 && c.y + c.height <= m.y + m.height + 1, `TV-FIT (${table} people): the overrule call overlays the map box, got the call at y ${c?.y}–${c ? c.y + c.height : '?'} and the box at ${m?.y}–${m ? m.y + m.height : '?'}`);
+    return await planningReads(tv, table, 'an overrule call over the map');
+  } finally {
+    await held(server, code, async () => {
+      game.viewFor = viewFor;
+      room.broadcast();
+    });
+  }
+}
+
+/** SB-5b: the widest budget line the view can carry, staged in every view: every share moved, welfare to the longest name. */
+async function theWidestBudget(server: Parameters<typeof held>[0], code: string, tv: Page, table: number): Promise<Read> {
+  type Room = { game: { state: GameState; viewFor(seat: string | null): MuleView }; broadcast(): void };
+  const room = server.registry.get(code) as unknown as Room | undefined;
+  check(room?.game.state.politics, `the ${table}-seat game has politics on, for its budget`);
+  const game = room.game;
+  const viewFor = game.viewFor;
+  const longest = [...game.state.players].sort((a, b) => b.name.length - a.name.length)[0]!;
+  const budget: BudgetView = {
+    lines: [
+      { line: 'projects', share: 80, start: 60, maxShare: 100, step: 5, credits: 0, maxCredits: null },
+      { line: 'welfare', share: 20, start: 0, maxShare: 20, step: 5, credits: 0, maxCredits: 200 },
+    ],
+    kept: 0,
+    welfareTo: longest.id,
+    setBy: game.state.players[0]!.id,
+    frozen: false,
+  };
+  await held(server, code, async () => {
+    game.viewFor = (seat) => {
+      const view = viewFor.call(game, seat);
+      return view.politics ? { ...view, politics: { ...view.politics, budget } } : view;
+    };
+    room.broadcast();
+  });
+  try {
+    const line = tv.locator('[data-phase=planning] [data-testid=tv-promise-row] [data-testid=tv-budget-line]');
+    await line.filter({ hasText: longest.name }).waitFor({ timeout: PRESS_MS });
+    const lines = await line.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 1;
+      const scale = r.height / (el as HTMLElement).offsetHeight || 1;
+      return Math.round((el as HTMLElement).offsetHeight / lh) || Math.round(r.height / scale / lh);
+    });
+    check(lines === 1, `TV-FIT (${table} people): the widest budget line ("${await line.innerText()}") keeps to one line on the promise row, got ${lines}`);
+    return await planningReads(tv, table, 'the widest budget line');
+  } finally {
+    await held(server, code, async () => {
+      game.viewFor = viewFor;
+      room.broadcast();
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const { server, base } = await startServer({ phaseScale: SCALE });
   const browser = await launch().catch(async (err: unknown) => {
@@ -113,6 +192,7 @@ async function main(): Promise<void> {
       check(people === seats, `the ${seats}-seat TV's ready list has a row for each person, got ${people}`);
       const at = (state: string) => planningReads(tv, seats, state).then((r) => reads.push(r));
       await at('everyone planning');
+      console.log(`  ${seats} people: the budget line ${(await tv.locator('[data-phase=planning] [data-testid=tv-budget-line]').count()) ? 'shows' : 'is not drawn'} on the promise row`);
       await theTableHasSaid(tv, server, code);
       await at('with a chat line');
       // SB-5a: a card broken now is a moment over the map, out of flow; the body keeps the scale it had a moment before.
@@ -120,6 +200,10 @@ async function main(): Promise<void> {
       const moment = await aBreakMoment(server, code, tv, seats);
       check(Math.abs(moment.scale - steady.scale) < 0.001, `TV-FIT (${seats} people): a break moment changes no scale, ${steady.scale.toFixed(3)} before, ${moment.scale.toFixed(3)} with its banner over the map`);
       reads.push(moment);
+      // SB-5b: an overrule call is a moment over the map too; the promise row says "Overrule called: tax frozen".
+      reads.push(await aCallMoment(server, code, tv, seats));
+      // SB-5b: the widest budget line (every share moved, welfare to the longest name) keeps the promise row one line.
+      reads.push(await theWidestBudget(server, code, tv, seats));
       // The host ready: the table may go on without the others, and the TV must say so.
       await ready(phones[0]!);
       // Up to three seats in the waiting box, from four on the host's row (PM ruling 8 Nov).

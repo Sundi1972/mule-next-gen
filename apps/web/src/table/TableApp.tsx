@@ -46,8 +46,11 @@ import { Grounds } from '../components/Grounds';
 import { TvElection } from './TvElection';
 import { FitHeight, TvBody } from './TvFit';
 import { brokenIn } from '../phone/hub/politics/deals-words';
+import { TvBudgetLine, TvOverruleCall } from './TvBudgetLine';
 import { TvDeals } from './TvDeals';
 import { TvGovernorPromise } from './TvGovernorPromise';
+import { useMoment } from './moments';
+import { TvOverrule } from './TvOverrule';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
 
@@ -238,6 +241,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   const opener = useGroundsOpener(game, overlayShowAt(game, now) !== null);
   // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
   const drift = useMonthEndDrift(game, opener === null);
+  // An overrule call is a moment over the planning map (SB-5b, PM ruling 8 Nov), keyed by month so next month's is new.
+  const overrule = game.politics?.overrule;
+  const calling = useMoment(game.phase === 'planning' && overrule?.stage === 'called' ? `call:${game.month}:${overrule.target}:${overrule.caller}` : null, now);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -259,6 +265,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
   if (phase === 'planning' && game.politics?.council && game.politics.council.stage !== 'over') return <TvCouncil game={game} />;
+  // The overrule's ballot and its reveal take the screen after the election and the law ballot (S5-RULE-7).
+  if (phase === 'planning' && (overrule?.stage === 'ballot' || overrule?.stage === 'reveal')) return <TvOverrule game={game} />;
   if (phase === 'development') return <TvDevelop game={game} />;
 
   let side: ReactNode;
@@ -433,7 +441,16 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         {phase === 'planning' ? (
           <div className="flex flex-col gap-3">
             <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} ready={<ReadyCount players={game.players} tv />} />
-            <TvGovernorPromise game={game} />
+            {/* SB-5b (mock CHANGE 1): one row, the Governor's promise whole on its left, the budget line on its right; while
+                an overrule call holds, that side says so. Drawn only with something in it, so it adds no gap. */}
+            {game.politics && (game.politics.governor || game.politics.budget || overrule?.stage === 'called') && (
+              <div className="mt-2 flex items-center gap-6" data-testid="tv-promise-row">
+                <div className="shrink-0 [&>p]:mt-0">
+                  <TvGovernorPromise game={game} />
+                </div>
+                <div className="flex min-w-0 flex-1 justify-end">{overrule?.stage === 'called' ? <OverruleCalledLine /> : <TvBudgetLine game={game} />}</div>
+              </div>
+            )}
           </div>
         ) : (
           <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
@@ -447,8 +464,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                 </StrikeMap>
                 {/* SB-5a (WS6 ruling 8 Nov): a broken card is a moment over the map's top, out of flow like the event show's
                     cards, so the body's scale never moves for it; the news column keeps the server's line for it. */}
-                {phase === 'planning' && brokenIn(game, game.month).length > 0 && (
+                {phase === 'planning' && (calling || brokenIn(game, game.month).length > 0) && (
                   <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-3 p-3 empty:hidden" data-testid="tv-moment">
+                    {calling && <TvOverruleCall game={game} />}
                     <TvDeals game={game} />
                   </div>
                 )}
@@ -468,6 +486,15 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </TvBody>
       </div>
     </SeatSpeciesProvider>
+  );
+}
+
+/** While an overrule call holds, the promise row's right side (SB-5b; the call's own words were its moment's). */
+function OverruleCalledLine() {
+  return (
+    <p className="flex items-center gap-2 whitespace-nowrap text-xl leading-tight text-warn" role="status" data-testid="tv-overrule-called-line">
+      <strong className="font-display font-semibold">Overrule called:</strong> tax frozen
+    </p>
   );
 }
 
