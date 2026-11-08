@@ -20,6 +20,7 @@ import {
   mulePriceFor,
   monthsToExperience,
   needsOf,
+  needsWith,
   outfitCostFor,
   pace,
   playerEventChance,
@@ -249,7 +250,7 @@ const inputRuns = (outfit: ProcessedGood): [Good, number][] => Object.entries(in
 /** canFeed's test for one input `g`, of which a run of a new `outfit` factory takes `q`: whether it lasts. */
 function inputLasts(obs: GameState, me: string, outfit: ProcessedGood): (g: Good, q: number) => boolean {
   const p = obs.players.find((q) => q.id === me)!;
-  const household = householdNeeds(obs, me);
+  const household = householdNeeds(obs, me, outfit);
   const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
   // Its raw plots' Water each month (AM-18), the wells' own included: `own` counts what a well makes before it pays.
   const drunk = obs.tiles.reduce((n, t) => n + (t.owner === me && t.outfit && !isFactory(t.outfit) ? waterUseOf(t) : 0), 0);
@@ -269,13 +270,13 @@ function inputLasts(obs: GameState, me: string, outfit: ProcessedGood): (g: Good
   };
 }
 
-/** What the household, a new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water. */
-function householdNeeds(obs: GameState, me: string): Partial<Stock> {
-  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
-  return {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
-  };
+/**
+ * What the household, the new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water.
+ * The engine's needsWith (needs C12); Food and Water only, as the callers read its keys.
+ */
+function householdNeeds(obs: GameState, me: string, factory: Outfit): Partial<Stock> {
+  const { food, water } = needsWith(obs, me, factory);
+  return { food, water };
 }
 
 /**
@@ -299,7 +300,7 @@ export const chainsOn = () => AI_PLANS.chain.months > 0;
 export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
   if (!chainsOn() || !isFactory(good)) return [];
   const inputs = Object.keys(feedOf(good)) as Good[];
-  const household = householdNeeds(obs, me);
+  const household = householdNeeds(obs, me, good as Outfit);
   if (inputs.some((g) => g in household)) return [];
   return [...new Set(inputs.flatMap((g) => [g, ...chainInputs(obs, me, g)]))];
 }
@@ -324,7 +325,7 @@ function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; st
   if (!chainsOn()) return { links: [], standing: [] };
   // Water, like Energy, is a base good every plot uses (AM-18), never a chain's link.
   const unfed = unfedInputs(obs, me, good).filter((g) => g !== 'water' || !plotWaterOn());
-  const household = householdNeeds(obs, me);
+  const household = householdNeeds(obs, me, good as Outfit);
   if (unfed.some((g) => g in household)) return { links: [], standing: [] };
   const links = new Set<Good>();
   const standing = new Set<Tile>();
