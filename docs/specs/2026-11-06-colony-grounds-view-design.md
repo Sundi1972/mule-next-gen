@@ -303,6 +303,7 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-7 (serves C5) | RULE-5: a stage change between two month ends leans in on that place; a first view leans in on none | C5 |
 | T-AC-10 (serves B-AC-4, AM-7) | the plate fit: on the shipped manifest every place of the plate's extent, and every kind's frame at its place, lies inside the plate's frame | C1 C2 |
 | T-AC-11 (serves G-2, AM-7) | the framing: a building's scale is 0.9–1.1× of 17.5 px/m; empty places fill ≤ 1/3 of the view; the view lies inside the plate; it is centred across on the hall, shifted only as much as keeps a building whole | C2 |
+| T-AC-12 (serves C5, B-AC-6) | during the opener's lean-in, a building nearer the camera than a place the caption names and across it on screen fades to 1 − ⅔ × lean (a third at full lean); the named place, a level or off-to-the-side building, and a view that leans on nothing do not fade (PM, 8 Nov, from the visibility spike: a new site is up to ⅔ covered) | C5 |
 
 Invariant: the grounds never write state (HC-1).
 
