@@ -2,6 +2,7 @@ import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTI
 import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase, strikeEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
+import { sabotageEvents } from './sabotage.js';
 import { formMeteorCrater, relicFit, settleSpecials, specialBonus } from './specials.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
 import {
@@ -306,6 +307,7 @@ export function runProduction(state: GameState): {
   // last, on what everything else left; paid, the good produces in full and production files no strike.
   const strike = strikeEvent(state);
   if (strike) events.push(strike);
+  events.push(...sabotageEvents(state));
   // A cold snap multiplies every plot's Energy need for this run only.
   const cold = coldFactor(events);
   const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();

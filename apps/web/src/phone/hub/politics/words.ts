@@ -3,8 +3,8 @@ import type { MuleView, PoliticsView } from '@mule/protocol';
 
 export const OFFICE_NAME: Record<Office, string> = { governor: 'Governor', sheriff: 'Sheriff' };
 
-/** What an office is for, in a few words (E-3); the Sheriff has no powers yet. */
-export const JOB: Partial<Record<Office, string>> = { governor: 'sets the sales tax each month' };
+/** What an office is for, in a few words (E-3). */
+export const JOB: Partial<Record<Office, string>> = { governor: 'sets the sales tax each month', sheriff: 'guards plots, investigates sabotage, fines the culprits' };
 
 /** The elected offices' names, in POLITICS.offices order. */
 export function officeNames(): string[] {

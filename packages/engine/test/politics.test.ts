@@ -720,7 +720,7 @@ describe("RULE-10: a Governor candidate's tax promise (C12, AM-11)", () => {
     const state = newGame();
     expect(politicsOf(state).promises).toEqual({});
     const before = structuredClone(state.politics);
-    expect(() => runFor(state, 'lena', 'sheriff', HOLD)).toThrow(new RuleError('Sheriff candidates make no promise yet'));
+    expect(() => runFor(state, 'lena', 'sheriff', HOLD)).toThrow(new RuleError('Sheriff candidates make no promise'));
     expect(state.politics).toEqual(before);
 
     runFor(state, 'lena', 'sheriff');
@@ -1220,5 +1220,81 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
     expect(state.treasury.money, 'the fund pays 50 a month, not 80').toBe(1_000 + COLONY.grant.perMonth - POLITICS.pay.governor);
     for (const id of SEATS) expect(player(state, id).money - money[id]!, id).toBe(id === 'lena' ? POLITICS.pay.governor : 0);
     for (const id of SEATS) expect(scoreParts(state, id).office, id).toBe(id === 'lena' ? POLITICS.termScore : 0);
+  });
+});
+
+describe('S4-C6: the Sheriff office, set on in the test (the default stays Governor only)', () => {
+  bothOffices();
+  noGrant();
+
+  it('S4-T-AC-15: RULE-3 appointments for the Sheriff: when every player runs for Sheriff the richest is appointed Governor and the Sheriff is never the new Governor; when nobody runs the two are different players', () => {
+    const state = newGame();
+    setMoney(state, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
+    for (const id of SEATS) runFor(state, id, 'sheriff');
+    everyoneDone(state);
+    for (const id of SEATS) castVote(state, id, 'sheriff', id === 'lena' ? 'brix' : id);
+    const result = everyoneDone(state);
+    expect(result?.governor).toEqual({ winner: 'lena', how: 'appointed', tallies: [] });
+    throughCeremony(state);
+    const { governor, sheriff } = politicsOf(state);
+    expect(governor).toBe('lena');
+    expect(sheriff, 'a Sheriff who is not the new Governor').not.toBeNull();
+    expect(sheriff).not.toBe(governor);
+
+    // Nobody runs and one player is strictly the richest: they are Governor, and the Sheriff is the next richest, never them.
+    const rich = newGame();
+    setMoney(rich, { lena: 2000, brix: 900, ossa: 1000, ai1: 800 });
+    expect(everyoneDone(rich)).toMatchObject({ governor: { winner: 'lena' }, sheriff: { winner: 'ossa', how: 'appointed' } });
+
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const quiet = newGame({ seed });
+      setMoney(quiet, { lena: 1000, brix: 1000, ossa: 1000, ai1: 1000 });
+      const appointed = everyoneDone(quiet)!;
+      expect(appointed.sheriff, `seed ${seed}`).toMatchObject({ how: 'appointed' });
+      expect(appointed.sheriff!.winner, `seed ${seed}`).not.toBe(appointed.governor!.winner);
+    }
+  });
+
+  it('S4-T-AC-15: RULE-7 pay is the Governor then the Sheriff from the fund as far as it reaches (fund 60 → Governor 50, Sheriff 10), and the office score counts both terms', () => {
+    const state = newGame();
+    setMoney(state, { brix: player(state, 'brix').money + 1 });
+    seatGovernor(state, 'lena');
+    expect(politicsOf(state).sheriff).toBe('brix');
+    while (state.phase !== 'auction') advancePhase(state);
+    const fund = POLITICS.pay.governor + Math.floor(POLITICS.pay.sheriff / 3);
+    state.treasury.money = fund;
+    const money = { lena: player(state, 'lena').money, brix: player(state, 'brix').money };
+
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    expect(player(state, 'lena').money - money.lena).toBe(POLITICS.pay.governor);
+    expect(player(state, 'brix').money - money.brix).toBe(fund - POLITICS.pay.governor);
+    expect(state.treasury.money).toBe(0);
+    expect(scoreParts(state, 'lena').office).toBe(POLITICS.termScore);
+    expect(scoreParts(state, 'brix').office, "a Sheriff term counts").toBe(POLITICS.termScore);
+    expect(scoreParts(state, 'ossa').office).toBe(0);
+  });
+
+  it('S4-T-AC-15: a Sheriff candidate\'s promise is refused "Sheriff candidates make no promise" and changes nothing', () => {
+    const state = newGame();
+    const before = structuredClone(state.politics);
+    expect(() => runFor(state, 'ossa', 'sheriff', CAP_8)).toThrow(new RuleError('Sheriff candidates make no promise'));
+    expect(state.politics).toEqual(before);
+  });
+
+  it('S4-B-AC-7: month 1 ends with a Governor and a Sheriff in office, the ceremony ran both, and the Sheriff is paid at upkeep; one player never holds both', () => {
+    const state = newGame();
+    setMoney(state, { lena: 900, brix: 1200, ossa: 1000, ai1: 950 });
+    const result = everyoneDone(state)!;
+    expect(ceremonyBeats(SEATS, result).offices.map((o) => o.office)).toEqual(OFFICES);
+    throughCeremony(state);
+    expect(politicsOf(state)).toMatchObject({ governor: 'brix', sheriff: 'ossa', terms: { brix: 1, ossa: 1 } });
+    expect(politicsOf(state).governor).not.toBe(politicsOf(state).sheriff);
+
+    while (state.phase !== 'auction') advancePhase(state);
+    state.treasury.money = 1_000;
+    const ossa = player(state, 'ossa').money;
+    advancePhase(state);
+    expect(player(state, 'ossa').money - ossa).toBe(POLITICS.pay.sheriff);
   });
 });
