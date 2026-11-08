@@ -1,5 +1,5 @@
 import { productionEventAtMs, productionShowMs } from '@mule/engine';
-import type { MuleView, PlayerView, ProductionView, TableView, TileView } from '@mule/protocol';
+import type { MuleView, PlayerView, ProductionReason, ProductionView, TableView, TileView } from '@mule/protocol';
 import { ProductionMap, showEnd, showTime, showTimes, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -194,4 +194,27 @@ describe('T-AC-14 (AM-19): the screens play the server’s timeline', () => {
       else expect(s.eventsAt).toBeNull();
     });
   }
+});
+
+describe("the TV's legend names every reason the map shows", () => {
+  /**
+   * Every reason the protocol carries, but the two the legend has never named (a ground trait, the floor at nothing):
+   * a reason added to ProductionReason fails to typecheck here until it is listed, then fails below until it has words.
+   */
+  const LEGEND: Record<Exclude<ProductionReason, 'trait' | 'floor'>, true> = {
+    cluster: true, species: true, special: true, pollution: true, crewShort: true, noWater: true, waterOff: true, noEnergy: true, energyOff: true,
+  };
+  const reasons = Object.keys(LEGEND) as ProductionReason[];
+
+  it("each reason on the month's plots has its own line in the legend, the crews' cut among them (needs C14)", () => {
+    const m = month({
+      lines: reasons.map((why, i) => ({ x: i % W, y: Math.floor(i / W), owner: 's1', good: 'food' as const, base: 4, made: 3, parts: [{ why, delta: -1 }] })),
+    });
+    const html = tvAt(m, showTimes(m).lossAt + 0.2);
+    const start = html.indexOf('data-testid="why-legend"');
+    expect(start, 'the legend shows in the loss act').toBeGreaterThan(-1);
+    const legend = html.slice(start, html.indexOf('</ul>', start));
+    expect(legend.match(/<li /g)?.length, 'one line per reason').toBe(reasons.length);
+    expect(legend).toContain('Crews short of Food or Water last month: makes less');
+  });
 });

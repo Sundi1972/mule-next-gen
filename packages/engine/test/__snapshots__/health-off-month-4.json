@@ -1,10 +1,10 @@
 {
   "air": 0,
   "auction": null,
-  "colonists": 103,
+  "colonists": 105,
   "colony": {
-    "happiness": 56,
-    "hardship": 0.23676364231513122,
+    "happiness": 58,
+    "hardship": 0.07443775609492816,
     "ledger": {
       "in": {
         "grant": 200
@@ -24,7 +24,7 @@
       },
       {
         "air": 0,
-        "happiness": 56,
+        "happiness": 58,
         "month": 3,
         "prestige": 0,
         "wealth": 4600
@@ -377,7 +377,7 @@
         "colonists": 108,
         "food": {
           "need": 5.4,
-          "took": 3
+          "took": 4
         },
         "water": {
           "need": 5.4,
@@ -483,11 +483,16 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
       "droneFound": [],
       "droneOrder": [],
+      "householdShort": 1,
       "hungry": true,
       "id": "lena",
       "installedThisTurn": false,
@@ -514,11 +519,16 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
       "droneFound": [],
       "droneOrder": [],
+      "householdShort": 1,
       "hungry": true,
       "id": "brix",
       "installedThisTurn": false,
@@ -545,11 +555,16 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
       "droneFound": [],
       "droneOrder": [],
+      "householdShort": 1,
       "hungry": true,
       "id": "ossa",
       "installedThisTurn": false,
@@ -576,11 +591,16 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
       "droneFound": [],
       "droneOrder": [],
+      "householdShort": 1,
       "hungry": true,
       "id": "kai",
       "installedThisTurn": false,

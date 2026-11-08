@@ -1,4 +1,5 @@
 import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { hardship } from './colony.js';
 import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase, strikeEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
@@ -190,6 +191,15 @@ export function needsOf(state: GameState, playerId: string): { food: number; wat
   };
 }
 
+/**
+ * The share of its output every plot of a player but its Energy plants makes, from how short its crews went at the last
+ * month end (needs RULE-12): 1 − crewDrop × g for each of Food and Water, multiplied, g the colonists' hardship curve.
+ * Up to its tolerance short costs nothing.
+ */
+export function crewFactor(short: { food: number; water: number }): number {
+  return (1 - UPKEEP.crewDrop * hardship(short.food)) * (1 - UPKEEP.crewDrop * hardship(short.water));
+}
+
 /** Energy a working plot burns a month: by good for raw plots, by recipe for factories. */
 export function energyUseOf(state: GameState, tile: Tile): number {
   if (!tile.owner || !tile.outfit || tile.outfit === 'greenBelt') return 0;
@@ -305,6 +315,8 @@ export function feedOf(good: ProcessedGood): Partial<Stock> {
 
 /**
  * Runs one production phase. Order matters and mirrors the design:
+ * 0. every plot of a player but Energy plants makes crewFactor of its output, rounded half up, from how short its crews
+ *    went at the last month end (needs C14), before any turn-off below cuts it;
  * 1. Energy plots and wells produce first and each pays its own use of its good from its own output, never from the
  *    stock (AM-17, AM-18 W5);
  * 2. an owner whose Energy can't cover the uses of all its other plots turns plots off, biggest use first, until the
@@ -375,6 +387,13 @@ export function runProduction(state: GameState): {
     const made = parts.reduce((n, p) => n + p.delta, 0);
     if (made > 0) parts.push({ why: 'noWater', delta: Math.floor(made * UPKEEP.shortOutputShare) - made });
   };
+  const crewFactorOf = new Map(state.players.map((p) => [p.id, crewFactor(p.crewShort ?? { food: 0, water: 0 })]));
+  /** Cuts what the parts add up to to the owner's crew factor, rounded half up, as a part of its own (needs C14). */
+  const crewCut = (tile: Tile, parts: Part[]) => {
+    const made = parts.reduce((n, p) => n + p.delta, 0);
+    const delta = Math.round(made * crewFactorOf.get(tile.owner!)!) - made;
+    if (made > 0 && delta !== 0) parts.push({ why: 'crewShort', delta });
+  };
   /** Cuts what the parts add up to to the turned-off share, as a part of its own, named for the good it went without. */
   const switchOff = (parts: Part[], why: OffWhy) => {
     const made = parts.reduce((n, p) => n + p.delta, 0);
@@ -391,15 +410,17 @@ export function runProduction(state: GameState): {
     const fit = factoryFit(state, tile, good, owner.id);
     const feed = feedOf(good);
     const parts: Part[] = [{ why: 'factory', delta: fit.output }];
+    crewCut(tile, parts);
+    const made = parts.reduce((n, p) => n + p.delta, 0);
     if (offWhy) {
       // Turned off it still files its line. Its inputs are there: a listed factory's were reserved for it
       // (energyOffOrder), a second-pass one is turned off only when it holds them. A share of output that rounds to 0
       // takes no inputs: nothing is spent for nothing.
       const share = Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offInput(q)]));
-      if (offShare(fit.output) > 0 && hasStock(owner.stock, share)) {
+      if (offShare(made) > 0 && hasStock(owner.stock, share)) {
         addStock(owner.stock, share, -1);
         switchOff(parts, offWhy);
-      } else parts.push({ why: offWhy, delta: 0 - fit.output });
+      } else parts.push({ why: offWhy, delta: 0 - made });
       credit(tile, good, parts);
       return;
     }
@@ -416,7 +437,9 @@ export function runProduction(state: GameState): {
     playerById.get(tile.owner!)!.stock.energy -= Math.min(Math.max(0, lines.at(-1)!.made), use(tile));
   }
   for (const tile of working.filter((t) => t.outfit === 'water' && isBaseProducer(t))) {
-    credit(tile, 'water', rawOutputParts(state, tile));
+    const parts = rawOutputParts(state, tile);
+    crewCut(tile, parts);
+    credit(tile, 'water', parts);
     playerById.get(tile.owner!)!.stock.water -= Math.min(Math.max(0, lines.at(-1)!.made), waterUseOf(tile));
   }
 
@@ -438,6 +461,7 @@ export function runProduction(state: GameState): {
   for (const tile of working.filter((t) => !isBaseProducer(t) && isRaw(t.outfit!))) {
     const owner = playerById.get(tile.owner!)!;
     const parts = rawOutputParts(state, tile);
+    crewCut(tile, parts);
     const why = off.get(tile);
     if (why) switchOff(parts, why);
     else {

@@ -202,18 +202,22 @@ describe('land grant', () => {
 
 describe('development', () => {
   it('T-AC-23: a hungry or sick player gets the full development time, marked hungry or sick', () => {
-    // Everyone's sickness roll comes up. Each seat [Food, Medicine]: fed and cured; neither; hungry but cured; fed but sick.
+    // Everyone's sickness roll comes up. Each seat [the household's Food short at the last month end, Medicine]: fed
+    // and cured; neither; hungry but cured; fed but sick (needs C15).
     const state = newGame();
     const sickness = EVENTS.player.sickness;
     const saved = { ...sickness };
     Object.assign(sickness, { phases: { development: 1 }, cap: 1 });
     const supplies: [number, number][] = [
-      [10, 1],
-      [0, 0],
       [0, 1],
-      [10, 0],
+      [1, 0],
+      [0.5, 1],
+      [0, 0],
     ];
-    supplies.forEach(([food, medicine], i) => Object.assign(state.players[i]!.stock, { food, medicine }));
+    supplies.forEach(([householdShort, medicine], i) => {
+      Object.assign(state.players[i]!, { householdShort });
+      state.players[i]!.stock.medicine = medicine;
+    });
     try {
       toPhase(state, 'development');
     } finally {

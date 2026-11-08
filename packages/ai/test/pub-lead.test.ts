@@ -18,7 +18,8 @@ interface Turn {
 
 /**
  * One development turn of ai0 on the floor, refereed as floor-turn.ts does, with `clock` seconds on it from the first tick.
- * Seed 4's two-seat game: ai0 a Zipwing with no Food (hungry: 0.6 of its pace), one plains plot of its own to put a MULE on.
+ * Seed 4's two-seat game: ai0 a Zipwing with no Food, whose household ate nothing at the last month end (hungry: 0.6 of its
+ * pace; needs C15), one plains plot of its own to put a MULE on.
  * The tick its BUY takes, a glint lights two tiles above the store and stays lit for the rest of the turn, and it races
  * every glint it can (GLINT.botShare 1, test-local). No wolves, so no pack meets it and nothing excuses a MULE lost.
  */
@@ -28,6 +29,7 @@ function turn(clockTicks: number): Turn & { pace: number; litOpen: boolean } {
   for (const t of state.tiles) if (t.owner === ME) t.owner = null;
   state.tiles.find((t) => t.terrain === 'plains' && t.owner === null)!.owner = ME;
   player(state, ME).stock.food = 0;
+  player(state, ME).householdShort = 1;
   const live = simFloorConfig();
   const cfg: FloorConfig = { ...live, wolves: { ...live.wolves, on: false }, glint: { ...live.glint, on: false, botShare: 1 } };
   const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });

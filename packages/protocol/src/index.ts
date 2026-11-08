@@ -143,9 +143,9 @@ export interface PlayerView {
    * every screen shows it.
    */
   condition: {
-    /** 0..1 of the month's Food held (engine foodShare). */
+    /** 0..1 of its Food the household ate at the last month end (engine foodShare; needs C15). */
     foodShare: number;
-    /** The month's Food need of this player's household (engine needsOf), so a screen can say "ate n of m". */
+    /** The household's Food need at the month end (engine UPKEEP.baseFood), so a screen can say "ate n of m". */
     foodNeed: number;
     sick: boolean;
     /** Why it is sick (engine playerEventReason): the air, its own pollution, or plain chance; null when well. */
@@ -694,7 +694,7 @@ export interface ShipView {
 export type ScorePartsView = Omit<ScoreParts, 'total'>;
 
 /** A reason a plot made more or less than its base, as a badge on the map: every one the engine names but the base and the events. */
-export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff';
+export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'crewShort' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff';
 
 /** One working plot in the month's production show. Public, like the auction's status table. */
 export interface ProductionLineView {

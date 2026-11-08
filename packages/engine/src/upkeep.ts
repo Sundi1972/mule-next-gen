@@ -7,7 +7,8 @@ import { GOODS, type GameState, type Good, type MonthReport } from './types.js';
 
 /**
  * RULE-1, the colonists' meal of one good: they take their need from the shelf, as far as it holds it, and pay
- * nothing. `short` is the share of their need they went without, 0 to 1; 0 when they need none.
+ * nothing. `short` is the share of their need they went without, 0 to 1; 0 when they need none. A player's household
+ * and crews eat from the player's stock the same way.
  */
 export function colonistMeal(need: number, stock: number): { took: number; short: number } {
   const took = Math.min(need, Math.max(0, stock));
@@ -38,11 +39,21 @@ export function growthRate(state: GameState, short: number): number {
 export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolean; colonistMonth: ColonistMonth } {
   const shortages = new Set<Good>();
 
-  // Players. Energy for plots was already paid in production.
+  // Players. Energy for plots was already paid in production. The household eats first, then the crews, from what is
+  // left; how short the household went of Food makes the player hungry next development (needs C15), how short the
+  // crews went slows next month's production (needs C14).
   for (const player of state.players) {
     const needs = needsOf(state, player.id);
-    player.stock.food = Math.max(0, player.stock.food - needs.food);
-    player.stock.water = Math.max(0, player.stock.water - needs.water);
+    const crewShort = { food: 0, water: 0 };
+    for (const good of ['food', 'water'] as const) {
+      const base = good === 'food' ? UPKEEP.baseFood : UPKEEP.baseWater;
+      const home = colonistMeal(base, player.stock[good]);
+      const crews = colonistMeal(needs[good] - base, player.stock[good] - home.took);
+      player.stock[good] = Math.max(0, player.stock[good] - home.took - crews.took);
+      crewShort[good] = crews.short;
+      if (good === 'food') player.householdShort = home.short;
+    }
+    player.crewShort = crewShort;
   }
 
   // Colonists take their Food and Water from the store, free, as far as its shelf holds them (needs C1, RULE-1):

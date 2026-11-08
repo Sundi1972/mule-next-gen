@@ -414,10 +414,13 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(bluffSeller.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
     expect(sold(bluffSeller, 'ai0')).toEqual([]);
     expect(bluffSeller.path.at(-1)!.price).toBe(screen.auction!.hi);
-    // Under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk. ai1, with no Food and 2,000 cr, buys its
-    // share at the store's line and stands there, at its own ceiling, under the bluffing seller resting at the top: a
-    // bluff never walks down onto a bid, so it sells nothing.
-    const soldOut = runGood(screen, 5, 0, () => ({ ...seller, bluff: true }));
+    // Under the 5 Nov start stock (4 Food a seat), one unit short of it, the store sells out mid-walk before ai1 holds its
+    // need (with Food spoiling a quarter its hold is 5, the store's full shelf would just cover it: needs C16). ai1, with
+    // no Food and 2,000 cr, buys its share at the store's line and stands there, at its own ceiling, under the bluffing
+    // seller resting at the top: a bluff never walks down onto a bid, so it sells nothing.
+    const shortShelf = structuredClone(screen);
+    shortShelf.store.stock.food -= 1;
+    const soldOut = runGood(shortShelf, 5, 0, () => ({ ...seller, bluff: true }));
     const { sellersBottom } = screen.auction!.zones;
     expect(soldOut.trades.some((t) => t.seller === STORE_ID && t.buyer === 'ai1'), 'ai1 buys at the store first').toBe(true);
     expect(storeForSale(soldOut.state, 'food'), 'the store sells out').toBe(0);

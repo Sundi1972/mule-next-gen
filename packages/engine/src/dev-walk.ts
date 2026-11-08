@@ -1,14 +1,15 @@
 import { DEV_WALK, SPECIES_PERK } from './config.js';
-import { needsOf } from './production.js';
 import type { GameState } from './types.js';
 
 /** Where a colonist is in development: on a map tile (its index), in the store, or at the corral across its floor. */
 export type DevPlace = number | 'store' | 'corral';
 
-/** The share of the month's Food the player holds, 0 to 1: the less, the hungrier, so the screens can show how hungry. */
+/**
+ * The share of its Food the player's household ate at the last month end, 0 to 1 (needs C15): the less, the hungrier, so
+ * the screens can show how hungry. 1 before the first month end.
+ */
 export function foodShare(state: GameState, id: string): number {
-  const p = state.players.find((q) => q.id === id)!;
-  return Math.min(1, p.stock.food / Math.max(1, needsOf(state, id).food));
+  return 1 - (state.players.find((q) => q.id === id)!.householdShort ?? 0);
 }
 
 /** The share of its pace a colonist walks at for hunger: 1 fed, falling linearly with the shortfall to hungerPaceMin. */
