@@ -1,10 +1,10 @@
-import { COLONY, EVENTS, GAME, GOOD_CONFIG, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { COLONY, EVENTS, GAME, GOOD_CONFIG, HARDSHIP, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
 import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
 import { airBand, cleanAir, type AirBand } from './pollution.js';
 import { createRng, seedOf } from './rng.js';
-import { GOODS, RAW_GOODS, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type MoodBand, type Phase, type Player, type PrestigeId, type SpecialKind, type Tile } from './types.js';
+import { GOODS, RAW_GOODS, type Colony, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type MoodBand, type Phase, type Player, type PrestigeId, type SpecialKind, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -445,10 +445,20 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
     pollution: row.pollution && pollutionCounts(state, row) ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
     wealth: row.wealth && player !== undefined ? wealthShare(state, row.wealth, player) : 0,
     follows,
-    mood: state.colony ? (row.mood?.[moodBand(state.colony.happiness)] ?? 0) : 0,
+    mood: state.colony ? moodPoints(row, state.colony) : 0,
     objects: (state.colony?.projects ?? []).filter((p) => p.stage === 'standing').reduce((sum, p) => sum + (row.objects?.[p.id] ?? 0), 0),
     foodPrice: row.foodPrice && state.store.posted.food > row.foodPrice.factor * GOOD_CONFIG.food.refPrice ? row.foodPrice.points : 0,
   };
+}
+
+/** The bands where the colony's memory of hardship raises a row's mood points (needs RULE-6). */
+const HARD_BANDS: readonly MoodBand[] = ['restless', 'unhappy', 'unrest'];
+
+/** A row's mood points in the colony's band; in the unhappy bands raised by the memory of hardship (needs RULE-6). */
+function moodPoints(row: EventRow, colony: Colony): number {
+  const band = moodBand(colony.happiness);
+  const points = row.mood?.[band] ?? 0;
+  return HARD_BANDS.includes(band) ? points * (1 + HARDSHIP.unrestPerHardship * (colony.hardship ?? 0)) : points;
 }
 
 function pollutionCounts(state: GameState, row: EventRow): boolean {

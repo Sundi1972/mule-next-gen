@@ -286,8 +286,10 @@ export const UPKEEP = {
   colonistsPerMedicine: 50,
   /** Colonists want 1 Electronics a month per this many, and with it the Rare earth and Alloy its recipe takes. */
   colonistsPerElectronics: 50,
-  /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
-  colonistGrowth: { fed: 1.04, hungry: 0.95 },
+  /** The colony grows by this factor in a month its colonists were fed, or short no more than HARDSHIP.tolerance. */
+  colonistGrowth: { fed: 1.04 },
+  /** Past the tolerance, the colony's growth factor is 1 less this many times the share missing (needs RULE-5). */
+  colonistShrinkPerShortfall: 0.1,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
@@ -1238,6 +1240,8 @@ export const HAPPINESS = {
     welfareUnit: 50,
     welfareCap: 4,
   },
+  /** Added to the colony's monthly growth factor in each mood band: a happy colony draws settlers (needs RULE-5). */
+  migration: { thriving: 0.02, content: 0, restless: -0.01, unhappy: -0.03, unrest: -0.05 } satisfies Record<MoodBand, number>,
 };
 
 /** How hard a shortfall bites (needs RULE-2): a share short up to `tolerance` is shrugged off, beyond it the bite grows. */
@@ -1254,6 +1258,8 @@ export const HARDSHIP = {
   targetPerHardship: 6,
   /** Mood points off at once, after the month's step, at a total miss; in proportion to the month's bite (needs RULE-4). */
   shock: 8,
+  /** Added to an unrest-band row's mood points, as a share of them, per unit of the memory of hardship (needs RULE-6). */
+  unrestPerHardship: 0.25,
 };
 
 /**
