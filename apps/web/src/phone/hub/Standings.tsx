@@ -5,6 +5,7 @@ import { collapseCutWords, inCollapse, league, yourLines } from '../../game/mont
 import { useEscape } from '../dialog';
 import { usePhoneGame } from '../game';
 import { OnlyYou } from './OnlyYou';
+import { noNewCard } from './politics/Deals';
 import { useHubIfAny } from './politics/parts';
 import { standingOf } from './standing';
 
@@ -20,7 +21,7 @@ export function useStanding(onOpen: () => void): { label: string; aria: string; 
  * total each, the one number everyone sees; your lines come from your own view's parts, which no one else receives.
  */
 export function StandingsSheet({ onClose }: { onClose: () => void }) {
-  const { view, self } = usePhoneGame();
+  const { view, me, self } = usePhoneGame();
   const hub = useHubIfAny();
   useEscape(onClose);
   const { rows } = league(view);
@@ -75,6 +76,8 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                       <td className="pl-1.5 text-right">
                         {!you && (
                           <Button
+                            disabled={!!noNewCard(view, me, r.player.id)}
+                            title={noNewCard(view, me, r.player.id) ?? undefined}
                             size="md"
                             variant="ghost"
                             className="h-8 whitespace-nowrap px-1.5 text-xs text-holo"
