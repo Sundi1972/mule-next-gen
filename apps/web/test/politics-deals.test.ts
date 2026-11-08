@@ -381,6 +381,8 @@ const BRIX_CARDS: DealCard[] = [
   card({ id: 'deal-out1', from: BRIX, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 2, until: 4 }),
   card({ id: 'deal-act1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 3, status: 'active' }),
   card({ id: 'deal-wd1', from: BRIX, to: KAI, terms: { kind: 'vote', law: true, yes: true }, offered: 1, until: 2, status: 'withdrawn', settled: 1 }),
+  // Broken cards are public: Brix's view carries this one between Ossa and Lena, but it is not Brix's card.
+  card({ id: 'deal-ob1', from: OSSA, to: LENA, terms: { kind: 'vote', office: 'governor', candidate: LENA }, offered: 1, until: 1, status: 'broken', brokenBy: OSSA, settled: 1 }),
 ];
 const brixGame = (cards: DealCard[] = BRIX_CARDS) => gameFor(myView(BRIX, cards), politics({ candidates: { governor: [OSSA] } }));
 const lenasAnswer = (status: DealCard['status']) => ({ ...LENAS, status, settled: status === 'active' ? null : 2 });
@@ -426,6 +428,8 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(text('my-deal-deal-act1-line')).toContain('Binds until the end of month 3');
     expect(text('my-deal-deal-wd1-line')).toContain('Withdrawn by you');
     expect(byTestid('my-deal-deal-wd1').getAttribute('data-status')).toBe('withdrawn');
+    expect(findTestid('my-deal-deal-ob1'), "Ossa's broken card to Lena is public, but not one of Brix's cards").toBeUndefined();
+    expect(text('my-deals-settled'), 'Settled counts only Brix’s own').toContain('Settled 1');
   });
 
   it('S3-B-AC-1: My cards lists a card offered to me under For you to answer, and a second offer makes the agenda open My cards', () => {
