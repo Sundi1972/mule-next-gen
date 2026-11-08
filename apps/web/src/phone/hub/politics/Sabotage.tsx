@@ -2,7 +2,7 @@ import { GOODS, POLITICS, type Good, type SabotageTarget } from '@mule/engine';
 import type { MuleView, MyPoliticsView, MyView, TileView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
 import { useState, type ReactNode } from 'react';
-import { tileAt } from '../../../game/derive';
+import { plotName, tileAt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
@@ -251,8 +251,15 @@ function RumourOrder({ view, sab, ban, pacts, onOrder, onWithdraw }: OrderProps)
   );
 }
 
-const OUTCOME: Record<Sab['mine'][number]['outcome'], [string, string]> = {
+/**
+ * An own order's outcome. 'void' (the crew found nothing to cut, S4-RULE-3 row 1) is WS7's, on #746 and not yet in
+ * trunk's type: the union keeps this compiling under both.
+ */
+type Outcome = Sab['mine'][number]['outcome'] | 'void';
+
+const OUTCOME: Record<Outcome, [string, string]> = {
   pending: ['Ordered', 'border-holo-line text-ink-2'],
+  void: ['Void', 'border-holo-line text-ink-3'],
   done: ['Worked', 'border-ok text-ok'],
   failed: ['Failed', 'border-holo-line text-ink-3'],
   caught: ['Caught', 'border-alert text-alert'],
@@ -277,20 +284,36 @@ function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
       </span>
       <ul className="flex flex-col gap-1">
         {mine.map((o) => {
-          const [word, tone] = OUTCOME[o.outcome];
+          const outcome = o.outcome as Outcome;
+          const [word, tone] = OUTCOME[outcome];
+          // A void order names the plot, never an owner: it has no victim, and the plot may have changed hands since.
+          const voided = outcome === 'void';
           return (
             <li key={o.id} className="flex items-start gap-2 rounded-control border border-holo-faint p-1.5 text-xs" data-testid={`my-order-${o.id}`}>
               {/* A pending cut on a plot that has since lost its MULE has no crop (good null, WS7's #746). */}
               {o.good && <GoodIcon good={o.good} size={14} />}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-semibold">
-                  Month {o.month}: {o.kind === 'rumour' ? `rumour, ${o.good ? goodWord(o.good) : ''} ${o.dir}` : `power cut on ${nameOf(view, cutOwner(view, o))}’s plot`}
+                  Month {o.month}:{' '}
+                  {o.kind === 'rumour'
+                    ? `rumour, ${o.good ? goodWord(o.good) : ''} ${o.dir}`
+                    : voided && o.at
+                      ? `power cut on plot ${plotName(o.at.x, o.at.y)}`
+                      : `power cut on ${nameOf(view, cutOwner(view, o))}’s plot`}
                 </span>
                 <span className="text-ink-3" data-testid={`my-order-known-${o.id}`}>
-                  {o.how !== null ? (o.fine ? `Everyone knows. Fined ${o.fine.due} cr.` : 'Everyone knows it was you.') : 'Nobody knows it was you.'}
+                  {voided
+                    ? 'Your crew found nothing to cut; you pay nothing.'
+                    : o.how !== null
+                      ? o.fine
+                        ? `Everyone knows. Fined ${o.fine.due} cr.`
+                        : 'Everyone knows it was you.'
+                      : 'Nobody knows it was you.'}
                 </span>
               </span>
-              <span className={cx('shrink-0 rounded-chip border px-1 font-mono text-[10px] font-bold uppercase leading-4', tone)}>{word}</span>
+              <span className={cx('shrink-0 rounded-chip border px-1 font-mono text-[10px] font-bold uppercase leading-4', tone)} data-testid={`my-order-chip-${o.id}`}>
+                {word}
+              </span>
             </li>
           );
         })}

@@ -573,7 +573,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
     ];
     mount(viewOf({ sabotage: { ...NO_ORDER, mine } }));
     tap('desk-market');
-    expect(allTestids('my-order-', byTestid('my-orders')).filter((id) => !id.includes('known'))).toEqual(['my-order-w3c8', 'my-order-p5d1']);
+    expect(allTestids('my-order-', byTestid('my-orders')).filter((id) => !id.includes('known') && !id.includes('chip'))).toEqual(['my-order-w3c8', 'my-order-p5d1']);
     expect(text('my-order-w3c8')).toBe('Month 4: power cut on Kai’s plotEveryone knows it was you.Caught');
     expect(text('my-order-known-p5d1'), 'it worked and nobody saw: public, but not who').toBe('Nobody knows it was you.');
   });
@@ -592,5 +592,30 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
     tap('desk-market');
     expect(text('my-order-sab-d4e5f6')).toBe('Month 5: power cut on Kai’s plotNobody knows it was you.Ordered');
     expect(byTestid('my-order-sab-d4e5f6').findAll('svg'), "no good's icon").toHaveLength(0);
+  });
+
+  /**
+   * A void order as WS7's projection sends it (#746, 8aded934): the crew found nothing to cut (S4-RULE-3 row 1). No victim,
+   * no charge; `good` is the crop at the void, or null. Trunk's outcome type has no 'void' until #746 merges: cast.
+   */
+  const voided = (good: string | null) =>
+    ({ id: 'sab-v0id01', month: 5, kind: 'powerCut', at: { x: 1, y: 0 }, victim: null, good, outcome: 'void', public: false, how: null, culprit: 's1', worked: false, investigated: false, fine: null }) as unknown as Sab['mine'][number];
+
+  it('S4-C14: a void order says the crew found nothing to cut and that you pay nothing; it names the plot, never an owner', () => {
+    mount(viewOf({ sabotage: { ...NO_ORDER, mine: [voided('smithore')] } }));
+    tap('desk-market');
+    const row = text('my-order-sab-v0id01');
+    expect(row).toBe('Month 5: power cut on plot 2·1Your crew found nothing to cut; you pay nothing.Void');
+    expect(row, "the plot's owner now may be a new one after a sale").not.toContain('Ossa');
+    expect(row, 'a void order is not charged').not.toMatch(/\d+ cr/);
+    expect(byTestid('my-order-chip-sab-v0id01').getAttribute('class'), 'a muted chip').toContain('border-holo-line text-ink-3');
+    expect(byTestid('my-order-sab-v0id01').findAll('svg'), "the crop's icon").toHaveLength(1);
+  });
+
+  it('S4-C14: a void order with no crop (good null) has no icon', () => {
+    mount(viewOf({ sabotage: { ...NO_ORDER, mine: [voided(null)] } }));
+    tap('desk-market');
+    expect(text('my-order-sab-v0id01')).toBe('Month 5: power cut on plot 2·1Your crew found nothing to cut; you pay nothing.Void');
+    expect(byTestid('my-order-sab-v0id01').findAll('svg')).toHaveLength(0);
   });
 });
