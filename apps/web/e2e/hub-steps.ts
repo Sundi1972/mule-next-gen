@@ -671,9 +671,11 @@ export async function governorsDeskFits({ browser, base, server }: { browser: Br
 }
 
 /**
- * B-AC-14 (PM ruling on #723): the map's plot is the same size whatever the needs strip says, at 844×390 and at
- * 667×375: everything OK (its shortest line), Water short, and all three short (its longest), so no need's number or
- * words can shrink the map and hide the STORE sign under 24 px. Seeded on the server with the clock held, and undone.
+ * B-AC-14 (PM rulings on #723 and #751): the map's plot is the same size whatever the needs strip says, at 844×390 and
+ * at 667×375: everything OK on small figures (the shortest line), Water short, all three short, two- and three-digit
+ * holdings, and short goods beside a three-digit one (the widest line trunk's config can make). At 844 the strip is one
+ * line in every case; at both sizes no good is cut off at its edge. Prints what it measured, so CI's log, in CI's fonts,
+ * is the evidence. Seeded on the server with the clock held, and undone.
  */
 export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, code: string, timeout = 2_000): Promise<string> {
   const room = server.registry.get(code) as unknown as { game: { state: GameState }; broadcast(): void } | undefined;
@@ -683,39 +685,60 @@ export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, cod
     const me = state.players.find((p) => p.id === SEAT);
     check(me, `seat ${SEAT} in the game`);
     const need = monthNeeds(state, SEAT);
-    check(need.water > 0 && need.energy > 0, `B-AC-14: the seat needs Water and Energy this month, got ${need.water} and ${need.energy}`);
+    check(need.food > 0 && need.water > 0 && need.energy > 0, `B-AC-14: the seat needs Food, Water and Energy this month, got ${need.food}, ${need.water} and ${need.energy}`);
     const before = { food: me.stock.food, water: me.stock.water, energy: me.stock.energy };
     const planning = phone.locator('[data-phase=planning]');
-    const plot = planning.getByTestId('hub-map').locator('[data-testid^=map-plot-]').first();
     type Stocks = { food: number; water: number; energy: number };
+    const each = (n: number): Stocks => ({ food: n, water: n, energy: n });
     const cases: [string, Stocks][] = [
       ['all OK', { food: need.food, water: need.water, energy: need.energy }],
-      [`Water short ${need.water}`, { food: need.food, water: 0, energy: need.energy }],
-      ['Food, Energy and Water short', { food: 0, water: 0, energy: 0 }],
+      ['Water short', { food: need.food, water: 0, energy: need.energy }],
+      ['all short', each(0)],
+      ['20 of each', each(20)],
+      ['120 of each', each(120)],
+      ['Food and Energy short, 120 Water', { food: 0, water: 120, energy: 0 }],
     ];
-    /** The plot's side with the seat's stock at `stock`, once the strip shows it. */
-    const sideWith = async (stock: Stocks) => {
+    type Read = { plot: number; strip: number; rows: number; label: number; cut: string[] };
+    /** The plot's side and the strip's shape with the seat's stock at `stock`, once the strip shows it. */
+    const readWith = async (stock: Stocks): Promise<Read> => {
       Object.assign(me.stock, stock);
       room.broadcast();
       for (const g of ['food', 'water', 'energy'] as const) {
         const shows = stock[g] >= need[g] ? '✓' : `short ${need[g] - stock[g]}`;
         await planning.getByTestId(`strip-${g}`).filter({ hasText: `${stock[g]} of ${need[g]}` }).filter({ hasText: shows }).waitFor({ timeout });
       }
-      await phone.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-      const box = await plot.boundingBox();
-      check(box, 'B-AC-14: the hub map draws its plots');
-      return Math.min(box.width, box.height);
+      return phone.evaluate(async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const strip = document.querySelector('[data-phase=planning] [data-testid=needs-strip]')!;
+        const plot = document.querySelector('[data-phase=planning] [data-testid=hub-map] [data-testid^=map-plot-]')!.getBoundingClientRect();
+        const box = strip.getBoundingClientRect();
+        const goods = [...strip.querySelectorAll('[data-testid^=strip-]')];
+        const label = strip.firstElementChild as HTMLElement;
+        const tops = new Set([label, ...goods].map((g) => Math.round(g.getBoundingClientRect().top)));
+        return {
+          plot: Math.min(plot.width, plot.height),
+          strip: box.height,
+          rows: tops.size,
+          label: label.getBoundingClientRect().width,
+          // A good whose box reaches past the strip's is cut off where the strip clips it.
+          cut: goods.filter((g) => g.getBoundingClientRect().right > box.right + 0.5 || g.getBoundingClientRect().bottom > box.bottom + 0.5).map((g) => g.getAttribute('data-testid')!),
+        };
+      });
     };
     const lines: string[] = [];
     try {
       for (const size of [PHONE.viewport, PHONE_SMALL.viewport]) {
         await phone.setViewportSize(size);
         const at = `${size.width}×${size.height}`;
-        const sides: number[] = [];
-        for (const [, stock] of cases) sides.push(await sideWith(stock));
-        const seen = cases.map(([name], i) => `${sides[i]!.toFixed(1)} px with ${name}`).join(', ');
-        check(Math.max(...sides) - Math.min(...sides) < 0.05, `B-AC-14: at ${at} the map's plot is ${seen}: the needs strip must never squeeze the map`);
-        lines.push(`${sides[0]!.toFixed(1)} px at ${at}`);
+        const reads: Read[] = [];
+        for (const [, stock] of cases) reads.push(await readWith(stock));
+        const seen = cases.map(([name], i) => `${name}: plot ${reads[i]!.plot.toFixed(1)} px, strip ${reads[i]!.strip.toFixed(1)} px in ${reads[i]!.rows} row(s), label ${reads[i]!.label.toFixed(0)} px`).join('; ');
+        console.log(`B-AC-14 at ${at}: ${seen}`);
+        const plots = reads.map((r) => r.plot);
+        check(Math.max(...plots) - Math.min(...plots) < 0.05, `B-AC-14: at ${at} the map's plot must not change with the needs strip's words: ${seen}`);
+        for (const [i, r] of reads.entries()) check(r.cut.length === 0, `B-AC-14: at ${at} with ${cases[i]![0]} no good is cut off at the strip's edge, got ${r.cut.join(', ')}`);
+        if (size === PHONE.viewport) for (const [i, r] of reads.entries()) check(r.rows === 1, `B-AC-14: at ${at} the needs strip is one line with ${cases[i]![0]}, got ${r.rows} rows`);
+        lines.push(`${plots[0]!.toFixed(1)} px at ${at}`);
       }
     } finally {
       Object.assign(me.stock, before);
