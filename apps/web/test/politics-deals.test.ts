@@ -403,6 +403,22 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
   });
 
+  it("S3-B-AC-6: a player card opened over the incoming sheet closes alone on Escape, and the sheet's chip has the focus back", () => {
+    listenForKeys();
+    mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
+    tap('desk-talk');
+    tapFocused('agenda-deals');
+    tapFocused('sheet-card-deal-in9-from-rep');
+    expect(findTestid(`player-card-${BRIX}`)).toBeDefined();
+    press('Escape');
+    expect(findTestid(`player-card-${BRIX}`), 'Escape closes the card on top').toBeUndefined();
+    expect(findTestid('incoming-sheet'), 'and only it').toBeDefined();
+    expect(focused()).toBe('sheet-card-deal-in9-from-rep');
+    press('Escape');
+    expect(findTestid('incoming-sheet'), 'the next Escape closes the sheet').toBeUndefined();
+    expect(focused()).toBe('agenda-deals');
+  });
+
   it("S3-B-AC-6: a name's player card takes the focus on open, closes on Escape and gives the focus back to the chip", () => {
     listenForKeys();
     const game = gameFor(myView(LENA, []));
