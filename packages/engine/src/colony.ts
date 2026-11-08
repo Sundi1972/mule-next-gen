@@ -236,10 +236,15 @@ export function hardship(short: number): number {
   return short <= tolerance ? 0 : ((short - tolerance) / (1 - tolerance)) ** power;
 }
 
-/** How the colonists fared at an upkeep: each need's share they went without (0..1), and the share of their Electronics want met. */
+/**
+ * How the colonists fared at an upkeep: each need's share they went without (0..1), the share of their Electronics
+ * want met, and the growth sickness can slow: the colony's size before it grew and the rate it grew at. No `growth`
+ * when Collapse air overrode it.
+ */
 export interface ColonistMonth {
   short: { food: number; water: number; medicine: number };
   comfort: number;
+  growth?: { from: number; rate: number };
 }
 
 /** A month with nothing missing and no Electronics. */
@@ -268,9 +273,9 @@ export function colonistMedicineNeed(state: GameState): number {
   return (state.colonists / UPKEEP.colonistsPerMedicine) * (1 + (sickShare(state) ?? 0));
 }
 
-/** What sickness takes off the colony's monthly growth factor: in proportion to the share sick before this upkeep (needs RULE-8). */
-export function sickGrowthCut(state: GameState): number {
-  return HEALTH.growthPerSick * (sickShare(state) ?? 0);
+/** The colony's size after a month's growth at `rate`, slowed by the share sick (needs RULE-8), rounded once. */
+export function grownColonists(from: number, rate: number, sick: number): number {
+  return Math.round(from * (rate - HEALTH.growthPerSick * sick));
 }
 
 /**
@@ -287,7 +292,7 @@ export function electronicsComfort(colonists: number, stock: number): { took: nu
 /**
  * At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is
  * funded, oldest first (G-5 RULE-21). Then, with colony health on, the sick share moves by how the colonists fared at
- * this upkeep's meal, and the month's mood steps.
+ * this upkeep's meal and slows the month's growth, and the month's mood steps.
  */
 export function runColony(state: GameState, shortages: readonly Good[], month: ColonistMonth = WELL_MONTH): void {
   if (!state.colony) return;
@@ -313,7 +318,11 @@ export function runColony(state: GameState, shortages: readonly Good[], month: C
   // (C48) (RULE-21 row 4).
   let limit = credits.projects;
   for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) limit -= fund(state, colony, p, limit);
-  if (HEALTH.enabled) colony.sick = nextSickShare(colony.sick ?? 0, month.short);
+  if (HEALTH.enabled) {
+    colony.sick = nextSickShare(colony.sick ?? 0, month.short);
+    // Upkeep grew the colony as if all were well; it grows again from the same size, slowed by the new share.
+    if (month.growth) state.colonists = grownColonists(month.growth.from, month.growth.rate, colony.sick);
+  }
   colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages, month.comfort)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);

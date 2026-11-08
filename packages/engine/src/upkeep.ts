@@ -1,4 +1,4 @@
-import { colonistMedicineNeed, electronicsComfort, sickGrowthCut, type ColonistMonth } from './colony.js';
+import { colonistMedicineNeed, electronicsComfort, grownColonists, type ColonistMonth } from './colony.js';
 import { GAME, GOOD_CONFIG, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
@@ -64,10 +64,12 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // The month's report keeps the meal for the month-end line (C6). A what-if shares the real report: it writes nothing.
   const report = state.history.at(-1);
   if (report?.month === state.month && !state.whatIf) report.colonistMeal = meal;
-  // In Collapse colonists leave whatever they eat. A sick colony grows more slowly, by the share sick before this upkeep.
-  const growth =
-    airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : (fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry) - sickGrowthCut(state);
-  state.colonists = Math.round(state.colonists * growth);
+  // In Collapse colonists leave whatever they eat. Otherwise they grow as if all were well: with colony health on,
+  // runColony grows them again from the same size once the month's sick share is known.
+  const collapse = airBand(state.air).name === 'collapse';
+  const rate = collapse ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
+  if (!collapse) colonistMonth.growth = { from: state.colonists, rate };
+  state.colonists = grownColonists(state.colonists, rate, 0);
 
   // Spoilage, then anything above the home depot is lost. Selling it in time
   // is the player's own decision.
