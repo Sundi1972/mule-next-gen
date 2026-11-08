@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { ColonyView, ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { DealCard } from '@mule/engine';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
@@ -79,7 +79,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
 });
 
 /** Lena's phone (or `self`'s): 2 Food against a need of 5, so This month carries what she is short of. */
-function game({ self = 's1', pol = politics(), sheriff = false, deals }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean; deals?: DealCard[] } = {}): MuleView {
+function game({ self = 's1', pol = politics(), sheriff = false, deals, colony }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean; deals?: DealCard[]; colony?: ColonyView } = {}): MuleView {
   const me: MyView = {
     id: self,
     species: 'zipwing',
@@ -108,7 +108,7 @@ function game({ self = 's1', pol = politics(), sheriff = false, deals }: { self?
       ...(sheriff ? { sheriff: { canAct: true as const, guards: [], max: 2, investigationsLeft: 1, fineable: [], steps: [], multiplier: 1 } } : {}),
     },
   };
-  return aMuleView({ month: 5, width: 4, height: 1, tiles: TILES, players: PLAYERS, me, politics: pol });
+  return aMuleView({ month: 5, width: 4, height: 1, tiles: TILES, players: PLAYERS, me, politics: pol, ...(colony ? { colony } : {}) });
 }
 
 const STATE = { status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
@@ -271,10 +271,13 @@ describe('the tabbed planning hub (SB-2)', () => {
     if (to.shows) byTestid(to.shows);
   });
 
-  it("B-AC-14 (D10, S3-C17, S3-C19): Colony's standings carry each name's reputation chip, opening the player's card, and each other name's + Deal, opening Talk's composer to that player; with a card to Kai unanswered his + Deal is off and says why", () => {
+  it("B-AC-14 (D10, D16, T-AC-14, S3-C17, S3-C19): Colony leads with the colony's picture, its colonists the seated players'; its standings carry each name's reputation chip, opening the player's card, and each other name's + Deal, opening Talk's composer to that player; with a card to Kai unanswered his + Deal is off and says why", () => {
     const unanswered: DealCard = { id: 'deal-1', from: 's1', to: 's3', terms: { kind: 'pact' }, offered: 5, until: 7, status: 'offered', brokenBy: null, settled: null };
-    mount(game({ deals: [unanswered] }));
+    const colony: ColonyView = { gauges: { wealth: 26_400, environment: 34, prestige: 2, happiness: 64, band: 'content' }, lastGauges: null, fund: 840, ledger: null, projects: [], catalogue: [], score: null };
+    mount(game({ deals: [unanswered], colony }));
     tap('tab-colony');
+    const picture = byTestid('colony-grounds', byTestid('colony-picture'));
+    expect(picture.getAttribute('data-players'), "the colonists wear the 3 seated players' colours").toBe(String(PLAYERS.length));
     for (const id of ['s1', 's2', 's3']) byTestid(`colony-standing-${id}-rep`);
     expect(findTestid('colony-standing-s1-deal'), 'no + Deal to yourself').toBeUndefined();
     expect(byTestid('colony-standing-s3-deal').getAttribute('disabled'), "Kai's row offers no second card").not.toBeNull();
