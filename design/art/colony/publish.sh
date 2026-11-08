@@ -148,10 +148,12 @@ manifest = {
 }
 if plates:
     manifest["plate"] = plates
-# the colonists' sheets are published by walker/publish.py, not rendered here: keep their entry
+# the colonists' sheets (walker/publish.py) and the inner-crossing lamp (lamp_publish.py) are published apart, not
+# rendered here: keep their entries
 old = os.path.join(pub, "manifest.json")
-if os.path.exists(old) and "walker" in json.load(open(old)):
-    manifest["walker"] = json.load(open(old))["walker"]
+for entry in ("walker", "lamp"):
+    if os.path.exists(old) and entry in json.load(open(old)):
+        manifest[entry] = json.load(open(old))[entry]
 with open(os.path.join(pub, "manifest.json"), "w") as f:
     json.dump(manifest, f, indent=2)
     f.write("\n")
