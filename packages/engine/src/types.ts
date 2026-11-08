@@ -126,6 +126,16 @@ export interface Player {
   doneWithLand: boolean;
   /** True when the player started development short of Food: less time to build. */
   hungry: boolean;
+  /**
+   * The share of their need the player's crews went without at the last month end, Food and Water, each 0 to 1 (needs
+   * C14): next production works slower by it. Absent before the first month end: nothing short.
+   */
+  crewShort?: { food: number; water: number };
+  /**
+   * The share of its Food the player's household went without at the last month end, 0 to 1 (needs C15): it sets
+   * hunger and the walking pace in the next development. Absent before the first month end: fed.
+   */
+  householdShort?: number;
   /** Seconds of development time this month, set when development starts. */
   devSeconds: number;
   /** True when sickness cost development time this month (no Medicine to cure it). */
@@ -384,10 +394,11 @@ export interface ProductionLine {
    * What made up the output, in order; the deltas sum to `made`. `energyOff`: the plot was turned off for want of
    * Energy and made UPKEEP.offOutputShare of its output (AM-17); `waterOff` the same for want of Water (AM-18).
    * `noEnergy` and `noWater` are the halvings they replaced, kept for screens and fixtures that still name them; the
-   * engine no longer files either.
+   * engine no longer files `noEnergy`, and `noWater` only with AM-18 off. `crewShort`: its crews went short at the last
+   * month end and worked slower (needs C14, RULE-12), before any turn-off.
    */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'crewShort' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];

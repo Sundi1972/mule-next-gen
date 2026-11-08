@@ -294,6 +294,12 @@ export const UPKEEP = {
   irrigated: ['food'] as RawGood[],
   /** With AM-18 off: share of its output an irrigated plot makes when its owner is short of Water, rounded down. */
   shortOutputShare: 0.5,
+  /**
+   * How much slower a crew left wholly short works, per good (needs C14, RULE-12): next production every plot of its
+   * player but Energy plants makes 1 − crewDrop × g(short) of its output for Food, the same again for Water, g the
+   * colonists' hardship curve (colony.ts::hardship). 0.5: half output with nothing to eat, a quarter with neither.
+   */
+  crewDrop: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
   /** Colonists' Energy demand, as a share of their Food and Water units. */

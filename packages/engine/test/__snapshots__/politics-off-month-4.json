@@ -423,6 +423,10 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
@@ -454,6 +458,10 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
@@ -485,6 +493,10 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
@@ -516,6 +528,10 @@
       "analysed": [],
       "carriedMule": null,
       "claimsThisGrant": 0,
+      "crewShort": {
+        "food": 0,
+        "water": 0
+      },
       "devSeconds": 60,
       "doneDeveloping": false,
       "doneWithLand": false,
