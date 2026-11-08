@@ -8,7 +8,7 @@ import { useEscape } from '../../dialog';
 import { slotOf } from '../../../game/derive';
 import { useHub, type HubNav } from '../Hub';
 import { SeatWords } from '../../../components/SeatWords';
-import { brokenMove, brokenWho, brokenWords } from './deals-words';
+import { brokenMove, brokenWho, brokenWords, noNewCard } from './deals-words';
 import { banOf } from './Sabotage';
 
 export function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
@@ -20,7 +20,7 @@ export function Section({ title, children, testid }: { title: ReactNode; childre
   );
 }
 
-type NameView = Pick<MuleView, 'players'> & Partial<Pick<MuleView, 'politics'>>;
+type NameView = Pick<MuleView, 'players'> & Partial<Pick<MuleView, 'politics' | 'me'>>;
 
 /** Who on a deal card: the name, its chip, and the mark for a computer seat. */
 export function CardWho(props: Parameters<typeof Who>[0]) {
@@ -250,6 +250,8 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; 
   const rep = reputationOf(view, id);
   const rows = reasonRows(view, id);
   const mine = id === me;
+  // S3-RULE-2 row 5: the same check as every other "+ Deal" door; the composer refuses too.
+  const waiting = view.me && !mine ? noNewCard(view, view.me, id) : null;
   const go = (focus: string) => {
     onClose();
     hub?.openDesk('talk', focus);
@@ -298,9 +300,14 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; 
             <Button size="md" variant="outline" onClick={() => go(`whisper:${id}`)} data-testid={`player-card-${id}-whisper`}>
               Whisper
             </Button>
-            <Button size="md" onClick={() => go(`compose:${id}`)} data-testid={`player-card-${id}-deal`}>
+            <Button size="md" disabled={!!waiting} title={waiting ?? undefined} onClick={() => go(`compose:${id}`)} data-testid={`player-card-${id}-deal`}>
               + Deal
             </Button>
+            {waiting && (
+              <span className="col-span-2 text-center text-[11px] leading-snug text-ink-2" data-testid={`player-card-${id}-deal-no`}>
+                {waiting}
+              </span>
+            )}
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { POLITICS, type DealCard } from '@mule/engine';
-import type { MuleView } from '@mule/protocol';
+import type { MuleView, MyView } from '@mule/protocol';
 import { proposalWords } from './LawPicker';
 import { OFFICE_NAME } from './words';
 
@@ -130,4 +130,13 @@ export function statusWords(view: V, c: DealCard, me: string | null): Said {
     case 'expired':
       return [c.terms.kind === 'vote' && c.settled !== c.offered ? 'Expired: no ballot settled it' : 'Expired: planning ended unanswered'];
   }
+}
+
+/**
+ * Why `me` may not offer `to` a card now, in the engine's words, or null: one unanswered card to a player at a time
+ * (S3-RULE-2 row 5). The composer asks it whichever door opened it, and every "+ Deal" door asks it too.
+ */
+export function noNewCard(view: Pick<MuleView, 'players'>, me: Pick<MyView, 'id' | 'deals'>, to: string): string | null {
+  const waiting = (me.deals?.cards ?? []).some((c) => c.from === me.id && c.to === to && c.status === 'offered');
+  return waiting ? `${nameOf(view, to, me.id)} has not answered your last card` : null;
 }

@@ -7,7 +7,9 @@ import { useClient, useClientState } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
 import { SeatWords } from '../../../components/SeatWords';
-import { bindsWords, lawUp, monthsWords, nameOf, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
+import { bindsWords, lawUp, monthsWords, nameOf, noNewCard, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
+
+export { noNewCard };
 import { CardWho, FIRST_CONTROL, shellOf, useDialog, Who } from './parts';
 
 /**
@@ -39,14 +41,6 @@ function toOffer(to: string, d: Draft): DealOffer | null {
 
 export const isOpen = (c: DealCard) => c.status === 'offered' || c.status === 'active';
 
-/**
- * Why `me` may not offer `to` a card now, in the engine's words, or null: one unanswered card to a player at a time
- * (S3-RULE-2 row 5). The composer asks it for every door; the whisper's "+ Deal" asks it too.
- */
-export function noNewCard(view: Pick<MuleView, 'players'>, me: Pick<MyView, 'id' | 'deals'>, to: string): string | null {
-  const waiting = (me.deals?.cards ?? []).some((c) => c.from === me.id && c.to === to && c.status === 'offered');
-  return waiting ? `${nameOf(view, to, me.id)} has not answered your last card` : null;
-}
 export const between = (c: DealCard, a: string, b: string) => (c.from === a && c.to === b) || (c.from === b && c.to === a);
 const choiceOf = (c: DealCard): string | null => (c.terms.kind !== 'vote' ? null : 'law' in c.terms ? `law:${c.terms.yes ? 'yes' : 'no'}` : `gov:${c.terms.candidate}`);
 
