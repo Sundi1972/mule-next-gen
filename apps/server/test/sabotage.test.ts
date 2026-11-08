@@ -124,7 +124,7 @@ describe('S4-B-AC-6: a pending order and the guards reach nobody but their party
       expect(text, `${viewer}: the order id`).not.toContain(id);
       expect(text, `${viewer}: the order's target`).not.toContain('"kind":"powerCut"');
       expect(text, `${viewer}: the order's tile`).not.toContain(`"tile":${w.ossaPlot}`);
-      expect(text, `${viewer}: the 120 cr crew`).not.toContain('"owed":120');
+      expect(text, `${viewer}: the crew's cost`).not.toContain(`"owed":${POLITICS.sabotage.orders.powerCut.cost}`);
       const view = w.game.viewFor(viewer);
       expect(view.politics!.sabotage!.incidents, `${viewer}: no incident yet`).toEqual([]);
       if (viewer !== null) expect(view.me!.politics!.sabotage, `${viewer}: nothing of their own`).toMatchObject({ order: null, owed: 0, mine: [] });
@@ -282,6 +282,9 @@ describe('S4-B-AC-4: an investigation is public at once, and once only', () => {
     expect(w.notices.find((n) => n.kind === 'investigation')).not.toHaveProperty('parties');
     // Negative: it cannot be investigated again, and the phone receives the RuleError's text.
     expect(() => w.game.handle('brix', { type: 'investigate', order: id })).toThrow(new RuleError('One investigation a month'));
+    // A month later the cap no longer refuses first: the rules' own words do.
+    until(w, 'planning', 3);
+    expect(() => w.game.handle('brix', { type: 'investigate', order: id })).toThrow(new RuleError('That one is solved'));
   });
 
   it('S4-B-AC-4: a cold trail shows on every screen at once and names nobody; a second investigation that month is refused', () => {
@@ -303,6 +306,10 @@ describe('S4-B-AC-4: an investigation is public at once, and once only', () => {
     expect(() => w.game.handle('brix', { type: 'investigate', order: id })).toThrow(new RuleError('One investigation a month'));
     // A refusal changes nothing: still one investigation recorded.
     expect(orders(w)[0]!.investigated).toBe(2);
+    // A month later the cap no longer refuses first: the rules' own words do, and the case is not reopened.
+    until(w, 'planning', 3);
+    expect(() => w.game.handle('brix', { type: 'investigate', order: id })).toThrow(new RuleError('The trail went cold on that one'));
+    expect(orders(w)[0]!.investigated, 'still the month it was looked at').toBe(2);
   });
 
   it('S4-B-AC-4: only the Sheriff investigates; the others are refused in words and no view changes', () => {
@@ -351,6 +358,7 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
 
   it('S4-T-AC-8: after a fine every screen has it: due, paid, to the victim and by whom; the Sheriff\'s desk loses it from fineable', () => {
     const w = world();
+    const share = Math.round(100 * POLITICS.sheriff.victimShare);
     force('powerCut', true, true);
     w.game.handle('lena', cut(w.brixPlot));
     until(w, 'planning', 2);
@@ -365,13 +373,13 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
 
     for (const viewer of VIEWERS) {
       const view = w.game.viewFor(viewer);
-      expect(view.politics!.sabotage!.incidents[0]!.fine, String(viewer)).toEqual({ due: 100, paid: 100, toVictim: 50, by: 'sheriff' });
-      expect(view.news[0], String(viewer)).toBe('Lena was fined 100 for sabotage; 50 to Brix.');
+      expect(view.politics!.sabotage!.incidents[0]!.fine, String(viewer)).toEqual({ due: 100, paid: 100, toVictim: share, by: 'sheriff' });
+      expect(view.news[0], String(viewer)).toBe(`Lena was fined 100 for sabotage; ${share} to Brix.`);
     }
     expect(money(w.game, 'lena')).toBe(lena - 100);
-    expect(money(w.game, 'brix'), 'the victim gets half through the fund').toBe(brix + 50);
+    expect(money(w.game, 'brix'), 'the victim gets their share through the fund').toBe(brix + share);
     expect(w.game.viewFor('brix').me!.politics!.sheriff!.fineable).toEqual([]);
-    expect(w.notices.filter((n) => n.kind === 'fine')).toEqual([expect.objectContaining({ kind: 'fine', order: id, culprit: 'lena', due: 100, paid: 100, toVictim: 50 })]);
+    expect(w.notices.filter((n) => n.kind === 'fine')).toEqual([expect.objectContaining({ kind: 'fine', order: id, culprit: 'lena', due: 100, paid: 100, toVictim: share })]);
     expect(w.notices.find((n) => n.kind === 'fine')).not.toHaveProperty('parties');
   });
 
@@ -410,7 +418,7 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
     expect(w.state.politics!.sabotage[0]).toMatchObject({ culpritPublic: true });
     for (const id of ['lena', 'brix', 'ossa']) w.game.handle(id, { type: 'ready' });
     expect(w.state.phase, 'planning closed').not.toBe('planning');
-    for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news[0], String(viewer)).toBe(`Lena was fined ${POLITICS.sheriff.fine.standard} for sabotage; ${POLITICS.sheriff.fine.standard / 2} to Brix.`);
+    for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news[0], String(viewer)).toBe(`Lena was fined ${POLITICS.sheriff.fine.standard} for sabotage; ${Math.round(POLITICS.sheriff.fine.standard * POLITICS.sheriff.victimShare)} to Brix.`);
   });
 
   it('S4-T-AC-8: the news is a ring of three with the phase headline first: three caught cases never push out the harvest line, and three fines at the last upkeep never push out the game-over line', () => {
