@@ -1,5 +1,6 @@
 import { document, FakeElement } from './fake-dom';
-import type { DealCard, ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { DealCard } from '@mule/engine';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
