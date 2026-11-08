@@ -632,6 +632,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const each = afterTax(obs, factoryFit(obs, t, t.outfit, me).output * P(t.outfit)) / units;
     const add = Math.ceil(q / keepRate);
     use = (use * block + each * add) / Math.max(1, block + add);
+    // Where the block's units differ (Food: the meal's, then the crews'), the factory's units are worth its run, unit by
+    // unit, not the blended `use` (needs C15).
+    if (perUnit) perUnit.push(...Array<number>(add).fill(each));
     block += add;
     factoryUnits += add;
     factoryWorth += each * add;
