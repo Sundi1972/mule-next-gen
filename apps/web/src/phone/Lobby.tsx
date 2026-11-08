@@ -435,17 +435,20 @@ function SeatRow({
   const claude = isClaude(seat);
   const word: ChipWord = seat.isAi ? (claude ? claudeChip(seat) : 'AI') : host ? 'HOST' : seat.connected ? 'PHONE' : 'AWAY';
   return (
-    // The name keeps 7rem: where the host's controls leave it less (a computer seat in the small phone's rail), they go
-    // to a line of their own under it, so a name never breaks inside a word (AM-18's "The Big Spender", C19).
+    // The name keeps 6rem: where what follows it leaves less (the host's controls on a computer seat in the small phone's
+    // rail, a Claude seat's status chip), that goes to a line of its own under it, so a name never breaks inside a word
+    // (AM-18's "The Big Spender", C19). A person's chip (PHONE, HOST, AWAY) still fits beside it at 667.
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-x-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2" data-testid={`seat-${seat.id}`}>
       <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
         <Creature species={seat.species} color={SLOT_COLOR[seat.slot]} size={22} />
       </span>
-      <span className="min-w-[7rem] flex-1 text-sm font-semibold @min-[1100px]/shell:text-base">
-        {/* One line: a name longer than its room ends in an ellipsis, never cut inside a word. */}
-        <span className="block truncate" title={seat.name} data-testid={`seat-${seat.id}-name`}>
-          {seat.name}
-          {me && ' (you)'}
+      <span className="min-w-[6rem] flex-1 text-sm font-semibold @min-[1100px]/shell:text-base">
+        {/* One line: a name longer than its room ends in an ellipsis, never cut inside a word; "(you)" always shows. */}
+        <span className="flex min-w-0 whitespace-pre" data-testid={`seat-${seat.id}-name`}>
+          <span className="truncate" title={seat.name}>
+            {seat.name}
+          </span>
+          {me && <span className="shrink-0"> (you)</span>}
         </span>
         {claude && <span className="block text-[10px] font-normal leading-tight text-ink-3 @min-[1100px]/shell:text-xs">Claude</span>}
         {/* Start stays enabled while the seat waits; the host is told what happens if they start now. */}
