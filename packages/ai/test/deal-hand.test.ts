@@ -335,7 +335,7 @@ describe('S3-T-AC-8: DealHand offer rows a-c (S3-RULE-9)', () => {
       }
     }
     expect(cards, 'the table did offer vote cards in announce').toBeGreaterThan(0);
-  });
+  }, 30_000); // 60 seeds of a whole announce with VoteHands and DealHands ticking: about 1 s locally, past vitest's 5 s default on CI (run 42425074650)
 
   it('S3-T-AC-8 AM-8 offer row a (I-1): a seat offers no vote card before its run is decided, so a seat that then runs holds none for that office', () => {
     // Month 2, the election in month 4: two other players are declared, and the AI seats have not yet rolled their own run.
@@ -595,7 +595,7 @@ describe('S3-T-AC-8 (S3-HC-3): DealHand\'s draws leave the election and council 
       expect(beside.governor, `seed ${seed}`).toBe(alone.governor);
     }
     expect(cards, 'the DealHands offered cards beside the VoteHands').toBeGreaterThan(0);
-  });
+  }, 30_000); // whole months of VoteHands and DealHands ticking, twice: about 0.3 s locally, the same CI-runner margin as the rows above
 
   it('S3-T-AC-8 (S3-HC-3): a council ballot with DealHands beside it votes as it does alone', () => {
     const lawVotes = (withDeals: boolean): AiAction[] => {

@@ -20,14 +20,17 @@ import {
   fitFilter,
   GAME,
   grantDone,
+  fineCulprit,
   grantPass,
   installMule,
+  investigate,
   list as listLot,
   litPlot,
   lotDone,
   MS_PER_SECOND,
   offerDeal,
   orderGeoDrone,
+  orderSabotage,
   outfitMule,
   RuleError,
   runFor,
@@ -36,6 +39,7 @@ import {
   repair,
   proposeLaw,
   setBudget,
+  setGuards,
   setSalesTax,
   votesDone,
   votesOpen,
@@ -275,6 +279,18 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         break;
       case 'answerDeal':
         answerDeal(state, id, action.id, action.accept);
+        break;
+      case 'sabotage':
+        orderSabotage(state, id, action.target);
+        break;
+      case 'guard':
+        setGuards(state, id, action.tiles);
+        break;
+      case 'investigate':
+        investigate(state, id, action.order);
+        break;
+      case 'fine':
+        fineCulprit(state, id, action.order, action.amount);
         break;
       case 'done':
         if (state.phase === 'landGrant') grantPass(state, id);

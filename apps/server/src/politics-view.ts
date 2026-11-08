@@ -4,6 +4,7 @@ import {
   isElectionDone,
   LAW_NAME,
   lawImpact,
+  lawOffered,
   nextElectionMonth,
   partyTo,
   PERCENT,
@@ -191,7 +192,7 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
 function candidates(state: GameState): Record<string, Record<string, LawImpact>> {
   const out: Record<string, Record<string, LawImpact>> = {};
   const add = (key: string, proposal: LawProposal) => (out[key] = lawImpact(state, proposal));
-  for (const law of Object.keys(POLITICS.laws) as LawId[]) {
+  for (const law of (Object.keys(POLITICS.laws) as LawId[]).filter(lawOffered)) {
     for (const setting of POLITICS.laws[law].settings) add(`${law}:${setting}`, { kind: 'enact', law, setting });
   }
   for (const law of Object.keys(state.politics!.laws) as LawId[]) add(`repeal:${law}`, { kind: 'repeal', law });

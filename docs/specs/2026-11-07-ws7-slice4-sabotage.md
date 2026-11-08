@@ -387,8 +387,8 @@ today        four laws in POLITICS.laws; the council's machinery, lawImpact, the
              apps/web/src/phone/hub/politics/LawPicker.tsx::settingWords, ::chipWords, ::LAW_MEANING,
              apps/web/src/table/TvCouncil.tsx
              verified_by: read
-tomorrow     MUST add sabotageBan with settings [2, 3] (a multiplier on the fine and the reputation loss of a
-             capture revealed while it is in force), through the existing council (propose, vote, three in
+tomorrow     MUST add sabotageBan with settings [2, 3] (a multiplier on a capture's reputation loss, by the ban
+             in force at the reveal, and on its fine, by the ban in force at the levy: S4-RULE-10), through the existing council (propose, vote, three in
              force, retry months). MUST give it a public "For you" preview (S4-RULE-10).
 logic        → §2 S4-RULE-10 · read at every attribution (reputation), every fine and every preview
 seam         config.ts POLITICS.laws; LawId (WS3 named edit); politics.ts LAW_NAME and enactImpact's switch
@@ -1254,6 +1254,43 @@ AM-3 · 2026-11-07 · Heiko (board, 12:54Z, via PM): "Approve all six as recomme
 
 target    the decisions for Heiko
 did       D-S4-1 → B (investigateOdds 0.5), D-S4-2 → A (no lobby switch in RC). The build builds the spec as written.
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-4 · 2026-11-08 · WS7 (build: S4-PR-1's logic review of S4-C1, findings I1 and I2) · an order's id names
+                    only its own month and orderer
+
+target    AM-1's id formula (S4-RULE-2's unknown line, §3 SabotageOrder.id); S4-B-AC-1's "Caught!"; S4-RULE-2's
+          rumour direction
+said      'sab-<tag>' from createRng over a hash of (state.seed, n, 'sab'), n counted over the shared order list
+did       the tag comes from a hash of (state.seed, order month, orderer, 'sab'). A player holds at most one
+          order a month, so the pair is unique; a replacement keeps its order's id; a clash with any id ever
+          issued redraws from the same stream. Investigation draws still key on n, which only the engine holds
+          (AM-1). Also settled here: S4-B-AC-1's "Caught!" is the screens' headline for any caught order
+          (S4-C17); the engine's guarded-catch line stays S4-RULE-4's "Caught at a guarded plot: the power stays
+          on." A rumour's direction other than up or down is refused: "A rumour moves a price up or down".
+because   n counted over everyone's orders told an orderer, by replacing her own order, whether someone else had
+          ordered in between (the leak AM-1 closed for sequential ids); and an id freed by a void order was issued
+          again to a later order, so a private void notice and a later public event could carry one id
+goal      S4-1, S4-2 — unchanged; HC-4 now holds for the id too
+```
+
+```
+AM-5 · 2026-11-08 · WS7 (build: S4-PR-1, S4-C5 and S4-C7's implementer questions; AM-4's review) · terms the rules
+                    left open
+
+target    S4-RULE-10's preview, S4-RULE-6 row 5, S4-RULE-7's draw, AM-4's clash line
+said      monthsPlayed undefined; "distinct plots" without saying what is stored; the investigation's salt unnamed;
+          AM-4: "a clash with any id ever issued"
+did       monthsPlayed = max(1, month − 1): laws are voted in planning, when month − 1 months have been played
+          (the example's 75 cr holds). The guards are stored as distinct tiles; a tile posted twice counts once.
+          The investigation draws from seedOf(seed, n, 'investigate', POLITICS.sabotage.streamSalt), apart from
+          the order stream. A 'caught' reputation reason is dated the month the culprit was revealed (the
+          investigation's month, else the order's). AM-4's clash redraw checks the ids of the orders still in
+          politics.sabotage: a (month, orderer) pair is unique, so another clash would need a hash collision
+          (about 1 in 2 billion).
+because   each was a choice the build had to make; recorded so the server, the hands and the screens read the same
 goal      S4-1, S4-2 — unchanged
 ```
 
