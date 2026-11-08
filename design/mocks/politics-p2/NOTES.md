@@ -156,3 +156,14 @@ Build needs (for WS7/WS3): ShowEventView gains `sabotage`; EVENT_ENTRY gains pow
 
 index (decisions, links) · #b Sheriff's desk B folded (approved) · #a variant A (record) · #p6 the secret order ·
 #p10 Caught! on the TV, phone lines, month end · #p9 election day with the Sheriff, the sabotage ban.
+
+## Build corrections (8 Nov)
+
+Three mock bugs the build fixed (#749, #750). The build is right; where this mock disagrees, follow the build.
+
+- **"Culprit known" is `how !== null`.** The mock's `sabotage/Order.tsx` read `o.public` as "culprit known". `public`
+  means "on the public record"; the server never sends `done` + `public:false` as the fixture did (#749 review).
+- **A pending power cut has `victim: null`.** Take the owner from `at`. A void row names the plot (`plotName(at)`),
+  never an owner (#754).
+- **Caught cost = caught × ban, and a pact adds −20 that is not multiplied.** The engine runs `reveal()` and then
+  `pactBreach`, so a pact under ×2 is −40, not the −60 that P11's effect line and P10's phone lines imply (#750).
