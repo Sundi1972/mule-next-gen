@@ -231,24 +231,26 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     expect(sent).toEqual([]);
   });
 
-  // S3-RULE-12's rows on the election ballot: [row, the seat, the taps before Cast, what the table receives in order].
-  const ROWS: [string, Seat, string[], unknown[]][] = [
+  // S3-RULE-12's rows on the election ballot: [row, the seat, the taps before Cast, what the table receives in order,
+  // whether the server answers the taps before Cast].
+  const ROWS: [string, Seat, string[], unknown[], boolean?][] = [
     ['row 4: no own pick, no ballot: the promised vote, then Cast', { promised: BRIX_VOTE }, [], [vote('s2'), READY]],
     ['row 2: an own pick of another candidate stands; no promised vote', { promised: BRIX_VOTE }, ['s3'], [vote('s3'), READY]],
     ['row 2: an explicit Abstain stands; no promised vote', { promised: BRIX_VOTE }, ['abstain'], [vote(null), READY]],
+    ['row 2: an own pick stands even before the server answers it', { promised: BRIX_VOTE }, ['s3'], [vote('s3'), READY], false],
     ['row 2: picking the promised candidate sends it once', { promised: BRIX_VOTE }, ['s2'], [vote('s2'), READY]],
     ['row 2: away from the promise and back: the latest pick, nothing more', { promised: BRIX_VOTE }, ['s3', 's2'], [vote('s3'), vote('s2'), READY]],
     ['row 3: no own pick, a ballot from another device: it stands', { promised: BRIX_VOTE, ballot: { governor: 's3' } }, [], [READY]],
     ['row 1: no promise: today\'s ballot', {}, ['s3'], [vote('s3'), READY]],
   ];
 
-  it.each(ROWS)('S3-T-AC-16: with a promise and no pick, Cast my vote sends the promised choice, then the press · %s', (_row, seat, taps, expected) => {
+  it.each(ROWS)('S3-T-AC-16: with a promise and no pick, Cast my vote sends the promised choice, then the press · %s', (_row, seat, taps, expected, answered = true) => {
     mount(electionFor(seat));
     expect(sent, 'nothing on open').toEqual([]);
     for (const t of taps) pick(t);
     // The server's answer to the last pick, as its broadcast brings it: it can't tell an abstention from no pick.
     const last = taps.at(-1);
-    if (last) rerender(electionFor({ ...seat, ballot: last === 'abstain' ? {} : { governor: last } }));
+    if (last && answered) rerender(electionFor({ ...seat, ballot: last === 'abstain' ? {} : { governor: last } }));
     expect(isDisabled('ready'), 'Cast my vote is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);
@@ -311,4 +313,12 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     rerender(lawFor({ promised: LAW_YES, lawBallot: false }));
     expect(pressed('ballot-no')).toBe(true);
   });
+});
+
+it("S3-T-AC-16: row 1 · outside a ballot, a promise or not, the ready press sends only ready, as today", () => {
+  const pol = politics({});
+  mount(aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, { promised: BRIX_VOTE }), politics: pol }));
+  expect(text('ready')).toBe("I'm ready");
+  tap('ready');
+  expect(sent).toEqual([READY]);
 });
