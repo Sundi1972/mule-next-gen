@@ -7,8 +7,8 @@ import { brokenIn, brokenMove, brokenWho, brokenWords } from '../phone/hub/polit
 import { RepChip } from '../phone/hub/politics/parts';
 
 /*
- * The banner of this month's broken cards on the TV (S3-C20): the cards in the news's words, and the drop beside each
- * breaker's chip. Its caller decides where and how long it shows.
+ * The banner of this month's broken cards on the TV (S3-C20): one line per breaker, the drop beside the chip. Its caller
+ * decides where and how long it shows.
  */
 
 /** This month's broken cards, one line per breaker in the order they broke: their cards, and the drops summed. */
