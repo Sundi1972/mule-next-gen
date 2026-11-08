@@ -35,11 +35,11 @@ export function tvScreen(world: MockWorld, { seats = 4 }: { seats?: Seats } = {}
 }
 
 /**
- * MEASURING ONLY. Two seats: Lena and Brix, so the Governor's row stays (who a line names but the table lacks reads as
- * the news wrote it). Six: the four, then a person and a computer seat, so the TV folds its AIs into one row (FOLD_AIS_FROM).
+ * MEASURING ONLY. Two seats: Ossa · AI and Brix, so the Governor's row and the month's breaker stay (who a line names
+ * but the table lacks reads as the news wrote it, or "someone"). Six: the four, then a person and a computer seat, so the TV folds its AIs into one row (FOLD_AIS_FROM).
  */
 function seatsOf(players: PlayerView[], seats: Seats): PlayerView[] {
-  if (seats === 2) return players.filter((p) => p.id === 'lena' || p.id === 'brix');
+  if (seats === 2) return players.filter((p) => p.id === 'ossa' || p.id === 'brix');
   if (seats === 4) return players;
   const at = (i: number) => players[i % players.length]!;
   return [
