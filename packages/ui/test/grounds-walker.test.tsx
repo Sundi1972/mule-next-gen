@@ -108,6 +108,21 @@ describe('T-AC-14 on the grounds', () => {
     expect(html).toMatch(/walker\/c[12]-/);
   });
 
+  it('T-AC-14 (B-AC-5): on the phone each suit comes in one sheet, so a full colony stays inside the phone\'s 1 MB of art', () => {
+    // Every building standing and the mood at its best: the most colonists the grounds ever send out.
+    const full: GroundsColony = {
+      gauges: { happiness: 100, wealth: 2000 },
+      projects: (['park', 'hospital', 'observatory', 'stadium', 'spaceport'] as const).map((id, n) => ({
+        id, name: id, stage: 'standing' as const, monthsLeft: null, buildMonths: 2,
+        place: [{ x: 1, y: 2, w: 1, h: 1 }, { x: 2, y: 3, w: 1, h: 1 }, { x: 1, y: 1, w: 1, h: 1 }, { x: 3, y: 2, w: 2, h: 2 }, { x: 2, y: 0, w: 2, h: 2 }][n]!,
+      })),
+    };
+    const sheets = (size: 'tv' | 'phone') =>
+      new Set([...renderToStaticMarkup(<ColonyGrounds colony={full} size={size} manifest={manifest} light="day" />).matchAll(/walker\/([pc]\d-\w+)-day@\d+\.webp/g)].map((m) => m[1]));
+    expect(sheets('tv').size).toBeGreaterThan(4);
+    expect(sheets('phone')).toEqual(new Set(['p1-graphite', 'p2-graphite', 'p3-graphite', 'p4-graphite']));
+  });
+
   it('T-AC-14 (negative): with no walker entry in the manifest, the colonists are today\'s SVG figures, never blank', () => {
     const { walker: _gone, ...without } = manifest;
     const html = renderToStaticMarkup(<ColonyGrounds colony={COLONY} size="tv" manifest={without} light="dusk" />);
