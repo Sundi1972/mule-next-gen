@@ -584,4 +584,13 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
     tap('desk-market');
     expect(text('my-order-sab-a1b2c3')).toBe('Month 5: power cut on Ossa’s plotNobody knows it was you.Ordered');
   });
+
+  it("S4-C14: a pending cut on a plot that has since lost its MULE has no crop (good null on the wire): its row shows no good's icon or name", () => {
+    // WS7's #746 types IncidentView.good as Good | null; null only in the orderer's own list, for exactly this case.
+    const pending = { id: 'sab-d4e5f6', month: 5, kind: 'powerCut', victim: null, at: { x: 2, y: 0 }, good: null, worked: false, culprit: 's1', how: null, investigated: false, fine: null, public: false, outcome: 'pending' } as unknown as Sab['mine'][number];
+    mount(viewOf({ sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(2, 0) }, owed: 120, mine: [pending] } }));
+    tap('desk-market');
+    expect(text('my-order-sab-d4e5f6')).toBe('Month 5: power cut on Kai’s plotNobody knows it was you.Ordered');
+    expect(byTestid('my-order-sab-d4e5f6').findAll('svg'), "no good's icon").toHaveLength(0);
+  });
 });

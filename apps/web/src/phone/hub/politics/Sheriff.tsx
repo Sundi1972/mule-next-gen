@@ -29,19 +29,20 @@ type View = Pick<MuleView, 'players' | 'tiles' | 'width'>;
 
 const name = (view: Pick<MuleView, 'players'>, id: string | null) => view.players.find((p) => p.id === id)?.name ?? '';
 const possessive = (n: string) => `${n}’s`;
-const goodWord = (c: IncidentView) => GOOD_NAME[c.good].toLowerCase();
+/** The crop's word and a space; empty when the crop is unknown (good null, WS7's #746: only ever in an orderer's own list). */
+const crop = (c: IncidentView) => (c.good ? `${GOOD_NAME[c.good].toLowerCase()} ` : '');
 const shift = () => `${Math.round(POLITICS.sabotage.orders.rumour.shift * 100)}%`;
 
 /** What happened, in words: "Power cut on Ossa’s smithore plot", "Rumour: food up 25%". */
 export function caseTitle(view: View, c: IncidentView): string {
-  if (c.kind === 'rumour') return `Rumour: ${goodWord(c)} ${c.dir === 'down' ? 'down' : 'up'} ${shift()}`;
-  return `Power cut on ${possessive(name(view, c.victim))} ${goodWord(c)} plot`;
+  if (c.kind === 'rumour') return `Rumour: ${crop(c)}${c.dir === 'down' ? 'down' : 'up'} ${shift()}`;
+  return `Power cut on ${possessive(name(view, c.victim))} ${crop(c)}plot`;
 }
 
 /** A case in a folded row's few words: "Cut: Kai’s energy plot", "Rumour: food up". */
 export function caseShort(view: View, c: IncidentView): string {
-  if (c.kind === 'rumour') return `Rumour: ${goodWord(c)} ${c.dir === 'down' ? 'down' : 'up'}`;
-  return `Cut: ${possessive(name(view, c.victim))} ${goodWord(c)} plot`;
+  if (c.kind === 'rumour') return `Rumour: ${crop(c)}${c.dir === 'down' ? 'down' : 'up'}`;
+  return `Cut: ${possessive(name(view, c.victim))} ${crop(c)}plot`;
 }
 
 /** Which state a case is in, from the Sheriff's chair: what they can still do with it. */
@@ -56,7 +57,7 @@ export function caseState(c: IncidentView, sheriff: Pick<Sheriff, 'fineable'>): 
 function CaseHead({ view, c, state }: { view: View; c: IncidentView; state: CaseState }) {
   return (
     <div className="flex min-w-0 items-start gap-2" data-testid={`case-head-${c.id}`}>
-      <GoodIcon good={c.good} size={16} />
+      {c.good && <GoodIcon good={c.good} size={16} />}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm font-semibold leading-snug @min-[1100px]/shell:text-base" data-testid={`case-title-${c.id}`}>
           {caseTitle(view, c)}
@@ -338,7 +339,7 @@ function CaseFile({ view, sheriff, incidents }: { view: MuleView; sheriff: Sheri
             return (
               <li key={c.id} className={cx('flex flex-col rounded-panel border bg-panel', state === 'fineable' ? 'border-alert' : 'border-holo-line')} data-testid={`b-case-${c.id}`}>
                 <button type="button" aria-expanded={open} onClick={() => setOpenId(open ? null : c.id)} className="flex min-h-11 items-center gap-2 px-2 text-left" data-testid={`b-case-row-${c.id}`}>
-                  <GoodIcon good={c.good} size={16} />
+                  {c.good && <GoodIcon good={c.good} size={16} />}
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold">{caseShort(view, c)}</span>
                   <span className="shrink-0 font-mono text-[10px] text-ink-3">M{c.month}</span>
                   <StepChip view={view} c={c} state={state} result={result} fined={fined} />

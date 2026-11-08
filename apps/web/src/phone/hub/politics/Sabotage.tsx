@@ -280,10 +280,11 @@ function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
           const [word, tone] = OUTCOME[o.outcome];
           return (
             <li key={o.id} className="flex items-start gap-2 rounded-control border border-holo-faint p-1.5 text-xs" data-testid={`my-order-${o.id}`}>
-              <GoodIcon good={o.good} size={14} />
+              {/* A pending cut on a plot that has since lost its MULE has no crop (good null, WS7's #746). */}
+              {o.good && <GoodIcon good={o.good} size={14} />}
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-semibold">
-                  Month {o.month}: {o.kind === 'rumour' ? `rumour, ${goodWord(o.good)} ${o.dir}` : `power cut on ${nameOf(view, cutOwner(view, o))}’s plot`}
+                  Month {o.month}: {o.kind === 'rumour' ? `rumour, ${o.good ? goodWord(o.good) : ''} ${o.dir}` : `power cut on ${nameOf(view, cutOwner(view, o))}’s plot`}
                 </span>
                 <span className="text-ink-3" data-testid={`my-order-known-${o.id}`}>
                   {o.how !== null ? (o.fine ? `Everyone knows. Fined ${o.fine.due} cr.` : 'Everyone knows it was you.') : 'Nobody knows it was you.'}
