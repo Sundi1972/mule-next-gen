@@ -4,6 +4,7 @@ import { Button, cx } from '@mule/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useClient, useClientState } from '../../../net/react';
+import { useEscape } from '../../dialog';
 import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
 import { SeatWords } from '../../../components/SeatWords';
@@ -295,11 +296,21 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
   );
 }
 
+/** Gives the focus back, when the sheet closes, to what held it when the sheet opened: the door that opened it. */
+function useFocusBack(): void {
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    return () => opener?.focus?.();
+  }, []);
+}
+
 /**
  * A sheet over the whole rail at the rail's width, portalled into the shell: the hub has no slot over its rail. Its
  * buttons sit in its footer, under the thumb.
  */
 function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: string; children: ReactNode }) {
+  useEscape(onClose);
+  useFocusBack();
   const sheet = (
     <div className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>
       <header className="flex min-h-10 items-center gap-1.5 border-b border-holo-faint px-3 py-1.5">{title}</header>
