@@ -26,7 +26,7 @@ function noCandidates(): Record<Office, string[]> {
 
 /** Politics as it stands before the first planning phase: no offices, no Baron, nobody running. */
 export function newPolitics(): Politics {
-  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, promise: null, promiseFrom: null, election: null, proposal: null, council: null, laws: {}, failed: {}, deals: [], sabotage: [], guards: [], rumoured: [], budget: null, budgetAtStart: null, overrule: null, overruled: 0, snapMonth: null, inquiry: null };
+  return { governor: null, sheriff: null, termStart: 1, terms: {}, governorRun: null, baron: null, taxAtStart: 0, candidates: noCandidates(), promises: {}, promise: null, promiseFrom: null, election: null, proposal: null, council: null, laws: {}, failed: {}, deals: [], sabotage: [], guards: [], rumoured: [], budget: null, budgetAtStart: null, overrule: null, overruled: 0, sheriffRecord: { caught: 0, solved: 0 }, snapMonth: null, inquiry: null };
 }
 
 /** A what-if copy may share politics, so every write copies it first. */
@@ -358,6 +358,7 @@ function takeOffice(state: GameState, politics: Politics): void {
   Object.assign(election, { stage: 'over', ceremony: null });
   politics.termStart = state.month;
   politics.overruled = 0; // every election starts a term, a re-elected Governor's included (AM-10)
+  politics.sheriffRecord = { caught: 0, solved: 0 }; // the same, for a re-elected Sheriff (slice 4 AM-11)
   for (const office of POLITICS.offices) {
     const winner = result[office]?.winner;
     if (winner === undefined) continue;
