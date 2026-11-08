@@ -115,6 +115,22 @@ describe('the tabbed hub shell (SB-1b)', () => {
     expect(words(element(element(header, 'phase-line'), 'month'))).toBe('Month 3/12');
   });
 
+  it("with tabs the rail packs as the hub-tabs mock does, at every phone height: head 6/12/8, body 8/12, actions 6/12; without them as before", () => {
+    const classes = (html: string, testid: string) => html.match(new RegExp(`<[a-z]+[^>]*data-testid="${testid}"[^>]*class="([^"]*)"|<[a-z]+[^>]*class="([^"]*)"[^>]*data-testid="${testid}"`))!.slice(1).find(Boolean)!.split(' ');
+    const body = (html: string) => element(html, 'guide').match(/<\/header><div class="([^"]*)"/)![1]!.split(' ');
+    const hub = draw({ tabs: tabs(), head: createElement(Shell.PhaseLine), footer: createElement('button', null, 'Ready') });
+    expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pb-2', 'pt-[max(0.375rem,env(safe-area-inset-top))]']));
+    expect(body(hub)).toEqual(expect.arrayContaining(['gap-2', 'px-3', 'py-2']));
+    expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pt-1.5', 'pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
+    // The mock's numbers hold at 667 too: no short-screen packing on top of them.
+    for (const c of [...classes(hub, 'rail-head'), ...body(hub), ...classes(hub, 'actions')]) expect(c).not.toMatch(/^short:/);
+    // Every other phase keeps its packing, short screens included, so the arcade's and the auction's fits don't move.
+    const other = draw({ footer: createElement('button', null, 'Ready') });
+    expect(classes(other, 'rail-head')).toEqual(expect.arrayContaining(['gap-1', 'pt-[max(0.5rem,env(safe-area-inset-top))]', 'short:gap-0.5', 'short:pb-1']));
+    expect(body(other)).toEqual(expect.arrayContaining(['gap-2.5', 'py-2.5', 'short:gap-2']));
+    expect(classes(other, 'actions')).toEqual(expect.arrayContaining(['gap-2', 'pt-2.5', 'pb-[max(0.625rem,env(safe-area-inset-bottom))]', 'short:pt-1.5']));
+  });
+
   it('a head that is nothing (null or false) draws the shell as without one, the month included', () => {
     for (const head of [null, false]) expect(words(element(draw({ head }), 'month'))).toBe('Month 3 / 12');
   });

@@ -185,6 +185,9 @@ export function PhoneShell({
   const move = useContext(MoveToPhoneOpener);
   // A head that is nothing (null, false: `cond && <X />`) is no head: the header keeps its month.
   const hasHead = head !== undefined && head !== null && head !== false;
+  // The tabbed hub's rail packs as its mock does (hub-tabs proposed/Shell.tsx), at every phone height: the mock was
+  // measured whole at 667 and 844 with these. Every other phase keeps its packing, so their fits don't move.
+  const hub = !!tabs && tabs.length > 0;
   return (
     <Wide.Provider value={wide}>
       <div ref={root} className="h-full @container/shell">
@@ -200,7 +203,13 @@ export function PhoneShell({
             {children}
           </main>
           <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
-            <header data-testid="rail-head" className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
+            <header
+              data-testid="rail-head"
+              className={cx(
+                'flex flex-col border-b border-holo-faint px-3 pb-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]',
+                hub ? 'gap-1.5 pt-[max(0.375rem,env(safe-area-inset-top))]' : 'gap-1 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))]',
+              )}
+            >
               {hasHead ? (
                 // The hub's head: the phase on one line with the ready count; the month is the phase line's (PhaseLine).
                 <div className="flex items-center justify-between gap-1.5 @min-[1100px]/shell:gap-2" data-testid="phase-title-row">
@@ -269,14 +278,24 @@ export function PhoneShell({
               {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
               {wide ? <TableChat /> : <FallbackBubble />}
             </header>
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
+            <div
+              className={cx(
+                'flex min-h-0 flex-1 flex-col overflow-y-auto px-3 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4',
+                hub ? 'gap-2 py-2' : 'gap-2.5 py-2.5 short:gap-2',
+              )}
+            >
               {now && (now.Card ? <now.Card /> : foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
               {!wide && <TableChat under />}
             </div>
             {footer && (
               <div
-                className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 short:gap-1.5 short:pb-[max(0.375rem,env(safe-area-inset-bottom))] short:pt-1.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4"
+                className={cx(
+                  'flex flex-col border-t border-holo-faint bg-void/60 px-3 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4',
+                  hub
+                    ? 'gap-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5'
+                    : 'gap-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 short:gap-1.5 short:pb-[max(0.375rem,env(safe-area-inset-bottom))] short:pt-1.5',
+                )}
                 data-testid="actions"
               >
                 {footer}
