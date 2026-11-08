@@ -2181,7 +2181,7 @@ export const AI_PLANS = {
     months: 0,
   },
   monopoly: {
-    /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
+    /** The goods a monopoly plan may aim to corner. Food may still be cornered in the auction when scarce (STRATEGIST.cornerMaxSpoilage), but no plan aims at it. */
     goods: ['energy', 'smithore'] as Good[],
     /** A good is cornered only while at most this many rival plots make it. */
     maxRivalPlots: 1,
