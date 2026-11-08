@@ -230,7 +230,7 @@ export function sabotageEvents(state: GameState): MonthEvent[] {
     if (order.target.kind === 'powerCut') {
       const tile = order.target.tile;
       const event = plotEvent(state, 'powerCut', tile);
-      if (worked) return { ...event, line: `Someone cut the power to a ${capital(goodWords(state.tiles[tile]!.outfit as never))} plot: it makes nothing this month.`, sabotage };
+      if (worked) return { ...event, line: `Someone cut the power to a ${order.good ? `${capital(goodWords(order.good))} ` : ''}plot: it makes nothing this month.`, sabotage };
       return { ...event, plots: [], line: guarded ? 'Caught at a guarded plot: the power stays on.' : named, sabotage };
     }
     const { good, dir } = order.target;
