@@ -135,14 +135,101 @@ export interface MapWalk {
   end: FloorPoint;
 }
 
+/** A walk to a plot, priced from the walk onto one tile: onto the plot itself, or onto a stand on a lake plot's shore. */
+interface Approach {
+  /** The tile the walk steps onto, by index. */
+  tile: number;
+  /** The rest of the walk from where the walk onto that tile ends, to where Reach first offers the plot. */
+  finish: (onto: MapWalk) => MapWalk;
+}
+
+/** Who walks to a plot and the press it walks there for: a lake plot's walk depends on both (shoreStands). */
+export interface Errand {
+  me: string;
+  press: ShorePress;
+}
+
+/** Whether a plot is worked from its shore, never stood on: a lake plot in shore mode (AM-18). */
+const worksFromShore = (state: GameState, cfg: FloorConfig, index: number) => state.tiles[index]!.terrain === 'lake' && cfg.steer.lakeMode === 'shore';
+
+/**
+ * How a walk reaches plot `index`: onto it; or, a lake plot, onto any of the stands shoreStands returns for the errand's
+ * seat and press (the walker's own spots), each walk ending where Reach first offers the plot. Without an errand (a
+ * valuation's estimate), its holder's install; one nobody holds as if each seat held it, unreachablePlot's judgement.
+ */
+function approaches(state: GameState, cfg: FloorConfig, index: number, errand?: Errand): Approach[] {
+  if (!worksFromShore(state, cfg, index)) return [{ tile: index, finish: (onto) => onto }];
+  const lake = state.tiles[index]!;
+  const via = (me: string, press: ShorePress, game = state) => shoreStands(game, cfg, me, lake, press).map((stand) => shoreApproach(game, cfg, me, lake, stand, press));
+  const holding = (me: string) => ({ ...state, tiles: state.tiles.map((t, i) => (i === index ? { ...t, owner: me } : t)) });
+  if (errand) return via(errand.me, errand.press);
+  return lake.owner !== null ? via(lake.owner, 'install') : state.players.flatMap((p) => via(p.id, 'install', holding(p.id)));
+}
+
+/** Bisections of a walk's last stretch for where Reach first offers a lake plot: a billionth of the stretch. */
+const BISECTIONS = 30; // literal-ok: a search's precision, not balance
+
+/** The first share of the way, past `short` where it does not hold, to 1 where it does, where `inside` holds: by halving. */
+function firstInside(inside: (f: number) => boolean, short: number): number {
+  let within = 1;
+  for (let k = 0; k < BISECTIONS; k++) {
+    const f = middle(short, within);
+    if (inside(f)) within = f;
+    else short = f;
+  }
+  return within;
+}
+
+/**
+ * The walk to lake plot `lake` from a stand on its shore for `press`, as the walker walks it: onto the stand's tile,
+ * then straight for the stand until Reach offers the press on the plot, where the hand presses. The stand is a spot
+ * where it does (shoreStands asked Reach there). Reach's gap to the plot's nearest point shrinks and then grows along a
+ * straight line, so the first point within DEV_STEER.shoreReachTiles is found by halving, and Reach is asked there; if
+ * it offers a nearer lake of the seat's own instead, the halving goes on, on Reach, between there and the stand. A stand
+ * where Reach offers the land underfoot first (landFirst) the walker walks to: it presses that land there.
+ */
+function shoreApproach(state: GameState, cfg: FloorConfig, me: string, lake: FloorPoint, stand: ShoreStand, press: ShorePress): Approach {
+  const { at } = stand;
+  const gap = (p: FloorPoint) => Math.hypot(Math.max(lake.x - p.x, 0, p.x - lake.x - 1), Math.max(lake.y - p.y, 0, p.y - lake.y - 1));
+  const game = atWork(state, me, press);
+  const offered = (p: FloorPoint) => pressOn(reachOf(standingAt(me, p), game, me, cfg), press, lake);
+  const finish = (onto: MapWalk): MapWalk => {
+    if (!Number.isFinite(onto.seconds)) return onto;
+    const a = onto.end;
+    const along = (f: number): FloorPoint => ({ x: a.x + f * (at.x - a.x), y: a.y + f * (at.y - a.y) });
+    const reached = (f: number) => gap(along(f)) < cfg.steer.shoreReachTiles;
+    const near = stand.landFirst ? 1 : reached(0) ? 0 : firstInside(reached, 0);
+    const end = along(stand.landFirst || offered(along(near)) ? near : firstInside((f) => offered(along(f)), near));
+    return { seconds: onto.seconds + Math.hypot(end.x - a.x, end.y - a.y) * tileSeconds(state, cfg, at), end };
+  };
+  return { tile: tileIndex(state.width, Math.floor(at.x), Math.floor(at.y)), finish };
+}
+
+/** The quickest of some walks; `none` if there are none. */
+const quickest = (walks: readonly MapWalk[], none: MapWalk): MapWalk => walks.reduce((a, b) => (b.seconds < a.seconds ? b : a), none);
+
 /**
  * The walk from a point on the map to plot `index`, as the hand walks pathTo's quickest walk: from each tile straight
  * for the next one's middle, cutting the corners, until it steps onto the plot, where Reach offers it. A lake plot it
- * works from the shore: on the tile before it, towards it until within DEV_STEER.shoreReachTiles of its edge. Not
- * pathTo's seconds, which count every tile crossed whole: the plot's own, where the walk ends at its edge, and none of
- * the one it starts on.
+ * works from the quickest of its stands for the errand (AM-18; approaches). Not pathTo's seconds, which count every tile
+ * crossed whole: the plot's own, where the walk ends at its edge, and none of the one it starts on.
  */
-export function mapWalk(state: GameState, cfg: FloorConfig, from: FloorPoint, index: number): MapWalk {
+export function mapWalk(state: GameState, cfg: FloorConfig, from: FloorPoint, index: number, errand?: Errand): MapWalk {
+  return quickest(approaches(state, cfg, index, errand).map((a) => a.finish(sideWalk(state, cfg, from, a.tile))), { seconds: Infinity, end: from });
+}
+
+/** Per open door, the walk from just outside it to plot `index` for the errand (approaches), by doorTable's walks. */
+function doorWalks(state: GameState, cfg: FloorConfig, index: number, errand?: Errand): [HallDoor, MapWalk][] {
+  const ways = approaches(state, cfg, index, errand);
+  return [...doorTable(state, cfg)].map(([door, map]) => [door, quickest(ways.map((a) => a.finish(map[a.tile]!)), { seconds: Infinity, end: doorOutside(state, door, cfg) })]);
+}
+
+/**
+ * The walk onto tile `index` along pathTo's four-way path. A plot nobody may stand on it works from the tile before it:
+ * towards it until within DEV_STEER.shoreReachTiles of its edge. A lake plot in shore mode is priced by its stands
+ * (approaches), not here.
+ */
+function sideWalk(state: GameState, cfg: FloorConfig, from: FloorPoint, index: number): MapWalk {
   const goal = state.tiles[index]!;
   const path = pathTo(state, from, tileMiddle(goal.x, goal.y), cfg);
   if (!path) return { seconds: Infinity, end: from };
@@ -183,9 +270,10 @@ export function backToDoor(state: GameState, cfg: FloorConfig, walks: readonly M
 }
 
 /**
- * Per open door, the walk out from just outside it to every tile, as the hand walks it (mapWalk). Remembered per map
+ * Per open door, the walk out from just outside it onto every tile, as the hand walks it (sideWalk). Remembered per map
  * and per the config the walk reads, so a game pays for it once. The walk back in is the same walk the other way
- * (backToDoor).
+ * (backToDoor). A lake plot in shore mode is Infinity here: its walk depends on who walks there and for what press, so
+ * it is priced by its stands (doorWalks), from these walks onto their tiles.
  */
 export function doorTable(state: GameState, cfg: FloorConfig): DoorTable {
   const { steer } = cfg;
@@ -196,7 +284,7 @@ export function doorTable(state: GameState, cfg: FloorConfig): DoorTable {
   for (const door of HALL_DOORS) {
     if (!doorOpen(state, door, cfg)) continue;
     const from = doorOutside(state, door, cfg);
-    table.set(door, state.tiles.map((_, i) => mapWalk(state, cfg, from, i)));
+    table.set(door, state.tiles.map((_, i) => (worksFromShore(state, cfg, i) ? { seconds: Infinity, end: from } : sideWalk(state, cfg, from, i))));
   }
   if (tables.size >= TABLES_KEPT) tables.clear();
   tables.set(key, table);
@@ -211,12 +299,13 @@ export interface Walker {
 
 /**
  * Seconds from a hall place out to plot `index` and back to the store: out through the door that makes the trip
- * quickest, leading a MULE out if `lead`, and on to `back` inside the store (null: only to the plot).
+ * quickest, leading a MULE out if `lead`, and on to `back` inside the store (null: only to the plot). A lake plot by
+ * the errand's stands (approaches).
  */
-export function tripSeconds(state: GameState, cfg: FloorConfig, w: Walker, from: HallPoint, index: number, lead: boolean, back: HallPlace | null = null): number {
+export function tripSeconds(state: GameState, cfg: FloorConfig, w: Walker, from: HallPoint, index: number, lead: boolean, back: HallPlace | null = null, errand?: Errand): number {
   let best = Infinity;
-  for (const [door, map] of doorTable(state, cfg)) {
-    const walk = map[index]!.seconds;
+  for (const [door, there] of doorWalks(state, cfg, index, errand)) {
+    const walk = there.seconds;
     const out = hallSeconds(state, cfg, from, door, w.pace, lead) + walk / mapFactor(cfg, w.pace, lead, w.bot);
     const home = back === null ? 0 : walk / mapFactor(cfg, w.pace, false, w.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], back, w.pace, false);
     best = Math.min(best, out + home);
@@ -274,6 +363,7 @@ export function muleLegs(state: GameState, cfg: FloorConfig, c: FloorColonist, i
   // A plot nobody can stand to install on is out of reach: a lake whose shore is all the seat's own land.
   if (!installable(state, cfg, c.id, index)) return { corral: Infinity, outfitter: Infinity, plot: Infinity, pub: Infinity };
   const w: Walker = { pace: c.pace, bot: c.bot };
+  const errand: Errand = { me: c.id, press: 'install' };
   // Each leg sets off from where the last one stopped: the counter's threshold, where the hand pressed.
   const corral = standPoint('corral', cfg.hall);
   // Every outfit has its counter in the hall: a shopfront, one of the works' bays, or the Green belt.
@@ -281,8 +371,8 @@ export function muleLegs(state: GameState, cfg: FloorConfig, c: FloorColonist, i
   return {
     corral: toCorral ?? secondsToPlace(state, cfg, { ...c, lead: null }, 'corral'),
     outfitter: hallSeconds(state, cfg, corral, place, w.pace, true),
-    plot: tripSeconds(state, cfg, w, standPoint(place, cfg.hall), index, true),
-    pub: plotToPlace(state, cfg, w, index, 'pub'),
+    plot: tripSeconds(state, cfg, w, standPoint(place, cfg.hall), index, true, null, errand),
+    pub: plotToPlace(state, cfg, w, index, 'pub', errand),
   };
 }
 
@@ -299,53 +389,69 @@ export function floorDevWalk(state: GameState, cfg: FloorConfig, c: FloorColonis
   return { left, taps, floor };
 }
 
-/** Seconds from plot `index` back into the store to a place, without a MULE, by the quickest door. */
-export function plotToPlace(state: GameState, cfg: FloorConfig, w: Walker, index: number, place: HallPlace): number {
+/** Seconds from plot `index` back into the store to a place, without a MULE, by the quickest door: from where the errand's walk there ended. */
+export function plotToPlace(state: GameState, cfg: FloorConfig, w: Walker, index: number, place: HallPlace, errand?: Errand): number {
   let best = Infinity;
-  for (const [door, map] of doorTable(state, cfg)) {
-    best = Math.min(best, map[index]!.seconds / mapFactor(cfg, w.pace, false, w.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], place, w.pace, false));
+  for (const [door, walk] of doorWalks(state, cfg, index, errand)) {
+    best = Math.min(best, walk.seconds / mapFactor(cfg, w.pace, false, w.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], place, w.pace, false));
   }
   return best;
 }
 
 /**
- * Seconds for an errand on a plot from where a colonist stands: the walk there (out of the store first, if inside),
- * `work` seconds on it, and the walk back to the pub. RULE-8's test for whether an errand still fits the clock.
+ * Seconds for an errand on a plot from where a colonist stands, to make `press` there: the walk there (out of the store
+ * first, if inside), `work` seconds on it, and the walk back to the pub. RULE-8's test for whether an errand still fits
+ * the clock.
  */
-export function plotErrandSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number, work: number): number {
+export function plotErrandSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number, work: number, press: ShorePress): number {
   const w: Walker = { pace: c.pace, bot: c.bot };
   const lead = leading(c);
-  if (c.space === 'hall') return tripSeconds(state, cfg, w, c, index, lead) + work + plotToPlace(state, cfg, w, index, 'pub');
+  const errand: Errand = { me: c.id, press };
+  if (c.space === 'hall') return tripSeconds(state, cfg, w, c, index, lead, null, errand) + work + plotToPlace(state, cfg, w, index, 'pub', errand);
   // On the map it walks there from where it stands (slowed by a bite), and back from where that walk ends.
-  const walk = mapWalk(state, cfg, c, index);
+  const walk = mapWalk(state, cfg, c, index, errand);
   return walk.seconds / mapFactor(cfg, c.pace, lead, c.bot, c.bitten) + work + pubSeconds(state, cfg, { ...c, ...walk.end, lead: null });
 }
 
 /**
- * The walk from where a colonist stands to plot `index`, as the hand walks it: on the map from where it stands (slowed
- * by a bite), from the hall out by the door that makes it quickest. Its seconds at the colonist's factors, and where it
- * ends, where Reach first offers the plot.
+ * The walk from where a colonist stands to plot `index` to make `press` there, as the hand walks it: on the map from
+ * where it stands (slowed by a bite), from the hall out by the door that makes it quickest; a lake plot to the quickest
+ * of its stands (approaches). Its seconds at the colonist's factors, and where it ends, where Reach first offers the plot.
  */
-export function plotWalk(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number): MapWalk {
+export function plotWalk(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number, press: ShorePress): MapWalk {
+  return walkVia(state, cfg, c, approaches(state, cfg, index, { me: c.id, press }));
+}
+
+/**
+ * The walk from where a colonist stands to lake plot `lake` from a stand on its shore for `press`, as plotWalk prices it:
+ * the walker (FloorWalker) heads for the stand this is quickest for, so the walk it makes is the walk the plan priced.
+ */
+export function standWalk(state: GameState, cfg: FloorConfig, c: FloorColonist, lake: FloorPoint, stand: ShoreStand, press: ShorePress): MapWalk {
+  return walkVia(state, cfg, c, [shoreApproach(state, cfg, c.id, lake, stand, press)]);
+}
+
+/** The quickest walk from where a colonist stands by any of the approaches, at its factors. */
+function walkVia(state: GameState, cfg: FloorConfig, c: FloorColonist, ways: readonly Approach[]): MapWalk {
   const lead = leading(c);
   if (c.space === 'map') {
-    const walk = mapWalk(state, cfg, c, index);
+    const walk = quickest(ways.map((a) => a.finish(sideWalk(state, cfg, c, a.tile))), { seconds: Infinity, end: c });
     return { seconds: walk.seconds / mapFactor(cfg, c.pace, lead, c.bot, c.bitten), end: walk.end };
   }
   let best: MapWalk = { seconds: Infinity, end: c };
   for (const [door, map] of doorTable(state, cfg)) {
-    const seconds = hallSeconds(state, cfg, c, door, c.pace, lead) + map[index]!.seconds / mapFactor(cfg, c.pace, lead, c.bot);
-    if (seconds < best.seconds) best = { seconds, end: map[index]!.end };
+    const walk = quickest(ways.map((a) => a.finish(map[a.tile]!)), { seconds: Infinity, end: c });
+    const seconds = hallSeconds(state, cfg, c, door, c.pace, lead) + walk.seconds / mapFactor(cfg, c.pace, lead, c.bot);
+    if (seconds < best.seconds) best = { seconds, end: walk.end };
   }
   return best;
 }
 
 /**
- * A stop on the rest of a plan: a place in the hall or a plot, and `work` seconds there (the press's pause, an assay).
- * `lead`: whether it walks there leading a MULE (true from the corral to the plot it installs on, false to the corral);
- * absent, as it stands.
+ * A stop on the rest of a plan: a place in the hall, or a plot and the press made there, and `work` seconds there (the
+ * press's pause, an assay). `lead`: whether it walks there leading a MULE (true from the corral to the plot it installs
+ * on, false to the corral); absent, as it stands.
  */
-export type PlanStop = ({ place: HallPlace } | { plot: number }) & { work: number; lead?: boolean };
+export type PlanStop = ({ place: HallPlace } | { plot: number; press: ShorePress }) & { work: number; lead?: boolean };
 
 /**
  * Seconds for the rest of a plan from where a colonist stands: each stop in order, every leg setting off where the last
@@ -359,7 +465,7 @@ export function planSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist
     const lead = stop.lead === undefined ? at.lead : stop.lead ? (at.lead ?? { good: null, x: at.x, y: at.y }) : null;
     const me: FloorColonist = { ...at, lead, bolt: undefined };
     if ('plot' in stop) {
-      const walk = plotWalk(state, cfg, me, stop.plot);
+      const walk = plotWalk(state, cfg, me, stop.plot, stop.press);
       seconds += walk.seconds + stop.work;
       // Installed, the MULE stays on the plot.
       at = { ...me, space: 'map', ...walk.end, lead: null, bitten: me.space === 'map' && me.bitten };
@@ -383,6 +489,9 @@ export interface ShoreStand {
   landFirst: boolean;
 }
 
+/** Whether Reach offers `press` on plot `p`. */
+const pressOn = (r: Reach, press: ShorePress, p: FloorPoint) => r.kind === press && r.plot.x === p.x && r.plot.y === p.y;
+
 /** The floor with only the seat's colonist on it, standing at a point on the map, and no moments. */
 function standingAt(me: string, at: FloorPoint): DevFloor {
   const c: FloorColonist = { ...probe('map', at, 1, false, true), id: me };
@@ -396,8 +505,9 @@ function standingAt(me: string, at: FloorPoint): DevFloor {
  */
 function atWork(state: GameState, me: string, press: ShorePress): GameState {
   const ready = (p: Player): Player => {
-    const mule = press === 'install' && !(p.carriedMule && p.carriedMule !== 'empty');
-    return { ...p, doneDeveloping: false, ...(mule && { carriedMule: 'food' as const, muleBolted: false }) };
+    const fitted = p.carriedMule && p.carriedMule !== 'empty' ? p.carriedMule : 'food';
+    // Caught again, a bolted MULE installs from the same spots: a bolt is no reason a shore can't reach the plot.
+    return { ...p, doneDeveloping: false, ...(press === 'install' && { carriedMule: fitted, muleBolted: false }) };
   };
   return { ...state, phase: 'development', players: state.players.map((p) => (p.id === me ? ready(p) : p)) };
 }
@@ -414,7 +524,7 @@ export function shoreStands(state: GameState, cfg: FloorConfig, me: string, plot
   if (cfg.steer.lakeMode !== 'shore') return [];
   const walks = [...doorTable(state, cfg).values()];
   const game = atWork(state, me, press);
-  const on = (r: Reach, p: FloorPoint) => r.kind === press && r.plot.x === p.x && r.plot.y === p.y;
+  const on = (r: Reach, p: FloorPoint) => pressOn(r, press, p);
   return AROUND.flatMap(([dx, dy]): ShoreStand[] => {
     const t = tileAt(state.tiles, state.width, plot.x + dx, plot.y + dy);
     if (!t || terrainShare(t.terrain, cfg) <= 0) return [];
@@ -432,8 +542,13 @@ export function shoreStands(state: GameState, cfg: FloorConfig, me: string, plot
   });
 }
 
-/** Whether a colonist can stand where Reach offers installing on the plot: on it, or (a lake plot) at a spot on its shore. */
+/**
+ * Whether a colonist can stand where Reach offers installing on the plot: on it, where a walk from the store reaches it
+ * (a plot shut in by lake and the map's edge is no plot to walk to), or (a lake plot) at a spot on its shore, which
+ * shoreStands only offers where a walk reaches it. One rule for the plans, the hands and the gate (FM-floor-unreachable).
+ */
 export function installable(state: GameState, cfg: FloorConfig, me: string, index: number): boolean {
   const t = state.tiles[index]!;
-  return terrainShare(t.terrain, cfg) > 0 || shoreStands(state, cfg, me, t, 'install').length > 0;
+  if (terrainShare(t.terrain, cfg) > 0) return [...doorTable(state, cfg).values()].some((walks) => Number.isFinite(walks[index]!.seconds));
+  return shoreStands(state, cfg, me, t, 'install').length > 0;
 }

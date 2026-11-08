@@ -12,14 +12,13 @@ import {
   nextPostedPrice,
   runProduction,
   runUpkeep,
+  stepOffWorld,
   emptyStock,
   energyUseOf,
   EVENTS,
   GOODS,
   MULE,
-  PRICE,
   STRATEGIST,
-  UPKEEP,
   type GameState,
   type Good,
   type Stock,
@@ -84,6 +83,8 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
     }
     if (isGameOver(sim)) return { ...flat(), final: true };
     sim.month++;
+    // The month opens as the engine opens it: on a what-if copy the ship's prices move along their expected path.
+    stepOffWorld(sim);
     lastShortages = shortages;
     ({ made, plantsUse } = produce(sim, me));
   }
@@ -128,7 +129,7 @@ interface Future {
  * MULEs and posts prices. Returns the prices posted `months` on, raised
  * where the rollout (run on to the horizon) shows a shortage the price
  * hasn't caught up with yet: Food or Water colonists went short of count at
- * what colonists would pay, and Smithore, when the corral can't build its
+ * what the store posts after such a month, and Smithore, when the corral can't build its
  * monthly target, at its price at the horizon.
  */
 function rollForward(stage: GameState, months: number): Future {
@@ -153,7 +154,8 @@ function rollForward(stage: GameState, months: number): Future {
   }
   prices = { ...prices };
   for (const good of new Set(sim.history.slice(Math.max(0, from - 1)).flatMap((h) => h.shortages))) {
-    prices[good] = Math.max(prices[good], (UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread));
+    // The store's own price for the month after its colonists went short of the good (pricing RULE-6 row 2).
+    prices[good] = Math.max(prices[good], nextPostedPrice(sim, good, undefined, [good]));
   }
   if (corralShort) prices.smithore = Math.max(prices.smithore, last.smithore);
   return { prices };

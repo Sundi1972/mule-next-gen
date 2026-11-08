@@ -1,8 +1,13 @@
-import type { ColonyProjectView, ColonyView, MuleView, MyView, TableView } from '@mule/protocol';
-import { COLONY_SCORE } from '@mule/engine';
+// A browser's document before react-dom loads: the month-end opener and the drift are decided in effects and timers.
+import { document, FakeElement } from './fake-dom';
+import type { ColonyProjectView, ColonyView, MuleView, MyView, PoliticsView, TableView } from '@mule/protocol';
+import { COLONY_SCORE, EVENT_SHOW } from '@mule/engine';
+import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -10,7 +15,11 @@ import { GameOver } from '../src/phone/GameOver';
 import { Results } from '../src/phone/Results';
 import { ColonyPanel, LeagueTable } from '../src/components/MonthEnd';
 import { TableApp, TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableApp';
+import { BuildSite } from '../src/components/Colony';
 import { aMuleView, aPlayer } from './fixtures/views';
+
+// The theme reads the page's dataset, which the server renders below read too.
+Object.assign(document.documentElement, { dataset: {} });
 
 /**
  * The colony's screens (C34), from views the server could send: the four gauges in the TV header, the build site at the
@@ -136,11 +145,16 @@ function onTv(view: MuleView, screen: (props: { game: MuleView }) => ReactElemen
 let boardState: unknown = null;
 vi.mock('../src/net/react', async (actual) => ({ ...(await actual<typeof import('../src/net/react')>()), useClientState: () => boardState }));
 
-/** The TV as the table drives it: TableApp's router over a board's view of the room. */
-function onTvRouter(view: MuleView): string {
+/** The router's state: a board's view of the room with this game. */
+function onTvRouterState(view: MuleView): void {
   const game = { ...view, me: null };
   const table = { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>;
   boardState = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: table, notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+}
+
+/** The TV as the table drives it: TableApp's router over a board's view of the room. */
+function onTvRouter(view: MuleView): string {
+  onTvRouterState(view);
   return renderToStaticMarkup(createElement(ClientProvider, { client: { ...client, watch: () => {} } as unknown as TableClient, children: createElement(TableApp, { room: 'MULE' }) }));
 }
 
@@ -317,12 +331,12 @@ describe('C34: the four gauges in the TV header', () => {
   });
 });
 
-describe('C34: the build site at the month end', () => {
-  const tv = onTv(game(MIDGAME), TvMonthEnd);
-  const row = (id: string) => element(tv, `project-${id}`);
+describe("C34: the build site on the phones' Colony desk", () => {
+  const desk = renderToStaticMarkup(createElement(BuildSite, { colony: MIDGAME, players: PLAYERS, size: 'phone' }));
+  const row = (id: string) => element(desk, `project-${id}`);
 
   it('B-AC-34-4: one row per project, each at its stage', () => {
-    const stages = [...element(tv, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => [m[1], m[2]]);
+    const stages = [...element(desk, 'build-site').matchAll(/data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => [m[1], m[2]]);
     expect(stages).toEqual([
       ['stadium', 'commissioned'],
       ['hospital', 'building'],
@@ -359,6 +373,63 @@ describe('C34: the build site at the month end', () => {
     const empty = onTv(game({ ...MIDGAME, projects: [], lastGauges: null }), TvMonthEnd);
     expect(has(empty, 'no-projects')).toBe(true);
     expect(has(empty, 'project-park')).toBe(false);
+  });
+});
+
+describe('C34: the build site at the TV month end, one line a project (PM ruling 7 Nov, TV-FIT)', () => {
+  const tv = (colony: ColonyView) => onTv(game(colony), TvMonthEnd);
+  const line = (html: string, id: string) => text(element(html, `project-${id}`));
+  const at = (over: Partial<ColonyProjectView>) => ({ ...MIDGAME, projects: MIDGAME.projects.map((p) => (p.id === over.id ? { ...p, ...over } : p)) });
+
+  it("B-AC-34-4: each project is one line, name, stage and the figure its stage turns on; the funding bar, build pips and plaque are the phones'", () => {
+    const html = tv(MIDGAME);
+    expect([...element(html, 'build-site').matchAll(/<li[^>]*data-testid="project-([a-z]+)" data-stage="([a-z]+)"/g)].map((m) => m[1])).toEqual(['stadium', 'hospital', 'observatory', 'spaceport']);
+    for (const id of ['stadium', 'hospital', 'park', 'observatory', 'spaceport']) expect(element(html, `project-${id}`)).not.toMatch(/data-testid="(funding|build|plaque)-/);
+    expect(line(html, 'stadium')).toBe('Stadium Collecting 61% paid');
+    expect(element(html, 'figure-spaceport')).toMatch(/line-through/);
+  });
+
+  it('PM ruling 7 Nov (five projects): the standing projects fold into one line after the rest, "Standing: Hospital · Park, +5 prestige"; collecting, building, closed and damaged keep their own', () => {
+    const html = tv(at({ id: 'hospital', stage: 'standing', monthsLeft: null }));
+    expect([...element(html, 'build-site').matchAll(/<li[^>]*data-testid="([a-z-]+)"/g)].map((m) => m[1])).toEqual(['project-stadium', 'project-observatory', 'project-spaceport', 'projects-standing']);
+    expect(text(element(html, 'projects-standing'))).toBe('Standing: Hospital · Park +5 prestige');
+    // Each standing project still answers to its own id and stage, inside the one line.
+    for (const id of ['hospital', 'park']) expect(element(html, 'projects-standing')).toMatch(new RegExp(`data-testid="project-${id}" data-stage="standing"`));
+    expect(text(element(html, 'figure-standing'))).toBe('+5 prestige');
+  });
+
+  it('PM ruling 7 Nov: one standing project folds the same way', () => {
+    expect(text(element(tv(MIDGAME), 'projects-standing'))).toBe('Standing: Park +2 prestige');
+  });
+
+  it('PM ruling 7 Nov (negative): with nothing standing there is no standing line', () => {
+    expect(has(tv({ ...MIDGAME, projects: MIDGAME.projects.filter((p) => p.stage !== 'standing') }), 'projects-standing')).toBe(false);
+  });
+
+  it('B-AC-34-4: a project paid in credits but short of goods names the goods it waits for, never "100% paid"', () => {
+    const html = tv(at({ id: 'stadium', funded: { credits: 1_400, goods: { alloy: 4, electronics: 1 } } }));
+    expect(line(html, 'stadium')).toBe('Stadium Collecting needs 1 Electronics');
+  });
+
+  it('B-AC-34-4: the month end has run the upkeep, so one month left stands next month, two in 2 months', () => {
+    expect(line(tv(MIDGAME), 'hospital')).toBe('Hospital Building stands next month');
+    expect(line(tv(at({ id: 'hospital', monthsLeft: 2 })), 'hospital')).toBe('Hospital Building stands in 2 months');
+  });
+
+  it('PM ruling 7 Nov (TV-FIT, five projects): beside the gauges the colony panel names the air\'s change in its header and leaves the level, band and fund to the Environment and Wealth gauges', () => {
+    const panel = element(tv(MIDGAME), 'colony-panel');
+    expect(text(element(panel, 'colony-air'))).toBe('Air ↓ worse than month 6 (35)');
+    for (const id of ['air-level', 'air-band', 'colony-fund', 'fund-balance']) expect(has(panel, id)).toBe(false);
+    expect(has(panel, 'colony-hungry')).toBe(true);
+  });
+
+  it('review of #672: a filtered plot leaves the air fractional; the Environment gauge reads it rounded, as the air trend does', () => {
+    const half = { ...MIDGAME, gauges: { ...MIDGAME.gauges, environment: 35.5 } };
+    expect(text(element(tv(half), 'gauge-environment'))).toMatch(/^Environment 36 /);
+  });
+
+  it('review of #672: five standing names wrap rather than cut', () => {
+    expect(element(tv(MIDGAME), 'projects-standing')).not.toMatch(/truncate/);
   });
 
   it('B-AC-34-4 (negative): without politics the month end has no build site', () => {
@@ -513,3 +584,260 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     for (const id of ['phone-month-score', 'colony-score-change', 'colony-band']) expect(has(harvest, id), `production has no ${id}`).toBe(false);
   });
 });
+
+describe('HC-3: the grounds when the art manifest fails', () => {
+  /** Month 12: the Park stands, the Stadium has 1 of its 3 months left, the Hospital is closed, the Spaceport only commissioned. */
+  const MONTH_12: ColonyView = {
+    ...MIDGAME,
+    projects: [
+      { ...PARK, place: { x: 1, y: 2, w: 1, h: 1 } },
+      { ...STADIUM, stage: 'building', monthsLeft: 1, place: { x: 0, y: 0, w: 2, h: 2 } },
+      { ...HOSPITAL, stage: 'closed', monthsLeft: null, place: { x: 3, y: 2, w: 1, h: 1 } },
+      { ...DAMAGED, stage: 'commissioned', repairCost: null, place: { x: 3, y: 3, w: 2, h: 2 } },
+    ],
+  };
+  const MANIFEST_URL = '/art/colony/manifest.json';
+  const manifestFile = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
+  /** The web server as the browser meets it: the manifest at its URL, nothing else. */
+  const serveManifest = (body: () => Response | Promise<Response>) => vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === MANIFEST_URL ? body() : new Response('', { status: 404 }))));
+  /** The shipped manifest with one part broken, as the server would send it. */
+  const broken = (spoil: (m: { frame: Record<string, unknown>; pictures: Record<string, Record<string, Record<string, unknown>>> }) => void) => () => {
+    const m = JSON.parse(manifestFile);
+    spoil(m);
+    return new Response(JSON.stringify(m));
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each<[string, () => Response | Promise<Response>]>([
+    ['the network fails', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['the server answers 404', () => new Response('Not found', { status: 404 })],
+    ['the file is not JSON', () => new Response('<!doctype html>')],
+    ['the JSON is not a manifest', () => new Response('{"pictures":null}')],
+    ['the frame is empty', broken((m) => void (m.frame = {}))],
+    ['the frame has no number for its width', broken((m) => void (m.frame.width = 'wide'))],
+    ['the frame centre is one number', broken((m) => void (m.frame.centre = [800]))],
+    ['an entry has no day picture', broken((m) => void delete m.pictures.park!.standing!.day)],
+    ["a kind's own frame is bad", broken((m) => void (m.pictures.stadium!.frame = {}))],
+  ])('HC-3: when %s, the grounds draw every place as its SVG shape and nothing breaks', async (_, body) => {
+    vi.resetModules();
+    const fresh = await import('../src/components/Grounds');
+    serveManifest(body);
+    await expect(fresh.loadGroundsManifest()).resolves.toBeNull();
+    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12, size: 'phone' }));
+    expect(has(html, 'colony-grounds')).toBe(true);
+    expect(html).not.toContain('<image');
+    for (const n of [1, 2, 3, 4]) expect(has(html, `shape-${n}`), `place ${n} is drawn`).toBe(true);
+  });
+});
+
+
+describe('C5 / C7: the month-end opener on the TV, between the event show and TvMonthEnd', () => {
+  const POLITICS: PoliticsView = {
+    governor: 's1',
+    sheriff: null,
+    term: [1, 3],
+    next: 4,
+    baron: null,
+    tax: { percent: 5, start: 5, low: 0, high: 10 },
+    fund: 0,
+    pay: {},
+    weights: [],
+    candidates: {},
+    promises: {},
+    promise: null,
+    promiseFrom: null,
+    election: null,
+  };
+  const PARK_AT = { x: 1, y: 2, w: 1, h: 1 };
+  const parkAt = (stage: ColonyProjectView['stage']): ColonyView => ({
+    ...MIDGAME,
+    lastGauges: null,
+    projects: [project({ id: 'park', name: 'Park', stage, buildMonths: 1, monthsLeft: stage === 'building' ? 1 : null, place: PARK_AT })],
+  });
+  /** The TV's view of month `month` in `phase`; politics off sends neither politics nor a colony (HC-5). */
+  const at = (phase: MuleView['phase'], month: number, colony: ColonyView | null) => ({ ...game(colony, { phase, month, politics: colony ? POLITICS : null }), me: null });
+
+  let host: FakeElement | null = null;
+  let root: ReturnType<typeof createRoot> | null = null;
+  let frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 1;
+  /** The page's frame clock, in ms: it moves only as the test lets time pass. */
+  let pageMs = 0;
+  /** The server's clock, as the TV reads it: it moves with the page's. */
+  let serverMs = 0;
+
+  beforeEach(() => {
+    Object.assign(FakeElement.prototype, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }), offsetWidth: 0, offsetHeight: 0, querySelectorAll: () => [] });
+    Object.assign(document, { createElementNS: (_ns: string, tag: string) => document.createElement(tag) });
+    Object.assign(window, { matchMedia: (q: string) => ({ media: q, matches: false, addEventListener() {}, removeEventListener() {} }) });
+    frames = new Map();
+    pageMs = 0;
+    serverMs = 0;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      frames.set(nextFrame, cb);
+      return nextFrame++;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    // No art on the test's server: the grounds draw their SVG shapes (HC-3).
+    vi.stubGlobal('fetch', () => Promise.reject(new TypeError('no server')));
+  });
+  afterEach(() => {
+    if (root) flushSync(() => root!.unmount());
+    if (host) document.body.removeChild(host);
+    root = null;
+    host = null;
+    delete (window as { matchMedia?: unknown }).matchMedia;
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** The TV mounted on TableApp's router; `send` is the server's next view. */
+  function tv(first: MuleView) {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host as unknown as HTMLElement);
+    const show = (view: MuleView) => {
+      onTvRouterState(view);
+      const board = { ...client, watch: () => {}, serverNow: () => serverMs } as unknown as TableClient;
+      flushSync(() => root!.render(createElement(ClientProvider, { client: board, children: createElement(TableApp, { room: 'MULE' }) })));
+    };
+    show(first);
+    return {
+      send: show,
+      shows: (testid: string) => find(host!, testid) !== null,
+      opener: () => find(host!, 'tv-grounds-opener'),
+      happiness: () => Number(words(find(host!, 'gauge-happiness')!).match(/Happiness\s*(\d+)/)?.[1]),
+    };
+  }
+
+  /** Lets `ms` pass on the page's timers and frames. */
+  function pass(ms: number) {
+    for (let t = 0; t < ms; t += 50) {
+      flushSync(() => vi.advanceTimersByTime(50));
+      const due = [...frames.values()];
+      frames.clear();
+      pageMs += 50;
+      serverMs += 50;
+      flushSync(() => due.forEach((cb) => cb(pageMs)));
+    }
+  }
+
+  it('T-AC-8: at a politics-on month end the TV shows the opener first, TvMonthEnd once its 3 s still has run; the first month end this TV sees leans in on nothing', () => {
+    const screen = tv(at('planning', 1, parkAt('building')));
+    screen.send(at('upkeep', 1, parkAt('standing')));
+    expect(screen.opener()?.getAttribute('data-opener')).toBe('still');
+    expect(screen.opener()?.getAttribute('data-leaning')).toBeNull();
+    expect(screen.shows('tv-monthend')).toBe(false);
+    pass(2_900);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    pass(200);
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+    expect(screen.shows('tv-monthend')).toBe(true);
+  });
+
+  it('T-AC-8: a month whose Park came to stand plays the full 6 s opener, leaning in on the Park, then TvMonthEnd', () => {
+    const screen = tv(at('planning', 1, parkAt('commissioned')));
+    screen.send(at('upkeep', 1, parkAt('building')));
+    pass(3_100);
+    screen.send(at('planning', 2, parkAt('building')));
+    screen.send(at('upkeep', 2, parkAt('standing')));
+    expect(screen.opener()?.getAttribute('data-opener')).toBe('full');
+    expect(screen.opener()?.getAttribute('data-leaning')).toBe('park');
+    expect(words(find(host!, 'opener-caption')!)).toBe('New this month: the Park stands.');
+    pass(5_900);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    pass(200);
+    expect(screen.shows('tv-monthend')).toBe(true);
+  });
+
+  it('T-AC-8: the month end’s event show plays first: under it the opener waits, its clock still, no month end; its 3 s start when the show ends', () => {
+    const screen = tv(at('planning', 1, parkAt('building')));
+    // A colony event at the month end, its show on the server's clock for the next 4 s.
+    const showMs = 4_000;
+    const event = { key: 'festival', kind: 'festival', title: 'Festival', line: 'The colony celebrates.', sign: 'good', scope: 'colony', origin: null, hits: [], phase: 'upkeep', weight: 'spotlight', playMs: EVENT_SHOW.playMs.spotlight, objects: [], effects: [] };
+    screen.send({ ...at('upkeep', 1, parkAt('standing')), events: [event], eventShow: { startsAt: serverMs, showMs, introMs: EVENT_SHOW.introMs, endsAt: serverMs + showMs, held: true } } as unknown as MuleView);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    pass(3_900);
+    // Longer than the still's 3 s: had its clock run under the show, it would be over.
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    expect(screen.shows('tv-monthend')).toBe(false);
+    pass(300);
+    // The show is over; the still now runs its whole 3 s, then the month end.
+    pass(2_700);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    pass(400);
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+    expect(screen.shows('tv-monthend')).toBe(true);
+  });
+
+  it('T-AC-8: everyone Ready during the opener moves the phase on, and the planning screen shows at once', () => {
+    const screen = tv(at('planning', 1, parkAt('building')));
+    screen.send(at('upkeep', 1, parkAt('standing')));
+    pass(1_000);
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    screen.send(at('planning', 2, parkAt('standing')));
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+    expect(screen.shows('tv-monthend')).toBe(false);
+  });
+
+  it('T-AC-8: the phase moving on ends the full opener, on a page whose frame clock has no cancelAnimationFrame too', () => {
+    const screen = tv(at('planning', 1, parkAt('commissioned')));
+    screen.send(at('upkeep', 1, parkAt('building')));
+    pass(3_100);
+    screen.send(at('planning', 2, parkAt('building')));
+    vi.stubGlobal('cancelAnimationFrame', undefined);
+    screen.send(at('upkeep', 2, parkAt('standing')));
+    pass(1_000);
+    expect(screen.opener()?.getAttribute('data-opener')).toBe('full');
+    expect(() => screen.send(at('planning', 3, parkAt('standing')))).not.toThrow();
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+  });
+
+  it('T-AC-8: a TV that reloads into the month end shows TvMonthEnd at once, no opener (RULE-5)', () => {
+    const screen = tv(at('upkeep', 2, parkAt('standing')));
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+    expect(screen.shows('tv-monthend')).toBe(true);
+  });
+
+  it('T-AC-9: the gauges count when TvMonthEnd mounts after the opener, not at the phase change: they open on last month’s mood and count to the server’s', () => {
+    const mood = (happiness: number, last: number): ColonyView => ({ ...parkAt('standing'), gauges: { ...MIDGAME.gauges, happiness, band: 'restless' }, lastGauges: { ...MIDGAME.lastGauges!, happiness: last } });
+    const screen = tv(at('planning', 3, mood(44, 50)));
+    screen.send(at('upkeep', 3, mood(31, 44)));
+    pass(3_000);
+    expect(screen.shows('tv-monthend')).toBe(true);
+    expect(screen.happiness()).toBe(44);
+    pass(3_000);
+    expect(screen.happiness()).toBe(31);
+  });
+
+  it('T-AC-5: politics off, the month end is TvMonthEnd at once: no opener and no grounds', () => {
+    const screen = tv(at('planning', 1, null));
+    screen.send(at('upkeep', 1, null));
+    expect(screen.shows('tv-grounds-opener')).toBe(false);
+    expect(screen.shows('colony-grounds')).toBe(false);
+    expect(screen.shows('tv-monthend')).toBe(true);
+  });
+});
+
+function find(node: FakeElement, testid: string): FakeElement | null {
+  for (const c of node.childNodes) {
+    if (!(c instanceof FakeElement)) continue;
+    if (c.getAttribute('data-testid') === testid) return c;
+    const deep = find(c, testid);
+    if (deep) return deep;
+  }
+  return null;
+}
+
+/** The text under a node, as a screen reads it. */
+const words = (node: FakeElement): string =>
+  node.childNodes
+    .map((c) => (c instanceof FakeElement ? words(c) : c.textContent))
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();

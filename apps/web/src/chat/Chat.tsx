@@ -141,10 +141,28 @@ function Bubble({ line, seat, me, size = 'phone', guide = false }: { line: ChatM
       data-place={place}
       role="status"
     >
+      {seat.player.isAi && <AiMark lead tv={size === 'tv'} />}
       {whisper && <span className="mr-1 font-mono text-[10px] font-bold text-holo">🔒 TO {to}</span>}
       {line.text}
       {/* The tail still points at the speaker when the bubble has slid. */}
       <span aria-hidden className={cx('absolute', TAIL[place])} style={{ ...(side ? { top: `calc(50% - ${dy}px)` } : { left: `calc(50% - ${dx}px)` }), [TAIL_COLOR[place]]: edge }} />
+    </span>
+  );
+}
+
+/**
+ * A computer seat's quiet mark (Heiko, 7 Nov: children play, and Claude will try to persuade): " · AI" after its name,
+ * or, where a line shows no name (a bubble), "AI · " before the words.
+ */
+export function AiMark({ lead = false, tv = false }: { lead?: boolean; tv?: boolean }) {
+  return lead ? (
+    <span className={cx('font-mono font-bold text-holo', tv ? 'text-base' : 'text-[10px]')} data-testid="ai-mark">
+      AI ·{' '}
+    </span>
+  ) : (
+    <span className="text-holo" data-testid="ai-mark">
+      {' '}
+      · AI
     </span>
   );
 }
@@ -270,6 +288,7 @@ export function Ticker({ size = 'phone', lines: keep, wrap = false, wide = false
               </span>
               <strong className={wrap ? undefined : 'shrink-0'}>
                 {player.name}
+                {player.isAi && <AiMark />}
                 {l.to ? ' 🔒' : ''}:
               </strong>
               <span className={wrap ? undefined : 'truncate'}>

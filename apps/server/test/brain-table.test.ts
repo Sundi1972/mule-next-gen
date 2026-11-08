@@ -493,7 +493,9 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
       throw new Error('api down');
     });
     const { brain, records, finishes } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, sayThrows: true });
+    // Two months, so a decision with a real choice reaches the failing model: with the store's Energy at 12 a seat
+    // (PR-5a), month 1 alone puts the seats only one-option calls, and nothing falls back.
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, sayThrows: true, maxMonths: 2 });
     expect(await t.toGameOver()).toBe(true);
 
     expect(sdk.calls).toBeGreaterThan(0);

@@ -1,4 +1,4 @@
-import type { ChatMessage, ClientEnvelope, SeatKind, ServerEnvelope, TableView } from './protocol.js';
+import type { ChatMessage, ClaudeStatus, ClientEnvelope, SeatKind, ServerEnvelope, TableView } from './protocol.js';
 
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
@@ -93,6 +93,8 @@ export interface Game<Intent, GameView> {
   heard?(from: string, text: string, to?: string): void;
   /** The seat's screen was replaced by another device; drop any input the old screen was holding. Not a disconnect. */
   seatMoved?(seatId: string): void;
+  /** A Claude seat's status for every screen (C6); undefined while its chat has not called. Call `changed()` when it moves. */
+  claudeStatus?(seatId: string): ClaudeStatus | undefined;
   dispose?(): void;
   /**
    * The game itself, when the room hosts a wrapper of it (the server's recorder): what a Claude seat's code names as its
@@ -111,7 +113,7 @@ export interface RoomOptions<Intent, GameView> {
   emotes?: readonly string[];
   /** The values a seat may pick in the lobby. Absent: the game has no choices to make. */
   picks?: readonly string[];
-  /** Cleans chat text, for example with a family-friendly filter. Return '' to drop the message. */
+  /** Cleans chat text and a joining player's name, for example with a family-friendly filter. Return '' to drop the message; a name it drops becomes "Player". */
   moderate?(text: string): string;
   /** Errors whose message is shown to the player instead of thrown. */
   isUserError?(err: unknown): boolean;
@@ -186,6 +188,7 @@ export class Room<Intent, View> {
   private nextSeat = 1;
   /** Seat codes taken back or kicked: they answer "taken back" for the room's life and are never issued again. */
   private readonly deadCodes = new Set<string>();
+  private readonly issued = new Set<string>();
   private chatId = 0;
   private broadcastQueued = false;
 
@@ -355,6 +358,11 @@ export class Room<Intent, View> {
     return this.deadCodes.has(typed) ? { state: 'taken_back' } : null;
   }
 
+  /** Every seat code this room has issued, live or dead: the registry retires them all when the room goes. */
+  get seatCodes(): ReadonlySet<string> {
+    return this.issued;
+  }
+
   /** RULE-1: the host, in the lobby, sets a computer seat's kind; claude issues it a code, builtin kills the code at once. */
   private setSeatKind(by: string, target: string, kind: SeatKind): void {
     this.requireHost(by);
@@ -373,7 +381,9 @@ export class Room<Intent, View> {
   private freshSeatCode(): string {
     for (let i = 0; i < 100; i++) {
       const code = this.opts.newSeatCode().trim().toUpperCase();
-      if (this.seatForCode(code) === null) return code;
+      if (this.seatForCode(code) !== null) continue;
+      this.issued.add(code);
+      return code;
     }
     throw new Error('No free seat code after 100 draws');
   }
@@ -391,7 +401,7 @@ export class Room<Intent, View> {
       if (this.started) throw new TableError('This game has already started');
       if (this.seats.length >= this.opts.maxSeats) throw new TableError('The table is full');
     }
-    const seat = back ?? this.addSeat(cleanName(name) || 'Player', false);
+    const seat = back ?? this.addSeat(this.opts.moderate(cleanName(name)) || 'Player', false);
     this.letGoOfOtherSeats(conn, seat);
     seat.conn = conn;
     if (back) this.game.connectionChanged?.(seat.id, true);
@@ -609,8 +619,7 @@ export class Room<Intent, View> {
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
         ...(!this.started && this.game.defaultPick ? { defaultPick: this.game.defaultPick(i, this.seats.length) } : {}),
         ...(s.kind ? { kind: s.kind } : {}),
-        // C6 fills the live status; until a Claude chat calls, the seat waits.
-        ...(s.kind === 'claude' ? { claude: 'waiting' as const } : {}),
+        ...(s.kind === 'claude' ? { claude: this.game.claudeStatus?.(s.id) ?? 'waiting' } : {}),
         // T-AC-5: the code lets whoever holds it play the seat, so it goes to the host's own view and no other.
         ...(s.seatCode && seatId !== null && seatId === this.hostId ? { seatCode: s.seatCode } : {}),
       })),

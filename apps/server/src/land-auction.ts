@@ -1,5 +1,5 @@
 import { COLONY_SELLER, lotLeader, LOTS, standing, type GameState, type Listing, type LotResult } from '@mule/engine';
-import type { ListingView, LotWalkerView, MuleView } from '@mule/protocol';
+import type { ListingView, LotWalkerView, MuleView, NewsLine } from '@mule/protocol';
 
 /* The land auction as the screens and the news see it: pure functions of the game state and seat names. */
 
@@ -53,15 +53,17 @@ export function landAuctionView(state: GameState): MuleView['landAuction'] {
 }
 
 /** The news line at a lot's bell: who bought it, or what happened to it unsold. */
-export function lotNews(lot: Listing, result: LotResult, nameOf: (seatId: string) => string): string {
+export function lotNews(lot: Listing, result: LotResult, nameOf: (seatId: string) => string): NewsLine {
   const { x, y } = lot.item;
   const what = lot.item.kind === 'plot' ? `plot ${x}·${y}` : `the MULE on plot ${x}·${y}`;
-  const seller = lot.seller === COLONY_SELLER ? 'the colony' : nameOf(lot.seller);
+  const colony = lot.seller === COLONY_SELLER;
+  const seller = colony ? 'the colony' : nameOf(lot.seller);
+  const sellers = colony ? [] : [lot.seller];
   return result.kind === 'sold'
-    ? `${nameOf(result.buyer)} bought ${what} from ${seller} for ${result.price}.`
+    ? { text: `${nameOf(result.buyer)} bought ${what} from ${seller} for ${result.price}.`, who: [result.buyer, ...sellers] }
     : result.kind === 'store'
-      ? `The store bought ${what} from ${seller} for ${result.price}.`
-      : `Nobody bid ${lot.minimum} on ${what}: ${seller} keeps it.`;
+      ? { text: `The store bought ${what} from ${seller} for ${result.price}.`, who: sellers }
+      : { text: `Nobody bid ${lot.minimum} on ${what}: ${seller} keeps it.`, who: sellers };
 }
 
 /** A board's price range, lo to hi, grown by a margin at both ends once a value lies past either edge. Shared with the goods auction's board. */

@@ -7,7 +7,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { devView, NOW, tableOf } from './fixtures/arcade';
 
-/** The table chat's ticker, as another screen mounts it (WS6's arcade, in place of its own ChatTicker). */
+/** The table chat's ticker, exported for other screens; the walking screen draws its own (arcade/parts.tsx::ChatTicker). */
 
 const CHAT: ChatMessage[] = [
   { id: 1, from: 's2', text: 'Race you to the corral', at: 0 },
@@ -37,6 +37,16 @@ const render = (props: Parameters<typeof Ticker>[0]) =>
 const linesOf = (html: string) => [...html.matchAll(/<li class="([^"]*)" data-testid="chat-line-(\d+)">([\s\S]*?)<\/li>/g)].map((m) => ({ id: Number(m[2]), cls: m[1]!, html: m[3]! }));
 
 describe('the table chat ticker, exported for other screens', () => {
+  it("marks a computer seat's line with a quiet \"· AI\" after its name, a person's with nothing (Heiko, 7 Nov), on the phone and the TV", () => {
+    for (const size of ['phone', 'tv'] as const) {
+      const lines = linesOf(render({ size, lines: 3 }));
+      const kai = lines.find((l) => l.id === 2)!;
+      const ossa = lines.find((l) => l.id === 3)!;
+      expect(kai.html, `${size}: Kai is an AI seat`).toMatch(/Kai<span[^>]*data-testid="ai-mark"[^>]*> · AI<\/span>:/);
+      expect(ossa.html, `${size}: Ossa (s2) is a person`).not.toContain('ai-mark');
+    }
+  });
+
   it('keeps the phone 2 and the TV 3 lines by default; `lines` keeps that many, newest first', () => {
     expect(linesOf(render({})).map((l) => l.id)).toEqual([3, 2]);
     expect(linesOf(render({ size: 'tv' })).map((l) => l.id)).toEqual([3, 2, 1]);

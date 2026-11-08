@@ -66,30 +66,62 @@ export function smallDots(plot: number, density: 'phone' | 'tv'): boolean {
 }
 
 /**
- * How far under its plot's middle the phone's dots chip ends its dot row, in px. Follows the chip's classes in HoloMap:
- * the full chip is 17 px tall (2 px padding, a 9 px icon, a 1 px gap, 3 px dots), the small one 7 px (2 px padding, 3 px dots).
+ * How far under its plot's middle the phone's full dots chip ends its dot row, in px. Follows the chip's classes in
+ * HoloMap: 17 px tall (2 px padding, a 9 px icon, a 1 px gap, 3 px dots). The small chip sits at its plot's foot.
  */
-const DOTS_FOOT = { full: 6.5, small: 1.5 };
+const DOTS_FOOT = 6.5;
 
-/** The room from a phone plot's edge to the dots of the plot next to it, less half a pixel, in px. */
+/** The room from a phone plot's edge to the dots of the plot above it, less half a pixel, in px. */
 function dotsRoom(plot: number): number {
-  return plot / 2 - (smallDots(plot, 'phone') ? DOTS_FOOT.small : DOTS_FOOT.full) - 0.5;
+  return plot / 2 - DOTS_FOOT - 0.5;
 }
 
 /**
+ * Under this phone plot width, in px, the selected ring and its glow are drawn inside the plot (WS6 ruling on SA-1372,
+ * 7 Nov). Measured, not chosen: a phone chip's three dots (3 px, 1 px apart, 11 px across) sit centred, (P − 11) / 2 from
+ * the plot's side, and outside its plot the ring reaches 6% of P plus its band and its 2 px edge, the glow at half
+ * strength 8% of P plus 4 px. From 24 px both stop short of a side neighbour's dots; at 23.8 px the ring reaches them.
+ * A right-column special's chip steps left by its badge's hang, so the plot beside it draws its ring inside at any size.
+ * Inside, the ring may cover only its own plot's dots, which the rail shows in full beside the map.
+ */
+export const RING_INSIDE_PLOT = 24;
+
+/**
  * The selected ring outside its plot, in px: how far its box reaches out (`inset`; null for 6% of the plot, as drawn on
- * a larger plot), its holo band and its void edge. On a small phone plot the three together stop within dotsRoom: the
- * box comes in first, then the band thins. `inside` when not even a 1 px band fits there: under dots the ring is then
- * drawn inside its plot, and elsewhere outside with its full `band`, as there is nothing above to keep off.
+ * a larger plot), its holo band and its void edge. Under dots the three together stop within dotsRoom: the box comes in
+ * first, then the band thins. `inside` on a phone plot under RING_INSIDE_PLOT: the ring is then drawn inside its plot.
  */
 export function selectionRing(plot: number, density: 'phone' | 'tv'): { inset: number | null; band: number; edge: number; inside: boolean } {
   const band = Math.max(2, Math.round(plot * SHARE.ring));
   const edge = density === 'tv' ? 3 : 2;
+  if (density === 'phone' && plot < RING_INSIDE_PLOT) return { inset: 0, band, edge, inside: true };
   const room = dotsRoom(plot);
   if (density === 'tv' || plot * 0.06 + band + edge <= room) return { inset: null, band, edge, inside: false };
-  const inside = room - edge < 1;
   const thin = Math.max(1, Math.min(band, room - edge));
-  return { inset: Math.max(0, room - thin - edge), band: inside ? band : thin, edge, inside };
+  return { inset: Math.max(0, room - thin - edge), band: thin, edge, inside: false };
+}
+
+/**
+ * The small phone plot's strip (WS6 ruling on SA-1372, 7 Nov), in px: on a plot under SMALL_DOTS_PLOT that shows its
+ * dots, the chip (7 px) sits half a pixel over the foot, and the owner's tab, the gem and a special's badge share one row
+ * above it, 1 px clear of the chip and 1 px apart, half a pixel in from the plot's top and sides. Their outlines are drawn
+ * inside their boxes there, so the gaps are as clear as they look. Each is at least a
+ * dot's 3 px: when they don't all fit, the badge goes first, then the gem. Two gems overlap by half, as elsewhere.
+ */
+export const SMALL_STRIP = { inset: 0.5, gap: 1, chipFoot: 0.5, chip: 7, overChip: 1, min: 3 };
+
+export function smallStrip(plot: number, want: { tab: boolean; gems: number; badge: boolean }): { top: number; size: number; tab: boolean; gems: number; badge: boolean } {
+  const { inset, gap, chipFoot, chip, overChip, min } = SMALL_STRIP;
+  const height = Math.min(plot * SHARE.tab, plot - chipFoot - chip - overChip - inset);
+  const fit = (tab: boolean, gems: number, badge: boolean) => {
+    const items = Number(tab) + Number(gems > 0) + Number(badge);
+    const units = Number(tab) + (gems > 1 ? 1.5 : gems) + Number(badge);
+    return units === 0 ? height : Math.min(height, (plot - 2 * inset - (items - 1) * gap) / units);
+  };
+  let { badge, gems } = want;
+  if (badge && fit(want.tab, gems, badge) < min) badge = false;
+  if (gems > 0 && fit(want.tab, gems, badge) < min) gems = 0;
+  return { top: inset, size: Math.max(0, fit(want.tab, gems, badge)), tab: want.tab, gems, badge };
 }
 
 /** The selection's pulsing glow: its box reaches 8% of the plot out; its box-shadow's blur and spread, in px. */
@@ -106,6 +138,12 @@ export function selectionGlow(plot: number, density: 'phone' | 'tv'): number | n
   const room = dotsRoom(plot);
   return plot * GLOW.out + GLOW.phone.spread <= room ? null : room - GLOW.phone.spread;
 }
+
+/**
+ * From this phone plot width, in px, the store's STORE sign is drawn (WS6 ruling on SA-1372, #636): under it the sign
+ * (about 33 px of 10 px mono) would reach a side neighbour's dots. The store plot keeps its look and its label.
+ */
+export const STORE_SIGN_PLOT = 24;
 
 /** How far inside the map's right or bottom edge an edge plot's special badge sits, in px, where it can't hang out. */
 const BADGE_EDGE = 2;
@@ -197,10 +235,16 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const under = t.y === 0 ? cells[width + t.x] : above;
           const pin = !under || !showsDots(under);
           const underDots = !!above && showsDots(above);
-          // Inside the plot on the map's edge, which clips, and under dots on a plot too small for a band between.
-          const inner = onEdge || (ring.inside && underDots);
+          // Inside the plot on the map's edge, which clips, and on a phone plot too small for a ring outside to miss its neighbours' dots,
+          // or beside a right-column special, whose chip steps left towards this plot (RING_INSIDE_PLOT assumes centred dots).
+          const right = t.x < width - 1 ? cells[t.y * width + t.x + 1] : undefined;
+          const besideStepped = !tv && !small && !!right && right.x === width - 1 && !!right.special && showsDots(right);
+          const inner = onEdge || ring.inside || besideStepped;
           const glowOut = !inner && underDots ? glow : null;
           const gems = !hideGround && t.ground ? gemsIn(t.ground) : [];
+          // Under 16 px on a phone (SA-1372): the chip sits at the foot and the tab, the gem and the badge share the strip above it.
+          const strip = small && showsDots(t) ? smallStrip(plot, { tab: t.owner !== null, gems: gems.length, badge: !!t.special }) : null;
+          const at = `${t.x}-${t.y}`;
           const label = [
             TERRAIN_NAME[t.terrain],
             t.special ? specialLabel(t.special) : '',
@@ -209,6 +253,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 3`),
             ...gems.map((g) => `${GOOD_NAME[g]} here`),
             t.pollution ? `pollution ${t.pollution} of 3` : '',
+            t.flag ? FLAG_WORDS[t.flag] : '',
           ]
             .filter(Boolean)
             .join(', ');
@@ -229,13 +274,18 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
-              {showsDots(t) && (
+              {/* On a small plot a flag takes the chip's place while it shows (SA-1372). */}
+              {showsDots(t) && !(strip && t.flag) && (
                 // The full chip (17 px) can stand taller than a 16 px plot: a tap on what overhangs goes to the plot beneath.
                 <span
-                  className={cx('pointer-events-none relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : small ? 'px-px py-[2px]' : 'px-[3px] py-[2px]', fade)}
+                  className={cx(
+                    'pointer-events-none flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip',
+                    tv ? 'relative gap-0.5 px-1.5 py-1' : small ? 'absolute left-1/2 -translate-x-1/2 px-px py-[2px]' : 'relative px-[3px] py-[2px]',
+                    fade,
+                  )}
                   // In the right column the badge sits inside the plot instead of hanging out: the chip steps left by as much,
                   // except the small chip, which fills its plot's width and would step into the next plot.
-                  style={t.special && t.x === width - 1 && !small ? { left: -(badge * SPECIAL_HANG + BADGE_EDGE) } : undefined}
+                  style={small ? { bottom: SMALL_STRIP.chipFoot } : t.special && t.x === width - 1 ? { left: -(badge * SPECIAL_HANG + BADGE_EDGE) } : undefined}
                   data-testid={`map-dots-${t.x}-${t.y}`}
                 >
                   {ground.map(([g, n]) => (
@@ -249,7 +299,33 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               {owner && (
                 <span aria-hidden className={cx('absolute inset-[2%] rounded-[10%]', fade)} style={{ boxShadow: `inset 0 0 0 ${size.border}px ${owner}`, background: `color-mix(in srgb, ${owner} 30%, transparent)` }} />
               )}
-              {owner && t.owner !== null && (
+              {strip && (strip.tab || strip.gems > 0 || strip.badge) && (
+                // z-[4], the tab's: above the badge layer of the plot up-left and the tint.
+                <span className={cx('pointer-events-none absolute z-[4] flex items-center', fade)} style={{ left: strip.top, top: strip.top, height: strip.size, gap: SMALL_STRIP.gap }} data-testid={`map-strip-${at}`}>
+                  {owner && t.owner !== null && (
+                    <span
+                      className="flex shrink-0 items-center justify-center rounded-[30%] bg-map-chip"
+                      style={{ width: strip.size, height: strip.size, boxShadow: `inset 0 0 0 1px ${owner}` }}
+                      data-testid={`owner-${at}`}
+                    >
+                      <PlayerMark slot={t.owner} size={(strip.size * SHARE.mark) / SHARE.tab} glow={false} />
+                    </span>
+                  )}
+                  {strip.gems > 0 && (
+                    <span className="flex shrink-0" data-testid={`map-gem-${at}`}>
+                      {gems.map((g, i) => (
+                        <MapGem key={g} good={g} nth={i} size={strip.size} unit="px" outlineInside />
+                      ))}
+                    </span>
+                  )}
+                  {strip.badge && t.special && (
+                    <span className="relative flex shrink-0" data-testid={`special-glyph-${at}`} data-kind={t.special.kind}>
+                      <SpecialBadge special={t.special} density={density} box={strip.size} halo={false} />
+                    </span>
+                  )}
+                </span>
+              )}
+              {owner && t.owner !== null && !strip && (
                 // z-[4]: above the badge layer, so a special's badge hung in from the plot up-left never covers the owner's tab.
                 <span
                   className={cx('absolute left-[4%] top-[4%] z-[4] flex items-center justify-center rounded-[30%] bg-map-chip shadow-chip', fade)}
@@ -259,19 +335,22 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   <PlayerMark slot={t.owner} size={size.mark} glow={false} />
                 </span>
               )}
-              {gems.length > 0 && (
+              {gems.length > 0 && !strip && (
                 // Right of the tab, which is 46% wide at 4%; z-[4], the tab's, so a neighbour's special badge never covers it.
                 <span
                   className={cx('pointer-events-none absolute top-[4%] z-[4] flex w-full', t.owner !== null ? 'left-[54%]' : 'left-[4%]', fade)}
                   data-testid={`map-gem-${t.x}-${t.y}`}
                 >
                   {gems.map((g, i) => (
-                    <MapGem key={g} good={g} nth={i} share={t.owner !== null && gems.length > 1 ? 30 : 40} />
+                    <MapGem key={g} good={g} nth={i} size={t.owner !== null && gems.length > 1 ? 30 : 40} unit="%" />
                   ))}
                 </span>
               )}
-              {t.terrain === 'store' && (
-                <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-0.5 text-[10px] tracking-tight')}>STORE</span>
+              {/* Hidden on a phone plot under STORE_SIGN_PLOT, where it would cover its neighbours' dots (WS6, SA-1372). */}
+              {t.terrain === 'store' && (tv || plot >= STORE_SIGN_PLOT) && (
+                <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-0.5 text-[10px] tracking-tight')} data-testid="map-store">
+                  STORE
+                </span>
               )}
               {t.good && (
                 <span
@@ -292,20 +371,33 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   )}
                 </span>
               )}
-              {t.flag && (
+              {t.flag && small && (
+                // Under 16 px a flag is a 7×7 glyph chip in the dots chip's place, on any plot (PM ruling A, WS6's glyphs, SA-1372):
+                // its word would cover a neighbour's dots. The plot's label carries the word.
+                <span
+                  className={cx('absolute left-1/2 z-[4] grid size-[7px] -translate-x-1/2 place-items-center rounded-[1.5px] shadow-chip', FLAG_TONE[t.flag], fade)}
+                  style={{ bottom: SMALL_STRIP.chipFoot }}
+                  data-testid={`map-flag-${at}`}
+                >
+                  <FlagGlyph flag={t.flag} />
+                </span>
+              )}
+              {t.flag && !small && (
                 // z-[4], after the tab: above the disc and the tab.
                 <span
                   className={cx(
                     'absolute right-0.5 top-0.5 z-[4] rounded-chip font-mono font-bold leading-tight shadow-chip',
                     tv ? 'px-1 text-[11px]' : 'px-0.5 text-[10px]',
-                    t.flag === 'sabotage' ? 'bg-alert text-white' : t.flag === 'sale' ? 'bg-warn text-void' : 'bg-holo text-on-holo',
+                    FLAG_TONE[t.flag],
                     fade,
                   )}
+                  data-testid={`map-flag-${at}`}
                 >
                   {t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
                 </span>
               )}
-              {t.special && (
+              {/* Under 16 px a MULE's plot draws no badge: the MULE wins, as the strip drops the badge first (WS6, SA-1372). */}
+              {t.special && !strip && !(small && t.good) && (
                 // Above the plot's chips and its right and lower neighbours', under the owners' marks (z-[4]), and never in the way of a
                 // tap: the tap goes to the plot beneath.
                 <span aria-hidden className={cx('pointer-events-none absolute inset-0 z-[3]', fade)} data-testid={`special-glyph-${t.x}-${t.y}`} data-kind={t.special.kind}>
@@ -315,8 +407,9 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                     box={badge}
                     className="absolute"
                     style={{
-                      right: t.x === width - 1 ? BADGE_EDGE : -badge * SPECIAL_HANG,
-                      bottom: t.y === height - 1 ? BADGE_EDGE : -badge * SPECIAL_HANG,
+                      // On a small phone plot it stays inside too: hung out, it would sit on the next plot's chip at its foot (SA-1372).
+                      right: t.x === width - 1 || small ? BADGE_EDGE : -badge * SPECIAL_HANG,
+                      bottom: t.y === height - 1 || small ? BADGE_EDGE : -badge * SPECIAL_HANG,
                     }}
                   />
                 </span>
@@ -401,12 +494,40 @@ function bestGoods(dots: Dots, count: number): [Good, number][] {
   return out;
 }
 
-/** A found Crystite or Rare earth, `share`% of the plot wide; a second gem overlaps the first by half. */
-function MapGem({ good, nth, share }: { good: RawGood; nth: number; share: number }) {
+/** A plot's flag: its chip's colours, and the words its plot's label says it with (WS6, SA-1372). */
+const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo' } as const;
+const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan' } as const;
+
+/**
+ * A flag's glyph on a small plot, 7×7 in the chip's text colour (WS6's paths, Jira SA-1372 comment 15290): OFF a cross,
+ * SCAN a ring with a centre dot, SALE a gavel drawn as an upright T. They differ by shape, so they read in greyscale.
+ */
+function FlagGlyph({ flag }: { flag: 'survey' | 'sabotage' | 'sale' }) {
+  return (
+    <svg aria-hidden viewBox="0 0 7 7" width={7} height={7}>
+      {flag === 'sabotage' && <path d="M2.1 2.1L4.9 4.9M4.9 2.1L2.1 4.9" stroke="currentColor" strokeWidth={1.15} strokeLinecap="round" />}
+      {flag === 'survey' && (
+        <>
+          <circle cx="3.5" cy="3.5" r="2.05" fill="none" stroke="currentColor" strokeWidth={0.95} />
+          <circle cx="3.5" cy="3.5" r="0.75" fill="currentColor" />
+        </>
+      )}
+      {flag === 'sale' && (
+        <>
+          <rect x="1.4" y="1.5" width="4.2" height="1.6" rx="0.3" fill="currentColor" />
+          <rect x="3" y="3.1" width="1" height="2.5" fill="currentColor" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** A found Crystite or Rare earth, `size` wide (a share of the plot, or px in the small strip); a second gem overlaps the first by half. */
+function MapGem({ good, nth, size, unit, outlineInside = false }: { good: RawGood; nth: number; size: number; unit: '%' | 'px'; outlineInside?: boolean }) {
   return (
     <span
-      className="relative grid aspect-square shrink-0 place-items-center rounded-full shadow-chip ring-1 ring-white/80"
-      style={{ width: `${share}%`, background: `var(--color-g-${good})`, marginLeft: nth > 0 ? `-${share / 2}%` : 0, zIndex: 2 - nth }}
+      className={cx('relative grid aspect-square shrink-0 place-items-center rounded-full ring-1 ring-white/80', outlineInside ? 'ring-inset' : 'shadow-chip')}
+      style={{ width: `${size}${unit}`, background: `var(--color-g-${good})`, marginLeft: nth > 0 ? `-${size / 2}${unit}` : 0, zIndex: 2 - nth }}
       data-testid={`gem-${good}`}
     >
       <GoodIcon good={good} color="white" className="h-[62%] w-[62%]" />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Room, RoomRegistry, type Connection, type Game, type ServerEnvelope, type TableView } from '../src/index.js';
+import { Room, RoomRegistry, type ClaudeStatus, type Connection, type Game, type GameContext, type ServerEnvelope, type TableView } from '../src/index.js';
 
 /**
  * C1 (the Claude seat spec): a computer seat has a kind, builtin or claude, which the host sets in the lobby. A claude
@@ -179,6 +179,87 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     expect(codes[1], 'the second room redraws rather than issue a live code').not.toBe('AAAA-00');
   });
 
+  it('PM ruling (a) on #628\'s review: a room that leaves the registry leaves its codes taken back, never live and never issued again', async () => {
+    let t = 0;
+    // The first room's first code is AAAA-00; the last room draws it again and must redraw.
+    const seatDraws: number[] = Array(6).fill(0);
+    const seatRandom = () => seatDraws.shift() ?? Math.random();
+    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix', 'Juno'], newToken: () => `t${++tokens}` }, Math.random, () => t, seatRandom);
+    /** A room whose host made two AI seats Claude's and switched the first back: one live code and one dead. */
+    const claudeRoom = async () => {
+      const room = registry.create();
+      const host = new Screen();
+      room.receive(host, host.from, { t: 'join', code: room.code, name: 'Host' });
+      room.receive(host, host.from, { t: 'addAi' });
+      room.receive(host, host.from, { t: 'addAi' });
+      await flush();
+      const [first, second] = host.view().seats.filter((s) => s.isAi).map((s) => s.id);
+      const codeOf = (id: string) => host.view().seats.find((s) => s.id === id)!.seatCode!;
+      room.receive(host, host.from, { t: 'setSeatKind', seatId: first!, kind: 'claude' });
+      await flush();
+      const dead = codeOf(first!);
+      room.receive(host, host.from, { t: 'setSeatKind', seatId: first!, kind: 'builtin' });
+      seatDraws.push(...Array(6).fill(0.5));
+      room.receive(host, host.from, { t: 'setSeatKind', seatId: second!, kind: 'claude' });
+      await flush();
+      return { room, host, codes: [dead, codeOf(second!)] };
+    };
+    const ends: [string, (r: Awaited<ReturnType<typeof claudeRoom>>) => void][] = [
+      ['the host closes it', ({ room, host }) => room.receive(host, host.from, { t: 'close' })],
+      ['a game error ends it', ({ room }) => room.fail()],
+      ['the idle sweep', ({ room, host }) => {
+        room.disconnect(host);
+        registry.sweep(1000);
+        t += 1000;
+        registry.sweep(1000);
+      }],
+      ['the server shuts down', () => registry.disposeAll()],
+    ];
+    for (const [how, end] of ends) {
+      const made = await claudeRoom();
+      expect(registry.seatForCode(made.codes[1]!), how).toMatchObject({ state: 'live' });
+      end(made);
+      expect(registry.get(made.room.code), `${how}: the room is gone`).toBeUndefined();
+      for (const code of made.codes) expect(registry.seatForCode(` ${code.toLowerCase()} `), `${how}: ${code}`).toEqual({ state: 'taken_back' });
+    }
+    // A new room's seat draws AAAA-00, which the first room issued: it redraws rather than issue a retired code.
+    const fresh = registry.create();
+    const host = new Screen();
+    fresh.receive(host, host.from, { t: 'join', code: fresh.code, name: 'Host' });
+    fresh.receive(host, host.from, { t: 'addAi' });
+    await flush();
+    const ai = host.view().seats.find((s) => s.isAi)!.id;
+    seatDraws.push(...Array(6).fill(0), ...Array(6).fill(0.75));
+    fresh.receive(host, host.from, { t: 'setSeatKind', seatId: ai, kind: 'claude' });
+    await flush();
+    const code = host.view().seats.find((s) => s.id === ai)!.seatCode!;
+    expect(code).toMatch(SEAT_CODE);
+    expect(code).not.toBe('AAAA-00');
+  });
+
+  it('#641 review: a late close from a swept room never drops the new room that took its room code, nor retires its codes', async () => {
+    let t = 0;
+    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix'], newToken: () => `t${++tokens}` }, () => 0, () => t);
+    const old = registry.create();
+    registry.sweep(1000);
+    t += 1000;
+    registry.sweep(1000);
+    expect(registry.get(old.code)).toBeUndefined();
+    const fresh = registry.create();
+    expect(fresh.code, 'the room code is reused').toBe(old.code);
+    const host = new Screen();
+    fresh.receive(host, host.from, { t: 'join', code: fresh.code, name: 'Host' });
+    fresh.receive(host, host.from, { t: 'addAi' });
+    await flush();
+    const ai = host.view().seats.find((s) => s.isAi)!.id;
+    fresh.receive(host, host.from, { t: 'setSeatKind', seatId: ai, kind: 'claude' });
+    await flush();
+    const code = host.view().seats.find((s) => s.id === ai)!.seatCode!;
+    old.fail();
+    expect(registry.get(fresh.code)).toBe(fresh);
+    expect(registry.seatForCode(code)).toMatchObject({ state: 'live', seatId: ai });
+  });
+
   it('RULE-1 row 1 (negative): only the host, only in the lobby, only on a computer seat', async () => {
     const { room, heiko, mia, brix, set } = await lobby();
     await set(mia, 'claude');
@@ -220,5 +301,66 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
     await flush();
     expect(started[0]!.find((s) => s.id === brix)).toMatchObject({ isAi: true, kind: 'claude' });
     expect(started[0]!.find((s) => s.name === 'Heiko')).not.toHaveProperty('kind');
+  });
+});
+
+describe("C6: a Claude seat's status reaches every screen", () => {
+  /** The lobby above, hosting a game that answers each seat's status from `status` and keeps its context. */
+  async function withStatus() {
+    const status = new Map<string, ClaudeStatus>();
+    let ctx: GameContext | null = null;
+    const room = new Room<unknown, View>({
+      code: 'KRTX',
+      createGame: (c) => {
+        ctx = c;
+        return { ...game(), claudeStatus: (seatId: string) => status.get(seatId) };
+      },
+      aiNames: ['Brix', 'Juno'],
+      newToken: () => `t${++tokens}`,
+    });
+    const heiko = new Screen();
+    const mia = new Screen();
+    const tv = new Screen();
+    room.receive(heiko, heiko.from, { t: 'join', code: 'KRTX', name: 'Heiko' });
+    room.receive(mia, mia.from, { t: 'join', code: 'KRTX', name: 'Mia' });
+    room.receive(tv, tv.from, { t: 'board', code: 'KRTX' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    await flush();
+    const [brix, juno] = heiko.view().seats.filter((s) => s.isAi).map((s) => s.id) as [string, string];
+    room.receive(heiko, heiko.from, { t: 'setSeatKind', seatId: brix, kind: 'claude' });
+    room.receive(heiko, heiko.from, { t: 'setSeatKind', seatId: juno, kind: 'builtin' });
+    await flush();
+    const screens = [['Heiko, the host', heiko], ['Mia', mia], ['the TV', tv]] as const;
+    return { room, heiko, screens, brix, juno, status, changed: async () => (ctx!.changed(), await flush()) };
+  }
+
+  it("B-AC-2 (room): the game's status for a Claude seat is on the host's, a phone's and the TV's view; the code stays the host's", async () => {
+    const { heiko, screens, brix, juno, status, changed } = await withStatus();
+    status.set(brix, 'connected');
+    status.set(juno, 'thinking');
+    await changed();
+    const code = heiko.view().seats.find((s) => s.id === brix)!.seatCode!;
+    for (const [who, screen] of screens) {
+      const seats = screen.view().seats;
+      expect(seats.find((s) => s.id === brix), `${who} sees Brix connected`).toMatchObject({ kind: 'claude', claude: 'connected' });
+      expect(seats.find((s) => s.id === juno), `${who}: a built-in seat has no status, whatever the game says`).not.toHaveProperty('claude');
+      for (const human of seats.filter((s) => !s.isAi)) expect(human, `${who}: ${human.name} has no status`).not.toHaveProperty('claude');
+      if (screen !== heiko) expect(JSON.stringify(screen.inbox), `${who} never sees the code`).not.toContain(code);
+    }
+  });
+
+  it("C6: a seat the game gives no status waits for its chat; the game's changed() carries each new status to every screen, in play too", async () => {
+    const { room, heiko, screens, brix, status, changed } = await withStatus();
+    for (const [who, screen] of screens) expect(screen.view().seats.find((s) => s.id === brix)!.claude, who).toBe('waiting');
+    status.set(brix, 'connected');
+    await changed();
+    for (const [who, screen] of screens) expect(screen.view().seats.find((s) => s.id === brix)!.claude, who).toBe('connected');
+    room.receive(heiko, heiko.from, { t: 'start' });
+    await flush();
+    status.set(brix, 'thinking');
+    await changed();
+    for (const [who, screen] of screens) expect(screen.view().seats.find((s) => s.id === brix)!.claude, `${who}, in play`).toBe('thinking');
+    expect(room.viewFor(null).seats.find((s) => s.id === brix)!.claude, 'the room for nobody').toBe('thinking');
   });
 });
