@@ -33,8 +33,8 @@ describe('S5-B-AC-6: AI seats play the budget and the overrule without a human',
     expect(games.every((g) => g.budgetSet), 'every game: the AI Governor set a budget').toBe(true);
     const all = games.flatMap((g) => g.overrules);
     expect(all.filter((o) => o.caller !== null && o.target === 'tax').length, 'AI seats called tax overrules').toBeGreaterThan(0);
+    // A ballot reaches 'over' only once every seat is Done on it, so this also proves every seat voted (review of #796, M4).
     expect(all.every((o) => o.stage === 'over'), 'every ballot closed').toBe(true);
-    expect(all.every((o) => Object.keys(o.ballots).length > 0), 'and seats voted on each').toBe(true);
   });
 
   it('S5-B-AC-6 negative: Rookie seats never call an overrule', { timeout: 300_000 }, () => {
