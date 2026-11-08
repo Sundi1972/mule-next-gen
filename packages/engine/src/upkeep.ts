@@ -1,4 +1,5 @@
-import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { colonistMedicineNeed, electronicsComfort, grownColonists, type ColonistMonth } from './colony.js';
+import { GAME, GOOD_CONFIG, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
@@ -18,9 +19,10 @@ export function colonistMeal(need: number, stock: number): { took: number; short
  * home depot is lost, the export ship takes the store's surplus and
  * leaves, and the store builds MULEs. Nothing is imported: the colony lives
  * on what its players make. Returns the goods the store ran out of before
- * its colonists had enough, and whether colonists went short at all.
+ * its colonists had enough, whether colonists went short at all, and how they fared at their meal, for the colony's
+ * sick share and mood.
  */
-export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolean } {
+export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolean; colonistMonth: ColonistMonth } {
   const shortages = new Set<Good>();
 
   // Players. Energy for plots was already paid in production.
@@ -34,6 +36,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // they hold no money and the meal moves none (HC-2). The store kept their month back from the players (HC-3).
   const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
   const meal: NonNullable<MonthReport['colonistMeal']> = { colonists: state.colonists, food: { need: 0, took: 0 }, water: { need: 0, took: 0 } };
+  const colonistMonth: ColonistMonth = { short: { food: 0, water: 0, medicine: 0 }, comfort: 0 };
   let fed = true;
   for (const good of ['food', 'water'] as const) {
     // A festival month the colonists eat more Food (G-5 C26).
@@ -45,13 +48,28 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     }
     state.store.stock[good] -= took;
     meal[good] = { need, took };
+    colonistMonth.short[good] = short;
+  }
+  // With colony health on, they take their Medicine and Electronics the same way: free, as far as the shelf holds them.
+  if (HEALTH.enabled && state.colony) {
+    const medicine = colonistMeal(colonistMedicineNeed(state), state.store.stock.medicine);
+    state.store.stock.medicine -= medicine.took;
+    colonistMonth.short.medicine = medicine.short;
+    // Reported like Food and Water, so the store's price and the computer players' outlook see it; not `fed`.
+    if (medicine.short > 0) shortages.add('medicine');
+    const electronics = electronicsComfort(state.colonists, state.store.stock.electronics);
+    state.store.stock.electronics -= electronics.took;
+    colonistMonth.comfort = electronics.met;
   }
   // The month's report keeps the meal for the month-end line (C6). A what-if shares the real report: it writes nothing.
   const report = state.history.at(-1);
   if (report?.month === state.month && !state.whatIf) report.colonistMeal = meal;
-  // In Collapse colonists leave whatever they eat.
-  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
-  state.colonists = Math.round(state.colonists * growth);
+  // In Collapse colonists leave whatever they eat. Otherwise they grow as if all were well: with colony health on,
+  // runColony grows them again from the same size once the month's sick share is known.
+  const collapse = airBand(state.air).name === 'collapse';
+  const rate = collapse ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
+  if (!collapse) colonistMonth.growth = { from: state.colonists, rate };
+  state.colonists = grownColonists(state.colonists, rate, 0);
 
   // Spoilage, then anything above the home depot is lost. Selling it in time
   // is the player's own decision.
@@ -89,5 +107,5 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   state.store.stock.smithore -= build * MULE.smithorePerMule;
   state.store.mules += build;
 
-  return { shortages: [...shortages], hungry: !fed };
+  return { shortages: [...shortages], hungry: !fed, colonistMonth };
 }
