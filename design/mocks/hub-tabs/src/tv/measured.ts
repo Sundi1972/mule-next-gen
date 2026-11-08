@@ -95,3 +95,37 @@ export const TV_FIT_SHERIFF: Record<string, { beat: string; fit: BySeats; dip?: 
   guarding: { beat: 's1-guarded', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
   monthEnd5: { beat: 's2-month-end', fit: { 2: 0.826, 4: 0.708, 6: 0.768 } },
 };
+
+/**
+ * The month end's breaker row (P15, D19), by the number of players who broke a promise this month (solo.html
+ * &breakers=0..3, world.ts' withBreakers: Ossa · AI's vote card to Kai, then Brix's law promise to Lena, then Kai's pact
+ * with Lena, −20). Read every frame for 3 s: the month end holds one scale, with no dips. 9-month-end and s3-month-end
+ * measured the same. A table of two has at most two breakers, so 2 seats has no 3.
+ * `mark`, TAKEN: "✗ −N" on the breaker's own league row, after the chip. It adds no height: at 4 and 6 seats every count
+ * reads as none does. At 2 seats 0.826 → 0.780 comes from the seats, not the mark: from one breaker the two seats are
+ * Brix and Ossa (who has broken), and Ossa's public chat line fills the header's chat strip, empty for Lena and Brix.
+ * `strip`, CONSIDERED, NOT TAKEN: a row per breaker under the league ("✗ (mark) Ossa · AI −10"). Under the floor
+ * from one breaker at 4 and 6 seats.
+ */
+export const TV_FIT_BREAKERS = {
+  mark: {
+    0: { 2: 0.826, 4: 0.708, 6: 0.768 },
+    1: { 2: 0.78, 4: 0.708, 6: 0.768 },
+    2: { 2: 0.78, 4: 0.708, 6: 0.768 },
+    3: { 4: 0.708, 6: 0.768 },
+  },
+  strip: {
+    0: { 2: 0.826, 4: 0.708, 6: 0.768 },
+    1: { 2: 0.763, 4: 0.665, 6: 0.694 },
+    2: { 2: 0.719, 4: 0.631, 6: 0.657 },
+    3: { 4: 0.601, 6: 0.625 },
+  },
+} as const satisfies Record<'mark' | 'strip', Record<0 | 1 | 2 | 3, Partial<BySeats>>>;
+
+/** The TV's own key decisions, for the notes page's list (mock-hub-tabs' DECISIONS spreads it). */
+export const TV_DECISIONS: [string, string][] = [
+  [
+    'D19',
+    'The TV month end’s breaker row (P15: the TV shows the total only; the phone carries the full broken list). Each player who broke a promise this month gets “✗ −10” on their own league row, after the reputation chip. The drop is the card’s, from POLITICS’ reputation moves (a pact −20), and several cards sum. The full words are in its accessible label, there is no reason text, and it shows nothing in a month without a break. The league’s names carry “ · AI”. It adds no height: 0.780 / 0.708 / 0.768 at 2 / 4 / 6 seats with one, two or three breakers, as with none at 4 and 6 (measured, 8 Nov). A strip, a row per breaker under the league, fell under 0.7 from one breaker (0.665 at 4 seats) and was not taken. A change to WS4’s TvMonthEnd, which builds it from this scaffold.',
+  ],
+];
