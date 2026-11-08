@@ -184,9 +184,14 @@ describe("the TV's break banner (S3-C20)", () => {
 
   it("S3-B-AC-2: one breaker's cards broken in the month make one line with the drops summed; another breaker has a line of its own", () => {
     const html = banner(atMonth([LENA_VOTE, OSSA_LAW, LENA_PACT]));
-    expect(ids(html, 'tv-break-').filter((id) => !/-(words|drop|rep)$/.test(id) && id !== 'tv-break-banner')).toEqual(['tv-break-lena', 'tv-break-ossa']);
+    expect(ids(html, 'tv-break-').filter((id) => !/-(words|drop|rep|label)$/.test(id) && id !== 'tv-break-banner')).toEqual(['tv-break-lena', 'tv-break-ossa']);
     expect(textOf(html, 'tv-break-lena-drop')).toBe(`−${-(voteBroken + pactBroken)}`);
     expect(textOf(html, 'tv-break-ossa-drop')).toBe(`−${-voteBroken}`);
+    // Several cards from one breaker: their name and the count, in the news's "broke a promise"; one card says its kind.
+    expect(textOf(html, 'tv-break-lena-label')).toBe('Lena broke 2 promises');
+    expect(textOf(html, 'tv-break-ossa-label')).toBe('A promise was broken');
+    const ossaTwice = banner(atMonth([OSSA_LAW, { ...OSSA_LAW, id: 'deal-z9w4tt', to: 'lena' }]));
+    expect(textOf(ossaTwice, 'tv-break-ossa-label'), 'the name through SeatWords').toBe('Ossa · AI broke 2 promises');
     expect(ids(html, 'tv-break-deal-').filter((id) => id.endsWith('-words'))).toEqual(['tv-break-deal-b3x8re-words', 'tv-break-deal-q7k2m9-words', 'tv-break-deal-z5n1yq-words']);
   });
 
