@@ -118,7 +118,7 @@ import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
-import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, politicsView, sabotageNews, sabotageNotices } from './politics-view.js';
+import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, politicsView, sabotageNews, sabotageNotices, voidedOrders } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -509,6 +509,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly voteHands = new Map<string, VoteHand>();
   /** The orders as the server last saw them, to diff for notices and news (every engine write copies Politics). */
   private sabotageSeen: SabotageOrder[] = [];
+  /** Every order that went void, as it stood while pending, oldest first: the engine drops it, and its orderer's own list shows it. A replayed game runs the same hooks and keeps the same list. */
+  private voided: SabotageOrder[] = [];
   /** The cards as the server last saw them, to diff for notices and news. Every write copies Politics, so this is a snapshot. */
   private dealsSeen: readonly DealCard[] = [];
 
@@ -648,6 +650,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const now = state?.politics?.sabotage ?? [];
     if (!state || now === this.sabotageSeen) return;
     for (const fact of sabotageNotices(state, this.sabotageSeen, now)) this.notify(fact, at);
+    this.voided = [...this.voided, ...voidedOrders(state, this.sabotageSeen, now)];
     const lines = sabotageNews(state, this.sabotageSeen, now, (id) => this.nameOf(id));
     if (behindHeadline) {
       // The news is a ring of three, newest first. At a phase's opening its own line (production's harvest, game over)
@@ -1793,7 +1796,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             outfitCosts: Object.fromEntries(OUTFITS.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             droneFound: me.droneFound.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
-            politics: myPoliticsView(state, me.id),
+            politics: myPoliticsView(state, me.id, this.voided),
             deals: dealsView(state, me.id),
             installedThisTurn: me.installedThisTurn,
             worthParts: worthPartsOf(state, me.id),
