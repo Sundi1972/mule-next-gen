@@ -384,6 +384,17 @@ describe('S4-T-AC-9: VoteHand votes on the sabotage ban by lawWorth (S4-RULE-13)
     expect(voteOf(state, 'ai3')).toBe(true);
   });
 
+  it("S4-T-AC-9 (AM-6): the ban's tie goes to the law in force: seats it costs nothing vote yes on the ban and no on its repeal, so one seat caught twice cannot repeal it", () => {
+    const state = banTable();
+    const enact = ['ai1', 'ai2', 'ai3'].map((id) => voteOf(state, id));
+    expect(enact.filter(Boolean)).toHaveLength(2); // 2 to 1: ai2 is fined by it
+    state.politics = { ...state.politics!, laws: { sabotageBan: { setting: 2, since: 1 } } };
+    const repeal = (id: string) => ownVote(observe(state, id), mindOf(id, 'cautious'), { proposal: { kind: 'repeal', law: 'sabotageBan' } });
+    expect(repeal('ai2')).toBe(true); // the ban costs it, so it saves by repealing
+    expect(repeal('ai1')).toBe(false);
+    expect(repeal('ai3')).toBe(false);
+  });
+
   it('S4-T-AC-9: the Governor votes yes whatever it costs, and a Rookie leaves the vote to the council coin', () => {
     const state = banTable();
     state.politics = { ...state.politics!, governor: 'ai2' };
