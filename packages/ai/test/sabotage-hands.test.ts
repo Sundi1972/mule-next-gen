@@ -307,7 +307,9 @@ describe('S4-T-AC-9: SheriffHand per S4-RULE-13 (guard, investigate, fine)', () 
     const obs = observe(state, 'ai1');
     expect(obs.players.reduce((best, p) => (score(obs, p.id) > score(obs, best.id) ? p : best)).id).toBe('ai2');
     const pact: DealCard = { id: 'deal-pact', from: 'ai1', to: 'ai0', terms: { kind: 'pact' }, offered: 1, until: 9, status: 'active', brokenBy: null, settled: null };
-    state.politics = { ...state.politics!, deals: [pact] };
+    // The leader is a pact partner too: the leader rule wins.
+    const leaderPact: DealCard = { ...pact, id: 'deal-pact-2', to: 'ai2' };
+    state.politics = { ...state.politics!, deals: [pact, leaderPact] };
     withOrders(state, [revealed('sab-aaaaaa', 'ai2'), revealed('sab-bbbbbb', 'ai0'), revealed('sab-cccccc', 'ai3')]);
     expect(fines(run(state))).toEqual([
       { order: 'sab-aaaaaa', amount: POLITICS.ai.sheriff.fine.leader },
