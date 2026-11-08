@@ -1313,6 +1313,24 @@ because   the review found a plot's outfit null by the time the line was built (
 goal      S4-1, S4-2 — unchanged
 ```
 
+```
+AM-9 · 2026-11-08 · PM rulings (S4-PR-5's boundary review, findings I2 and m13) · the void entry; a rumour's real price
+
+target    S4-RULE-3 row 1 (a void order), §3 MyPoliticsView.sabotage.mine, S4-C9 (politics.rumoured in observe)
+said      row 1 promises the orderer "the crew found nothing to cut", but the engine drops a void order and no view
+          carried it; S4-C9 called politics.rumoured public, so observe() kept each entry's pre-shift price
+did       the void: the engine is unchanged (a void order leaves politics.sabotage, uncharged). The server keeps it
+          (noteSabotage's change list) and the orderer's own `mine` lists it as one entry: outcome 'void', public
+          false, how null, culprit the orderer, worked false, fine null, its crop frozen at the void. The protocol's
+          `mine` outcome widens to SabotageOrder['outcome'] | 'void'; never in incidents, a show event or another
+          view. WS8 draws "Month 5: power cut on Ossa's plot · Void. Your crew found nothing to cut; you pay nothing."
+          The price: observe() drops rumoured[].from; engine state keeps it for endRumours, which skips an entry
+          without it (an observed copy, as the AI's outlook runs).
+because   a promise no screen kept; and a computer seat must see what a human sees (HC-4): no phone gets the
+          pre-shift price, so no AI seat may either
+goal      S4-1, S4-2 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: sabotage state
