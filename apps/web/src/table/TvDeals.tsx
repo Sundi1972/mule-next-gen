@@ -1,10 +1,9 @@
 import { POLITICS, type DealCard } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { PlayerMark } from '@mule/ui';
-import { Fragment, type ReactNode } from 'react';
-import { AiMark } from '../chat/Chat';
+import { SeatWords } from '../components/SeatWords';
 import { toSlot } from '../game/derive';
-import { brokenIn, brokenMove, brokenWords, nameOf } from '../phone/hub/politics/deals-words';
+import { brokenIn, brokenMove, brokenWords } from '../phone/hub/politics/deals-words';
 import { RepChip } from '../phone/hub/politics/parts';
 
 /*
@@ -13,34 +12,11 @@ import { RepChip } from '../phone/hub/politics/parts';
  * header; the month end lists the same cards itself.
  */
 
-/** The seats a broken card's words name, in their order: the breaker, the other party, and a vote's candidate. */
+/** The seats a broken card's words name, in their order (SeatWords' `who`): the breaker, the other party, a vote's candidate. */
 function namedIn(c: DealCard): string[] {
   const breaker = c.brokenBy ?? c.from;
   if (c.terms.kind === 'pact') return [breaker, breaker === c.from ? c.to : c.from];
   return 'law' in c.terms ? [breaker, c.to] : [breaker, c.to, c.terms.candidate];
-}
-
-/** The break's words with " · AI" after each computer seat's name, found by the seat's id, never by its name. */
-function MarkedWords({ game, card }: { game: MuleView; card: DealCard }) {
-  const text = brokenWords(game, card);
-  const parts: ReactNode[] = [];
-  let shown = 0;
-  let at = 0;
-  for (const id of namedIn(card)) {
-    const name = nameOf(game, id, null);
-    const found = text.indexOf(name, at);
-    if (found < 0) break;
-    at = found + name.length;
-    if (!game.players.find((p) => p.id === id)?.isAi) continue;
-    parts.push(<Fragment key={at}>{text.slice(shown, at)}<AiMark /></Fragment>);
-    shown = at;
-  }
-  return (
-    <>
-      {parts}
-      {text.slice(shown)}
-    </>
-  );
 }
 
 /** The banner of this month's broken cards on the TV; nothing when none broke. */
@@ -62,7 +38,7 @@ export function TvDeals({ game }: { game: MuleView }) {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="label-caps text-base! text-alert-ink">{c.terms.kind === 'pact' ? 'A pact was broken' : 'A promise was broken'}</span>
               <span className="font-display text-3xl font-semibold leading-tight text-alert-ink" data-testid={`tv-break-${c.id}-words`}>
-                <MarkedWords game={game} card={c} />
+                <SeatWords text={brokenWords(game, c)} who={namedIn(c)} players={game.players} />
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end gap-1">
