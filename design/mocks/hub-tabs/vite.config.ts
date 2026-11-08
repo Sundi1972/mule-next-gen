@@ -28,4 +28,6 @@ function swapHub(): Plugin {
 export default defineConfig({
   // sourceStamp must run before React's JSX transform; without both plugins nothing is selectable.
   plugins: [swapHub(), sourceStamp(), react(), selectSink(), tailwindcss()],
+  // The app's own public folder, so WS10's colony art (/art/colony/manifest.json and its plates) loads as in the game.
+  publicDir: "../../../apps/web/public",
 });
