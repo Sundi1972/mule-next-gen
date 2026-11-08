@@ -1,5 +1,5 @@
 import { playGame, type SeatSpec } from '@mule/ai';
-import { AI_PLANS, boxOf, DEV_STEER, EVENT_SHOW, GOODS, HALL, stableJson, type GameState } from '@mule/engine';
+import { AI_PLANS, boxOf, DEV_STEER, EVENT_SHOW, GOODS, HALL, POLITICS, stableJson, type GameState } from '@mule/engine';
 import type { SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBrain } from '../src/brain/index.js';
@@ -103,8 +103,8 @@ function serverGame(seed: number, politics: boolean) {
   return { outcomes, state: inside.state, taps };
 }
 
-/** T-AC-1's check: the sim's and the server's game, development by development, whole state and all. */
-function parity(seed: number, politics: boolean): void {
+/** T-AC-1's check: the sim's and the server's game, development by development, whole state and all. Returns the sim's outcomes. */
+function parity(seed: number, politics: boolean): Outcome[] {
   const sim = simGame(seed, politics);
   const server = serverGame(seed, politics);
   expect(sim, 'the sim played every month').toHaveLength(MONTHS);
@@ -119,6 +119,7 @@ function parity(seed: number, politics: boolean): void {
     expect(serverState === simState, `month ${m + 1}: the whole engine state`).toBe(true);
   }
   expect(server.state.phase).toBe('gameOver');
+  return sim;
 }
 
 describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)', () => {
@@ -129,6 +130,21 @@ describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)',
       parity(seed, politics);
     });
   }
+
+  // S5-PR-3's merge gate (S5-C9): the overrule flow on both sides, where an AI seat really calls. With minGain at 0 a
+  // seat calls on any gain; seed 3's month 1 then holds a tax overrule voted to the end, in the sim as on the server.
+  it('S5-C9: seed 3, politics on, an AI seat calls a tax overrule and it is voted to the end: the server ends every development as the sim', { timeout: 120_000 }, () => {
+    const saved = POLITICS.ai.overrule.minGain;
+    POLITICS.ai.overrule.minGain = 0;
+    try {
+      const sim = parity(3, true);
+      const overrules = sim.map((o) => (JSON.parse(o.state) as GameState).politics?.overrule).filter((o) => o?.caller);
+      expect(overrules.length, 'the premise: an AI seat called').toBeGreaterThan(0);
+      expect(overrules.every((o) => o!.stage === 'over'), 'every ballot closed without a human').toBe(true);
+    } finally {
+      POLITICS.ai.overrule.minGain = saved;
+    }
+  });
 
   // AM-24: the parity runs both ways. The playbook path (AI_PLANS.ownPhases on) on the first game, the seats' draft
   // points inside the floor tick's recorded step on the server and at the same step in the sim (C4, RULE-7): a whole
