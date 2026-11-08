@@ -1053,8 +1053,8 @@ export const POLITICS = {
     securityDetect: 0.1,
     /** Investigations the Sheriff may open in a month. */
     investigations: 1,
-    /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3). */
-    investigateOdds: 0.5,
+    /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3; Heiko, 8 Nov: 0.3, was 0.5, AM-10). */
+    investigateOdds: 0.3,
     fine: {
       /** The base fines the Sheriff may levy, in credits, before the ban's multiplier. */
       steps: [50, 100, 150, 200, 250, 300],

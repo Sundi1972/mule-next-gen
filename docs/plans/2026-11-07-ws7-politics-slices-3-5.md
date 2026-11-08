@@ -272,7 +272,7 @@ When each slice's W1 PR is pushed, WS7 tells the PM, who passes it to WS1 (the w
 | Decision | Built as | If Heiko picks otherwise |
 |---|---|---|
 | D-S3-1 campaign law promises | A: after RC (nothing built) | B: one more PR after S3-PR-1: the election picker's law promise and its break rule, about +1 day, mostly WS6's picker |
-| D-S4-1 does an investigation find the culprit | B: `POLITICS.sheriff.investigateOdds` 0.5 | A: the value 1.0 (config only); C: S4-RULE-7 gains a "latest month only" row in S4-PR-1 |
+| D-S4-1 does an investigation find the culprit | B: `POLITICS.sheriff.investigateOdds` 0.5 (0.3 since Heiko's 8 Nov ruling, slice 4 AM-10) | A: the value 1.0 (config only); C: S4-RULE-7 gains a "latest month only" row in S4-PR-1 |
 | D-S4-2 a separate sabotage switch | A: none; `POLITICS.sabotage.on` for the sim | B: one more PR (lobby, createGame and server options; the Sheriff leaves the ballot when off) |
 | D-S5-2 when the overrule vote is held | A: as planning ends | B: the overrule ballot moves beside the law ballot when the next planning opens; S5-PR-1's timing rows and S5-PR-4's flow change |
 | D-S5-3, D-S5-4 | after RC | decided before S5-PR-8 |
@@ -903,6 +903,9 @@ switch). Steps a different ruling changes carry **[ruling: D-S4-1]** or **[rulin
 | mocks | the mock owner's design branch | Task S4-M.1 (P6-P11, tracking) | — | the approved mock under `design/mocks/<slug>/` at a SHA | §3 views | mock only | WS6 per spec; the PM confirms the mock and screen builders (SEAMS 7 Nov 11:02Z relays a P2 mock to WS8) |
 | S4-PR-6 desks | `ws7-s4-desks` | Tasks S4-6.0 … S4-6.5 (S4-C14, S4-C15, S4-C16, S4-C18; the defaults flipped on, AM-2) | S4-B-AC-10 (screen legs, contract), S4-B-AC-7 (screen leg, e2e month 1) | `POLITICS.offices` ['governor', 'sheriff'] and `POLITICS.sabotage.on` true as defaults | S4-PR-5 views; the approved mock | Yes | WS7 files (+ WS6, WS4, WS1 named edits); the PM confirms the builder |
 | S4-PR-7 show | WS8's branch | Task S4-7.1 (S4-C17, tracking) | screen legs of S4-B-AC-1, -2, -3 | EVENT_SHOW rows; kind 'sabotage' stories | S4-PR-1 events; S4-PR-5 EventView.sabotage; the approved mock | Yes | WS8 (+ WS6, WS4 named edits) |
+| S4-PR-9 Sheriff incentives, engine + server (AM-11) | `ws7-s4-sheriff` | canGuard + S4-RULE-6 own-plot row; bounty at a guard catch and a solved investigation (officePay, as far as the fund reaches; order.bounty); captureOdds + ownPlotDetectBonus; politics.sheriffRecord reset in takeOffice; config bounty 50, ownPlotDetectBonus 0.2; the election view carries the record; rulebook | S4-B-AC-11 (engine+server legs), S4-B-AC-12, S4-T-AC-17..20 | — | S4-PR-1, S4-PR-5 | No | WS7 (protocol + mule-game/politics-view named edits as before: WS3 OKs by SHA) |
+| S4-PR-10 Sheriff incentives, AI values | WS1's | guardValue never offers the Sheriff's own plots and weighs the bounty (value × chance targeted + bounty × chance caught); sabotage values read the new captureOdds (no change expected: they call it) | S4-T-AC-9 rows extended | — | S4-PR-9's config keys + canGuard | No | WS1 |
+| S4-PR-11 Sheriff incentives, screens | WS8's + WS7's | WS8: GUARD_PICK offers only canGuard plots; the desk shows the bounty (order.bounty, POLITICS.sheriff.bounty). WS7: ElectionDay + TvElection show the outgoing Sheriff's record line | S4-B-AC-11 (record leg) | — | S4-PR-9 | **Yes** | WS8, WS7 |
 | S4-PR-8 e2e + rows | `ws7-s4-e2e` | Tasks S4-8.1 … S4-8.3 (S4-C19; rows to Heiko) | S4-UBER-AC-2, S4-B-AC-10, S4-UBER-AC-3 (final), S4-B-AC-9 | — | every PR above | e2e only | WS7, WS1 |
 
 ### Per-PR authority
