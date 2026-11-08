@@ -111,4 +111,7 @@ into their own sub-tab still leaves cases at 492 px; folding only solved or fine
 it in place, one at a time, scrolled just into view; guards are one row. Measured at 357 wide in this mock: 294 px
 folded (fits 309); fine case open 415 with its button on screen; the last case's Investigate scrolled into view.
 B's rule is kept (one list, a case keeps its place, only its step changes); its first screen changes (the step's
-controls are a tap away), so it goes to Heiko as a change.
+controls are a tap away), so it went to Heiko as a change.
+
+**APPROVED by Heiko, 8 Nov 03:57Z (board, via the PM): folded B, 651 → 294 px, one tap more per action. It replaces
+the unfolded B as the approved basis.** WS6 copies it at d0a52c1a for a "Sheriff month" prototype step.

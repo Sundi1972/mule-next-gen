@@ -20,7 +20,7 @@ const DECISIONS: string[] = [
   'Guards are the Sheriff’s secret: the desk says “hidden until they catch someone”; nobody else’s map shows them.',
   'Before the votes are counted the desk waits and says why; nothing on it can be pressed.',
   'No id is ever printed (ids are opaque): a case is named by what happened, to whom, and when.',
-  'The trade: in A a solved case jumps from Investigate down to Fine (clear jobs, but it moves under the thumb); in B it stays put and its next step changes (calmer, but one long list). PM ruled B (8 Nov); it goes to Heiko inside the tabbed-hub card on 9 Nov (Governor › Sheriff), where he may veto. A stays here for that.',
+  'The trade: in A a solved case jumps from Investigate down to Fine (clear jobs, but it moves under the thumb); in B it stays put and its next step changes (calmer, but one long list). PM ruled B (8 Nov); Heiko approved B folded (651 → 294 px in the 309 px sub-tab, one tap more per action), 8 Nov 03:57Z. A stays here for the record.',
 ];
 
 type Route = 'index' | 'a' | 'b' | 'p6';
@@ -93,7 +93,7 @@ function Page({ title, children }: { title: string; children: ReactNode }) {
 }
 
 const A = { title: 'A · Three jobs', blurb: 'The office’s three powers as three sections, in the order a month uses them: Guard, Investigate, Fine. Only work that can still be done is on the desk; cold and closed cases are history.' };
-const B = { title: 'B · The case file (chosen), folded', blurb: 'Guards as one row on top, then one list of every case, each a 44 px row with its next step on a chip (Investigate, Fine Lena); a tap opens it in place, one at a time. Cold and closed cases fold under one line. Folded 8 Nov: in WS6’s Sheriff sub-tab at 667 (357 × 309) B measured 651 px; folded it is 294.' };
+const B = { title: 'B · The case file, folded (approved by Heiko, 8 Nov 03:57Z)', blurb: 'Guards as one row on top, then one list of every case, each a 44 px row with its next step on a chip (Investigate, Fine Lena); a tap opens it in place, one at a time. Cold and closed cases fold under one line. Folded 8 Nov: in WS6’s Sheriff sub-tab at 667 (357 × 309) B measured 651 px; folded it is 294.' };
 
 export default function App() {
   const [r, setR] = useState(route);
@@ -129,7 +129,7 @@ export default function App() {
         </ul>
       </header>
       <nav className="flex flex-wrap gap-4 text-sm" data-testid="screens">
-        <a href="#b" className="text-holo underline" data-testid="link-b">P7–P8 · Sheriff’s desk, B (chosen)</a>
+        <a href="#b" className="text-holo underline" data-testid="link-b">P7–P8 · Sheriff’s desk, B folded (approved)</a>
         <a href="#a" className="text-holo underline" data-testid="link-a">Sheriff’s desk, A</a>
         <a href="#p6" className="text-holo underline" data-testid="link-p6">P6 · the secret order</a>
       </nav>
