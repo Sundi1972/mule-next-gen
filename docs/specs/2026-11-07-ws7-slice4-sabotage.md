@@ -1009,6 +1009,9 @@ export interface SabotageOrder {
   victim?: string | null;
   /** Set when it resolves: whether the effect happened. 'caught' alone cannot say whether the plot went dark. */
   worked?: boolean | null;
+  /** Set when a power cut resolves: the crop of the plot it hit then. Absent for a rumour (its good is target.good),
+   *  while pending, and on a void order (AM-7). */
+  good?: Good;
   /** The month the Sheriff investigated it; null never. Once-only, and the month's count (S4-RULE-7). */
   investigated?: number | null;
   /** The fine levied on it, once (S4-RULE-8). */
@@ -1291,6 +1294,20 @@ did       monthsPlayed = max(1, month − 1): laws are voted in planning, when m
           politics.sabotage: a (month, orderer) pair is unique, so another clash would need a hash collision
           (about 1 in 2 billion).
 because   each was a choice the build had to make; recorded so the server, the hands and the screens read the same
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-7 · 2026-11-08 · WS7 (build: S4-PR-5's logic review, finding C1) · the crop a power cut hit is recorded on the order
+
+target    §3 SabotageOrder; S4-RULE-12's news lines
+said      the news names the plot's good (the server read it off the plot's outfit when it built the line)
+did       the engine records the cut crop on the order at resolution (`good`, set by resolveSabotage where it sets
+          `victim`, for a power cut only; the sole writer is sabotage.ts); the server reads order.good, and reads the
+          plot's outfit only for a pending order, which only its orderer sees. With no crop to name, the words say
+          "Ossa's plot" and the view leaves the incident's `good` out; nothing throws
+because   the review found a plot's outfit null by the time the line was built (the MULE taken off, sold or stolen),
+          which crashed the hook and with it every later intent, and a re-outfitted plot naming the wrong crop
 goal      S4-1, S4-2 — unchanged
 ```
 
