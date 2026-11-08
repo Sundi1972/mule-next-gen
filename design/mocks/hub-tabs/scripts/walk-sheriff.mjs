@@ -15,13 +15,17 @@ async function beat(id, as, fn) {
   const see = (tid) => phone.getByTestId(tid).first().waitFor({ state: 'visible', timeout: 3000 });
   const tap = (tid) => phone.getByTestId(tid).first().click();
   /** The phone's text under a test id must hold every one of `words`. */
+  /** The TV pane must show `line` (the server's public news line). */
+  const tvSays = async (line) => {
+    await p.getByTestId('tv-pane').getByText(line, { exact: false }).first().waitFor({ state: 'attached', timeout: 3000 }).catch(() => { throw new Error(`the TV does not show “${line}”`); });
+  };
   const says = async (tid, ...words) => {
     await see(tid);
     const t = await phone.getByTestId(tid).first().innerText();
     for (const w of words) if (!t.includes(w)) throw new Error(`${tid} says “${t.replace(/\s+/g, ' ').slice(0, 120)}”, not “${w}”`);
   };
   try {
-    await fn({ p, phone, see, tap, says });
+    await fn({ p, phone, see, tap, says, tvSays });
     if (errs.length) throw new Error(`page errors: ${errs.join(' | ')}`);
     out.push(`ok   ${id} as ${as}`);
   } catch (e) {
@@ -77,7 +81,7 @@ await beat('s2-month-end', 'brix', async ({ says, phone }) => {
 });
 
 // 3 · Kai fines Lena; Lena's orders say so; half goes to Brix at the month end.
-await beat('s3-case', 'kai', async ({ see, tap, says }) => {
+await beat('s3-case', 'kai', async ({ see, tap, says, tvSays }) => {
   await says(`step-chip-${ORDER}`, 'Fine Lena');
   await tap(`b-case-row-${ORDER}`);
   await see(`fine-${ORDER}`);
@@ -86,6 +90,8 @@ await beat('s3-case', 'kai', async ({ see, tap, says }) => {
   await tap(`fine-confirm-${ORDER}`);
   await says(`fined-${ORDER}`, 'Lena');
   await says(`step-chip-${ORDER}`, 'Fined');
+  // The fine intent writes the server's public line, the news's first: the TV's one place for it (PM, 8 Nov).
+  await tvSays('Lena was fined 150 for sabotage; half to Brix');
 });
 // Holder-only (PM RULED for the RC): only Kai's phone has a Sheriff sub-tab on this path.
 for (const as of ['lena', 'brix']) {
@@ -95,12 +101,12 @@ for (const as of ['lena', 'brix']) {
     if (await phone.getByTestId('sub-sheriff').count()) throw new Error(`${as} has a Sheriff sub-tab`);
   });
 }
-await beat('s3-fined', 'lena', async ({ says }) => { await says(`my-order-known-${ORDER}`, 'Everyone knows', 'Fined 150'); });
+await beat('s3-fined', 'lena', async ({ says, tvSays }) => { await says(`my-order-known-${ORDER}`, 'Everyone knows', 'Fined 150'); await tvSays('Lena was fined 150 for sabotage; half to Brix'); });
 await beat('s3-month-end', 'brix', async ({ says }) => { await says('phone-sabotage', 'Lena was fined 150 for sabotage; half to Brix'); await says(`phone-sabotage-restitution-${ORDER}`, '+75 cr'); });
 await beat('s3-month-end', 'lena', async ({ says }) => { await says(`phone-sabotage-fine-${ORDER}`, '150 cr'); });
 
 // 4 · Unguarded, it works; Kai investigates.
-await beat('s4-dark', 'brix', async ({ see, says }) => { await see('map-plot-9-2'); await says(`production-public-${DARK}`, 'Someone cut the power'); await says(`production-mine-${DARK}`, 'Your Food plot went dark'); });
+await beat('s4-dark', 'brix', async ({ see, says, tvSays }) => { await tvSays('Sabotage: someone cut the power to Brix’s Food plot'); await see('map-plot-9-2'); await says(`production-public-${DARK}`, 'Someone cut the power'); await says(`production-mine-${DARK}`, 'Your Food plot went dark'); });
 await beat('s4-dark', 'lena', async ({ says }) => { await says(`production-mine-${DARK}`, 'Nobody saw'); });
 await beat('s4-investigate', 'kai', async ({ tap, says }) => {
   await tap(`b-case-row-${DARK}`);
@@ -108,7 +114,9 @@ await beat('s4-investigate', 'kai', async ({ tap, says }) => {
   await says(`investigate-result-${DARK}`, 'Lena');
   await says('sheriff-left', 'One investigation a month: used');
 });
-await beat('s4-cold', 'kai', async ({ says, phone }) => {
+await beat('s4-solved', 'kai', async ({ tvSays }) => { await tvSays('Solved by the Sheriff: it was Lena'); });
+await beat('s4-cold', 'kai', async ({ says, phone, tvSays }) => {
+  await tvSays('The trail went cold');
   await says('sheriff-left', 'One investigation a month: used');
   if (await phone.getByTestId(`step-chip-${DARK}`).count()) throw new Error('the cold case wears a chip');
 });
