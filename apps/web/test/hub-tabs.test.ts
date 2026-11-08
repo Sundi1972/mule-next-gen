@@ -162,7 +162,7 @@ const pressed = (testid: string) => byTestid(testid).getAttribute('aria-pressed'
 /** Every testid under `node`, in document order. */
 const testidsIn = (node: FakeElement): (string | null)[] => node.childNodes.flatMap((c) => (c instanceof FakeElement ? [c.getAttribute('data-testid'), ...testidsIn(c)] : []));
 /** The planning tabs, in their order. */
-const tabs = () => byTestid('tabs-a').findAll('button').map((b) => b.getAttribute('data-testid'));
+const tabs = () => byTestid('tabs').findAll('button').map((b) => b.getAttribute('data-testid'));
 const go = (move: (n: HubNav) => void) => act(() => move(nav!));
 
 describe('the tabbed planning hub (SB-2)', () => {
@@ -383,7 +383,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     const ballot: ElectionView = { stage: 'ballot', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], result: {} };
     mount(game({ pol: politics({ election: ballot, next: 5 }) }));
     byTestid('hub-situation');
-    expect(findTestid('tabs-a')).toBeUndefined();
+    expect(findTestid('tabs')).toBeUndefined();
   });
 
   it("C66 (frame): the first stage shown takes the stage in place of the tabs, the tool row, the map and This month; its Rail sits under Now; the shell's phase and the ready bar's words are its own", () => {
@@ -396,7 +396,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     });
     mount(game(), stage(true));
     byTestid('day-card', byTestid('hub-situation'));
-    for (const gone of ['hidden-card', 'later-card', 'tabs-a', 'map-tools', 'hub-map', 'agenda']) expect(findTestid(gone), gone).toBeUndefined();
+    for (const gone of ['hidden-card', 'later-card', 'tabs', 'map-tools', 'hub-map', 'agenda']) expect(findTestid(gone), gone).toBeUndefined();
     const rail = byTestid('guide');
     expect(rail.textContent).toContain('Election day');
     const order = testidsIn(rail);
