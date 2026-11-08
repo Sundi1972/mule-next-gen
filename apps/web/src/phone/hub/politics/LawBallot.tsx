@@ -55,7 +55,10 @@ export function CouncilBallot() {
   const client = useClient();
   const c = view.politics!.council!;
   useLawPick();
-  useEffect(() => forgetLawPick, []);
+  // The pick outlives this card leaving the screen (another sub-tab) while the vote is open; the vote's close forgets it.
+  useEffect(() => {
+    if (c.stage !== 'ballot') forgetLawPick();
+  }, [c.stage]);
   if (c.stage === 'reveal' && c.result) return <PhoneReveal view={view} c={c} result={c.result} />;
   const mine = shownLawPick({ view, me });
   const promised = me.politics?.promised?.law ?? null;
