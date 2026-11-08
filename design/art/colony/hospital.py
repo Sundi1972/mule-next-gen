@@ -98,6 +98,14 @@ def dress_site():
         props.place(z, "KB3D_CSZ_" + name, at, rot)
 
 
+# the glass's depth behind the face and the frames' colour: at 0.28 m behind near-black mullions the lit panes read as
+# dark recesses at TV size (game shots, 7 Nov); look.html's hospital has lighter frames on near-flush glass
+INSET = 0.12
+
+
+def FRAME():  # mid grey: light enough not to read as a black recess, dark enough that the warm panes stay distinct from the white plaster
+    return flat("hospital_frame", (0.4, 0.41, 0.42), 0.35, 0.8)
+
 def build(stage):
     """site: the shared site kit. build1: the main block's ground floor up, the floor above and the wing a bare frame,
     scaffold, crane. standing: main block, emergency wing, ambulance bay. closed: faded, dead glass, boarded, the bay
@@ -116,9 +124,9 @@ def build(stage):
     before = set(bpy.context.scene.objects)
     d_main = W / 2 - MAIN_Y0
     cy_main = (W / 2 + MAIN_Y0) / 2
-    parts, top = kits.modern(0, cy_main, W, d_main, 2, FH, wall, "hospital", sp=1.25, top_extra=0.9, upto=1 if b1 else None, gl=gl)
+    parts, top = kits.modern(0, cy_main, W, d_main, 2, FH, wall, "hospital", sp=1.25, top_extra=0.9, upto=1 if b1 else None, gl=gl, inset=INSET, frame=FRAME())
     d_wing = MAIN_Y0 - (-W / 2) + 0.05
-    kits.modern(0, -W / 2 + d_wing / 2, W, d_wing, 1, WING_H - 0.4, wall, "wing", sp=0.9, top_extra=0.5, upto=0 if b1 else None, gl=gl)
+    kits.modern(0, -W / 2 + d_wing / 2, W, d_wing, 1, WING_H - 0.4, wall, "wing", sp=0.9, top_extra=0.5, upto=0 if b1 else None, gl=gl, inset=INSET, frame=FRAME())
     if b1:
         kits.scaffold(0, cy_main, W, d_main, 2 * FH + 0.6)
         kits.crane(5.0, 4.4, 11.0)
