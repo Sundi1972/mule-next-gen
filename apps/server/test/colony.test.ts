@@ -95,8 +95,11 @@ describe('the colony at the table', () => {
     expect(state.colony!.happiness).toBe(60);
     while (state.phase !== 'auction') advancePhase(state);
     state.air = 70;
-    state.store.stock.food = 0;
-    state.store.stock.water = 0;
+    // 400 colonists need 20 of each; a fifth short of both bites too little for a shock (needs RULE-4), so the month's
+    // fall is the capped step alone.
+    state.colonists = 400;
+    state.store.stock.food = 16;
+    state.store.stock.water = 16;
     advancePhase(state);
     expect(state.history.at(-1)!.shortages.length, 'two goods short').toBe(2);
     for (const viewer of [null, 's1', 's2']) {

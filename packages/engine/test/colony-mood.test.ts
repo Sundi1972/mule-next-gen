@@ -7,7 +7,9 @@ import {
   createRng,
   GAME,
   HAPPINESS,
+  HARDSHIP,
   moodBand,
+  monthMood,
   moodInputs,
   moodShift,
   moodStep,
@@ -33,13 +35,13 @@ function colony(): GameState {
   return state;
 }
 
-const QUIET: MoodInputs = { short: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
+const QUIET: MoodInputs = { hardship: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
 
 describe('C23: the colony\'s happiness (RULE-20)', () => {
   it('T-AC-31: each input moves the target its own way with the others fixed; a month\'s step never exceeds maxStep and h stays 0..100', () => {
     const rng = createRng(20);
     const draw = (): MoodInputs => ({
-      short: rng.int(0, 5),
+      hardship: rng.int(0, 2 * HARDSHIP.memoryCap) / 2,
       air: rng.int(0, 100),
       tax: rng.int(POLITICS.tax.min, POLITICS.tax.max),
       broken: rng.chance(0.5) ? 1 : 0,
@@ -47,8 +49,8 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
       gap: rng.int(0, 20_000),
       welfare: 0,
     });
-    // Worse with more of it: shortages, air, tax, a broken promise, the gap. Better with more prestige.
-    const worse: (keyof MoodInputs)[] = ['short', 'air', 'tax', 'broken', 'gap'];
+    // Worse with more of it: the memory of hardship, air, tax, a broken promise, the gap. Better with more prestige.
+    const worse: (keyof MoodInputs)[] = ['hardship', 'air', 'tax', 'broken', 'gap'];
     let moved = 0;
     for (let i = 0; i < 500; i++) {
       const at = draw();
@@ -76,9 +78,9 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     expect(moved, 'the inputs do move the target, not only never raise it').toBeGreaterThan(100);
   });
 
-  it("T-AC-31: RULE-20's example — from 60, a month with two goods short and the air at 70 falls by maxStep to Restless", () => {
-    const target = moodTarget({ ...QUIET, short: 2, air: 70 });
-    expect(target).toBeCloseTo(HAPPINESS.base - 2 * W.shortage - W.air * (70 - W.airFree));
+  it("T-AC-31: RULE-20's example — from 60, a month with the memory of hardship at its cap and the air at 70 falls by maxStep to Restless", () => {
+    const target = moodTarget({ ...QUIET, hardship: HARDSHIP.memoryCap, air: 70 });
+    expect(target).toBeCloseTo(HAPPINESS.base - HARDSHIP.targetPerHardship * HARDSHIP.memoryCap - W.air * (70 - W.airFree));
     expect(moodStep(60, target)).toBe(60 - HAPPINESS.maxStep);
     expect(moodBand(60 - HAPPINESS.maxStep)).toBe('restless');
     expect(moodTarget(QUIET), 'a quiet month aims at the base').toBe(HAPPINESS.base);
@@ -88,11 +90,11 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
 
   it("S5-T-AC-5: S5-RULE-5's examples — 100 cr -> +2, 200 cr -> +4 (the cap holds at more), nothing paid -> +0, an earlier month's Welfare counts 0", () => {
     const state = colony();
-    const quiet = moodTarget(moodInputs(state, []));
+    const quiet = moodTarget(moodInputs(state));
     expect(quiet, 'nothing paid: the quiet month\'s base').toBe(HAPPINESS.base);
     const paid = (credits: number, month = state.month): number => {
       state.colony = { ...state.colony!, welfare: { month, to: 'kai', paid: credits } };
-      return moodTarget(moodInputs(state, [])) - quiet;
+      return moodTarget(moodInputs(state)) - quiet;
     };
     const worth = (credits: number): number => W.welfare * Math.min(credits / W.welfareUnit, W.welfareCap);
     expect(paid(100)).toBe(worth(100));
@@ -102,43 +104,44 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     expect(paid(100, state.month - 1), 'last month\'s payment counts 0').toBe(0);
   });
 
-  it('T-AC-31: moodInputs reads the month: the shortages given, the air, the tax in whole %, standing prestige and the gap', () => {
+  it("T-AC-31: moodInputs reads the month: the colony's memory of hardship, the air, the tax in whole %, standing prestige and the gap", () => {
     const state = colony();
     state.air = 55;
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
     state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
-    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500, welfare: 0 });
+    state.colony!.hardship = 0.5;
+    expect(moodInputs(state)).toEqual({ hardship: 0.5, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500, welfare: 0 });
   });
 
-  it("T-AC-31: a real upkeep feeds the mood that upkeep's shortages, not the report's empty list from production", () => {
+  it("T-AC-31: a real upkeep feeds the mood that upkeep's meal, not the report's empty list from production", () => {
     const state = colony();
     while (state.phase !== 'auction') advancePhase(state);
     state.store.stock.food = 0;
     state.store.stock.water = 0;
     advancePhase(state);
     expect(state.phase).toBe('upkeep');
-    const short = state.history.at(-1)!.shortages;
-    expect(short.length, 'an empty shelf leaves the colonists short').toBeGreaterThan(0);
-    expect(state.colony!.happiness).toBe(moodStep(HAPPINESS.start, moodTarget(moodInputs(state, short))));
-    expect(state.colony!.happiness).toBeLessThan(moodStep(HAPPINESS.start, moodTarget(moodInputs(state, []))));
+    expect(state.history.at(-1)!.shortages.length, 'an empty shelf leaves the colonists short').toBeGreaterThan(0);
+    expect(state.colony!.hardship, 'nothing to eat: the whole bite, from no memory').toBe(1);
+    expect(state.colony!.happiness).toBe(monthMood(HAPPINESS.start, moodTarget(moodInputs(state)), 1));
+    expect(state.colony!.happiness).toBeLessThan(moodStep(HAPPINESS.start, moodTarget({ ...moodInputs(state), hardship: 0 })));
   });
 
   it('T-AC-32: the unknowns contribute 0 — no Governor, no promise this month, one player, nothing short', () => {
     const none = colony();
     none.politics = { ...none.politics!, governor: null };
-    expect(moodInputs(none, [])).toMatchObject({ short: 0, broken: 0 });
+    expect(moodInputs(none)).toMatchObject({ hardship: 0, broken: 0 });
 
     const kept = colony();
     kept.colony!.promises.push({ month: kept.month, governor: 'lena', kind: 'hold', kept: true });
-    expect(moodInputs(kept, []).broken).toBe(0);
+    expect(moodInputs(kept).broken).toBe(0);
     const earlier = colony();
     earlier.month = 3;
     earlier.colony!.promises.push({ month: 2, governor: 'lena', kind: 'hold', kept: false });
-    expect(moodInputs(earlier, []).broken, "last month's broken promise is not this month's").toBe(0);
+    expect(moodInputs(earlier).broken, "last month's broken promise is not this month's").toBe(0);
     const broken = colony();
     broken.colony!.promises.push({ month: broken.month, governor: 'lena', kind: 'hold', kept: false });
-    expect(moodInputs(broken, []).broken).toBe(1);
+    expect(moodInputs(broken).broken).toBe(1);
 
     // A game needs two players at least; the helper is asked of one, as a colony down to its last settler would be.
     const alone = colony();
@@ -164,7 +167,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
     const seen: number[] = [];
     for (let month = 0; month < 6; month++) {
-      runColony(state, []);
+      runColony(state);
       seen.push(state.colony!.happiness);
     }
     expect(seen.at(-1)).toBeGreaterThanOrEqual(60);

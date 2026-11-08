@@ -479,6 +479,8 @@ export interface Colony {
   happiness: number;
   /** The share of the colonists who are sick, 0..HEALTH.cap. Absent until colony health first plays, and read as 0. */
   sick?: number;
+  /** The colony's memory of hardship, 0..HARDSHIP.memoryCap: how short it went, fading a month at a time (needs RULE-3). Absent until the first upkeep, and read as 0. */
+  hardship?: number;
   /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
   strike: Strike | null;
   /** This month's Welfare payment (slice 5): who got it and how much; null when none. */

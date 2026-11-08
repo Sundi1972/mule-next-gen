@@ -1218,8 +1218,6 @@ export const HAPPINESS = {
   /** The least happiness of each band; below `unhappy` is Unrest. */
   bands: { thriving: 80, content: 60, restless: 40, unhappy: 20 },
   weights: {
-    /** Off the target for each good the store ran short of this upkeep. */
-    shortage: 8,
     /** Off the target for each point of air above `airFree`. */
     air: 0.4,
     airFree: 30,
@@ -1248,6 +1246,14 @@ export const HARDSHIP = {
   tolerance: 0.1,
   /** The curve's exponent above the tolerance: above 1, a small miss bites little and a large one much more. */
   power: 1.5,
+  /** Share of last month's memory of hardship a month keeps (needs RULE-3): a fed month halves it. */
+  memoryKeep: 0.5,
+  /** The most the memory of hardship ever holds. */
+  memoryCap: 2,
+  /** Mood points off the month's target per unit of the memory of hardship (needs RULE-4). */
+  targetPerHardship: 6,
+  /** Mood points off at once, after the month's step, at a total miss; in proportion to the month's bite (needs RULE-4). */
+  shock: 8,
 };
 
 /**
