@@ -270,7 +270,7 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
   picture's opaque pixels column by column (40 frame px each), top and bottom row as fractions of its height, written by
   `design/art/colony/skyline.py`; the live layer hides a colonist only where it covers the figure (C4, T-AC-13).
   Top-level `"walker"` · ADDED · non-breaking (absent → today's SVG figure) (AM-8):
-  `{ "cell": { "width": 192, "height": 224, "feet": [96, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
+  `{ "cell": { "width": 320, "height": 256, "feet": [120, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
      "headings": ["+x", "+y", "-x", "-y"], "sheets": { "<suit>-<trim>": { "day": "walker/…@800.webp", "dusk": "…" } },
      "outline": "walker/outline@800.webp" }` — a sheet's rows are the headings top to bottom, its columns the frames;
   `+x` is c rising (screen down-right), `+y` r falling (up-right). suit ∈ p1–p4; trim ∈ white, graphite, sand.

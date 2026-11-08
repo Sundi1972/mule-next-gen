@@ -619,7 +619,17 @@ export function upkeepOf(w: World) {
   const welfare = creditsOf('welfare', w.budget.shares.welfare);
   const limit = creditsOf('projects', w.budget.shares.projects);
   const project = Math.min(limit, PRESTIGE.observatory.credits);
-  return { in: { grant: 200 }, out: { officePay, upkeep: parkUpkeep, welfare, project }, limit, balance: FUND - welfare - project };
+  // The Sheriff path: a fine set this month is paid at its end, into the fund ('fine'), and the victim's share paid out
+  // ('restitution'), as trunk's FundSource and FundLine type them.
+  const fined = (w.sabotage?.orders ?? []).filter((o) => o.fine && o.finedMonth === w.month);
+  const fine = fined.reduce((n, o) => n + o.fine!.due, 0);
+  const restitution = fined.reduce((n, o) => n + o.fine!.toVictim, 0);
+  return {
+    in: { grant: 200, ...(fine ? { fine } : {}) },
+    out: { officePay, upkeep: parkUpkeep, welfare, project, ...(restitution ? { restitution } : {}) },
+    limit,
+    balance: FUND - welfare - project + fine - restitution,
+  };
 }
 
 function colonyView(w: World): ColonyView {
