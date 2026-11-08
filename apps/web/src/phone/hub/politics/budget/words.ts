@@ -1,4 +1,4 @@
-import type { Good, OverruleWhy } from '@mule/engine';
+import type { Good } from '@mule/engine';
 import type { BudgetView, MuleView, OverruleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 
@@ -65,9 +65,3 @@ export function verdictWords(o: Pick<OverruleView, 'needed' | 'restores' | 'stan
     ? { stamp: 'Overruled', line: `Yes ${r.yes} · needed ${o.needed}: Overruled, the tax goes back to ${restore}%` }
     : { stamp: 'It stands', line: `Yes ${r.yes} · needed ${o.needed}: The Governor’s tax stands at ${now}%` };
 }
-
-/** Why the call button is not there while the tax has moved and a caller still cannot call: the engine's own words for the two reasons a phone can see. */
-export const OVERRULE_REFUSAL: Partial<Record<OverruleWhy, string>> = {
-  notNow: 'Call an overrule once the votes are over',
-  noGovernor: 'There is no Governor to overrule',
-};

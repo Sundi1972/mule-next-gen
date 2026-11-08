@@ -103,6 +103,11 @@ const mine = (id: string, extra: Partial<NonNullable<MyView['politics']>> = {}):
 const viewFor = (id: string, pol: PoliticsView, my: Partial<NonNullable<MyView['politics']>> = {}): MuleView => ({ ...aMuleView({ month: 4, players: PLAYERS, me: mine(id, my), politics: pol }), colony });
 
 const sent: unknown[] = [];
+const unmountAll = () => {
+  const r = root;
+  if (r) act(() => r.unmount());
+  root = null;
+};
 const client = { subscribe: () => () => {}, getState: () => ({ status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }), serverNow: () => 0, intent: (i: unknown) => void sent.push(i) } as unknown as TableClient;
 
 let root: Root | null = null;
@@ -146,6 +151,12 @@ function props(el: FakeElement): Record<string, unknown> {
 const tap = (testid: string) => act(() => (props(byTestid(testid)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(testid) }));
 const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' ').trim();
 const isDisabled = (testid: string) => props(byTestid(testid)).disabled === true;
+/** The aria-labels under an element: the players' marks. */
+function labels(node: FakeElement): string[] {
+  const own = node.getAttribute('aria-label');
+  return [...(own ? [own] : []), ...node.childNodes.flatMap((c) => (c instanceof FakeElement ? labels(c) : []))];
+}
+
 /** The test ids under the host, in the order they are drawn. */
 function drawn(node: FakeElement = host): string[] {
   const own = node.getAttribute('data-testid');
@@ -166,6 +177,7 @@ describe('S5-B-AC-1 (component): the Governor sets the budget on the Budget sub-
     expect(text('budget-pays-welfare')).toContain(`${lineCredits('welfare', 10, spareOf(FUND))} cr`);
     expect(text('budget-line-kept')).toContain('Kept in the fund');
     expect(text('budget-line-welfare')).toContain('was 0%');
+    expect(find('budget-was-projects'), 'Projects has not moved').toBeUndefined();
   });
 
   it('S5-B-AC-1: the steppers move by step within maxShare, the draft shows the credits lineCredits gives, and the Commission stays on the sub-tab', () => {
@@ -224,6 +236,7 @@ describe('S5-B-AC-1 (component): everyone else sees the budget as set', () => {
   it('S5-B-AC-1: a budget nobody has set says it is as the game began', () => {
     mount('budget', viewFor('s2', politics({ budget: budgetOf({ projects: 100, welfare: 0 }, { projects: 100, welfare: 0 }) })));
     expect(text('council-budget-by')).toBe('as the game began');
+    expect(text('council-budget-share-projects')).toBe('100%');
   });
 });
 
@@ -238,10 +251,13 @@ describe('S5-B-AC-3 (component): calling an overrule on the tax from the Laws su
     expect(sent).toEqual([{ type: 'callOverrule', target: 'tax' }]);
   });
 
-  it('S5-B-AC-3: no button for a refused caller, whatever the web might guess; the engine\'s refusal decides', () => {
+  it('S5-B-AC-3: no call button and no call words when canOverrule.tax is not true', () => {
     mount('laws', viewFor('s2', politics({ tax: moved }), { canOverrule: { ...canCall, tax: 'notNow' } }));
     expect(find('overrule-call-button')).toBeUndefined();
-    expect(text('overrule-call-refused')).toBe('Call an overrule once the votes are over');
+    expect(find('overrule-call-rule')).toBeUndefined();
+    expect(find('overrule-withdraw')).toBeUndefined();
+    expect(find('overrule-called-other')).toBeUndefined();
+    expect(text('overrule-call')).toBe('Up from 5% when the month began.');
   });
 
   it('S5-B-AC-3: a tax as the month began shows no call at all', () => {
@@ -277,6 +293,34 @@ describe('S5-B-AC-3 (component): calling an overrule on the tax from the Laws su
     expect(find('gov-tax')).toBeDefined();
     expect(find('gov-tax-frozen')).toBeUndefined();
   });
+
+  it('S5-B-AC-3: once the vote is at its ballot the tax is no longer drawn as frozen', () => {
+    mount('laws', viewFor('s1', politics({ tax: moved, overrule: overruleOf({ stage: 'ballot' }) })));
+    expect(find('gov-tax-frozen')).toBeUndefined();
+  });
+});
+
+describe('S5-B-AC-3 (component): the call line under Now', () => {
+  const slot = () => import('../src/phone/hub/politics/budget/OverruleCall').then((m) => m.OVERRULE_CALL_LINE);
+  const moved = { percent: 9, start: 5, low: 0, high: 10 };
+  const seatOf = (g: MuleView) => ({ view: g, me: g.me!, self: g.players.find((p) => p.id === g.me!.id)! });
+
+  it('S5-B-AC-3: it shows while a tax call stands, and not before or after', async () => {
+    const line = await slot();
+    expect(line.show?.(seatOf(viewFor('s3', politics({ tax: moved, overrule: overruleOf() }))))).toBe(true);
+    expect(line.show?.(seatOf(viewFor('s3', politics({ tax: moved }))))).toBe(false);
+    expect(line.show?.(seatOf(viewFor('s3', politics({ tax: moved, overrule: overruleOf({ stage: 'ballot' }) }))))).toBe(false);
+  });
+
+  it.each([
+    ['s2', 'You called an overrule vote on the tax: held as planning ends.'],
+    ['s1', 'Ossa called an overrule vote on your tax: held as planning ends.'],
+    ['s3', 'Ossa called an overrule vote on the tax: held as planning ends.'],
+  ])('S5-B-AC-3: seat %s reads: %s', async (id, words) => {
+    const line = await slot();
+    mount(line.Body, viewFor(id, politics({ tax: moved, overrule: overruleOf({ caller: 's2' }) })));
+    expect(text('overrule-call-line')).toBe(words);
+  });
 });
 
 describe('S5-B-AC-3 (component): the overrule ballot and its reveal', () => {
@@ -294,11 +338,15 @@ describe('S5-B-AC-3 (component): the overrule ballot and its reveal', () => {
   });
 
   it('S5-B-AC-3: start against now, what it needs, who has voted but never how, and Yes and No send voteOverrule', () => {
-    mount('laws', viewFor('s3', ballot()));
+    // Lena (s1) has a vote registered but is not Done: only `done` counts as cast.
+    mount('laws', viewFor('s3', ballot({ voted: ['s1', 's2'], done: ['s2'], result: { passed: true, yes: 2, no: 0 } })));
     expect(text('overrule-start-now')).toBe('5% at the month’s start → 9% now');
     expect(text('overrule-needed')).toContain('needs 2 of 3 votes');
     expect(text('overrule-cast')).toContain('1 of 3');
     expect(text('overrule-cast')).toContain('Never shown: how');
+    const marks = labels(byTestid('overrule-cast'));
+    expect(marks).toEqual(['Ossa']);
+    expect(find('overrule-stamp'), 'a ballot stage is not a reveal even if a result is present').toBeUndefined();
     tap('overrule-yes');
     tap('overrule-no');
     expect(sent).toEqual([
@@ -316,6 +364,12 @@ describe('S5-B-AC-3 (component): the overrule ballot and its reveal', () => {
   it('S5-B-AC-3: the caller\'s ballot starts at Yes and the Governor\'s at No, and they are told so', () => {
     mount('laws', viewFor('s2', ballot(), { overruleBallot: true }));
     expect(text('overrule-preset')).toContain('starts at Yes');
+  });
+
+  it('S5-B-AC-3: the Governor\'s ballot starts at No, and they are told so', () => {
+    unmountAll();
+    mount('laws', viewFor('s1', ballot(), { overruleBallot: false }));
+    expect(text('overrule-preset')).toContain('starts at No');
   });
 
   it.each([
