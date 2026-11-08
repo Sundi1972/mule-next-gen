@@ -1,4 +1,4 @@
-import { POLITICS, type DealCard, type DealOffer } from '@mule/engine';
+import { POLITICS, START, type DealCard, type DealOffer } from '@mule/engine';
 import type { MuleView, MyView } from '@mule/protocol';
 import { Button, cx } from '@mule/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -7,8 +7,10 @@ import { useClient, useClientState } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
 import { SeatWords } from '../../../components/SeatWords';
-import { bindsWords, lawUp, monthsWords, nameOf, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
-import { CardWho, shellOf, Who } from './parts';
+import { bindsWords, lawUp, monthsWords, nameOf, noNewCard, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
+
+export { noNewCard };
+import { CardWho, FIRST_CONTROL, shellOf, useDialog, Who } from './parts';
 
 /**
  * Deal cards on the phone (S3-C17, S3-C18): the composer over the rail, a card offered to me (in its whisper thread
@@ -38,6 +40,7 @@ function toOffer(to: string, d: Draft): DealOffer | null {
 }
 
 export const isOpen = (c: DealCard) => c.status === 'offered' || c.status === 'active';
+
 export const between = (c: DealCard, a: string, b: string) => (c.from === a && c.to === b) || (c.from === b && c.to === a);
 const choiceOf = (c: DealCard): string | null => (c.terms.kind !== 'vote' ? null : 'law' in c.terms ? `law:${c.terms.yes ? 'yes' : 'no'}` : `gov:${c.terms.candidate}`);
 
@@ -96,6 +99,9 @@ function ballotsFor(view: MuleView, me: MyView): BallotChoices[] {
   return [gov, lawBallot];
 }
 
+/** The pact length the composer starts on: the middle of the lengths offered. */
+const startingPact = (lengths: readonly number[]): number => lengths[Math.floor(lengths.length / 2)] ?? 1;
+
 /** The composer's draft and its send. Calls `onSent` once the server lists the new card. */
 function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void) {
   const { view, me } = usePhoneGame();
@@ -103,18 +109,25 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
   const { toasts } = useClientState();
   const cards = me.deals?.cards ?? [];
   const pactMonths = me.deals?.pactMonths ?? POLITICS.deals.pactMonths;
-  const [draft, setDraft] = useState<Draft>({ kind: kind ?? 'pact', months: pactMonths[Math.floor(pactMonths.length / 2)] ?? 1, choice: null });
+  const [draft, setDraft] = useState<Draft>({ kind: kind ?? 'pact', months: startingPact(pactMonths), choice: null });
   const before = useRef<Set<string> | null>(null);
-  // The newest toast when this composer last sent: only a later one is this card's refusal.
-  const [sentAfter, setSentAfter] = useState<number | null>(null);
+  // This send's answer: the first toast after it, kept once seen, so a later toast is never read as this card's refusal.
+  // The server's error names no intent, so the first one after the send is the nearest the phone can tie to it.
+  const [sent, setSent] = useState<{ after: number; answer: number | null } | null>(null);
   const offersLeft = me.deals?.offersLeft ?? 0;
   const other = view.players.find((p) => p.id === to)!;
-  const myRep = view.players.find((p) => p.id === me.id)?.reputation ?? 0;
+  const myRep = view.players.find((p) => p.id === me.id)?.reputation ?? START.reputation;
   const refuseBelow = POLITICS.ai.deals.refuseBelow;
-  const pactNo = cards.some((c) => c.terms.kind === 'pact' && isOpen(c) && between(c, me.id, to)) ? `You already have a pact with ${other.name}` : undefined;
+  // S3-RULE-2 row 5 first: an unanswered card of mine to them is not a pact, whatever it offers.
+  const waiting = noNewCard(view, me, to);
+  const pactNo = !waiting && cards.some((c) => c.terms.kind === 'pact' && isOpen(c) && between(c, me.id, to)) ? `You already have a pact with ${other.name}` : undefined;
   const offer = toOffer(to, draft);
-  const refusal = sentAfter === null ? null : (toasts.filter((t) => t.id > sentAfter).at(-1) ?? null);
-  const blocked = offersLeft <= 0 ? `You have ${cards.filter((c) => c.from === me.id && c.status === 'offered').length} cards waiting for an answer` : draft.kind === 'pact' ? pactNo : undefined;
+  const answer = sent === null ? null : (sent.answer ?? toasts.find((t) => t.id > sent.after)?.id ?? null);
+  useEffect(() => {
+    if (sent && sent.answer === null && answer !== null) setSent({ ...sent, answer });
+  }, [sent, answer]);
+  const refusal = answer === null ? null : (toasts.find((t) => t.id === answer) ?? null);
+  const blocked = offersLeft <= 0 ? `You have ${cards.filter((c) => c.from === me.id && c.status === 'offered').length} cards waiting for an answer` : (waiting ?? (draft.kind === 'pact' ? pactNo : undefined));
   const landed = cards.some((c) => c.from === me.id && c.to === to && c.status === 'offered' && before.current && !before.current.has(c.id));
   useEffect(() => {
     if (landed) onSent();
@@ -138,7 +151,7 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
       if (!offer) return;
       before.current = new Set(cards.map((c) => c.id));
       if (refusal) client.dismiss(refusal.id);
-      setSentAfter(toasts.at(-1)?.id ?? -1);
+      setSent({ after: toasts.at(-1)?.id ?? -1, answer: null });
       client.intent({ type: 'offerDeal', offer });
     },
     dismiss() {
@@ -178,7 +191,7 @@ function ComposerFields({ c, testid }: { c: Composer; testid: string }) {
               ))}
             </div>
             <p className="text-xs leading-snug" data-testid={`${testid}-binds`}>
-              Neither of you sabotages the other, {monthsWords(c.view.month, c.view.month + draft.months - 1)}.
+              Neither of you sabotages the other, {monthsWords(c.view.month, Math.min(c.view.maxMonths, c.view.month + draft.months - 1))}.
             </p>
           </>
         )
@@ -240,7 +253,7 @@ function ComposerNotes({ c, testid }: { c: Composer; testid: string }) {
       )}
       {c.aiWarning && (
         <p className="rounded-control border border-dashed border-warn px-2 py-1 text-[11px] font-semibold leading-snug text-warn" data-testid={`${testid}-ai-warning`}>
-          {c.aiWarning}
+          <SeatWords text={c.aiWarning} who={[c.other.id]} players={c.view.players} />
         </p>
       )}
       {(c.blocked || c.refusal) && (
@@ -275,10 +288,10 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
       }
       action={
         <Button size="md" className="px-3" disabled={!c.canSend} onClick={c.send} data-testid="composer-a-send">
-          Offer to {c.other.name}
+          <SeatWords text={`Offer to ${c.other.name}`} who={[c.other.id]} players={c.view.players} />
         </Button>
       }
-      note={`${c.other.name} answers before planning ends, or it expires.`}
+      note={<SeatWords text={`${c.other.name} answers before planning ends, or it expires.`} who={[c.other.id]} players={c.view.players} />}
     >
       <ComposerFields c={c} testid="composer-a" />
       <ComposerNotes c={c} testid="composer-a" />
@@ -286,13 +299,15 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
   );
 }
 
+
 /**
  * A sheet over the whole rail at the rail's width, portalled into the shell: the hub has no slot over its rail. Its
  * buttons sit in its footer, under the thumb.
  */
-function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: string; children: ReactNode }) {
+function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: ReactNode; children: ReactNode }) {
+  const box = useDialog(onClose, FIRST_CONTROL);
   const sheet = (
-    <div className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>
+    <div ref={box} className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>
       <header className="flex min-h-10 items-center gap-1.5 border-b border-holo-faint px-3 py-1.5">{title}</header>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-2" data-testid={`${testid}-body`}>
         {children}
@@ -502,7 +517,8 @@ function MyDealRow({ c }: { c: DealCard }) {
 /** Every card of mine, by what I must do: answer, waiting, active, settled. One section of the Talk desk. */
 export function MyDeals() {
   const { me } = usePhoneGame();
-  const cards = me.deals?.cards ?? [];
+  // me.deals also carries the game's public broken cards; only this player's own are listed.
+  const cards = (me.deals?.cards ?? []).filter((c) => c.from === me.id || c.to === me.id);
   const incoming = cards.filter((c) => c.status === 'offered' && c.to === me.id);
   const waiting = cards.filter((c) => c.status === 'offered' && c.from === me.id);
   const active = cards.filter((c) => c.status === 'active');

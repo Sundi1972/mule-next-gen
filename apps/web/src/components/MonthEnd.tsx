@@ -1,11 +1,13 @@
 import { GAME, POLITICS } from '@mule/engine';
-import type { MuleView } from '@mule/protocol';
+import type { ColonyHealthView, MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import { Fragment, type ReactNode } from 'react';
 import { sabotageNews } from '../events/sabotage';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
 import { brokenIn, brokenMove, brokenWords } from '../phone/hub/politics/deals-words';
 import { RepChip } from '../phone/hub/politics/parts';
+// Render-time only: Colony.tsx imports ChangeTag from here, so nothing of Colony's is read while the modules load.
+import { healthBand, HEALTH_LOOK } from './Colony';
 import { collapseCutWords, colonyReport, type ColonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
 
 /**
@@ -359,6 +361,8 @@ const HUNGRY_LINES_COMPACT = 2;
  * across the TV. `besideGauges` is the TV
  * month end's, where the Environment and Wealth gauges above already show the air's level and band and the fund: the
  * panel keeps only the air's change, in its header (PM ruling 7 Nov, TV-FIT: five projects at six seats drew at 0.622).
+ * On the phone with no TV ('compact') the colonists line ends with the colony's health (PR-11, option A); the TV and a
+ * phone beside it keep the line as it is, the TV's Health gauge carries it there.
  */
 export function ColonyPanel({ view, density, layout = 'stack', verdict = false, besideGauges = false }: { view: MuleView; density: Exclude<Density, 'phone'>; layout?: 'stack' | 'row'; verdict?: boolean; besideGauges?: boolean }) {
   const r = colonyReport(view);
@@ -381,6 +385,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
   // The TV puts everyone who went hungry on one line (TvHungryLine); the phone with no TV names a few and counts the rest.
   const shownHungry = r.hungry.slice(0, HUNGRY_LINES_COMPACT);
   const moreHungry = tv ? 0 : r.hungry.length - shownHungry.length;
+  const health = tv ? null : (view.colonyHealth ?? null);
   const sabotage = sabotageNews(view);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1 px-2.5 py-1.5')} aria-label="How the colony is doing" data-testid="colony-panel">
@@ -409,7 +414,9 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
           </span>
         )}
       </header>
-      <div className={cx('grid', row ? 'grid-cols-3 gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
+      {/* With health on the colonists line, the phone's columns lean to Hunger, taken from Air and Colony fund (their
+          lines are short), so the line wraps no more often than today's. DS-GAP: unequal panel columns. */}
+      <div className={cx('grid', row ? 'grid-cols-3 gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : health ? 'grid-cols-[minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1.25fr)] gap-2' : 'grid-cols-3 gap-2')}>
         {!slim && (
           <>
             <Block label="Air" testid="colony-air" tv={tv}>
@@ -468,6 +475,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
             )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
               {colonistsLine(view, r)}
+              {health && <HealthWords health={health} />}
             </span>
           </span>
         </Block>
@@ -484,6 +492,33 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * " · health 78% · Sick spell": the end of the phone-alone colonists line, the figure toned by its band, the band word
+ * only when it is not Well (PR-11, mock design/mocks/colony-health @ b2470c60).
+ */
+function HealthWords({ health }: { health: ColonyHealthView }) {
+  const b = healthBand(health.health);
+  return (
+    <span data-testid="colony-health">
+      {' · '}
+      <span data-testid="health-line">
+        health{' '}
+        <span data-num className={cx('font-mono font-bold leading-none', b.tone)} data-testid="health-value">
+          {health.health}%
+        </span>
+        {health.health < HEALTH_LOOK.well && (
+          <>
+            {' · '}
+            <span className={cx('font-semibold', b.tone)} data-testid="health-band">
+              {b.label}
+            </span>
+          </>
+        )}
+      </span>
+    </span>
   );
 }
 

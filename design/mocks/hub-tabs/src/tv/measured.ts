@@ -62,3 +62,70 @@ export const TV_FIT_A: Record<string, { fixture: number; market: number }> = {
   'overrule-called': { fixture: 0.544, market: 0.381 },
   waiting: { fixture: 0.516, market: 0.359 },
 };
+
+/**
+ * Considered, not taken (lead's ruling, 9 Nov): the fine month's news line on the TV month end, which has no news.
+ * 9.1's world, the real market, 2 / 4 / 6 seats; the month end stays trunk's (0.780 / 0.708 / 0.768).
+ */
+export const TV_MONTH_END_NEWS_CONSIDERED = {
+  /** A: a one-line news strip under the header. */
+  stripUnderHeader: { 2: 0.753, 4: 0.646, 6: 0.677 },
+  /** B: the news line in the Worth footnote's row (free, but it changes WS4's TvMonthEnd). */
+  inFootnoteRow: { 2: 0.78, 4: 0.708, 6: 0.768 },
+} as const;
+
+/**
+ * The Sheriff month (?path=sheriff, mock-hub-tabs' b25a4abf: its news lines, and month 6's ledger with the fine in and the
+ * victim's half out), each beat on solo.html?beat=, at 2 / 4 / 6 seats (2 = Lena and Brix here). `fit` is the lowest
+ * scale the beat holds. Production's rail changes through the show, so its two beats were read every frame over the
+ * whole show (45 s): each step holds about 1.5 s at `fit`, and as the rail re-fits it passes, for about 0.1 s (7 frames),
+ * through the lower scales in `dip` (the lowest of two runs; a dip moves by up to 0.008 between runs). Every dip is above the floor too. A 0.5 s sample catches a dip only sometimes
+ * (693dad07 recorded two of them as the 4-seat values).
+ * WS8's layer sits out of flow over the map: the guard's shield and the dark plot measured 0.0 px off Brix's Food plot's
+ * centre, every size. The investigation's moment showed for its 8 s at the same scale as after it.
+ */
+export const TV_FIT_SHERIFF: Record<string, { beat: string; fit: BySeats; dip?: BySeats }> = {
+  productionCaught: { beat: 's2-caught', fit: { 2: 0.973, 4: 0.923, 6: 0.788 }, dip: { 2: 0.932, 4: 0.882, 6: 0.76 } },
+  fineSet: { beat: 's3-fined', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  /** Wealth note “fund 311 cr · paid out 574”: the fine in, the victim’s 75 in the paid-out total. */
+  monthEndFine: { beat: 's3-month-end', fit: { 2: 0.826, 4: 0.708, 6: 0.768 } },
+  productionDark: { beat: 's4-dark', fit: { 2: 0.93, 4: 0.882, 6: 0.758 }, dip: { 2: 0.897, 4: 0.856, 6: 0.741 } },
+  /** Solved and cold alike; the moment's scale equals its folded state's. */
+  investigation: { beat: 's4-solved', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  guarding: { beat: 's1-guarded', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  monthEnd5: { beat: 's2-month-end', fit: { 2: 0.826, 4: 0.708, 6: 0.768 } },
+};
+
+/**
+ * The month end's breaker row (P15, D19), by the number of players who broke a promise this month (solo.html
+ * &breakers=0..3, world.ts' withBreakers: Ossa · AI's vote card to Kai, then Brix's law promise to Lena, then Kai's pact
+ * with Lena, −20). Read every frame for 3 s: the month end holds one scale, with no dips. 9-month-end and s3-month-end
+ * measured the same. A table of two has at most two breakers, so 2 seats has no 3.
+ * `mark`, TAKEN: "✗ −N" on the breaker's own league row, after the chip. It adds no height: at 4 and 6 seats every count
+ * reads as none does. At 2 seats 0.826 → 0.780 comes from the seats, not the mark: from one breaker the two seats are
+ * Brix and Ossa (who has broken), and Ossa's public chat line fills the header's chat strip, empty for Lena and Brix.
+ * `strip`, CONSIDERED, NOT TAKEN: a row per breaker under the league ("✗ (mark) Ossa · AI −10"). Under the floor
+ * from one breaker at 4 and 6 seats.
+ */
+export const TV_FIT_BREAKERS = {
+  mark: {
+    0: { 2: 0.826, 4: 0.708, 6: 0.768 },
+    1: { 2: 0.78, 4: 0.708, 6: 0.768 },
+    2: { 2: 0.78, 4: 0.708, 6: 0.768 },
+    3: { 4: 0.708, 6: 0.768 },
+  },
+  strip: {
+    0: { 2: 0.826, 4: 0.708, 6: 0.768 },
+    1: { 2: 0.763, 4: 0.665, 6: 0.694 },
+    2: { 2: 0.719, 4: 0.631, 6: 0.657 },
+    3: { 4: 0.601, 6: 0.625 },
+  },
+} as const satisfies Record<'mark' | 'strip', Record<0 | 1 | 2 | 3, Partial<BySeats>>>;
+
+/** The TV's own key decisions, for the notes page's list (mock-hub-tabs' DECISIONS spreads it). */
+export const TV_DECISIONS: [string, string][] = [
+  [
+    'D19',
+    'The TV month end’s breaker row (P15: the TV shows the total only; the phone carries the full broken list). Each player who broke a promise this month gets “✗ −10” on their own league row, after the reputation chip. The drop is the card’s, from POLITICS’ reputation moves (a pact −20), and several cards sum. The full words are in its accessible label, there is no reason text, and it shows nothing in a month without a break. The league’s names carry “ · AI”. It adds no height: 0.780 / 0.708 / 0.768 at 2 / 4 / 6 seats with one, two or three breakers, as with none at 4 and 6 (measured, 8 Nov). A strip, a row per breaker under the league, fell under 0.7 from one breaker (0.665 at 4 seats) and was not taken. A change to WS4’s TvMonthEnd, which builds it from this scaffold.',
+  ],
+];

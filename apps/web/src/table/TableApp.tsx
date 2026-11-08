@@ -169,7 +169,9 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
  * 'beside', as development keeps them, PM ruling 6 Nov) and the clock, then
  * the table chat. `ready`, a screen's ready count, sits beside the title. A header with a clock, the strike badge or a
  * ready count puts the colony's gauges on a row of their own under it, full width: they don't share 1280 px with the
- * title, or the clock runs off the screen's right edge (PM ruling, 5 Nov; rulebook #gauges-row).
+ * title, or the clock runs off the screen's right edge (PM ruling, 5 Nov; rulebook #gauges-row). With the colony's
+ * health (MuleView.colonyHealth) the five gauges always take that row, 'beside' too: five cells beside the title cut
+ * text (PR-11, Heiko's option A, 7 Nov; rulebook #colony-health-gauge-look).
  * `landing` counts changes onto the gauges, wherever they sit. The chat ticker shows tvChatLines(game) lines.
  */
 export function TvHeader({
@@ -192,8 +194,9 @@ export function TvHeader({
   landing?: GaugeLanding | undefined;
 }) {
   const crowded = seconds !== undefined || ready !== undefined || !!game.colony?.strike;
-  const ownRow = !!game.colony && gauges === true && crowded;
-  const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
+  const health = game.colonyHealth ?? null;
+  const ownRow = !!game.colony && (gauges === true ? crowded || health !== null : gauges === 'beside' && health !== null);
+  const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : 'w-[760px]'} landing={landing} health={health} /> : null;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
   const fixed = ready !== undefined;
@@ -266,7 +269,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        {opener && game.colony ? <GroundsOpener opener={opener} colony={game.colony} month={game.month} Scene={Grounds} /> : <TvMonthEnd game={game} drift={drift} />}
+        {opener && game.colony ? <GroundsOpener opener={opener} colony={game.colony} month={game.month} Scene={Grounds} players={game.players.length} /> : <TvMonthEnd game={game} drift={drift} />}
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
@@ -912,7 +915,8 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-8 text-ink" data-phase={game.phase} data-testid="tv-monthend">
       {/* The league and the colony's score need the height (six seats, PM ruling C, 5 Nov): the colony's gauges sit at the
-          top of the right column, not in a row of their own. */}
+          top of the right column, not in a row of their own; with health, three over two, Health across two columns, as
+          tall as the four's two by two (PR-11, option A). */}
       <div className="flex flex-col gap-3">
         <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} gauges={game.colony ? 'none' : true} />
       </div>
@@ -924,7 +928,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
               <LeagueTable view={game} density="tv" />
             </MonthScoreColumn>
             <div className="flex flex-col gap-4">
-              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} paidOut={paidOutThisMonth(game.colony, game.month)} />
+              <ColonyGauges colony={game.colony} size="tv" className={game.colonyHealth ? 'grid-cols-3!' : 'grid-cols-2!'} landing={drift} paidOut={paidOutThisMonth(game.colony, game.month)} health={game.colonyHealth} spanHealth />
               <ColonyPanel view={game} density="tv" besideGauges />
               {/* One line a project, so six seats fit TV-FIT's floor; the funding, pips and plaques are on the phones. */}
               <BuildSite colony={game.colony} players={game.players} size="tv" compact />

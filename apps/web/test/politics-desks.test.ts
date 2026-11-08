@@ -909,6 +909,8 @@ describe('the Colony desk (C11, H-5, A-3)', () => {
     expect(on).toContain('data-testid="colony-grounds"');
     expect(on, 'the standing Park in its phone-size picture').toContain('href="/art/colony/park/standing-day@400.webp"');
     expect(on.indexOf('data-testid="colony-grounds"'), 'above the colony card').toBeLessThan(on.indexOf('data-testid="colony-desk-card"'));
+    const seated = view(politics({ governor: 's2', fund: 840 }), me(), { colony }).players.length;
+    expect(on, "T-AC-14 (phone): the seated players, for the colonists' suits").toContain(`data-players="${seated}"`);
     const off = onPhone(view(null, { ...me(), politics: null }, { colony }), ColonyWithFacts);
     expect(off).not.toContain('data-testid="colony-grounds"');
   });

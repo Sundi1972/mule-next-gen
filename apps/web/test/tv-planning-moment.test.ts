@@ -130,7 +130,7 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
     // Out of flow, over the map's top, above the map's own layers.
     expect(moment).toMatch(/^<div[^>]*class="[^"]*\babsolute\b[^"]*\binset-x-0\b[^"]*\btop-0\b/);
     expect(moment).toContain('data-testid="tv-break-banner"');
-    expect(moment).toContain('data-testid="tv-break-deal-k"');
+    expect(moment).toContain('data-testid="tv-break-deal-k-words"');
     // The moment comes after the map in the box, so it draws over it.
     expect(box.indexOf('data-testid="holo-map"')).toBeLessThan(box.indexOf('data-testid="tv-moment"'));
     // Not in the planning header, where it would push the body down and scale it.

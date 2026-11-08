@@ -740,6 +740,13 @@ describe('C5 / C7: the month-end opener on the TV, between the event show and Tv
     expect(screen.shows('tv-monthend')).toBe(true);
   });
 
+  it("T-AC-14 (TV): the opener hands the grounds the seated players, for the colonists' suits", () => {
+    const screen = tv(at('planning', 1, parkAt('building')));
+    screen.send(at('upkeep', 1, parkAt('standing')));
+    expect(screen.shows('tv-grounds-opener')).toBe(true);
+    expect(find(host!, 'colony-grounds')?.getAttribute('data-players')).toBe(String(PLAYERS.length));
+  });
+
   it('T-AC-8: a month whose Park came to stand plays the full 6 s opener, leaning in on the Park, then TvMonthEnd', () => {
     const screen = tv(at('planning', 1, parkAt('commissioned')));
     screen.send(at('upkeep', 1, parkAt('building')));
