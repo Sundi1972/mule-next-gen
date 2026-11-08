@@ -1,7 +1,7 @@
 import { POLITICS } from '@mule/engine';
 import type { IncidentView, MuleView, MyPoliticsView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodIcon, HoloMap, type MapTile } from '@mule/ui';
-import { useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { mapTiles, plotName } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
@@ -259,8 +259,11 @@ function useNewestToast(): number {
   return useSyncExternalStore(client.subscribe, newest, newest);
 }
 
-/** What this phone asked of a case this month, and the newest toast then: a refusal after it ends the wait. */
-type Asked = Record<string, { kind: 'investigate' | 'fine'; toast: number }>;
+/**
+ * What this phone asked of a case this month, the newest toast then, and whether a refusal has come since: a toast newer
+ * than the ask ends the wait for good, though the toast itself is dismissed a few seconds later.
+ */
+type Asked = Record<string, { kind: 'investigate' | 'fine'; toast: number; refused: boolean }>;
 
 const ORDER: Record<CaseState, number> = { fineable: 0, open: 1, cold: 2, closed: 3 };
 
@@ -288,7 +291,14 @@ function CaseFile({ view, sheriff, incidents }: { view: MuleView; sheriff: Sheri
   const [openId, setOpenId] = useState<string | null>(null);
   // Where each live case first stood: a case acted on keeps its place, so it does not jump from under the thumb.
   const places = useRef<string[]>([]);
-  const ask = (id: string, kind: Asked[string]['kind']) => setAsked((a) => ({ ...a, [id]: { kind, toast: newestToast } }));
+  const ask = (id: string, kind: Asked[string]['kind']) => setAsked((a) => ({ ...a, [id]: { kind, toast: newestToast, refused: false } }));
+  // Latch a refusal: once a newer toast is seen, the wait is over even after the toast is gone.
+  useEffect(() => {
+    setAsked((a) => {
+      const late = Object.entries(a).filter(([, e]) => !e.refused && newestToast > e.toast);
+      return late.length === 0 ? a : { ...a, ...Object.fromEntries(late.map(([id, e]) => [id, { ...e, refused: true }])) };
+    });
+  }, [newestToast]);
   const touched = (id: string) => id in asked;
   const cases = incidents.map((c) => {
     const state = caseState(c, sheriff);
@@ -296,7 +306,7 @@ function CaseFile({ view, sheriff, incidents }: { view: MuleView; sheriff: Sheri
     // The verdict is the server's: the culprit its investigation named, or the trail gone cold.
     const result = a?.kind === 'investigate' ? (c.culprit !== null && c.how === 'investigation' ? c.culprit : c.investigated && c.culprit === null ? null : undefined) : undefined;
     const fined = a?.kind === 'fine' && c.fine !== null;
-    const waiting = a !== undefined && result === undefined && !fined && newestToast <= a.toast;
+    const waiting = a !== undefined && result === undefined && !fined && !a.refused && newestToast <= a.toast;
     return { c, state, result, fined, waiting };
   });
   const live = cases.filter((k) => k.state === 'open' || k.state === 'fineable' || touched(k.c.id));

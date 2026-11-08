@@ -258,7 +258,15 @@ const OUTCOME: Record<Sab['mine'][number]['outcome'], [string, string]> = {
   caught: ['Caught', 'border-alert text-alert'],
 };
 
-/** Your own orders, newest first: how each came out, and whether anyone else knows it was you. */
+/** Whose plot an order of yours cut: the victim once it resolved; while pending (no victim yet), the plot's owner now. */
+function cutOwner(view: MuleView, o: Sab['mine'][number]): string | null {
+  return o.victim ?? (o.at ? (tileAt(view, o.at.x, o.at.y)?.owner ?? null) : null);
+}
+
+/**
+ * Your own orders, newest first: how each came out, and whether anyone else knows it was you. `public` says the order
+ * is public (its effect is known: done, caught or revealed); only `how`, set once the culprit is known, says it was you.
+ */
 function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
   if (sab.mine.length === 0) return null;
   const mine = [...sab.mine].sort((a, b) => b.month - a.month);
@@ -275,10 +283,10 @@ function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
               <GoodIcon good={o.good} size={14} />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="font-semibold">
-                  Month {o.month}: {o.kind === 'rumour' ? `rumour, ${goodWord(o.good)} ${o.dir}` : `power cut on ${nameOf(view, o.victim)}’s plot`}
+                  Month {o.month}: {o.kind === 'rumour' ? `rumour, ${goodWord(o.good)} ${o.dir}` : `power cut on ${nameOf(view, cutOwner(view, o))}’s plot`}
                 </span>
                 <span className="text-ink-3" data-testid={`my-order-known-${o.id}`}>
-                  {o.public ? (o.fine ? `Everyone knows. Fined ${o.fine.due} cr.` : 'Everyone knows it was you.') : 'Nobody knows it was you.'}
+                  {o.how !== null ? (o.fine ? `Everyone knows. Fined ${o.fine.due} cr.` : 'Everyone knows it was you.') : 'Nobody knows it was you.'}
                 </span>
               </span>
               <span className={cx('shrink-0 rounded-chip border px-1 font-mono text-[10px] font-bold uppercase leading-4', tone)}>{word}</span>

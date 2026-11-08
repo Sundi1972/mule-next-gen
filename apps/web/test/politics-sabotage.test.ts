@@ -293,6 +293,37 @@ describe("S4-C15, P7: the Sheriff's case file (B folded)", () => {
     expect(caseRows(), 'the case keeps its place; only its step changes').toEqual(['w3c8', 'k1m9', 'q7f2']);
   });
 
+  /** A refusal from the server: a toast arrives, then is dismissed after its time, as the client does. */
+  function refuse(): void {
+    act(() => {
+      state = { ...state, toasts: [{ id: 7 }] };
+      for (const l of listeners) l();
+    });
+    act(() => {
+      state = { ...state, toasts: [] };
+      for (const l of listeners) l();
+    });
+  }
+
+  it('S4-C15: a refused investigation ends the wait for good, even once its toast is gone', () => {
+    mount(brix());
+    tap('b-case-row-q7f2');
+    tap('investigate-q7f2');
+    expect(off('investigate-q7f2')).toBe(true);
+    refuse();
+    expect(off('investigate-q7f2'), 'the refusal gives the button back').toBe(false);
+    expect(text('investigate-q7f2')).toBe('Investigate · 1 a month');
+  });
+
+  it('S4-C15: a refused fine ends the wait for good, even once its toast is gone', () => {
+    mount(brix());
+    tap('b-case-row-w3c8');
+    tap('fine-confirm-w3c8');
+    expect(off('fine-confirm-w3c8')).toBe(true);
+    refuse();
+    expect(off('fine-confirm-w3c8'), 'the refusal gives the button back').toBe(false);
+  });
+
   it('S4-B-AC-4: a trail gone cold says so in the case, and its row loses its chip', () => {
     mount(brix());
     tap('b-case-row-k1m9');
@@ -534,14 +565,23 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
   });
 
   it('S4-C14: "Your orders", newest first: how each came out, and whether anyone knows it was you', () => {
+    // As WS7's projection sends them (politics-view.ts mySabotageView): `public` is isPublicOrder (done, caught or
+    // culpritPublic), so a cut that worked unseen is public with no `how`; only `how` says the culprit is known.
     const mine: Sab['mine'] = [
-      { ...COLD, culprit: 's1', public: false, outcome: 'done' },
+      { ...COLD, investigated: false, culprit: 's1', public: true, outcome: 'done' },
       { ...GUARDED, public: true, outcome: 'caught' },
     ];
     mount(viewOf({ sabotage: { ...NO_ORDER, mine } }));
     tap('desk-market');
     expect(allTestids('my-order-', byTestid('my-orders')).filter((id) => !id.includes('known'))).toEqual(['my-order-w3c8', 'my-order-p5d1']);
     expect(text('my-order-w3c8')).toBe('Month 4: power cut on Kai’s plotEveryone knows it was you.Caught');
-    expect(text('my-order-known-p5d1')).toBe('Nobody knows it was you.');
+    expect(text('my-order-known-p5d1'), 'it worked and nobody saw: public, but not who').toBe('Nobody knows it was you.');
+  });
+
+  it("S4-C14: this month's pending power cut is in Your orders under its plot's owner (the engine names the victim only when it resolves)", () => {
+    const pending: Sab['mine'][number] = { id: 'sab-a1b2c3', month: 5, kind: 'powerCut', victim: null, at: { x: 1, y: 0 }, good: 'smithore', worked: false, culprit: 's1', how: null, investigated: false, fine: null, public: false, outcome: 'pending' };
+    mount(viewOf({ sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(1, 0) }, owed: 120, mine: [pending] } }));
+    tap('desk-market');
+    expect(text('my-order-sab-a1b2c3')).toBe('Month 5: power cut on Ossa’s plotNobody knows it was you.Ordered');
   });
 });
