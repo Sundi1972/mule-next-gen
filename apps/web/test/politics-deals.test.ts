@@ -424,3 +424,29 @@ describe("the break words' seats (S3-C20)", () => {
     }
   });
 });
+
+// ---- S3-C20 · the month's broken cards on the phone's month end -----------------------------------------------------
+
+describe("the phone's month end (S3-C20)", () => {
+  it("S3-B-AC-2: the phone's month end lists the month's broken cards in public (who broke a promise to whom, what was promised, the drop), from brokenIn; none for a kept card or one broken in an earlier month", async () => {
+    const { Results } = await import('../src/phone/Results');
+    const broke = (over: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to'>) => card({ status: 'broken', settled: 2, ...over });
+    const vote = broke({ id: 'deal-v2', from: BRIX, to: KAI_LEE, terms: { kind: 'vote', office: 'governor', candidate: KAI }, brokenBy: BRIX });
+    const pact = broke({ id: 'deal-p2', from: LENA, to: KAI, brokenBy: KAI });
+    const earlier = broke({ id: 'deal-p1', from: OSSA, to: LENA, brokenBy: OSSA, settled: 1 });
+    const kept = card({ id: 'deal-k2', from: LENA, to: BRIX, offered: 2, until: 2, status: 'kept', settled: 2 });
+    const monthEnd = (brokenDeals: DealCard[]) => gameFor(myView(LENA, [kept]), politics({ brokenDeals }), { phase: 'upkeep' });
+    mount(monthEnd([vote, pact, earlier]), () => createElement(Results));
+
+    expect(text('broken-cards')).toContain('Broken this month · in public');
+    expect(allTestids('broken-deal-'), "month 2's broken cards, and only those").toEqual(['broken-deal-v2', 'broken-deal-p2']);
+    expect(text('broken-deal-v2-words')).toBe('Brix broke a promise to Kai Lee: a vote for Kai · AI');
+    expect(text('broken-deal-v2-drop')).toBe(`−${-POLITICS.reputation.moves.voteBroken}`);
+    expect(text('broken-deal-p2-words'), 'the computer seat that broke it is marked').toBe('Kai · AI broke a pact with Lena');
+    expect(text('broken-deal-p2-drop')).toBe(`−${-POLITICS.reputation.moves.pactBroken}`);
+    expect(findTestid('broken-deal-k2'), 'a kept card is never listed').toBeUndefined();
+
+    rerender(monthEnd([earlier]));
+    expect(findTestid('broken-cards'), 'nothing broke this month: no list').toBeUndefined();
+  });
+});
