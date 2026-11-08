@@ -553,12 +553,12 @@ describe('S4-RULE-12 (the record): orders and guards are in the record and repla
         send(seat, intent);
       };
 
-      // A theft or a swap in development takes the MULE off a plot after the order is given: the same fixture in the game and
-      // in its replay (the replay plays the intents, not this), so the order is void at production in both.
+      // The plot changes hands to the orderer after the order is given (a sale, a swap): the same fixture in the game and in
+      // its replay (the replay plays the intents, not this), so the order is void at production in both.
       const realHandle = MuleGame.prototype.handle;
       vi.spyOn(MuleGame.prototype, 'handle').mockImplementation(function (this: MuleGame, seat: string, intent: MuleIntent) {
         realHandle.call(this, seat, intent);
-        if (seat === 's1' && intent.type === 'sabotage' && intent.target?.kind === 'powerCut') (this as unknown as { state: GameState }).state.tiles[intent.target.tile]!.outfit = null;
+        if (seat === 's1' && intent.type === 'sabotage' && intent.target?.kind === 'powerCut') (this as unknown as { state: GameState }).state.tiles[intent.target.tile]!.owner = 's1';
       });
       // The replayed game's view of Heiko at its end: the replay disposes the game it ran, and the spy reads it first.
       let replayedMine: unknown = null;
@@ -589,7 +589,7 @@ describe('S4-RULE-12 (the record): orders and guards are in the record and repla
           const lit = game.viewFor('s1').lit;
           if (lit) once('claim', 's1', { type: 'claim', ...lit });
         }
-        // Month 2's planning: Heiko orders a power cut on a worked plot of another seat, which loses its MULE before production.
+        // Month 2's planning: Heiko orders a power cut on a worked plot of another seat, which changes hands to him before production.
         if (view.phase === 'planning' && view.month === 2 && votesOver) {
           const target = state().tiles.findIndex((t) => t.owner !== null && t.owner !== 's1' && ['food', 'energy', 'smithore', 'crystite'].includes(t.outfit ?? ''));
           if (target >= 0) once('cut', 's1', { type: 'sabotage', target: { kind: 'powerCut', tile: target } });
