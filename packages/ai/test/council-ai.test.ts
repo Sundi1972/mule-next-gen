@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AI_LEVELS,
   AI_PERSONAS,
@@ -34,7 +34,13 @@ const LAND_10: LawProposal = { kind: 'enact', law: 'landTax', setting: 10 };
 const savedChance = { ...POLITICS.ai.council.proposeChance };
 const savedColony = structuredClone(POLITICS.ai.colony);
 const savedOffices = [...POLITICS.offices];
+const savedWelfareMax = POLITICS.budget.welfare.maxShare;
+beforeEach(() => {
+  // S5-C6 pin: these rows predate the budget. With Welfare at 0% an AI Governor's split is the budget in force (Projects 100), so it sends no setBudget and the fund reaches the buildings whole.
+  POLITICS.budget.welfare.maxShare = 0;
+});
 afterEach(() => {
+  POLITICS.budget.welfare.maxShare = savedWelfareMax;
   POLITICS.offices = [...savedOffices];
   Object.assign(POLITICS.ai.council.proposeChance, savedChance);
   Object.assign(POLITICS.ai.colony, structuredClone(savedColony));

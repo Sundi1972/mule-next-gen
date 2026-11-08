@@ -263,6 +263,12 @@ function isSabotageTarget(x: unknown): boolean {
   return t.kind === 'rumour' && typeof t.good === 'string' && typeof t.dir === 'string';
 }
 
+/** A budget's shares: an object whose offered lines are numbers. The rules check the rest (whole steps, the sum) in words. */
+function isShares(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null || Array.isArray(x)) return false;
+  return Object.values(x).every((share) => typeof share === 'number');
+}
+
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
   const i = v as Record<string, unknown>;
@@ -313,6 +319,12 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'propose':
       return i.proposal === null || isProposal(i.proposal);
     case 'voteLaw':
+      return typeof i.yes === 'boolean';
+    case 'setBudget':
+      return isShares(i.shares);
+    case 'callOverrule':
+      return i.target === null || i.target === 'tax' || i.target === 'budget' || i.target === 'confidence';
+    case 'voteOverrule':
       return typeof i.yes === 'boolean';
     case 'offerDeal':
       return isDealOffer(i.offer);

@@ -1688,6 +1688,29 @@ because   AM-5 is the later decision, made for the Governor's screen; the server
 goal      S5-1 — unchanged
 ```
 
+```
+AM-10 · 2026-11-08 · WS7 (build: S5-PR-2; the lead's ruling) · the engine counts passed tax overrules from the RC
+
+target    S5-C6's hold; S5-C15's count (politics.overruled)
+said      the count was after-RC (S5-C15), but the RC's hold needs to see an earlier month's pass
+did       the engine counts passed tax overrules from the RC, in politics.overruled, and a new term (every election,
+          a re-elected Governor's included) resets it to 0. No snap election: S5-C15's snap stays after RC. The AI
+          Governor reads the count (obs.politics.overruled > 0) and holds its tax and budget
+because   the implementer found openPlanning clears `overrule` each month, so a hand could only remember a pass in
+          memory, which is lost if it is rebuilt
+goal      S5-1 — unchanged
+```
+
+```
+AM-11 · 2026-11-08 · WS7 (build: S5-PR-2's logic review, I1 and I2) · the AI Governor keeps no share back; Projects takes the rest
+
+target    §2 S5-RULE-11 (fill), S5-T-AC-13
+said      projects "starts at the share that covers the open buildings", and a fill step costs nothing "while projects would stay above its covering share", which read as if the AI kept the rest in the fund
+did       Projects takes every share the base and the fill leave, and never less than its covering share: projects = max(cover, 100 − the other lines). There is no "kept" from the AI. Each fill step comes from Projects, and its cost is the drop in lineWorth(projects). WS1's §3.2 contract makes that drop flat above the covering share (what Projects is worth is the months it brings forward), so the cost is 0 there, as the old wording meant. Each other line takes min(its base, its maxShare, what is left after the covering share and the lines before it), so the split is always exactly 100
+because   under AM-7 the Projects share is a ceiling, so a share no building needs stays in the fund anyway. Giving it to Projects means a building opened later in the month is not short. That serves S5-UBER-AC-1 (buildings per game)
+goal      S5-1, unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change:

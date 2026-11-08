@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AI_LEVELS, EVENT_SHOW, GAME, LOTS, RuleError, WALK } from '@mule/engine';
+import { AI_LEVELS, EVENT_SHOW, GAME, LOTS, POLITICS, RuleError, setSalesTax, WALK, type GameState } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext } from '@tabletop/core';
 import { AI_NAMES, DEFAULT_AI_LEVEL, MuleGame } from '../src/mule-game.js';
@@ -36,6 +36,8 @@ const GOODS_AUCTION_MS = WALK.order.length * (SIDE_PICK_MS + WALK.goodMs / WALK.
 /** The land auction at its slowest: every lot of the month and the colony's plot, each run to its late-change cap. */
 const LAND_AUCTION_MS = (LOTS.maxLotsPerMonth + 1) * (LOTS.introMs + LOTS.walkMs + LOTS.lateCapMs + LOTS.resultMs);
 const AIS = 4;
+/** What a politics table's planning may hold past the host's press: the election with its show, the law ballot, the overrule vote. A generous bound; month 2's overrule is held to its own tighter one. */
+const POLITICS_VOTES_MS = 120_000;
 
 let rooms: Room<MuleIntent, MuleView>[];
 
@@ -67,10 +69,12 @@ interface PhaseLived {
  * up to its cap. The phases with no clock wait for the host's press. A phase not named here with no clock in the view
  * may run no longer than the longest one, the goods auction.
  */
-function legalMs(phase: string, view: MuleView): number | null {
+function legalMs(phase: string, view: MuleView, politics = false): number | null {
   const show = EVENT_SHOW.capMs;
   switch (phase) {
     case 'planning':
+      // With politics on, planning also holds the month's votes, each at the speed of its slowest voter (S5-C7).
+      return HOST_PRESSES_AFTER_MS + show + (politics ? POLITICS_VOTES_MS : 0);
     case 'upkeep':
       return HOST_PRESSES_AFTER_MS + show;
     case 'landGrant':
@@ -94,11 +98,11 @@ function stalledBy(p: PhaseLived): boolean {
  * its players (planning, the month end), HOST_PRESSES_AFTER_MS in; everything else ends on its own clock or the AI
  * seats' moves. Returns every phase it lived, and the first that stalled.
  */
-async function playKeyless(seed: number, months: number): Promise<{ finished: boolean; phases: PhaseLived[]; stalled: PhaseLived | null }> {
+async function playKeyless(seed: number, months: number, options: { politics?: boolean; step?: Step } = {}): Promise<{ finished: boolean; phases: PhaseLived[]; stalled: PhaseLived | null }> {
   let game: MuleGame | null = null;
   const room = new Room<MuleIntent, MuleView>({
     code: CODE,
-    createGame: (ctx: GameContext) => (game = new MuleGame(ctx, seed, { maxMonths: months })),
+    createGame: (ctx: GameContext) => (game = new MuleGame(ctx, seed, { maxMonths: months, ...(options.politics ? { politics: true } : {}) })),
     aiNames: AI_NAMES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
   });
@@ -111,7 +115,7 @@ async function playKeyless(seed: number, months: number): Promise<{ finished: bo
 
   // A finished game's room is disposed at once: twenty live rooms on one fake clock would each tick on every step.
   try {
-    return await playToTheEnd(() => game!.viewFor(null), send);
+    return await playToTheEnd(() => game!.viewFor(null), send, { politics: options.politics, step: options.step && ((view, ms) => options.step!(view, ms, send, (game as unknown as { state: GameState }).state)) });
   } finally {
     room.dispose();
     rooms.splice(rooms.indexOf(room), 1);
@@ -119,7 +123,10 @@ async function playKeyless(seed: number, months: number): Promise<{ finished: bo
 }
 
 /** Steps the fake clock until the game is over or a phase stalls; `send` is the host's line to the room. */
-async function playToTheEnd(now: () => MuleView, send: (msg: ClientEnvelope<MuleIntent>) => void): Promise<{ finished: boolean; phases: PhaseLived[]; stalled: PhaseLived | null }> {
+/** A scripted host move at each step of the loop: the view, how long the phase has been open, the host's line to the room, and the game's state to arrange. */
+type Step = (view: MuleView, phaseMs: number, send: (msg: ClientEnvelope<MuleIntent>) => void, state: GameState) => void;
+
+async function playToTheEnd(now: () => MuleView, send: (msg: ClientEnvelope<MuleIntent>) => void, options: { politics?: boolean; step?: (view: MuleView, phaseMs: number) => void } = {}): Promise<{ finished: boolean; phases: PhaseLived[]; stalled: PhaseLived | null }> {
   const lived = (month: number, phase: string): PhaseLived => ({ month, phase, ms: 0, overrunMs: 0, sidePick: null });
   const phases: PhaseLived[] = [];
   let current = lived(now().month, now().phase);
@@ -133,9 +140,10 @@ async function playToTheEnd(now: () => MuleView, send: (msg: ClientEnvelope<Mule
       continue;
     }
     current.ms += STEP_MS;
-    const legal = legalMs(phase, view);
+    const legal = legalMs(phase, view, options.politics);
     const over = phaseEndsAt !== null ? Date.now() - phaseEndsAt : current.ms - (legal ?? GOODS_AUCTION_MS + EVENT_SHOW.capMs);
     current.overrunMs = Math.max(current.overrunMs, over);
+    options.step?.(view, current.ms);
     if ((phase === 'planning' || phase === 'upkeep') && current.ms >= HOST_PRESSES_AFTER_MS) send({ t: 'intent', intent: { type: 'ready' } });
     // A good's side pick: the host presses Ready once, HOST_PRESSES_AFTER_MS after any event show lets it; the AI seats must do the rest.
     const pick = phase === 'auction' && view.auction?.stage === 'status' ? view.auction.good : null;
@@ -180,4 +188,36 @@ describe('G-2 keyless: AI seats never stall a game with the key unset', () => {
     expect(stalls, stalls.join('; ')).toEqual([]);
     expect(sdkModule.built).toEqual([]);
   }, 30 * 60_000);
+});
+
+describe('S5-C7 keyless: AI seats never stall the overrule ballot', () => {
+  it('UBER-AC-2 (S5, key unset, server): a table of four AI seats and a host, a called tax overrule in month 2 ends by itself, with no Continue, and the game reaches gameOver', async () => {
+    expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+    let armed = false;
+    let sawBallot = false;
+    let ballotMs = 0;
+    const step: Step = (view, phaseMs, send, state) => {
+      const overrule = view.politics?.overrule;
+      if (overrule?.stage === 'ballot') {
+        sawBallot = true;
+        ballotMs += STEP_MS;
+      }
+      // Month 2, once its votes are over and the AI hands have had their say: an AI Governor raises the tax (Heiko, the host, may not be Governor) and Heiko calls it.
+      if (armed || view.month !== 2 || view.phase !== 'planning' || phaseMs < 1_500 || !view.politics || state.politics!.election || state.politics!.council?.stage === 'ballot') return;
+      const ai = state.players.find((p) => p.isAi)!.id;
+      state.politics!.governor = ai;
+      setSalesTax(state, ai, Math.round(state.treasury.salesTax * 100) + 3);
+      send({ t: 'intent', intent: { type: 'callOverrule', target: 'tax' } });
+      armed = true;
+    };
+    const { finished, phases, stalled } = await playKeyless(101, 3, { politics: true, step });
+    expect(stalled, `stalled: ${JSON.stringify(stalled)}`).toBeNull();
+    expect(finished).toBe(true);
+    expect(armed, 'the call was made').toBe(true);
+    expect(sawBallot, 'the ballot opened').toBe(true);
+    // Open from the host's Ready to the end of the reveal: the AI seats' reaction and the reveal, never an unanswered wait.
+    expect(ballotMs, 'the ballot closed on its own').toBeLessThanOrEqual(SLACK_MS * 2 + POLITICS.overrule.revealMs);
+    expect(phases.find((p) => p.month === 2 && p.phase === 'planning')!.ms).toBeLessThanOrEqual(HOST_PRESSES_AFTER_MS + EVENT_SHOW.capMs + SLACK_MS * 2 + POLITICS.overrule.revealMs + POLITICS_VOTES_MS);
+    expect(sdkModule.built).toEqual([]);
+  }, 60_000);
 });
