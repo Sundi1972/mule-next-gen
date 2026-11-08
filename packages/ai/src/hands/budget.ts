@@ -45,11 +45,13 @@ export class BudgetHand {
     const base = POLITICS.ai.budget.base[this.mind.personaId as AiPersonaId];
     const others = lines.filter((l) => l !== 'projects');
     const shares: Shares = { projects: 0, welfare: 0, security: 0 };
-    for (const l of others) shares[l as Exclude<BudgetLine, 'projects'>] = Math.min(base[l as Exclude<BudgetLine, 'projects'>], POLITICS.budget[l].maxShare);
-    // Whatever the base asks, the open buildings keep their covering share.
-    for (const l of others) shares[l] = Math.min(shares[l], PERCENT - cover);
-    const taken = () => others.reduce((sum, l) => sum + shares[l], 0);
-    shares.projects = Math.max(cover, PERCENT - taken());
+    // Each line takes its base against what the covering share and the lines before it leave; Projects takes the rest (AM-11).
+    let remaining = PERCENT - cover;
+    for (const l of others) {
+      shares[l] = Math.min(base[l as Exclude<BudgetLine, 'projects'>], POLITICS.budget[l].maxShare, remaining);
+      remaining -= shares[l];
+    }
+    shares.projects = cover + remaining;
     if (this.mind.levelId !== 'rookie') this.fill(obs, shares, others, cover, credits, step);
     const now = budgetShares(obs);
     if (lines.every((l) => shares[l] === now[l])) return false;
@@ -65,15 +67,13 @@ export class BudgetHand {
     return Math.min(PERCENT, Math.ceil((need * PERCENT) / room / step) * step);
   }
 
-  /** One step at a time to the line whose worth gain, tilted by the persona, beats what the step costs Projects; the kept share is free. */
+  /** One step at a time to the line whose worth gain, tilted by the persona, beats what the step takes from Projects (AM-11: every step comes from Projects, down to its covering share). */
   private fill(obs: GameState, shares: Shares, others: BudgetLine[], cover: number, credits: (l: BudgetLine, share: number) => number, step: number): void {
     const me = this.mind.me;
     const tilt = POLITICS.ai.budget.tilt[this.mind.personaId as AiPersonaId];
     for (;;) {
-      const used = others.reduce((sum, l) => sum + shares[l], 0) + shares.projects;
-      const fromProjects = used + step > PERCENT;
-      if (fromProjects && shares.projects - step < cover) return;
-      const cost = fromProjects ? lineWorth(obs, me, 'projects', credits('projects', shares.projects)) - lineWorth(obs, me, 'projects', credits('projects', shares.projects - step)) : 0;
+      if (shares.projects - step < cover) return;
+      const cost = lineWorth(obs, me, 'projects', credits('projects', shares.projects)) - lineWorth(obs, me, 'projects', credits('projects', shares.projects - step));
       let best: { line: BudgetLine; net: number } | null = null;
       for (const l of others) {
         if (shares[l] + step > POLITICS.budget[l].maxShare) continue;
@@ -83,7 +83,7 @@ export class BudgetHand {
       }
       if (best === null) return;
       shares[best.line] += step;
-      if (fromProjects) shares.projects -= step;
+      shares.projects -= step;
     }
   }
 }
