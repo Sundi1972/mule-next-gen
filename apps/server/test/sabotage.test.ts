@@ -416,6 +416,9 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
       id: voidId, month: 1, kind: 'powerCut', victim: null, at: { x, y }, good: null, worked: false, culprit: 'brix', how: null, investigated: false, fine: null, public: false, outcome: 'void',
     });
     expect(w.game.viewFor('brix').me!.politics!.sabotage!.owed, 'a void order is not charged').toBe(0);
+    // The entry is frozen at the void: a MULE put back on the plot later does not give it a crop.
+    w.state.tiles[w.ossaPlot]!.outfit = 'energy';
+    expect(w.game.viewFor('brix').me!.politics!.sabotage!.mine.find((o) => o.id === voidId)!.good, 'the void entry keeps the crop it had at the void').toBeNull();
     for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news.join(' '), String(viewer)).not.toMatch(/Ossa's .* plot\.$|void/);
   });
 
