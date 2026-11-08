@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, cloneForSim, createGame, exportDemand, HEALTH, monthlyDemand, POLLUTION, RECIPES, UPKEEP, type GameState } from '../src/index.js';
+import { advancePhase, cloneForSim, colonistMedicineNeed, createGame, exportDemand, HEALTH, monthlyDemand, POLLUTION, RECIPES, UPKEEP, type GameState } from '../src/index.js';
 import { game, to, worked } from './fixtures/food-month.js';
 import { withHealth, withoutHealth } from './health-switch.js';
 
@@ -124,5 +124,59 @@ describe("needs C13: the colonists' Medicine demand reads colony health (RULE-11
       expect(colonistsMedicine(0, 0), 'h 0: today\'s').toBeCloseTo(today, 9);
     });
     expect(withoutHealth(() => colonistsMedicine(HEALTH.cap, SMOG)), "health off in dirty air: today's dirty-air demand").toBeCloseTo(today * POLLUTION.sickMedicineDemand, 9);
+  });
+});
+
+describe("needs C13: the store's demand is players + crews + colonists (RULE-11)", () => {
+  /** 4 seats each working 3 farms and a well, 100 colonists, Food posted at 300, the month as the store posts it. */
+  function farmers(): GameState {
+    const state = createGame({ seed: 7, players: ['p0', 'p1', 'p2', 'p3'].map((id) => ({ id, name: id, isAi: false })) });
+    const free = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+    state.players.forEach((p, i) => {
+      (['food', 'food', 'food', 'water'] as const).forEach((outfit, k) => Object.assign(free[i * 4 + k]!, { owner: p.id, outfit }));
+    });
+    state.colonists = 100;
+    state.store.posted.food = 300;
+    state.monthEvents = [];
+    return state;
+  }
+  const festival = (units: number) =>
+    ({ key: 'festival', effects: [{ on: 'store', what: 'food', delta: units }] }) as unknown as GameState['monthEvents'][number];
+
+  it('needs B-AC-12: 4 seats of "3 farms + well" and 100 colonists, Food posted at 300, give a store Food demand of 17', () => {
+    const state = farmers();
+    expect(exportDemand(state).food, 'the premise: no ship wants Food').toBe(0);
+    // 4 seats × (2 + ⌈4 × ¼⌉) + 100 ÷ 20, at any price: no wage cap.
+    expect(monthlyDemand(state).food).toBe(17);
+  });
+
+  it('needs B-AC-12 (negative): a festival month adds its Food on top', () => {
+    const state = farmers();
+    state.monthEvents = [festival(2)];
+    expect(monthlyDemand(state).food).toBe(19);
+  });
+
+  const DIRTY = POLLUTION.bands.find((b) => b.name === 'smoggy')!.from;
+
+  /** The players' part of the store's Medicine demand: all of it but the colonists' need and the export ship's take. */
+  function playersMedicine(sick: number, air = 0): number {
+    const state = createGame({ seed: 7, politics: true, players: ['p0', 'p1', 'p2', 'p3'].map((id) => ({ id, name: id, isAi: false })) });
+    state.colonists = 400;
+    state.colony!.sick = sick;
+    state.air = air;
+    for (const p of state.players) p.stock.medicine = 0;
+    // Dirty air multiplies the colonists' need, never the crews' cure.
+    const airFactor = air >= DIRTY ? POLLUTION.sickMedicineDemand : 1;
+    return monthlyDemand(state).medicine - colonistMedicineNeed(state) * airFactor - exportDemand(state).medicine;
+  }
+
+  it("needs B-AC-12 (the Medicine case): health on, h 0.3, 4 seats holding no Medicine: the crews' cure adds 4; health off, today's", () => {
+    expect(withoutHealth(() => playersMedicine(0.3)), 'health off: no crew falls sick').toBeCloseTo(0, 9);
+    withHealth(() => {
+      expect(0.3, 'the premise: h at or over crewSickFrom').toBeGreaterThanOrEqual(HEALTH.crewSickFrom);
+      expect(playersMedicine(0.3)).toBeCloseTo(4, 9);
+      expect(playersMedicine(0.3, DIRTY), 'in dirty air the cure is still 1 a seat: the air factor is the colonists\'').toBeCloseTo(4, 9);
+      expect(playersMedicine(0), "h 0: no crew falls sick, today's").toBeCloseTo(0, 9);
+    });
   });
 });

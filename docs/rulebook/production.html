@@ -162,13 +162,13 @@
 <tr><td>Smithore mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
 <tr><td>Crystite mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
 <tr><td>Rare earth mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
-<tr><td>Alloy smelter</td><td class="n">2</td><td class="n">2</td><td>1 next to your own Smithore mine (a feeder)</td></tr>
-<tr><td>Electronics works</td><td class="n">1</td><td class="n">1</td><td>0 next to your own Rare earth mine or Alloy smelter</td></tr>
-<tr><td>Medicine lab</td><td class="n">1</td><td class="n">1</td><td>0 next to your own farm or well</td></tr>
+<tr><td>Alloy smelter</td><td class="n">3</td><td class="n">2</td><td>Its recipe's 2 and a running 1; 2 next to your own Smithore mine (a feeder)</td></tr>
+<tr><td>Electronics works</td><td class="n">3</td><td class="n">1</td><td>Its recipe's 1 and a running 2; 2 next to your own Rare earth mine or Alloy smelter</td></tr>
+<tr><td>Medicine lab</td><td class="n">2</td><td class="n">1</td><td>Its recipe's 1 and a running 1; 1 next to your own farm or well</td></tr>
 <tr><td>Green belt</td><td class="n">0</td><td class="n">0</td><td>Grows nothing, uses nothing</td></tr>
 </tbody></table></div>
 <div class="box next"><h4>Still to design: are these the right numbers?</h4>
-<p>Heiko asked for the Energy use per plot type and per factory to be designed. The table is the earlier set plus the new 1 for Energy plants. It is the starting proposal, not a final balance. Every number is a named setting (<code>UPKEEP.energyUse</code> for farms, wells, plants and mines, and each factory's recipe), so it can change without touching the rules.</p>
+<p>Heiko asked for the Energy use per plot type and per factory to be designed. The table is the earlier set plus the new 1 for Energy plants. It is the starting proposal, not a final balance. Every number is a named setting (<code>CONSUMPTION</code> for every kind of plot, and each factory's recipe), so it can change without touching the rules.</p>
 <p>Measured with the rule as built, the computer players pricing Energy by it (40 simulated games on each of seeds 1, 101 and 201 with politics on, and seed 1 with politics off; 5 Nov). Each cell gives the range over the four runs.</p>
 <div class="table-wrap"><table>
 <thead><tr><th></th><th class="n">Old rule</th><th class="n">Now</th></tr></thead>
@@ -184,13 +184,13 @@
 <p>The 20% output does most of the extra damage; an earlier run with plants using 0 cut nearly as many player months. Shortages bite harder and Energy gets dearer: these are the numbers the balance work starts from.</p></div>
 
 <h3 id="factory-energy">What factories need</h3>
-<p>A factory turns goods from your own stock into something worth more. Each run takes its inputs and its Energy together.</p>
+<p>A factory turns goods from your own stock into something worth more. Each run takes its inputs and its Energy together: its recipe's Energy and a running draw on top (see <a href="#plot-consumption">What each kind of plot uses</a>).</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Factory</th><th>Takes per run</th><th class="n">Energy</th><th class="n">Makes</th></tr></thead>
+<thead><tr><th>Factory</th><th>Takes per run</th><th class="n">Energy: recipe + running</th><th class="n">Makes</th></tr></thead>
 <tbody>
-<tr><td>Alloy smelter</td><td>2 Smithore (and 1 Water)</td><td class="n">2</td><td class="n">2 Alloy</td></tr>
-<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy (and 1 Water)</td><td class="n">1</td><td class="n">1 Electronics</td></tr>
-<tr><td>Medicine lab</td><td>1 Food (and 1 Water)</td><td class="n">1</td><td class="n">2 Medicine</td></tr>
+<tr><td>Alloy smelter</td><td>2 Smithore (and 1 Water)</td><td class="n">2 + 1 = 3</td><td class="n">2 Alloy</td></tr>
+<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy (and 1 Water)</td><td class="n">1 + 2 = 3</td><td class="n">1 Electronics</td></tr>
+<tr><td>Medicine lab</td><td>1 Food (and 1 Water)</td><td class="n">1 + 1 = 2</td><td class="n">2 Medicine</td></tr>
 </tbody></table></div>
 <p>Ground, a neighbouring factory of the same kind, experience and relics can raise what a factory makes; see <a href="#factories">Factories and recipes</a>. Under the new rule:</p>
 <ul>
@@ -221,7 +221,7 @@
 <p>Result: farms 3 and 4, mines 1 and 1. Under the old rule the farms' place on the map decided it, and farm B made only 2.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: the biggest users stop first, so a shortage is predictable and the cheap staples keep running, and a plant that pays its own Energy makes Energy a real cost of every estate. The PM settled the details on 5 Nov: plants pay from their own output and are never turned off; ties go by value; factories in the same list; inputs rounded up so nothing is made from nothing; no experience while off.</p></div>
 <p>The phone and the TV show a turned-off plot with a red "20%" badge and the Energy icon, and the words "Turned off: not enough Energy (20%)". The computer players price a missing unit of Energy at what the plot it keeps on would lose turned off: 80% of that plot's output at the store's price, spread over the plot's use.</p>
-<p class="code-ref">In the code: <code>packages/engine/src/production.ts::energyOffOrder</code>, <code>::runProduction</code>, <code>::monthNeeds</code> · <code>economy.ts::playersUse</code> · <code>packages/ai/src/value.ts::unitValues</code> · <code>config.ts::UPKEEP.energyUse</code>, <code>UPKEEP.offOutputShare</code>, <code>RECIPES</code>, <code>FACTORY.feederEnergySaving</code> · spec <code>ws1-balance</code> AM-17</p>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::energyOffOrder</code>, <code>::runProduction</code>, <code>::monthNeeds</code> · <code>economy.ts::playersUse</code> · <code>packages/ai/src/value.ts::unitValues</code> · <code>config.ts::CONSUMPTION</code>, <code>UPKEEP.offOutputShare</code>, <code>RECIPES</code>, <code>FACTORY.feederEnergySaving</code> · spec <code>ws1-balance</code> AM-17</p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
 <h2 id="energy-turn-off">How the Energy rule changed on 5 November <span class="pill built">In the game</span></h2>
@@ -246,7 +246,7 @@
 <p>Heiko set this on 5 November: Water is a base resource like Food and Energy, so every plot uses some, not only farms. In his words: "Each plott should conusme some water. water is like food and energy a base ressource we msut ensure that this is reflected . not that only food plots need water".</p>
 <div class="box"><h4>The rules</h4>
 <ol>
-<li><strong>Your household and crew drink first</strong>, as today. Your plots get only the Water left after this month's drinking.</li>
+<li><strong>Your household drinks first</strong>, as today. Your plots get only the Water left after this month's drinking. Your crews drink nothing of their own: their Water is the plot's.</li>
 <li><strong>Every working plot uses Water</strong>: Food farms 2 ("crops drink most"), every other plot 1.</li>
 <li><strong>Energy is settled first, then Water.</strong> After any Energy cuts, if your Water can't cover the plots still running, the biggest Water user is turned off first, then the next, until the rest fit. A plot is never cut twice.</li>
 <li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy. Its line in the month's report is filed as <code>waterOff</code>, Water's twin of <code>energyOff</code>; the TV and phone show it as "Turned off: not enough Water (20%)", a red "20%" with the Water icon.</li>
@@ -271,11 +271,11 @@
 <p class="owner">Status: Being built &mdash; WS1, PR-5b (AM-18), on · Kept current by: the Balance team (WS1).</p>
 
 <h2 id="water-shortage">Short of Water today, until the new rule lands: farms make half <span class="pill built">In the game</span></h2>
-<p><strong>Replaced by <a href="#water-use">Water: every plot uses it</a> on the colony-economy branch (PR-5); still the rule on trunk until that branch lands.</strong> Food farms need irrigation. When production starts, the game compares the Water you hold with the Water your household and crew need this month (see <a href="#upkeep-and-crew">Upkeep and crew</a>). If you hold less, every one of your Food farms makes half, rounded down. This comes on top of any Energy shortfall: a farm short of both makes a quarter, rounded down at each step.</p>
+<p><strong>Replaced by <a href="#water-use">Water: every plot uses it</a> on the colony-economy branch (PR-5); still the rule on trunk until that branch lands.</strong> Food farms need irrigation. When production starts, the game compares the Water you hold with the Water your household needs this month (see <a href="#upkeep-and-crew">Upkeep and crew</a>). If you hold less, every one of your Food farms makes half, rounded down. This comes on top of any Energy shortfall: a farm short of both makes a quarter, rounded down at each step.</p>
 <ul>
 <li>Only Food farms are irrigated. Wells, Energy plots and mines don't care about Water.</li>
 <li>The check is made once, before any plot runs. Water your wells make this month counts for next month.</li>
-<li>The Water is not taken at this point. You pay it at the month end, when your household and crew drink.</li>
+<li>The Water is not taken at this point. You pay it at the month end, when your household drinks.</li>
 </ul>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko's ruling of 21 October 2026 (economy design): "Short of Water, your Food farms make half, because they can't irrigate." It makes Water a real need for a Food grower and gives wells a reason to exist beyond the colonists' demand.</p></div>
 <p class="code-ref">In the code on trunk: <code>packages/engine/src/production.ts::runProduction</code> (the <code>dry</code> set) · <code>config.ts::UPKEEP.irrigated</code>, <code>UPKEEP.shortOutputShare</code> (on the colony-economy branch these are the AM-18-off path only, used when <code>UPKEEP.waterUse.food</code> is 0)</p>
@@ -324,26 +324,18 @@
 <p class="owner">Built by WS5 (PR-8) in the Balance team's (WS1) config; kept current by WS1.</p>
 
 <h2 id="upkeep-and-crew">Upkeep and crew <span class="pill built">In the game</span></h2>
-<p>Every plot you work has a crew, and your household and crew eat and drink at the month end. A bigger estate costs more to feed.</p>
-<div class="table-wrap"><table>
-<thead><tr><th>Plot</th><th class="n">Crew</th></tr></thead>
-<tbody>
-<tr><td>Farm, well, Energy plot or mine</td><td class="n">1</td></tr>
-<tr><td>Factory</td><td class="n">2</td></tr>
-<tr><td>Green belt</td><td class="n">0</td></tr>
-</tbody>
-</table></div>
+<p>Every plot you work has a crew, and your household and crews eat at the month end. A bigger estate costs more to feed.</p>
 <ul>
-<li><strong>Food a month:</strong> <span class="num">2</span> for you, plus 1 for every <span class="num">4</span> crew or part of 4.</li>
-<li><strong>Water a month:</strong> <span class="num">1</span> for you, plus 1 for every <span class="num">6</span> crew or part of 6.</li>
+<li><strong>Food a month:</strong> <span class="num">2</span> for you, plus what each of your plots' crews eats (see <a href="#plot-consumption">What each kind of plot uses</a>), summed and rounded up once.</li>
+<li><strong>Water a month:</strong> <span class="num">1</span> for you. Your crews drink nothing of their own: each plot takes its Water as it produces (see <a href="#water-use">Water: every plot uses it</a>).</li>
 </ul>
-<p>At the month end both are taken from your depot; if you don't have enough, you go down to 0. Being short of Food shows up at the next development, where a hungry colonist walks slower (see <a href="development.html">Development</a>). Being short of Water shows up at the next production, where your farms make half. Energy is not part of upkeep: your plots paid it during production.</p>
-<div class="box example"><h4>Example: what an estate eats</h4><p>Five raw plots and one factory: a crew of 5 + 2 = 7. Food: 2 + 2 (7 crew is one full 4 and part of another) = <span class="num">4</span>. Water: 1 + 2 = <span class="num">3</span>. To keep your farms irrigated next month you need to hold 3 Water when production starts.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/production.ts::crewOf</code>, <code>::needsOf</code> · <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP</code> (<code>baseFood</code>, <code>baseWater</code>, <code>crewPerFood</code>, <code>crewPerWater</code>, <code>crew</code>)</p>
+<p>At the month end both are taken from your depot; if you don't have enough, you go down to 0. Being short of Food shows up at the next development, where a hungry colonist walks slower (see <a href="development.html">Development</a>), and at the next production, where crews left short make less (see <a href="#crew-shortfall">A crew left short makes less</a>). Energy is not part of upkeep: your plots paid it during production.</p>
+<div class="box example"><h4>Example: what an estate eats</h4><p>Five farms and an Alloy works: Food 2 + (5 × ¼ + ½ = 1¾, rounded up to 2) = <span class="num">4</span>. Water: <span class="num">1</span>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::needsOf</code> · <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP</code> (<code>baseFood</code>, <code>baseWater</code>), <code>CONSUMPTION</code></p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
-<h2 id="plot-consumption">What each kind of plot uses <span class="pill designed">Designed, not in the game yet, WS5</span></h2>
-<p><strong>Not in the game yet.</strong> Heiko approved this on 6 Nov with the whole colony economy. In his words: "the key demand comes from players supporting production and their crews, so more crews means more Food demand", and each kind of production uses different amounts of Food, Water and Energy. It replaces the crew count above (1 per plot, 2 per factory) with one table.</p>
+<h2 id="plot-consumption">What each kind of plot uses <span class="pill built">In the game</span></h2>
+<p>Heiko approved this on 6 Nov with the whole colony economy. In his words: "the key demand comes from players supporting production and their crews, so more crews means more Food demand", and each kind of production uses different amounts of Food, Water and Energy. It replaced the old crew count (1 per plot, 2 per factory) with one table.</p>
 <div class="box next"><h4>Ships as one package</h4><p>Heiko's decision 1 (6 Nov): the colonists' hardship and sickness ship together with the Food and Medicine supply change, tuned in one pass, so players first meet hardship in a colony that can be fed. This table is part of that pass.</p></div>
 <p>Your household still eats <span class="num">2</span> Food and drinks <span class="num">1</span> Water a month. On top of that, every plot you work uses this much a month. Water is not in this table: each plot's Water is a production input, taken as it produces (see <a href="#water-use">Water: every plot uses it</a>).</p>
 <div class="table-wrap"><table>
@@ -363,30 +355,31 @@
 </table></div>
 <ul>
 <li><strong>Quarters add up once.</strong> Your plots' Food quarters are summed across your whole estate and rounded up once, so three farms don't pay three round-ups.</li>
-<li><strong>Energy.</strong> Farms, wells, plants and mines use what they use today (see <a href="#energy-use-table">the Energy table</a>). A works or lab now burns a running draw on top of its recipe's Energy. A plant still pays its own use from its own output.</li>
+<li><strong>Energy.</strong> Farms, wells, plants and mines use what they used before (see <a href="#energy-use-table">the Energy table</a>). A works or lab burns a running draw on top of its recipe's Energy, and a works short of the whole of it is turned off. A plant still pays its own use from its own output.</li>
 <li><strong>Crews eat from your own stock, never from the store.</strong> Feeding your crews or selling the Food stays your choice. The store sees your crews only as demand (see <a href="store-and-prices.html#colony-demand">the demand the store counts</a>).</li>
 </ul>
-<div class="box example"><h4>Example: three estates, today and designed (Food a month)</h4>
+<div class="box example"><h4>Example: three estates, before and now (Food a month)</h4>
 <div class="table-wrap"><table>
-<thead><tr><th>Estate</th><th class="n">Today</th><th class="n">Designed</th></tr></thead>
+<thead><tr><th>Estate</th><th class="n">Before</th><th class="n">Now</th></tr></thead>
 <tbody>
 <tr><td>Three farms and a well</td><td class="n">3</td><td class="n">3</td></tr>
 <tr><td>Two Smithore mines, a Crystite mine and a power plant</td><td class="n">3</td><td class="n">4</td></tr>
 <tr><td>An Alloy works, an Electronics works and two Smithore mines</td><td class="n">4</td><td class="n">4</td></tr>
 </tbody>
 </table></div>
-<p>Three farms and a well: Food 2 + (¼ + ¼ + ¼ + ¼ = 1) = <span class="num">3</span>. The works estate's Energy rises from 7 to 10. Food stays at about today's amount; the plots' Water comes from <a href="#water-use">the Water rule</a>.</p></div>
+<p>Three farms and a well: Food 2 + (¼ + ¼ + ¼ + ¼ = 1) = <span class="num">3</span>. The works estate's Energy rises from 7 to 10. Food stays at about the old amount; each household drinks 1 Water, and the plots' Water comes from <a href="#water-use">the Water rule</a>.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko asked that each kind of plot has its own appetite. The table keeps Food at today's rate on average, because the colony is already short of Food: measured on ten simulated games, doubling what crews eat cut the colony's Food from 14.8 to 4.8 a month and left 64 colonists of 100 instead of 74. Heiko agreed (decision 5): crews eat more only in the same pass as the power supply.</p></div>
 <div class="box why"><h4>Why it has no Water column</h4><p>This table first had a Water column too, drunk at the month end, while <a href="#water-use">the Water rule</a> (5 Nov) already gave each plot Water taken as it produces. Built together, a farm would have drawn Water twice and a short plot would have been both turned off and slowed. The PM ruled on 7 Nov (for Heiko to verify) that Water is one production input, the Water rule's: farms 2, every other plot 1, factories through their recipe. This table keeps Food. Both of Heiko's rulings stand: every plot uses Water, and each kind uses a different amount.</p></div>
-<p class="code-ref">Spec: <code>docs/specs/2026-11-06-colony-needs.md</code>, WS5's C10 to C12 · <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a> · code it changes: <code>production.ts::needsOf</code>, <code>::energyUseOf</code> · <code>config.ts::UPKEEP</code> · the computer players' <code>value.ts</code></p>
-<p class="owner">Designed, not in the game yet, WS5. Built as named edits in the Balance team's (WS1) production and config code.</p>
+<div class="box next"><h4>What is changing</h4><p>The computer players still price a plot's crew by the old count (1 per plot, 2 per factory). The Balance team's (WS1) next PR switches them to this table, through the same engine rule the game uses.</p></div>
+<p class="code-ref">In the code: <code>config.ts::CONSUMPTION</code> · <code>production.ts::needsOf</code>, <code>::needsWith</code>, <code>::energyUseOf</code>, <code>::runProduction</code> · <code>economy.ts::playersUse</code> · spec <code>docs/specs/2026-11-06-colony-needs.md</code>, WS5's C10 to C13 with AM-3 · <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a></p>
+<p class="owner">Kept current by: the Maps team (WS5). Built as named edits in the Balance team's (WS1) production, config and economy code.</p>
 
 <h2 id="crew-shortfall">A crew left short makes less <span class="pill built">In the game</span></h2>
-<p>Your crews eat and drink at the month end, after your household, from your stock. Next month every plot you work but your Energy plants makes a share of its output set by how short they went, rounded half up, and the month's report names the cut on each plot. Production runs before the month's market, so a crew can only be fed from what you kept back.</p>
+<p>Your crews eat at the month end, after your household, from your stock. Next month every plot you work but your Energy plants makes a share of its output set by how short they went, rounded half up, and the month's report names the cut on each plot. Production runs before the month's market, so a crew can only be fed from what you kept back.</p>
 <ul>
-<li><strong>Last month's meal.</strong> Your household eats its <span class="num">2</span> Food and drinks its <span class="num">1</span> Water first; your crews take what they need of the rest (<a href="#upkeep-and-crew">Upkeep and crew</a>). What they went without, as a share of their need, is what counts. With no crew, nothing is short.</li>
+<li><strong>Last month's meal.</strong> Your household eats its <span class="num">2</span> Food and drinks its <span class="num">1</span> Water first; your crews take the Food they need of the rest (<a href="#upkeep-and-crew">Upkeep and crew</a>). What they went without, as a share of their need, is what counts. With no crew, nothing is short.</li>
 <li><strong>The curve.</strong> Up to a tenth short costs nothing. Past that the cost grows faster than the shortfall, down to half output with nothing to eat (<code>UPKEEP.crewDrop</code> = <span class="num">0.5</span>). It is the same curve the colonists' mood uses, so one rule reads every shortage (see <a href="colony-and-politics.html#severity">How short they went</a>).</li>
-<li><strong>Food and Water.</strong> The crews' drink at the month end counts the same way, and the two multiply: crews who went without both make a quarter. The Water each plot uses as it produces is a separate rule (see <a href="#water-use">the Water rule</a>).</li>
+<li><strong>Food only.</strong> Your crews drink nothing of their own, so only their Food counts here. A plot short of Water is turned off as it produces instead (see <a href="#water-use">the Water rule</a>), so it is never cut twice for the same Water.</li>
 <li><strong>Before any turn-off.</strong> A plot turned off for want of Energy or Water makes its share of the reduced output.</li>
 <li><strong>Energy plants keep running</strong> at full output.</li>
 <li><strong>The farm's dry rule</strong> plays only with plot Water switched off (see <a href="#water-shortage">Short of Water</a>); with it on, the default, a farm's irrigation is its Water use of 2.</li>
@@ -397,11 +390,9 @@
 <tr><td>A tenth or less of their Food</td><td class="n">all of it</td></tr>
 <tr><td>Half their Food</td><td class="n">85%</td></tr>
 <tr><td>All their Food</td><td class="n">50%</td></tr>
-<tr><td>All their Food and all their Water</td><td class="n">25%</td></tr>
 </tbody>
 </table></div>
-<div class="box example"><h4>Example</h4><p>Mara's crews got half their Food last month and all their Water. This month each of her plots makes about 85% of its output (0.852), rounded half up: a farm that would make 4 makes <span class="num">3</span> (3.41), a mine that would make 3 makes <span class="num">3</span> (2.56), a well that would make 10 makes <span class="num">9</span> (8.52). Her Energy plant makes its full output. The month's report says why.</p></div>
-<div class="box next"><h4>What is changing</h4><p>The crews' Water will read nothing once their table is Food only (PM ruling, 7 Nov: a plot takes its Water as it produces, so a crew is not also cut for it). That table is PR-6 on the colony-economy branch, WS5; until it lands the crews' drink counts as above.</p></div>
+<div class="box example"><h4>Example</h4><p>Mara's crews got half their Food last month. This month each of her plots makes about 85% of its output (0.852), rounded half up: a farm that would make 4 makes <span class="num">3</span> (3.41), a mine that would make 3 makes <span class="num">3</span> (2.56), a well that would make 10 makes <span class="num">9</span> (8.52). Her Energy plant makes its full output. The month's report says why.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko approved this on 6 Nov (decision 4), as part of the supply pass (decision 1). A crew left short makes less, so the cost grows with the shortage, never all or nothing, and the player whose crew it is sees why; walkouts stay with the colony's mood, so the same hunger never counts twice. It reads last month's meal, not the stock in hand, because production runs before the month's market and stock in hand reads nearly everyone short. Measured on 6 Nov on ten simulated games, with the farm halving gone: the colony makes 14.8 Food a month instead of 10.2, and colonists go short of Food in 61 months instead of 74.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> (the crews' meal, <code>Player.crewShort</code>) · <code>production.ts::crewFactor</code>, <code>::runProduction</code> (the <code>crewShort</code> part) · <code>colony.ts::hardship</code> · <code>config.ts::UPKEEP.crewDrop</code> · Spec: <code>docs/specs/2026-11-06-colony-needs.md</code>, C14, RULE-12</p>
 <p class="owner">Built by WS5 (PR-8) in the Balance team's (WS1) upkeep and production code; kept current by WS1.</p>

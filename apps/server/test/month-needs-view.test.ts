@@ -5,7 +5,7 @@ import { fakeContext, seats } from './fake-context.js';
 
 /**
  * Planning, month 1: s1 works two farms and a Smithore mine (Energy 1 + 1 + 2 = 4 a month), s2 one mine (2).
- * Mines and farms burn a fixed Energy (UPKEEP.energyUse); factories would vary with their fit, so none here.
+ * Mines and farms burn a fixed Energy (CONSUMPTION); factories would vary with their fit, so none here.
  */
 function planningWithKnownEnergyUse() {
   const { ctx } = fakeContext();

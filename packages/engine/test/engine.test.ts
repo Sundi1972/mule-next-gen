@@ -229,7 +229,8 @@ describe('production', () => {
     p0.stock.smithore = 0;
     expect(runProduction(state).produced.p0!.alloy).toBe(0);
     p0.stock.smithore = 2;
-    p0.stock.energy = 2;
+    // Its recipe's 2 Energy and the works' running 1 (needs C11).
+    p0.stock.energy = 3;
     expect(runProduction(state).produced.p0!.alloy).toBe(2);
     expect(p0.stock.smithore).toBe(0);
   });

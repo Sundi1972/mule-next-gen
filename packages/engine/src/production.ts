@@ -1,4 +1,4 @@
-import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, HEALTH, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { ADJACENCY, CONSUMPTION, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, HEALTH, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
 import { hardship, sickShare } from './colony.js';
 import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase, strikeEvent } from './events.js';
 import { neighbours } from './map.js';
@@ -177,24 +177,34 @@ function outfitsOf(state: GameState, playerId: string): Outfit[] {
   return state.tiles.filter((t) => t.owner === playerId && t.outfit).map((t) => t.outfit!);
 }
 
-/** Crew on plots of these outfits: 1 per raw plot, 2 per factory, none on a green belt. */
-function crewOver(outfits: readonly Outfit[]): number {
-  return outfits.reduce((n, o) => n + (o === 'greenBelt' ? UPKEEP.crew.greenBelt : isFactory(o) ? UPKEEP.crew.factory : UPKEEP.crew.raw), 0);
+/** Crew working a player's land: 1 per raw plot, 2 per factory, none on a green belt. Read by the AI until WS1's needsWith switch. */
+export function crewOf(state: GameState, playerId: string): number {
+  return outfitsOf(state, playerId).reduce((n, o) => n + (o === 'greenBelt' ? UPKEEP.crew.greenBelt : isFactory(o) ? UPKEEP.crew.factory : UPKEEP.crew.raw), 0);
 }
 
-/** Crew working a player's land: 1 per raw plot, 2 per factory, none on a green belt. */
-export function crewOf(state: GameState, playerId: string): number {
-  return crewOver(outfitsOf(state, playerId));
-}
+/** Slack under a sum of quarters before it is rounded up: the sum is exact, so this only guards the round-up. */
+const QUARTER_SLACK = 1e-9; // literal-ok: a float tolerance (RULE-10's ε), not balance
 
 export type Needs = { food: number; water: number; medicine: number };
 
-/** Food and Water a household working plots of these outfits needs, and the Medicine that keeps its crews well. */
+/**
+ * The Food and Water one plot's crew adds to its owner's need a month, before the estate's one round-up (needs C12,
+ * RULE-10): the rate the computer players weigh a plot by. needsWith minus needsOf is the stepped marginal instead,
+ * which jumps with how many plots the owner already works. Water is none: a plot takes its Water as it produces (AM-3).
+ */
+export function crewUpkeep(outfit: Outfit): { food: number; water: number } {
+  return { food: CONSUMPTION[outfit].food, water: 0 };
+}
+
+/**
+ * Food and Water a household working plots of these outfits needs, and the Medicine that keeps its crews well (needs
+ * RULE-10, AM-3): the crews' Food summed over the plots and rounded up once; Water the household's alone.
+ */
 function needsOver(state: GameState, outfits: readonly Outfit[]): Needs {
-  const crew = crewOver(outfits);
+  const crews = outfits.reduce((n, o) => n + CONSUMPTION[o].food, 0);
   return {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+    food: UPKEEP.baseFood + Math.ceil(crews - QUARTER_SLACK),
+    water: UPKEEP.baseWater,
     medicine: crewsFallSick(state) ? 1 : 0,
   };
 }
@@ -233,11 +243,27 @@ export function crewFactor(short: { food: number; water: number }): number {
   return (1 - UPKEEP.crewDrop * hardship(short.food)) * (1 - UPKEEP.crewDrop * hardship(short.water));
 }
 
-/** Energy a working plot burns a month: by good for raw plots, by recipe for factories. */
+/** The share of its output a player's sick crews let a plot make (needs RULE-15): 1 while they are well or cured. */
+function sickCrewShare(state: GameState, holdsMedicine: boolean): number {
+  const { share } = crewSickness(state, { stock: { medicine: holdsMedicine ? 1 : 0 } });
+  return 1 - HEALTH.crewSickDrop * share;
+}
+
+/**
+ * The share of its output a player's crews let every plot but its Energy plants make this production: the short-fed
+ * crews' factor times the sick crews', as if the player holds a Medicine or not. Production applies the two as parts
+ * of their own, each rounded; the computer players weigh plots by this product rather than copy the rule.
+ */
+export function crewOutputShare(state: GameState, playerId: string, { medicine }: { medicine: boolean }): number {
+  const owner = state.players.find((p) => p.id === playerId)!;
+  return crewFactor(owner.crewShort ?? { food: 0, water: 0 }) * sickCrewShare(state, medicine);
+}
+
+/** Energy a working plot burns a month (needs RULE-10): CONSUMPTION's, on top of its recipe's for a factory. */
 export function energyUseOf(state: GameState, tile: Tile): number {
-  if (!tile.owner || !tile.outfit || tile.outfit === 'greenBelt') return 0;
-  if (isFactory(tile.outfit)) return factoryFit(state, tile, tile.outfit, tile.owner).energy;
-  return UPKEEP.energyUse[tile.outfit as RawGood];
+  if (!tile.owner || !tile.outfit) return 0;
+  const recipe = isFactory(tile.outfit) ? factoryFit(state, tile, tile.outfit, tile.owner).energy : 0;
+  return recipe + CONSUMPTION[tile.outfit].energy;
 }
 
 /**
@@ -424,9 +450,8 @@ export function runProduction(state: GameState): {
   const crewFactorOf = new Map(state.players.map((p) => [p.id, crewFactor(p.crewShort ?? { food: 0, water: 0 })]));
   const sickFactorOf = new Map<string, number>();
   for (const p of state.players) {
-    const { cure, share } = crewSickness(state, p);
-    if (cure) p.stock.medicine--;
-    sickFactorOf.set(p.id, 1 - HEALTH.crewSickDrop * share);
+    sickFactorOf.set(p.id, sickCrewShare(state, p.stock.medicine >= 1));
+    if (crewSickness(state, p).cure) p.stock.medicine--;
   }
   /** Cuts what the parts add up to by a factor, rounded half up, as a part of its own. */
   const cutBy = (parts: Part[], factor: number, why: 'crewShort' | 'crewSick') => {
@@ -445,7 +470,7 @@ export function runProduction(state: GameState): {
     if (made > 0) parts.push({ why, delta: offShare(made) - made });
   };
   const use = (tile: Tile) => energyUseOf(state, tile) * cold;
-  // The household drinks first (AM-18 W2): what it and the crews drink at upkeep is kept back from the plots.
+  // The household drinks first (AM-18 W2): what it drinks at upkeep is kept back from the plots.
   const drink = new Map(state.players.map((p) => [p.id, needsOf(state, p.id).water]));
   /** The Water an owner's plots may use: what it holds over the household's drink. */
   const spare = (owner: { id: string; stock: Stock }) => Math.max(0, owner.stock.water - drink.get(owner.id)!);
@@ -469,7 +494,7 @@ export function runProduction(state: GameState): {
       credit(tile, good, parts);
       return;
     }
-    const inputs = { ...feed, energy: fit.energy * cold };
+    const inputs = { ...feed, energy: use(tile) };
     const water = waterUseOf(tile);
     if (!hasStock(owner.stock, inputs) || spare(owner) < water) return;
     addStock(owner.stock, { ...inputs, water: (inputs.water ?? 0) + water }, -1);
@@ -525,7 +550,7 @@ export function runProduction(state: GameState): {
     for (const tile of working.filter((t) => t.outfit === good && !listed.has(t))) {
       const owner = playerById.get(tile.owner!)!;
       if (!hasStock(owner.stock, feedOf(good))) continue;
-      const noEnergy = owner.stock.energy < factoryFit(state, tile, good, owner.id).energy * cold;
+      const noEnergy = owner.stock.energy < use(tile);
       const why: OffWhy | undefined = noEnergy ? 'energyOff' : spare(owner) < waterUseOf(tile) ? 'waterOff' : undefined;
       if (why) off.set(tile, why);
       runFactory(tile, good, why);
