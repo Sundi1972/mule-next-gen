@@ -2,7 +2,7 @@ import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
 import type { AgendaSlot, BannerSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
 import { OverruleBallot, OverruleRail } from './budget/OverruleBallot';
-import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
+import { ballotComplete, contested, ElectionDay, ElectionDayRail, enterRoom } from './ElectionDay';
 import { CouncilBallot, CouncilRail } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
@@ -78,11 +78,13 @@ const BALLOT_WORDS: ReadyWords = {
 };
 
 /** The ready bar's words on election day: Ready to vote, then Cast my vote, live once every office is picked. */
-export function electionReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
+export function electionReadyWords({ table, view, me }: HubSeat): ReadyBarWords | null {
   const politics = view.politics;
   const election = politics?.election;
   if (!election) return null;
   if (election.stage === 'announce') return contested(politics.candidates).length > 0 ? ANNOUNCE_WORDS : NO_BALLOT_WORDS;
+  // Another room's picks are forgotten before they can make Cast live; the ready bar draws before the ballot does.
+  if (table) enterRoom(table.code);
   if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete({ view, me }, election) };
   return null;
 }

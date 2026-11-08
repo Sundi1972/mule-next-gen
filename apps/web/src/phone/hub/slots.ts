@@ -15,8 +15,8 @@ import type { ReadyWords } from './ready';
  * from ./Hub.tsx; `show` and the agenda's texts are plain functions of the seat, called on every render.
  */
 
-/** Who is looking: what every `show` decides on. */
-export type HubSeat = Pick<PhoneGame, 'view' | 'me' | 'self'>;
+/** Who is looking: what every `show` decides on. `table` is the room: the hub gives it; a bare seat built for a test may leave it out. */
+export type HubSeat = Pick<PhoneGame, 'view' | 'me' | 'self'> & Partial<Pick<PhoneGame, 'table'>>;
 
 interface Shown {
   /** Whether this seat sees the slot now; omitted, always. */

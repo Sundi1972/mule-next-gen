@@ -245,7 +245,7 @@ function changed(): void {
 
 let heldRoom: string | null = null;
 /** Notes the room whose ballot is drawn and forgets another room's picks; true if it did. */
-function enterRoom(code: string): boolean {
+export function enterRoom(code: string): boolean {
   if (heldRoom === code) return false;
   heldRoom = code;
   const had = held !== null;

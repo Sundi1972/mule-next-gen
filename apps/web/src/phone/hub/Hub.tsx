@@ -95,7 +95,7 @@ function HubHead() {
 export function Hub({ slots }: { slots: TabHubSlots }) {
   const { table, view, me, self } = usePhoneGame();
   const serverNow = useServerNow();
-  const seat: HubSeat = { view, me, self };
+  const seat: HubSeat = { table, view, me, self };
   const tabs = shown(slots.tabs, seat);
   const subs = shown(slots.politicsTabs, seat);
   const tools = shown(slots.tools, seat);
