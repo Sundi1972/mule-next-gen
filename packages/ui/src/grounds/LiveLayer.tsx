@@ -8,7 +8,7 @@ import { useEventReducedMotion } from '../events/motion';
 import type { GridPlace } from './layout';
 import { hiddenBy, type Occluder } from './occlusion';
 import type { Heading, Light, WalkerEntry } from './pick';
-import { iso } from './projection';
+import { iso, W } from './projection';
 import { METRE, walkerOn, walkRoute, type Spot } from './walks';
 
 export interface PictureBox {
@@ -96,7 +96,7 @@ export function frameAt(i: number, seconds: number, reduced: boolean, { frames, 
 function sheetOf(i: number, { entry }: WalkerSprite, players: number): { day: string; dusk: string } | undefined {
   const k = i % 4;
   const suit = k < players ? `p${k + 1}-` : `c${((k - players) % 2) + 1}-`;
-  const variants = Object.keys(entry.sheets).filter((k) => k.startsWith(suit)).sort();
+  const variants = Object.keys(entry.sheets).filter((key) => key.startsWith(suit)).sort();
   return variants.length ? entry.sheets[variants[Math.floor(i / 4) % variants.length]!] : undefined;
 }
 
@@ -107,7 +107,8 @@ function sheetOf(i: number, { entry }: WalkerSprite, players: number): { day: st
 function Sprite({ spot, href, heading, frame, entry, ghost, onError }: { spot: Spot; href: string; heading: Heading; frame: number; entry: WalkerEntry; ghost: boolean; onError: () => void }) {
   const [fx, fy] = iso(spot[0], spot[1]);
   const { width: cw, height: ch, feet } = entry.cell;
-  const k = METRE / entry.px_per_m;
+  // The sheets share the buildings' camera: a place, 12 m a side, is W wide on screen as its diagonal, 12√2 m at px_per_m.
+  const k = W / (12 * Math.SQRT2 * entry.px_per_m);
   const row = Math.max(0, entry.headings.indexOf(heading));
   return (
     <svg
@@ -127,11 +128,12 @@ function Sprite({ spot, href, heading, frame, entry, ghost, onError }: { spot: S
 
 /** A colonist from its sheet where the manifest has one, else today's SVG figure (never blank; a sheet that fails falls back too). */
 function Walker({ i, spot, leg, seconds, reduced, sprite, players, ghost = false }: { i: number; spot: Spot; leg: [Spot, Spot]; seconds: number; reduced: boolean; sprite?: WalkerSprite; players: number; ghost?: boolean }) {
-  const [failed, setFailed] = useState(false);
+  // The sheet that failed, so another light's or size's sheet is tried afresh.
+  const [failed, setFailed] = useState<string | null>(null);
   const sheet = sprite && sheetOf(i, sprite, players);
-  if (!sprite || !sheet || failed) return <Colonist i={i} spot={spot} seconds={seconds} ghost={ghost} />;
-  const href = sprite.href(ghost ? sprite.entry.outline : sheet[sprite.light]);
-  return <Sprite spot={spot} href={href} heading={headingOf(...leg)} frame={frameAt(i, seconds, reduced, sprite.entry)} entry={sprite.entry} ghost={ghost} onError={() => setFailed(true)} />;
+  const href = sprite && sheet && sprite.href(ghost ? sprite.entry.outline : sheet[sprite.light]);
+  if (!sprite || !href || failed === href) return <Colonist i={i} spot={spot} seconds={seconds} ghost={ghost} />;
+  return <Sprite spot={spot} href={href} heading={headingOf(...leg)} frame={frameAt(i, seconds, reduced, sprite.entry)} entry={sprite.entry} ghost={ghost} onError={() => setFailed(href)} />;
 }
 
 /** Something on the grounds drawn in painter's order: its element and its depth from the camera, col + row. */
