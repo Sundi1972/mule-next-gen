@@ -276,7 +276,8 @@ export function myPoliticsView(state: GameState, playerId: string, voids: readon
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
-    overruleBallot: p.overrule?.stage === 'ballot' ? (p.overrule.ballots[playerId] ?? null) : null,
+    // Their own, before and after the reveal (S5-RULE-10); a past month's vote is not shown.
+    overruleBallot: p.overrule?.month === state.month ? (p.overrule.ballots[playerId] ?? null) : null,
     canOverrule: canOverrule(state, playerId),
     promised: structuredClone(promisedVotes(state, playerId)),
     sabotage: mySabotageView(state, playerId, voids),
