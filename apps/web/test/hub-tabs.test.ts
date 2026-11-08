@@ -534,4 +534,16 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     expect(nav!.tab).toBe('politics');
     expect(selected('sub-laws')).toBe(true);
   });
+
+  it('S3-RULE-12 (O-2): Abstain stands across a sub-tab switch: the ballot keeps the pick and Cast my vote stays live', () => {
+    mount(game({ pol: announce('ballot'), month: 4, mine: { canRun: { governor: 'closed' } } }));
+    openElections();
+    const radio = (id: string) => byTestid(`ballot-governor-${id}`).findAll('input')[0]!;
+    act(() => (props(radio('abstain')).onChange as () => void)());
+    expect((radio('abstain') as unknown as { checked?: boolean }).checked).toBe(true);
+    tap('sub-laws');
+    tap('sub-elections');
+    expect((radio('abstain') as unknown as { checked?: boolean }).checked, 'Abstain is still picked').toBe(true);
+    expect(byTestid('ready').getAttribute('disabled'), 'Cast my vote is live').toBeNull();
+  });
 });
