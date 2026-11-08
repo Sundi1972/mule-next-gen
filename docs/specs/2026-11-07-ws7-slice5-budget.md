@@ -1392,7 +1392,7 @@ export function overruleWorth(obs: GameState, me: string, target?: OverruleTarge
 // Computed only from facts in obs (WS7, 7 Nov).
 ```
 It must account for:
-- **tax:** (taxAtStart − salesTax) × the sales `me` is expected to make in this month's auctions (the
+- **tax:** (salesTax − taxAtStart) × the sales `me` is expected to make (AM-14: undoing a raise pays the seller) in this month's auctions (the
   seller pays, economy.ts::taxSale), minus the share of the lost tax income that would have reached `me`
   through the budget's lines (lineWorth).
 - **budget** [after RC]: Σ over lines of [lineWorth(at budgetAtStart's credits) − lineWorth(at now's
@@ -1709,6 +1709,16 @@ said      projects "starts at the share that covers the open buildings", and a f
 did       Projects takes every share the base and the fill leave, and never less than its covering share: projects = max(cover, 100 − the other lines). There is no "kept" from the AI. Each fill step comes from Projects, and its cost is the drop in lineWorth(projects). WS1's §3.2 contract makes that drop flat above the covering share (what Projects is worth is the months it brings forward), so the cost is 0 there, as the old wording meant. Each other line takes min(its base, its maxShare, what is left after the covering share and the lines before it), so the split is always exactly 100
 because   under AM-7 the Projects share is a ceiling, so a share no building needs stays in the fund anyway. Giving it to Projects means a building opened later in the month is not short. That serves S5-UBER-AC-1 (buildings per game)
 goal      S5-1, unchanged
+
+AM-14 · 2026-11-08 · WS1's reading (S5-PR-3, #796), via the PM; WS7 agrees · the sign of overruleWorth's tax term
+target    §3.2 overruleWorth, the tax bullet
+said      (taxAtStart − salesTax) × the sales me is expected to make
+did       (salesTax − taxAtStart) × those sales: the overrule puts the tax back at taxAtStart, so after a raise the
+          seller saves the difference on every sale (a gain), and after a cut it pays it (a loss). The rest of the
+          term (less the share of the fund's lost income reaching me through the lines) is unchanged
+because   overruleWorth is a gain to me (as the budget term's lineWorth(start) − lineWorth(now) already is); the old
+          sign made every seat oppose undoing a raise
+goal      S5-1 — unchanged; S5-B-AC-6 reads the corrected sign
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

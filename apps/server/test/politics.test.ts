@@ -1123,8 +1123,8 @@ function expectBoardKeys(board: MuleView) {
   expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'brokenDeals', 'budget', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'overrule', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'reputationReasons', 'retry', 'sabotage', 'sheriff', 'tax', 'term', 'weights']);
   // S4-T-AC-8: the board carries the public sabotage view and nothing of an order's party (S4-RULE-12).
   if (politics.sabotage) {
-    expect(keysOf(politics.sabotage), NEW_FIELD).toEqual(['incidents', 'sheriff', 'terms']);
-    expect(keysOf(politics.sabotage.sheriff), NEW_FIELD).toEqual(['guards', 'investigations', 'investigationsLeft']);
+    expect(keysOf(politics.sabotage), NEW_FIELD).toEqual(['incidents', 'sheriff', 'sheriffRecord', 'terms']);
+    expect(keysOf(politics.sabotage.sheriff), NEW_FIELD).toEqual(['bounty', 'guards', 'investigations', 'investigationsLeft']);
     expect(typeof politics.sabotage.sheriff.guards, 'the count he may post, never the tiles').toBe('number');
   }
   expectBudgetKeys(politics);
@@ -1197,7 +1197,7 @@ describe('S4-C13 (server): the four sabotage intents on the wire', () => {
 
     const tv = await board((g) => !!g.politics?.sabotage);
     expect(tv.me).toBeNull();
-    expect(Object.keys(tv.politics!.sabotage!).sort()).toEqual(['incidents', 'sheriff', 'terms']);
+    expect(Object.keys(tv.politics!.sabotage!).sort()).toEqual(['incidents', 'sheriff', 'sheriffRecord', 'terms']);
     const mine = await phone.waitForGame((g) => !!g.me?.politics?.sabotage);
     expect(mine.me!.politics!.sabotage).toEqual({ order: null, canOrder: true, owed: 0, mine: [] });
     expect(mine.me!.politics!.sheriff ?? null, 'Brix is not the Sheriff').toBeNull();

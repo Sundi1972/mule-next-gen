@@ -10,6 +10,7 @@ import {
   fineable,
   GOODS,
   goodWords,
+  canGuard,
   guardsMax,
   isElectionDone,
   isPublicOrder,
@@ -458,6 +459,8 @@ function incidentView(state: GameState, order: SabotageOrder, viewerId: string |
     how: howOf(state, order),
     investigated: order.investigated != null,
     fine: order.fine ? { due: order.fine.due, paid: order.fine.paid, toVictim: order.fine.toVictim, by: order.fine.by } : null,
+    // Never more than `how` tells: the bounty shows only once the culprit is public, even on the orderer's own list (WS3).
+    bounty: order.bounty && order.culpritPublic ? { ...order.bounty } : null,
   };
 }
 
@@ -470,7 +473,9 @@ export function sabotageView(state: GameState): NonNullable<PoliticsView['sabota
     terms: structuredClone(orderTerms(state)),
     incidents: [...p.sabotage].reverse().flatMap((o) => incidentView(state, o, EVERYONE) ?? []),
     // What he may post, never what he has posted: a guard shows only by its catch (AM-1).
-    sheriff: { guards: guardsMax(state), investigations: POLITICS.sheriff.investigations, investigationsLeft: Math.max(0, POLITICS.sheriff.investigations - done) },
+    sheriff: { guards: guardsMax(state), investigations: POLITICS.sheriff.investigations, investigationsLeft: Math.max(0, POLITICS.sheriff.investigations - done), bounty: POLITICS.sheriff.bounty },
+    // Public: the two counts only, never where the guards stood.
+    sheriffRecord: p.sheriff === null ? null : { ...p.sheriffRecord },
   };
 }
 
@@ -511,6 +516,7 @@ function sheriffDesk(state: GameState, playerId: string): Pick<MyPoliticsView, '
       canAct: can,
       guards: [...state.politics!.guards],
       max: guardsMax(state),
+      guardable: state.tiles.flatMap((_, tile) => (canGuard(state, playerId, tile) === true ? [tile] : [])),
       investigationsLeft: Math.max(0, POLITICS.sheriff.investigations - done),
       fineable: fineable(state, playerId),
       steps: [...POLITICS.sheriff.fine.steps],
