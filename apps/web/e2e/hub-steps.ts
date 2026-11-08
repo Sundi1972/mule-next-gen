@@ -532,7 +532,7 @@ const READ_GOV = `(async () => {
 
 /**
  * E-11 (C66, SB-2: the Governor's desk on its sub-tab, the table chat in the rail): Lena, the sitting Governor, plans at
- * `size` with the chat's seat row and a two-line ticker, and Ossa still planning. Her politics tab opens on the
+ * `size` with the chat's seat row and a two-line ticker, and Ossa still planning. Her Now line is the door to the
  * Governor's sub-tab (E-9, D8); its tax row and verdict end inside the sub-tab's visible body, without it scrolling, as
  * the desk opens over her promise, after −, and after Set (at 844 × 390 by at least GOV_MARGIN_844). The rail keeps
  * the Now line, the footer names who is still planning, the ticker keeps both lines, and the seat row sits in the rail's
@@ -544,7 +544,8 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
   const at = `${size.width}×${size.height}`;
   await lena.setViewportSize(size);
   const planning = lena.locator('[data-phase=planning]');
-  await planning.getByTestId('tab-politics').evaluate((el: HTMLElement) => el.click());
+  // The Governor's sub-tab asks first: from Overview the Now line is the door to it (D8); nothing opens it by itself.
+  await planning.getByTestId('now-go').evaluate((el: HTMLElement) => el.click());
   await planning.getByTestId('governor-tax-row').waitFor({ timeout });
   const read = () => lena.evaluate(READ_GOV) as Promise<GovFit>;
   const click = (id: string) => planning.getByTestId(id).evaluate((el: HTMLElement) => el.click());
