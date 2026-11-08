@@ -3,7 +3,7 @@
  * approved scaffold, design/mocks/colony-grounds/src/look/Living.tsx: its lit glow pass and its colonists, placed here on
  * the grounds' paths instead of one picture's frame.
  */
-import { useEffect, useId, useMemo, useState, type ReactElement } from 'react';
+import { useId, useMemo, useState, type ReactElement } from 'react';
 import { useEventReducedMotion } from '../events/motion';
 import { useSeconds } from './clock';
 import type { GridPlace } from './layout';
@@ -164,6 +164,8 @@ export function WalkingScene({
   routes: given,
   sprite,
   players = 4,
+  smoke = [],
+  light = 'day',
 }: {
   scene: Placed[];
   walkers: number;
@@ -177,9 +179,14 @@ export function WalkingScene({
   sprite?: WalkerSprite;
   /** The players seated: colonists wear only their colours, the rest the colony's. Unknown: all four player colours. */
   players?: number;
+  /** Each damaged building's smoke (RULE-8), drawn just after its building, so the buildings nearer the camera cover it. */
+  smoke?: SmokeSource[];
+  /** The light, for the smoke's colour and its embers at dusk. */
+  light?: Light;
 }) {
   const reduced = useEventReducedMotion();
-  const seconds = useSeconds(!reduced && walkers > 0);
+  // One clock for the colonists and the smoke: each tick re-renders this layer, never the buildings' elements.
+  const seconds = useSeconds(!reduced && (walkers > 0 || smoke.length > 0));
   const routes = useMemo(() => given ?? Array.from({ length: walkers }, (_, i) => walkRoute(i, rim, blocks)), [given, walkers, rim, blocks]);
   const t = reduced ? 0 : seconds;
   const people = routes.map((route, i) => {
@@ -188,9 +195,12 @@ export function WalkingScene({
     const walker = (ghost: boolean) => <Walker key={`${ghost ? 'ghost' : 'walker'}-${i}`} i={i} spot={spot} leg={leg} seconds={t} reduced={reduced} sprite={sprite} players={players} ghost={ghost} />;
     return { depth: spot[0] + spot[1], node: walker(false), ghost: hidden ? walker(true) : null };
   }).sort((a, b) => a.depth - b.depth);
+  // Stable: a plume follows the buildings at its own depth, its own among them.
+  const plumes = smoke.map((source) => ({ depth: source.depth, node: <Plume key={`smoke-${source.n}`} source={source} light={light} seconds={t} reduced={reduced} /> }));
+  const items = [...scene, ...plumes].sort((a, b) => a.depth - b.depth);
   const drawn: ReactElement[] = [];
   let next = 0;
-  for (const item of scene) {
+  for (const item of items) {
     while (next < people.length && people[next]!.depth < item.depth) drawn.push(people[next++]!.node);
     drawn.push(item.node);
   }
@@ -201,27 +211,26 @@ export function WalkingScene({
 }
 
 
-/** Where a damaged place's smoke leaves it: place `n`, at the top of its picture, in scene units. */
+/** Where a damaged place's smoke leaves it: place `n`, at the top of its picture, in scene units, `depth` its col + row. */
 export interface SmokeSource {
   n: number;
   x: number;
   y: number;
+  depth: number;
   /** The building's fade during the opener's lean-in: its smoke fades with it, so the named place shows through. */
   fade?: number;
 }
 
 /**
- * The smoke over each damaged building and the haze over the grounds (RULE-7, RULE-8), `seconds` into the plume's
- * drift; with `reduced` motion the plume stands as it starts. The haze covers `view`, thickest at the far (top) edge.
- * Gradients only: nothing is downloaded.
+ * A damaged building's smoke (RULE-8), `seconds` into its drift; with `reduced` motion it stands as it starts. Each
+ * circle takes the building's fade itself: a group opacity would isolate the screen-blended embers.
  */
-export function AirPicture({ view, environment, light, smoke, seconds, reduced }: { view: { x: number; y: number; w: number; h: number }; environment: number; light: Light; smoke: SmokeSource[]; seconds: number; reduced: boolean }) {
+export function Plume({ source: s, light, seconds, reduced }: { source: SmokeSource; light: Light; seconds: number; reduced: boolean }) {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  const haze = hazeOpacity(environment);
-  const puffs = plume(reduced ? 0 : seconds);
   const colour = SMOKE.colour[light];
+  const fade = s.fade ?? 1;
   return (
-    <g pointerEvents="none" data-testid="air">
+    <g pointerEvents="none" data-testid={`smoke-${s.n}`}>
       <defs>
         {/* A soft-edged ball with a solid core, so overlapping puffs read as one body of smoke. */}
         <radialGradient id={`${id}puff`}>
@@ -233,32 +242,32 @@ export function AirPicture({ view, environment, light, smoke, seconds, reduced }
           <stop offset="0" stopColor="#ff9a4a" stopOpacity="1" />
           <stop offset="1" stopColor="#ff9a4a" stopOpacity="0" />
         </radialGradient>
-        {haze > 0 && (
-          <linearGradient id={`${id}haze`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={hazeColour(environment, light)} stopOpacity={haze} data-testid="haze-far" />
-            <stop offset="1" stopColor={hazeColour(environment, light)} stopOpacity={haze * HAZE.near} />
-          </linearGradient>
-        )}
       </defs>
-      {smoke.map((s) => (
-        <g key={s.n} data-testid={`smoke-${s.n}`}>
-          {puffs.map((q, k) => (
-            <g key={k}>
-              <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r} fill={`url(#${id}puff)`} opacity={q.opacity * (s.fade ?? 1)} data-testid="puff" />
-              {light === 'dusk' && q.warm > 0 && <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r * 0.9} fill={`url(#${id}ember)`} opacity={q.warm * q.opacity * (s.fade ?? 1)} style={{ mixBlendMode: 'screen' }} />}
-            </g>
-          ))}
+      {plume(reduced ? 0 : seconds).map((q, k) => (
+        <g key={k}>
+          <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r} fill={`url(#${id}puff)`} opacity={q.opacity * fade} data-testid="puff" data-plume={s.n} />
+          {light === 'dusk' && q.warm > 0 && <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r * 0.9} fill={`url(#${id}ember)`} opacity={q.warm * q.opacity * fade} style={{ mixBlendMode: 'screen' }} data-plume={s.n} />}
         </g>
       ))}
-      {haze > 0 && <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={`url(#${id}haze)`} data-testid="haze" />}
     </g>
   );
 }
 
-/** The air over the grounds, on its own clock: each tick re-renders only the plume, never the buildings. */
-export function AirLayer({ view, environment, light, smoke }: { view: { x: number; y: number; w: number; h: number }; environment: number; light: Light; smoke: SmokeSource[] }) {
-  const reduced = useEventReducedMotion();
-  const seconds = useSeconds(!reduced && smoke.length > 0);
-  if (smoke.length === 0 && hazeOpacity(environment) === 0) return null;
-  return <AirPicture view={view} environment={environment} light={light} smoke={smoke} seconds={seconds} reduced={reduced} />;
+/** The haze over the grounds by the air gauge (RULE-7): over `view`, thickest at the far (top) edge. None on clean air. */
+export function Haze({ view, environment, light }: { view: { x: number; y: number; w: number; h: number }; environment: number; light: Light }) {
+  const id = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const haze = hazeOpacity(environment);
+  if (haze === 0) return null;
+  const colour = hazeColour(environment, light);
+  return (
+    <g pointerEvents="none">
+      <defs>
+        <linearGradient id={`${id}haze`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={colour} stopOpacity={haze} data-testid="haze-far" />
+          <stop offset="1" stopColor={colour} stopOpacity={haze * HAZE.near} />
+        </linearGradient>
+      </defs>
+      <rect x={view.x} y={view.y} width={view.w} height={view.h} fill={`url(#${id}haze)`} data-testid="haze" />
+    </g>
+  );
 }
