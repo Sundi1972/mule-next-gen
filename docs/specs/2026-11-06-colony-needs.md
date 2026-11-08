@@ -922,19 +922,6 @@ folded    §1 C10, C11, C14 and §2 RULE-10, RULE-12 read with AM-3; docs/rulebo
           #crew-shortfall describe it. WS1 builds AM-18 in PR-5's supply pass (S1 due 8 Nov 08:00Z)
 ```
 
-```
-AM-4 · 2026-11-08 · WS7 (spec owner) · from WS7's design-owner review of #766 (WS5 PR-9) · the growth cut reads last month's sick share
-target    §1 C8; §2 RULE-8 (growth)
-said      growth rate −= HEALTH.growthPerSick × h, with h this upkeep's new share
-did       the growth cut reads h_old, the share before this upkeep, as the Medicine need already does: growth is cut in
-          runUpkeep, and h is written later, in runColony (C7's seam). The mood still reads the new h. Growth lags the
-          share by one month: the cut is growthPerSick × h_old, at most growthPerSick × cap
-because   moving the sick-share update into runUpkeep would break C7's seam, before the mood steps; a one-month lag
-          on growth changes no outcome a player can read in the month it happens
-goal      G-1 unchanged
-folded    T-AC-9 pins the growth cut on h_old (packages/engine/test/colony-health.test.ts, as built in #766)
-```
-
 ## §9 · Ownership Boundaries
 
 No ownership change. `colony.ts` stays the sole writer of the colony (the memory lives there);
