@@ -560,6 +560,40 @@ describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; S4-PR-9 refus
     }
   });
 
+  it("S4-PR-11: the check is the public office: a seat whose view lacks the desk but holds the office still gets no door", () => {
+    // WS7's advice: view.politics.sheriff === me.id, not the private desk's presence.
+    lookAt(1, 0, { id: 's4', sheriff: null });
+    expect(has('sabotage-door')).toBe(false);
+    act(() => root!.unmount());
+    // And the desk alone does not bar a seat that does not hold the office.
+    lookAt(1, 0, { id: 's1', sheriff: SHERIFF });
+    expect(has('sabotage-door')).toBe(true);
+  });
+
+  it('S4-PR-11: an order placed before the election is withdrawn when its player becomes Sheriff: no pending row, no crew cost, no empty list', () => {
+    const pending: Sab['mine'][number] = { id: 'sab-b7c8d9', month: 5, kind: 'powerCut', victim: null, at: { x: 1, y: 0 }, good: 'smithore', worked: false, culprit: 's4', how: null, investigated: false, fine: null, public: false, outcome: 'pending' };
+    const before = viewOf({ id: 's4', sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(1, 0) }, owed: 120, mine: [pending] }, politics: { sheriff: null } });
+    mount(before);
+    tap('desk-market');
+    expect(text('order-pending-words')).toContain('120 cr at the month end');
+    expect(has('my-order-sab-b7c8d9')).toBe(true);
+
+    // The server's next view: Brix holds the office; the engine withdrew the order for free.
+    answer(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...NO_ORDER, order: null, owed: 0, mine: [] } }));
+    expect(openDesk()).toBe('desk-sheriff');
+    tap('desk-market');
+    expect(has('order-pending'), 'no pending-order row').toBe(false);
+    expect(byTestid('desk-body-market').textContent, 'no crew cost').not.toMatch(/cr at the month end/);
+    expect(has('my-orders'), 'no Your orders head over an empty list').toBe(false);
+    expect(has('rumour-door')).toBe(false);
+    expect(has('list-asset'), 'the Market desk itself is whole').toBe(true);
+    tap('tool-look');
+    tap('map-plot-1-0');
+    expect(has('look-plot')).toBe(true);
+    expect(has('order-pending')).toBe(false);
+    expect(has('sabotage-door')).toBe(false);
+  });
+
   it("S4-PR-11: the Sheriff's own past orders stay listed under Your orders", () => {
     const mine: Sab['mine'] = [{ ...GUARDED, culprit: 's4', public: true, outcome: 'caught' }];
     mount(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...NO_ORDER, mine } }));

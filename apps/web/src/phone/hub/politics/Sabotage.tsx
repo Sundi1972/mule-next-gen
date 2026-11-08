@@ -301,11 +301,11 @@ function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
 
 /**
  * Why this phone may not order sabotage at all, or null when it may: the sitting Sheriff orders none (Heiko; WS7's
- * S4-PR-9 refuses it). Only the sitting Sheriff's view carries `me.politics.sheriff`. The one place this is decided,
- * so a reason from the server can take its place.
+ * engine canOrder answers 'sheriff', #780). Read from the public office holder, as WS7 advises. The one place this is
+ * decided: if S4-PR-9 puts that reason in the view, this switches to it.
  */
-export function orderBarred(me: Pick<MyView, 'politics'>): 'sheriff' | null {
-  return me.politics?.sheriff ? 'sheriff' : null;
+export function orderBarred(view: Pick<MuleView, 'politics'>, me: Pick<MyView, 'id'>): 'sheriff' | null {
+  return view.politics?.sheriff === me.id ? 'sheriff' : null;
 }
 
 /** This phone's order props: its sabotage, the ban, its pacts, and the intents a tap sends. Null with sabotage off. */
@@ -318,7 +318,7 @@ function useOrder(): (OrderProps & { meId: string; barred: 'sheriff' | null }) |
     view,
     sab,
     meId: me.id,
-    barred: orderBarred(me),
+    barred: orderBarred(view, me),
     ban: banOf(view),
     pacts: pactPartners(me),
     onOrder: (target) => client.intent({ type: 'sabotage', target }),
