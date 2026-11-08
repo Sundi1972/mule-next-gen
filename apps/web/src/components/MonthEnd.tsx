@@ -1,4 +1,4 @@
-import { GAME, POLITICS } from '@mule/engine';
+import { colonistMeal, GAME, hardship, POLITICS, severity } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import { Fragment, type ReactNode } from 'react';
@@ -453,7 +453,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
                 +{moreHungry} more went hungry
               </span>
             )}
-            <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
+            <span className={cx(line, colonistsBitten(view, r) ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
               {colonistsLine(view, r)}
             </span>
           </span>
@@ -476,6 +476,17 @@ function colonistsLine(view: MuleView, r: ReturnType<typeof colonyReport>): stri
     return meal.food.took >= meal.food.need && meal.water.took >= meal.water.need ? fed : `${fed} ${got(meal.food, 'Food')} and ${got(meal.water, 'Water')}`;
   }
   return r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`;
+}
+
+/**
+ * Whether the colonists' line is red (needs C6): they went short past what they shrug off, read through the engine's
+ * own curve from the line's numbers. Without the meal in the view, any shortfall.
+ */
+function colonistsBitten(view: MuleView, r: ReturnType<typeof colonyReport>): boolean {
+  const meal = view.colonistMeal;
+  if (!meal) return r.colonistsFed === false;
+  const missed = (g: { took: number; need: number }) => colonistMeal(g.need, g.took).short;
+  return hardship(severity({ food: missed(meal.food), water: missed(meal.water) })) > 0;
 }
 
 // --- Your worth (your phone only) --------------------------------------------------------------------
