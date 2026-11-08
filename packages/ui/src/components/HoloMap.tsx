@@ -16,8 +16,8 @@ export interface MapTile {
   /** Units produced last month, floated above the plot. */
   output?: number;
   peaks?: number;
-  /** Marks a plot: being surveyed, hit by sabotage, or up for sale. */
-  flag?: 'survey' | 'sabotage' | 'sale';
+  /** Marks a plot: being surveyed, hit by sabotage, up for sale, or guarded (the Sheriff's own map only, slice 4). */
+  flag?: MapFlag;
   /** What a geo analysis found here, only on the map of the player who ran it: each raw good's dots, 0 to 3. */
   ground?: Partial<Record<Good, number>>;
   /** Local pollution, 0 clean to 3 toxic. Drawn as a brown haze over the land. */
@@ -25,6 +25,8 @@ export interface MapTile {
   /** The plot's special field, public on every map: drawn as a badge on the plot's lower-right corner. */
   special?: MapSpecial;
 }
+
+export type MapFlag = 'survey' | 'sabotage' | 'sale' | 'guard';
 
 export interface MapAvatar {
   slot: Slot;
@@ -57,8 +59,13 @@ export interface HoloMapProps {
 /** Every mark is a share of the plot's size, so it reads the same at any width. */
 const SHARE = { border: 1 / 12, tab: 0.46, mark: 0.36, disc: 0.62, icon: 0.44, ring: 1 / 9 };
 
-/** Under this plot width, in px, the phone's dots chip drops its good's icon and keeps its dots, so it fits inside the plot. */
-const SMALL_DOTS_PLOT = 16;
+/**
+ * Under this plot width, in px, the phone's dots chip drops its good's icon and keeps its dots, so it fits inside the
+ * plot, with the tab, gem and badge in the strip above it. 24, where the ring comes inside and the STORE sign goes: from
+ * 16 to 24 px the full chip met the tab, gem and badge and left the right column (the iPhone SE's planning map, 19.8 px;
+ * WS6, 8 Nov).
+ */
+const SMALL_DOTS_PLOT = 24;
 
 /** Whether a plot `plot` px wide draws the small dots chip: only on a phone, only under SMALL_DOTS_PLOT. */
 export function smallDots(plot: number, density: 'phone' | 'tv'): boolean {
@@ -147,6 +154,19 @@ export const STORE_SIGN_PLOT = 24;
 
 /** How far inside the map's right or bottom edge an edge plot's special badge sits, in px, where it can't hang out. */
 const BADGE_EDGE = 2;
+
+/** The phone's full dots chip, in px, either way: 3 px padding round three 3 px dots 1 px apart, under a 9 px icon. */
+export const DOTS_CHIP = 17;
+
+/**
+ * How far left a right-column special's full dots chip steps on a phone, in px, clear of the badge sitting inside the
+ * plot: the badge's hang and edge inset, but never past the chip's room, so the chip stays inside its plot (on the
+ * land grant's 24 px plots the hang alone put it 0.65 px over). The TV's chip always takes the hang.
+ */
+export function rightColumnStep(plot: number, density: 'phone' | 'tv' = 'phone'): number {
+  const hang = specialBadgeBox(plot, density) * SPECIAL_HANG + BADGE_EDGE;
+  return density === 'tv' ? hang : Math.min(hang, Math.max(0, (plot - DOTS_CHIP) / 2));
+}
 
 /** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
@@ -242,7 +262,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const inner = onEdge || ring.inside || besideStepped;
           const glowOut = !inner && underDots ? glow : null;
           const gems = !hideGround && t.ground ? gemsIn(t.ground) : [];
-          // Under 16 px on a phone (SA-1372): the chip sits at the foot and the tab, the gem and the badge share the strip above it.
+          // Under 24 px on a phone (SA-1372): the chip sits at the foot and the tab, the gem and the badge share the strip above it.
           const strip = small && showsDots(t) ? smallStrip(plot, { tab: t.owner !== null, gems: gems.length, badge: !!t.special }) : null;
           const at = `${t.x}-${t.y}`;
           const label = [
@@ -276,7 +296,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               )}
               {/* On a small plot a flag takes the chip's place while it shows (SA-1372). */}
               {showsDots(t) && !(strip && t.flag) && (
-                // The full chip (17 px) can stand taller than a 16 px plot: a tap on what overhangs goes to the plot beneath.
+                // A tap on the chip goes to the plot beneath.
                 <span
                   className={cx(
                     'pointer-events-none flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip',
@@ -285,7 +305,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   )}
                   // In the right column the badge sits inside the plot instead of hanging out: the chip steps left by as much,
                   // except the small chip, which fills its plot's width and would step into the next plot.
-                  style={small ? { bottom: SMALL_STRIP.chipFoot } : t.special && t.x === width - 1 ? { left: -(badge * SPECIAL_HANG + BADGE_EDGE) } : undefined}
+                  style={small ? { bottom: SMALL_STRIP.chipFoot } : t.special && t.x === width - 1 ? { left: -rightColumnStep(plot, density) } : undefined}
                   data-testid={`map-dots-${t.x}-${t.y}`}
                 >
                   {ground.map(([g, n]) => (
@@ -372,12 +392,13 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 </span>
               )}
               {t.flag && small && (
-                // Under 16 px a flag is a 7×7 glyph chip in the dots chip's place, on any plot (PM ruling A, WS6's glyphs, SA-1372):
+                // Under 24 px a flag is a 7×7 glyph chip in the dots chip's place, on any plot (PM ruling A, WS6's glyphs, SA-1372):
                 // its word would cover a neighbour's dots. The plot's label carries the word.
                 <span
                   className={cx('absolute left-1/2 z-[4] grid size-[7px] -translate-x-1/2 place-items-center rounded-[1.5px] shadow-chip', FLAG_TONE[t.flag], fade)}
                   style={{ bottom: SMALL_STRIP.chipFoot }}
                   data-testid={`map-flag-${at}`}
+                  data-flag={t.flag}
                 >
                   <FlagGlyph flag={t.flag} />
                 </span>
@@ -392,11 +413,12 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                     fade,
                   )}
                   data-testid={`map-flag-${at}`}
+                  data-flag={t.flag}
                 >
-                  {t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
+                  {t.flag === 'guard' ? <GuardShield size={tv ? 14 : 10} /> : t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
                 </span>
               )}
-              {/* Under 16 px a MULE's plot draws no badge: the MULE wins, as the strip drops the badge first (WS6, SA-1372). */}
+              {/* Under 24 px a MULE's plot draws no badge: the MULE wins, as the strip drops the badge first (WS6, SA-1372). */}
               {t.special && !strip && !(small && t.good) && (
                 // Above the plot's chips and its right and lower neighbours', under the owners' marks (z-[4]), and never in the way of a
                 // tap: the tap goes to the plot beneath.
@@ -495,14 +517,24 @@ function bestGoods(dots: Dots, count: number): [Good, number][] {
 }
 
 /** A plot's flag: its chip's colours, and the words its plot's label says it with (WS6, SA-1372). */
-const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo' } as const;
-const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan' } as const;
+const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo', guard: 'bg-void text-holo ring-1 ring-inset ring-holo' } as const;
+const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan', guard: 'guarded' } as const;
+
+/** The Sheriff's guard: a shield (WS8's politics-p2 mock, GuardGlyph), where the other flags print a word. */
+function GuardShield({ size }: { size: number }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className="block" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z" />
+    </svg>
+  );
+}
 
 /**
  * A flag's glyph on a small plot, 7×7 in the chip's text colour (WS6's paths, Jira SA-1372 comment 15290): OFF a cross,
- * SCAN a ring with a centre dot, SALE a gavel drawn as an upright T. They differ by shape, so they read in greyscale.
+ * SCAN a ring with a centre dot, SALE a gavel drawn as an upright T, GUARD a shield. They differ by shape, so they read in
+ * greyscale.
  */
-function FlagGlyph({ flag }: { flag: 'survey' | 'sabotage' | 'sale' }) {
+function FlagGlyph({ flag }: { flag: MapFlag }) {
   return (
     <svg aria-hidden viewBox="0 0 7 7" width={7} height={7}>
       {flag === 'sabotage' && <path d="M2.1 2.1L4.9 4.9M4.9 2.1L2.1 4.9" stroke="currentColor" strokeWidth={1.15} strokeLinecap="round" />}
@@ -512,6 +544,7 @@ function FlagGlyph({ flag }: { flag: 'survey' | 'sabotage' | 'sale' }) {
           <circle cx="3.5" cy="3.5" r="0.75" fill="currentColor" />
         </>
       )}
+      {flag === 'guard' && <path d="M3.5 1l2.4.9v1.7c0 1.3-1 2.2-2.4 2.5-1.4-.3-2.4-1.2-2.4-2.5V1.9z" fill="none" stroke="currentColor" strokeWidth={0.95} strokeLinejoin="round" />}
       {flag === 'sale' && (
         <>
           <rect x="1.4" y="1.5" width="4.2" height="1.6" rx="0.3" fill="currentColor" />

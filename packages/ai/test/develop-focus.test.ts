@@ -3,6 +3,10 @@ import { advancePhase, AI_LEVELS, AI_PERSONAS, createGame, observe, stableJson, 
 import { developDecision, type DevAction } from '../src/strategist.js';
 import type { Candidate } from '../src/utility.js';
 import type { Mind } from '../src/value.js';
+import { rulesOff } from './rule-switches.js';
+
+// Focus ranks the installs Energy first would rule out.
+rulesOff('energyFirst');
 
 const mind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
 

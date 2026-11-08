@@ -3,12 +3,13 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
+import { COLONY, GAME, HAPPINESS, POLITICS, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
-import { votesOpen } from './politics.js';
+import { budgetCredits, taxAsPlanningEnds, votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
-import { scoreParts } from './game.js';
+import { createRng, seedOf } from './rng.js';
+import { score, scoreParts } from './game.js';
 import { GOODS, type Colony, type ColonyGauges, type FundLedger, type FundLine, type FundSource, type GameState, type Good, type MoodBand, type PrestigeId, type Project } from './types.js';
 
 /** The colony at the start of a game played with politics. */
@@ -241,10 +242,16 @@ export function runColony(state: GameState, shortages: readonly Good[]): void {
     p.monthsLeft = p.monthsLeft! - 1;
     if (p.monthsLeft === 0) Object.assign(p, { stage: 'standing', monthsLeft: null });
   }
-  // Every project still being paid for, in the order it was commissioned: one paid in credits but waiting for its goods
-  // takes no credits, so it never starves the ones behind it. fund() keeps the reserve across all of them, and starts
-  // every one that has all its credits and goods; no building waits for land (C48) (RULE-21 row 4).
-  for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) fund(state, colony, p);
+  // The Governor's budget (S5-RULE-3): budgetCredits fixes the spare once, here, and each line takes its share of it. The shares
+  // add up to at most 100 and each payment is floored, so the lines together never take more than the spare.
+  const credits = budgetCredits(state);
+  payWelfare(state, colony, credits.welfare);
+  // Every project still being paid for, in the order it was commissioned, out of what the Projects share leaves: one paid
+  // in credits but waiting for its goods takes no credits, so it never starves the ones behind it. fund() keeps the
+  // reserve across all of them, and starts every one that has all its credits and goods; no building waits for land
+  // (C48) (RULE-21 row 4).
+  let limit = credits.projects;
+  for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) limit -= fund(state, colony, p, limit);
   colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
@@ -273,19 +280,22 @@ export function lastGauges(state: GameState): ColonyGauges | null {
 }
 
 /** What the fund can spend on a project: everything above the reserve it keeps for office pay. */
-function spare(state: GameState): number {
+export function spare(state: GameState): number {
   return Math.max(0, state.treasury.money - COLONY.reserve);
 }
 
-function fund(state: GameState, colony: Colony, project: Project): void {
-  project.funded.credits += payOut(state, colony, 'project', Math.min(stillNeeds(project).credits, spare(state)));
+/** Funds one project from the fund as far as the reserve and `limit` (credits and goods together) allow. Returns what it spent. */
+function fund(state: GameState, colony: Colony, project: Project, limit: number): number {
+  let spent = payOut(state, colony, 'project', Math.min(stillNeeds(project).credits, spare(state), limit));
+  project.funded.credits += spent;
   if (COLONY.fundBuysGoods) {
     for (const [good, missing] of Object.entries(stillNeeds(project).goods) as [Good, number][]) {
       const price = storeQuotes(state, good).sell;
       if (price === null) continue;
-      const units = Math.min(missing, storeForSale(state, good), Math.floor(spare(state) / price));
+      const units = Math.min(missing, storeForSale(state, good), Math.floor(Math.min(spare(state), limit - spent) / price));
       if (units <= 0) continue;
       payOut(state, colony, 'project', units * price);
+      spent += units * price;
       state.store.stock[good] -= units;
       state.store.capital += units * price;
       project.funded.goods[good] = (project.funded.goods[good] ?? 0) + units;
@@ -295,6 +305,7 @@ function fund(state: GameState, colony: Colony, project: Project): void {
   const funded = needs.credits === 0 && Object.keys(needs.goods).length === 0;
   // RULE-21 row 4: fully funded, it builds. Its place on the colony's grounds is its own from the commission (C48).
   if (funded) Object.assign(project, { stage: 'building', monthsLeft: PRESTIGE[project.id].buildMonths });
+  return spent;
 }
 
 /** A good's key as words for a message: rareEarth reads "rare earth". */
@@ -355,7 +366,7 @@ export function keepPromise(state: GameState): void {
   const politics = state.politics;
   if (!state.colony || !politics?.governor || !politics.promise || politics.promiseFrom === null) return;
   if (politics.election && politics.election.stage !== 'over') return;
-  const tax = Math.round(state.treasury.salesTax * PERCENT);
+  const tax = Math.round(taxAsPlanningEnds(state) * PERCENT);
   const { promise, promiseFrom: from } = politics;
   const kept = promise.kind === 'cap' ? tax <= promise.percent : promise.kind === 'lower' ? tax < from : tax === from;
   edit(state).promises.push({ month: state.month, governor: politics.governor, kind: promise.kind, kept });
@@ -375,6 +386,8 @@ export interface MoodInputs {
   prestige: number;
   /** Credits between the richest and poorest player, by cash and land. */
   gap: number;
+  /** Credits of Welfare paid this upkeep (S5-RULE-5). */
+  welfare: number;
 }
 
 /** The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done. */
@@ -387,6 +400,7 @@ export function moodInputs(state: GameState, shortages: readonly Good[]): MoodIn
     broken: brokeNow ? 1 : 0,
     prestige: colonyPrestige(state),
     gap: wealthGap(state),
+    welfare: state.colony?.welfare?.month === state.month ? state.colony.welfare.paid : 0,
   };
 }
 
@@ -399,7 +413,8 @@ export function moodTarget(i: MoodInputs): number {
     w.air * Math.max(0, i.air - w.airFree) -
     w.tax * Math.max(0, i.tax - w.taxFree) -
     w.broken * i.broken +
-    w.prestige * Math.min(i.prestige, w.prestigeCap) -
+    w.prestige * Math.min(i.prestige, w.prestigeCap) +
+    w.welfare * Math.min(i.welfare / w.welfareUnit, w.welfareCap) -
     w.gap * Math.min(i.gap / w.gapUnit, w.gapCap);
   return clampMood(target);
 }
@@ -474,4 +489,29 @@ export function payStrike(state: GameState, playerId: string): void {
   const colony = edit(state);
   payOut(state, colony, 'strikePay', strike.cost);
   colony.strike = { ...strike, paid: true };
+}
+
+/**
+ * Who Welfare would go to now: the non-Governor with strictly the lowest Worth; a tie is drawn on a stream from the
+ * game, the month and the name 'welfare', so no election draw moves. Named at a 0% share too; the payment is what the share sets (AM-8). Nobody with politics off. See S5-RULE-4.
+ */
+export function welfareRecipient(state: GameState): string | null {
+  const politics = state.politics;
+  if (!politics) return null;
+  const worths = state.players.filter((p) => p.id !== politics.governor).map((p) => ({ id: p.id, worth: score(state, p.id) }));
+  if (worths.length === 0) return null;
+  const lowest = Math.min(...worths.map((w) => w.worth));
+  const tied = worths.filter((w) => w.worth === lowest).map((w) => w.id);
+  if (tied.length === 1) return tied[0]!;
+  return createRng(seedOf(state.seed, state.month, 'welfare')).pick(tied);
+}
+
+/** Pays Welfare out of the fund to the player in last place, as far as the fund reaches, and records it. */
+function payWelfare(state: GameState, colony: Colony, want: number): void {
+  const to = want > 0 ? welfareRecipient(state) : null;
+  if (to === null) return;
+  const paid = payOut(state, colony, 'welfare', want);
+  if (paid === 0) return;
+  state.players.find((p) => p.id === to)!.money += paid;
+  colony.welfare = { month: state.month, to, paid };
 }

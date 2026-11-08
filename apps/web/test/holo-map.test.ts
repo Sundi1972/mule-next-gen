@@ -1,4 +1,4 @@
-import { HoloMap, RING_INSIDE_PLOT, selectionGlow, selectionRing, smallDots, smallStrip, specialBadgeBox, type MapTile } from '@mule/ui';
+import { DOTS_CHIP, HoloMap, RING_INSIDE_PLOT, rightColumnStep, selectionGlow, selectionRing, smallDots, smallStrip, specialBadgeBox, STORE_SIGN_PLOT, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -270,15 +270,25 @@ describe('B-AC-9 (WS4, plot look A; PM ruling, 7 Nov): under dots the selection�
 });
 
 describe('B-AC-9 (WS6 ruling, 7 Nov): the phone’s small dots chip', () => {
-  it('is drawn on a phone plot under 16 px, never at 16 px and over, never on the TV', () => {
+  it('is drawn on a phone plot under 24 px, never at 24 px and over, never on the TV', () => {
     expect(smallDots(12.8, 'phone')).toBe(true);
     expect(smallDots(15.9, 'phone')).toBe(true);
-    expect(smallDots(16, 'phone')).toBe(false);
+    // The iPhone SE's planning map (19.8 px, SB-2): the full chip there met the tab, gem and badge and left the right column.
+    expect(smallDots(16, 'phone')).toBe(true);
+    expect(smallDots(19.8, 'phone')).toBe(true);
+    expect(smallDots(23.9, 'phone')).toBe(true);
+    expect(smallDots(24, 'phone')).toBe(false);
     expect(smallDots(25, 'phone')).toBe(false);
-    expect(smallDots(12.8, 'tv')).toBe(false);
+    expect(smallDots(19.8, 'tv')).toBe(false);
   });
 
-  it('at 16 px and over keeps its good’s icon over the three dots, 3 px padding, and the plot’s label names the good', () => {
+  it('switches where the ring comes inside and the STORE sign goes: one small plot, under 24 px (SA-1372, moved from 16 px, WS6 8 Nov)', () => {
+    expect(RING_INSIDE_PLOT).toBe(24);
+    expect(STORE_SIGN_PLOT).toBe(24);
+    for (const plot of [23.9, 24]) expect(smallDots(plot, 'phone'), `${plot} px`).toBe(plot < RING_INSIDE_PLOT);
+  });
+
+  it('at 24 px and over keeps its good’s icon over the three dots, 3 px padding, and the plot’s label names the good', () => {
     const map = renderToStaticMarkup(createElement(HoloMap, { width: 1, height: 1, tiles: [{ x: 0, y: 0, terrain: 'plains', owner: null, ground: { water: 2 } }] }));
     const chip = map.slice(map.indexOf('data-testid="map-dots-0-0"'));
     expect(tag(map, /data-testid="map-dots-0-0"/)).toMatch(/\bpx-\[3px\] py-\[2px\]/);
@@ -316,12 +326,12 @@ describe('B-AC-9 (MG-2): the special badge is sized with the plot, so it hides n
   });
 });
 
-describe('SA-1372 (WS6 ruling, 7 Nov): on a phone plot under 16 px that shows its dots, no mark meets the chip', () => {
+describe('SA-1372 (WS6 ruling, 7 Nov; under 24 px since 8 Nov): on a small phone plot that shows its dots, no mark meets the chip', () => {
   /** The small chip: 7 px tall (2 px padding, 3 px dots), half a pixel over the plot's foot; its dots at 3 px. */
   const chipTop = (plot: number) => plot - 0.5 - 7;
 
   it('lays the tab, the gem and the badge in a strip above the chip, each at least 3 px, the strip ending 1 px over the chip', () => {
-    for (const plot of [12.8, 13.5, 15, 15.9]) {
+    for (const plot of [12.8, 13.5, 15, 15.9, 16, 19.8, 23.9]) {
       const s = smallStrip(plot, { tab: true, gems: 1, badge: true });
       expect(s, `${plot} px`).toMatchObject({ tab: true, gems: 1, badge: true });
       expect(s.size).toBeGreaterThanOrEqual(3);
@@ -341,10 +351,11 @@ describe('SA-1372 (WS6 ruling, 7 Nov): on a phone plot under 16 px that shows it
     expect(smallStrip(12.8, { tab: false, gems: 0, badge: true })).toMatchObject({ tab: false, gems: 0, badge: true });
   });
 
-  it('draws the chip at the plot’s foot only under 16 px; from 16 px it stays centred (ruling X)', () => {
+  it('draws the chip at the plot’s foot only under 24 px; from 24 px it stays centred (ruling X: real 25–30 px plots)', () => {
     const at = (plot: number) => smallDots(plot, 'phone');
     expect(at(12.8)).toBe(true);
-    expect(at(16)).toBe(false);
+    expect(at(19.8)).toBe(true);
+    expect(at(24)).toBe(false);
   });
 });
 
@@ -381,3 +392,21 @@ describe('SA-1372, #640 review: no mark from a plot beside reaches a neighbour�
     expect(tag(plain, /data-testid="selected-ring"/)).toMatch(/-inset-\[6%\]/);
   });
 });
+
+describe('B-AC-9 (MG-2): a right-column special’s full dots chip steps left, never out of its plot', () => {
+  /** The full chip, centred: its gap to either side of its plot. */
+  const room = (plot: number) => (plot - DOTS_CHIP) / 2;
+
+  it('steps by the badge’s hang and edge inset where that fits (4.75 px on a 30 px plot), and by no more than the chip’s room where it does not', () => {
+    expect(DOTS_CHIP).toBe(17);
+    expect(rightColumnStep(30)).toBeCloseTo(4.75, 6);
+    // The land grant's map on the iPhone SE: 24.2 px plots, where the hang and edge (4.25 px) would put 0.65 px outside.
+    expect(rightColumnStep(24.2)).toBeCloseTo(room(24.2), 6);
+    for (let plot = 24; plot <= 60; plot += 0.05) {
+      const step = rightColumnStep(plot);
+      expect(step, `${plot} px`).toBeLessThanOrEqual(room(plot) + 1e-9);
+      expect(step, `${plot} px`).toBeCloseTo(Math.min(specialBadgeBox(plot, 'phone') * 0.25 + 2, room(plot)), 6);
+    }
+  });
+});
+

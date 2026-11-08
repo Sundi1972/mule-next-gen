@@ -1,10 +1,12 @@
 import {
   advanceGrant,
   advancePhase,
+  answerDeal,
   AI_HANDS,
   analysePlot,
   auctionDone,
   buyMule,
+  callOverrule,
   castLawVote,
   castVote,
   commission,
@@ -18,13 +20,17 @@ import {
   fitFilter,
   GAME,
   grantDone,
+  fineCulprit,
   grantPass,
   installMule,
+  investigate,
   list as listLot,
   litPlot,
   lotDone,
   MS_PER_SECOND,
+  offerDeal,
   orderGeoDrone,
+  orderSabotage,
   outfitMule,
   RuleError,
   runFor,
@@ -32,6 +38,8 @@ import {
   payStrike,
   repair,
   proposeLaw,
+  setBudget,
+  setGuards,
   setSalesTax,
   votesDone,
   votesOpen,
@@ -45,7 +53,9 @@ import {
   tileIndex,
   unlist as unlistLot,
   visitPub,
+  voteOverrule,
   walkSeconds,
+  withdrawDeal,
   WALK,
   type AiLevelId,
   type AiPersonaId,
@@ -252,11 +262,41 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
       case 'voteLaw':
         castLawVote(state, id, action.yes);
         break;
+      case 'setBudget':
+        setBudget(state, id, action.shares);
+        break;
+      case 'callOverrule':
+        callOverrule(state, id, action.target);
+        break;
+      case 'voteOverrule':
+        voteOverrule(state, id, action.yes);
+        break;
+      case 'offerDeal':
+        offerDeal(state, id, action.offer);
+        break;
+      case 'withdrawDeal':
+        withdrawDeal(state, id, action.id);
+        break;
+      case 'answerDeal':
+        answerDeal(state, id, action.id, action.accept);
+        break;
+      case 'sabotage':
+        orderSabotage(state, id, action.target);
+        break;
+      case 'guard':
+        setGuards(state, id, action.tiles);
+        break;
+      case 'investigate':
+        investigate(state, id, action.order);
+        break;
+      case 'fine':
+        fineCulprit(state, id, action.order, action.amount);
+        break;
       case 'done':
         if (state.phase === 'landGrant') grantPass(state, id);
         else if (state.phase === 'landAuction') lotDone(state, id, action.done);
-        // The election's or the law ballot's Done, through the one votes facade, as the server's.
-        else if (state.phase === 'planning' && (state.politics?.election || state.politics?.council)) votesDone(state, id, action.done);
+        // The election's, the law ballot's or the overrule ballot's Done, through the one votes facade, as the server's.
+        else if (votesOpen(state)) votesDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
       case 'drone':

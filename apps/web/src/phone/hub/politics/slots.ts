@@ -2,9 +2,9 @@ import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
 import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot } from '../slots';
 import { CouncilDesk } from './Council';
-import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
+import { ballotComplete, contested, ElectionDay, ElectionDayRail, promisedFirst } from './ElectionDay';
 import { GovernorDesk } from './Governor';
-import { CouncilBallot, CouncilRail } from './LawBallot';
+import { CouncilBallot, CouncilRail, lawBallotComplete, lawPromisedFirst } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
@@ -96,7 +96,7 @@ export function electionReadyWords({ view, me }: HubSeat): ReadyBarWords | null 
   const election = politics?.election;
   if (!election) return null;
   if (election.stage === 'announce') return contested(politics.candidates).length > 0 ? ANNOUNCE_WORDS : NO_BALLOT_WORDS;
-  if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete({ view, me }, election) };
+  if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete({ view, me }, election), first: () => promisedFirst({ view, me }, election) };
   return null;
 }
 
@@ -155,10 +155,10 @@ const LAW_BALLOT_WORDS: ReadyWords = {
   confirm: () => 'Close the vote now? The votes as they stand are counted, and the result is shown.',
 };
 
-/** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes). */
+/** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes) or a promised one. */
 export function councilReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
   if (view.politics?.council?.stage !== 'ballot') return null;
-  return { ...LAW_BALLOT_WORDS, label: 'VOTED', canReady: (me.politics?.lawBallot ?? null) !== null };
+  return { ...LAW_BALLOT_WORDS, label: 'VOTED', canReady: lawBallotComplete({ view, me }), first: () => lawPromisedFirst({ view, me }) };
 }
 
 /** Now through the law ballot and its reveal; a Done seat is told whom the vote waits for, not planning's words. */

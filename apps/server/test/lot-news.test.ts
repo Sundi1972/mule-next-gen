@@ -9,6 +9,6 @@ const brixPlot: Listing = { id: 'plot-2-1', seller: 'brix', item: { kind: 'plot'
 
 describe('the news at a lot’s bell', () => {
   it('a player who buys it is named as before', () => {
-    expect(lotNews(brixPlot, { kind: 'sold', buyer: 'ossa', price: 300 }, nameOf)).toBe('Ossa bought plot 2·1 from Brix for 300.');
+    expect(lotNews(brixPlot, { kind: 'sold', buyer: 'ossa', price: 300 }, nameOf)).toEqual({ text: 'Ossa bought plot 2·1 from Brix for 300.', who: ['ossa', 'brix'] });
   });
 });
