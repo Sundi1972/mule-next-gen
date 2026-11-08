@@ -37,9 +37,7 @@ export class SheriffHand {
     const plots = this.workingPlots(obs);
     let posted: number[];
     if (this.rookie) {
-      posted = [];
-      const pool = [...plots];
-      while (posted.length < max && pool.length > 0) posted.push(...pool.splice(pool.indexOf(rng.pick(pool)), 1));
+      posted = rng.shuffle(plots).slice(0, max);
     } else {
       const ranked = plots.map((tile) => ({ tile, worth: guardValue(obs, this.mind.me, tile) })).filter((p) => p.worth > 0).sort((a, b) => b.worth - a.worth || a.tile - b.tile);
       const cut = ranked[max - 1]?.worth;
@@ -47,10 +45,7 @@ export class SheriffHand {
       const tied = ranked.filter((p) => cut !== undefined && p.worth === cut);
       posted = sure.map((p) => p.tile);
       if (cut !== undefined && tied.length > max - sure.length) {
-        const chosen: number[] = [];
-        const pool = tied.map((p) => p.tile);
-        while (chosen.length < max - sure.length) chosen.push(...pool.splice(pool.indexOf(rng.pick(pool)), 1));
-        posted = [...posted, ...chosen];
+        posted = [...posted, ...rng.shuffle(tied.map((p) => p.tile)).slice(0, max - sure.length)];
       } else posted = [...posted, ...tied.map((p) => p.tile)].slice(0, max);
     }
     if (posted.length > 0) act({ type: 'guard', tiles: posted });
