@@ -447,6 +447,10 @@ describe('shortage foresight', () => {
     const later = outlook(observe(developmentWithWater(20), 'ai0'), 'ai0', { lookAhead: true });
     expect(later.price('water'), 'the premise: Water is posted normal now').toBeLessThan(ceiling / 2);
     expect(later.later('water')).toBeLessThan(ceiling);
+    // The colonists go short of 17 Water in the forecast month's own upkeep, which runs after the auction it reads: that
+    // shortage moves only the next month's posting, so it doesn't raise this one (review of #743).
+    const after = outlook(observe(developmentWithWater(17), 'ai0'), 'ai0', { lookAhead: true });
+    expect(after.later('water')).toBeLessThan(ceiling);
     // Negative case: with Water to spare the forecast stays a market price, far under the ceiling.
     const plenty = outlook(observe(developmentWithWater(300), 'ai0'), 'ai0', { lookAhead: true });
     expect(plenty.later('water')).toBeLessThan(ceiling / 2);
