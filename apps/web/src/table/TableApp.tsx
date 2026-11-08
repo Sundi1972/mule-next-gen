@@ -243,7 +243,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
   const drift = useMonthEndDrift(game, opener === null);
   // A card broken this month is a moment (SB-5b, PM ruling 8 Nov): its banner folds after TV_MOMENT_MS; the news keeps its
-  // line. A new break while it shows is a new moment, and the banner leads with the newest breaks (it names two).
+  // line. A new break while it shows is a new moment, and the banner leads with the newest breaks (two breakers' lines).
   const broken = game.phase === 'planning' ? brokenIn(game, game.month) : [];
   const breaking = useMoment(broken.length > 0 ? `break:${game.month}:${broken.map((c) => c.id).sort().join(',')}` : null, now);
   const newest = useHeldNewestFirst(broken.map((c) => c.id));
