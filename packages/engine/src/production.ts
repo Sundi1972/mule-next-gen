@@ -172,24 +172,41 @@ export function monthsToExperience(tile: Tile): number {
   return Math.max(0, FACTORY.experienceMonths - tile.runMonths);
 }
 
-/** Crew working a player's land: 1 per raw plot, 2 per factory, none on a green belt. */
-export function crewOf(state: GameState, playerId: string): number {
-  let crew = 0;
-  for (const t of state.tiles) {
-    if (t.owner !== playerId || !t.outfit) continue;
-    crew += t.outfit === 'greenBelt' ? UPKEEP.crew.greenBelt : isFactory(t.outfit) ? UPKEEP.crew.factory : UPKEEP.crew.raw;
-  }
-  return crew;
+/** The outfit of every plot a player works. */
+function outfitsOf(state: GameState, playerId: string): Outfit[] {
+  return state.tiles.filter((t) => t.owner === playerId && t.outfit).map((t) => t.outfit!);
 }
 
-/** Food and Water a player's household and crew need this month, and the Medicine that keeps the crews well (needs RULE-15). */
-export function needsOf(state: GameState, playerId: string): { food: number; water: number; medicine: number } {
-  const crew = crewOf(state, playerId);
+/** Crew on plots of these outfits: 1 per raw plot, 2 per factory, none on a green belt. */
+function crewOver(outfits: readonly Outfit[]): number {
+  return outfits.reduce((n, o) => n + (o === 'greenBelt' ? UPKEEP.crew.greenBelt : isFactory(o) ? UPKEEP.crew.factory : UPKEEP.crew.raw), 0);
+}
+
+/** Crew working a player's land: 1 per raw plot, 2 per factory, none on a green belt. */
+export function crewOf(state: GameState, playerId: string): number {
+  return crewOver(outfitsOf(state, playerId));
+}
+
+export type Needs = { food: number; water: number; medicine: number };
+
+/** Food and Water a household working plots of these outfits needs, and the Medicine that keeps its crews well. */
+function needsOver(state: GameState, outfits: readonly Outfit[]): Needs {
+  const crew = crewOver(outfits);
   return {
     food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
     water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
     medicine: crewsFallSick(state) ? 1 : 0,
   };
+}
+
+/** Food and Water a player's household and crew need this month, and the Medicine that keeps the crews well (needs RULE-15). */
+export function needsOf(state: GameState, playerId: string): Needs {
+  return needsOver(state, outfitsOf(state, playerId));
+}
+
+/** needsOf as if the player worked one more plot of `outfit` (needs C12): what the AI weighs before it buys one. */
+export function needsWith(state: GameState, playerId: string, outfit: Outfit): Needs {
+  return needsOver(state, [...outfitsOf(state, playerId), outfit]);
 }
 
 /** Whether the colony is sick enough to make players' crews sick: health on and h at least HEALTH.crewSickFrom. */
