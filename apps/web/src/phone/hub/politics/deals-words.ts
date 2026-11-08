@@ -73,7 +73,7 @@ export function bindsWords(view: V, c: DealCard, me: string | null): Said {
 
 /** What keeping and breaking it cost, for the one who holds the promise. */
 export function stakesWords(view: V, c: Pick<DealCard, 'from' | 'to' | 'terms'>, me: string | null): Said {
-  if (c.terms.kind === 'pact') return [`Kept: +${MOVES.kept} each. Broken: −${-MOVES.pactBroken} to whoever breaks it, and the table sees it.`];
+  if (c.terms.kind === 'pact') return [`Kept. Broken: −${-MOVES.pactBroken} to whoever breaks it, and the table sees it.`];
   if (c.from === me) return [`Kept: +${MOVES.kept} to your name. Broken: −${-MOVES.voteBroken}, and the table sees it.`];
   const from = who(view, c.from, me);
   return ['You promise nothing. If ', from, ` breaks it: −${-MOVES.voteBroken} to `, from, ', in public.'];
@@ -120,7 +120,7 @@ export function statusWords(view: V, c: DealCard, me: string | null): Said {
     case 'active':
       return [c.terms.kind === 'pact' ? `Binds until the end of month ${c.until}` : `Binds at the ballot, month ${c.until}`];
     case 'kept':
-      return c.terms.kind === 'pact' ? [`Pact kept · +${MOVES.kept} each`] : [`Kept · +${MOVES.kept} to `, who(view, c.from, me)];
+      return c.terms.kind === 'pact' ? ['Pact kept'] : [`Kept · +${MOVES.kept} to `, who(view, c.from, me)];
     case 'broken':
       return ['Broken by ', who(view, c.brokenBy ?? c.from, me), ` · −${-brokenMove(c)}, in public`];
     case 'declined':
