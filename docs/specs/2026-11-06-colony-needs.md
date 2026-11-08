@@ -1,6 +1,6 @@
-# Colony needs: demand and hardship — design (PROPOSED, spec only)
+# Colony needs: demand and hardship — design (approved 6 Nov, being built)
 
-Status: **draft, nothing built.** For Heiko: "Read it first". Lead WS7 (the colonists part);
+Status: **approved by Heiko on 6 Nov** (explainer v3, a28b861b; AM-1), being built in WS5's colony-economy PRs (plan docs/plans/2026-11-06-ws5-colony-economy-build.md). Lead WS7 (the colonists part);
 WS5 writes the per-production-type consumption table and the store-demand step; WS1 reviews the
 numbers as owner of `upkeep.ts` and `config.ts`. Folds in C27 (WS1's held draft `origin/ws1-c27`,
 RULE-29 there) and touches G-5 HC-22.
