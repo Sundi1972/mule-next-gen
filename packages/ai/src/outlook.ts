@@ -195,9 +195,14 @@ export function endMonth(state: GameState): number {
   return state.landRanOutMonth === null ? state.maxMonths : Math.min(state.maxMonths, state.landRanOutMonth + GAME.landRushMonths);
 }
 
+/** True while this month's production has yet to run. */
+export function producesThisMonth(state: GameState): boolean {
+  return BEFORE_PRODUCTION.has(state.phase);
+}
+
 /** Productions still to come, counting this month's if it hasn't run yet. */
 export function productionsLeft(state: GameState): number {
-  return Math.max(0, endMonth(state) - state.month + (BEFORE_PRODUCTION.has(state.phase) ? 1 : 0));
+  return Math.max(0, endMonth(state) - state.month + (producesThisMonth(state) ? 1 : 0));
 }
 
 /** Every good's price in an outlook, without extra units. */

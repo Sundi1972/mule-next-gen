@@ -3,6 +3,7 @@ import {
   AI_PLANS,
   AI_VALUE,
   airPoints,
+  crewFactor,
   crewOf,
   DEV_STEER,
   DEV_WALK,
@@ -54,7 +55,7 @@ import {
   type Tile,
 } from '@mule/engine';
 import { standPoint, tripSeconds } from './floor-time.js';
-import { belief, endMonth, outlook, productionsLeft, type Outlook } from './outlook.js';
+import { belief, endMonth, outlook, producesThisMonth, productionsLeft, type Outlook } from './outlook.js';
 
 /** Who is thinking: the seat, its persona and its level. */
 export interface Mind {
@@ -191,13 +192,27 @@ function weights(obs: GameState): { now: number; long: number }[] {
   return out;
 }
 
+/**
+ * The share of its output an outfit makes for the seat in this month's production, from how short its crews went at the
+ * last month end (needs C14): the engine's crewFactor, but 1 for an Energy plant, and 1 once the month has produced, as
+ * the next month end can feed the crews.
+ */
+export function crewNext(obs: GameState, me: string, outfit: Outfit): number {
+  const short = obs.players.find((p) => p.id === me)?.crewShort;
+  if (!short || outfit === 'energy' || !producesThisMonth(obs)) return 1;
+  return crewFactor(short);
+}
+
 /** Credits gained by buying, outfitting and installing a MULE: its running value, less the price, plus what the developed plot adds to the final score. */
 export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outfit, mind: Mind): { gain: number; cost: number; net: number; y: Yield } {
   const y = yieldOf(obs, tile, outfit, mind.me);
   const net = monthlyNet(obs, o, y, outfit, mind);
   // With look-ahead the later months use the rolled-forward prices; without, next month's price lasts (Rookie's mistake).
   const long = mind.level.lookAhead ? monthlyNet(obs, o, y, outfit, mind, (g, extra = 0) => o.later(g, extra)) : net;
-  const running = weights(obs).reduce((n, w) => n + w.now * net + w.long * long, 0);
+  // The first month is this month's production when it is still to come: the crews' cut bites there only (crewNext).
+  const f = crewNext(obs, mind.me, outfit);
+  const first = f < 1 ? monthlyNet(obs, o, { ...y, made: Math.round(y.made * f) }, outfit, mind) : net;
+  const running = weights(obs).reduce((n, w, i) => n + w.now * (i === 0 ? first : net) + w.long * long, 0);
   const cost = (tile.outfit ? 0 : mulePriceFor(obs, mind.me)) + outfitCostFor(obs, mind.me, outfit);
   const residual = productionsLeft(obs) > 0 && !tile.outfit ? mulePrice(obs) * STRATEGIST.residual : 0;
   return { gain: running - cost + residual, cost, net, y };
