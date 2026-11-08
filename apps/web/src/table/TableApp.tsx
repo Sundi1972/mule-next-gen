@@ -26,6 +26,7 @@ import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, paidOutThis
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { NewsWords } from '../components/SeatWords';
+import { RepChip } from '../phone/hub/politics/parts';
 import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -293,7 +294,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
         {phase !== 'planning' ? null : waiting.length > 0 ? (
           <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
-            <WaitingFor seats={waiting} me={null} tv />
+            <WaitingFor view={game.politics ? game : undefined} seats={waiting} me={null} tv />
             {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
           </div>
         ) : (
@@ -325,7 +326,13 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                       <span className="flex-1" />
                     ) : (
                       <span className="min-w-0 flex-1 truncate font-display text-xl font-semibold" data-testid="tv-ready-claude-names">
-                        {row.seats.map((s) => s.name).join(', ')}
+                        {row.seats.map((s, i) => (
+                          <Fragment key={s.id}>
+                            {i > 0 && ', '}
+                            {s.name}
+                            <TvRep game={game} id={s.id} testid={`tv-ready-rep-${s.id}`} />
+                          </Fragment>
+                        ))}
                       </span>
                     )}
                     {/* The note wraps under the words when the column is narrow (five seats at full size), never past its edge. */}
@@ -348,7 +355,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                       {row.seats.map((s, i) => (
                         <Fragment key={s.id}>
                           {i > 0 && ', '}
-                          {s.name}{' '}
+                          {s.name}
+                          <TvRep game={game} id={s.id} testid={`tv-ready-rep-${s.id}`} />{' '}
                           <span data-num className="font-mono text-sm font-normal text-ink-3" data-testid={`tv-rank-${s.id}`}>
                             {ordinal(places.get(s.id) ?? game.players.length)}
                           </span>
@@ -373,9 +381,13 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                   </span>
                   <PlayerMark slot={toSlot(s.slot)} size={22} glow={!dim} />
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate font-display text-xl font-semibold" data-testid="tv-ready-name">
-                      {s.name}
-                      {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
+                    {/* The chip sits outside the name's truncation, so a long name gives way first. */}
+                    <span className="flex min-w-0 items-center">
+                      <span className="truncate font-display text-xl font-semibold" data-testid="tv-ready-name">
+                        {s.name}
+                        {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
+                      </span>
+                      <TvRep game={game} id={s.id} testid={`tv-ready-rep-${s.id}`} />
                     </span>
                     {/* Under the name, not beside it: beside, it leaves the name a few letters. */}
                     {playsBuiltIn(status) && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
@@ -443,6 +455,15 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   );
 }
 
+/** A player's reputation chip on the TV, after their name, with politics on (S3-C19); nothing with it off. */
+function TvRep({ game, id, testid }: { game: MuleView; id: string; testid: string }) {
+  return game.politics ? (
+    <span className="ml-2 inline-flex shrink-0 align-middle font-normal">
+      <RepChip view={game} id={id} tv testid={testid} />
+    </span>
+  ) : null;
+}
+
 function Players({ game, right, className }: { game: MuleView; right: (p: MuleView['players'][number]) => ReactNode; className?: string }) {
   return (
     <ul className={cx('flex flex-col gap-2', className)}>
@@ -461,6 +482,7 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
                 <AiMark />
               </span>
             )}
+            <TvRep game={game} id={p.id} testid={`tv-player-rep-${p.id}`} />
           </span>
           {right(p)}
         </li>

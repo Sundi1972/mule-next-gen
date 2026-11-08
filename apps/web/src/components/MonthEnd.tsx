@@ -3,6 +3,7 @@ import type { MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import { Fragment, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
+import { RepChip } from '../phone/hub/politics/parts';
 import { collapseCutWords, colonyReport, type ColonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
 
 /**
@@ -153,6 +154,8 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                         `You (${r.player.name})`
                       )}
                     </span>
+                    {/* S3-C19: the reputation chip, with politics on; not at 'compact' (the phone with no TV, where the name has no room) nor at game over. */}
+                    {view.politics && density !== 'compact' && !final && <RepChip view={view} id={r.player.id} tv={tv} testid={`league-rep-${r.player.id}`} />}
                   </span>
                 </td>
                 <td className={cx(s.cell, 'text-right')}>
