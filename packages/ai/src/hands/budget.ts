@@ -7,7 +7,7 @@ import {
   PERCENT,
   POLITICS,
   spare,
-  stillNeeds,
+  stillToPay,
   voteWeight,
   type AiPersonaId,
   type BudgetLine,
@@ -58,9 +58,9 @@ export class BudgetHand {
     return act({ type: 'setBudget', shares });
   }
 
-  /** The smallest share, in steps, whose credits at today's spare cover what the open buildings still need; 0 where none is open. */
+  /** The smallest share, in steps, whose credits at today's spare cover what the open buildings still cost the fund, goods it buys at the store included (AM-15); 0 where none is open. */
   private covering(obs: GameState, room: number): number {
-    const need = (obs.colony?.projects ?? []).filter((p) => OPEN_STAGES.includes(p.stage)).reduce((sum, p) => sum + Math.max(0, stillNeeds(p).credits), 0);
+    const need = (obs.colony?.projects ?? []).filter((p) => OPEN_STAGES.includes(p.stage)).reduce((sum, p) => sum + stillToPay(obs, p), 0);
     if (need <= 0) return 0;
     if (room <= 0) return PERCENT;
     const { step } = POLITICS.budget;

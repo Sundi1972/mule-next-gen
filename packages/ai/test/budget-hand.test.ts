@@ -10,6 +10,7 @@ import {
   POLITICS,
   PRESTIGE,
   stillNeeds,
+  stillToPay,
   storeForSale,
   storeQuotes,
   voteWeight,
@@ -99,7 +100,8 @@ describe('S5-C6: the AI Governor splits the fund (S5-RULE-11)', () => {
   it("S5-T-AC-13: it never takes the share that covers its own open buildings' credits, however much a line is worth", () => {
     const state = governed(100 + 4 * PRESTIGE.park.credits); // spare = 4 x the Park's credits: the Park alone needs 25%
     commission(state, 'ai0', 'park');
-    const need = stillNeeds(state.colony!.projects[0]!).credits;
+    // AM-15: what the open building still costs the fund counts the goods it buys at the store, not its credits alone.
+    const need = stillToPay(state, state.colony!.projects[0]!);
     const covering = Math.ceil((need * 100) / (state.treasury.money - 100) / POLITICS.budget.step) * POLITICS.budget.step;
     POLITICS.budget.welfare.maxShare = 95; // lifted for the case, so only the covering share can stop the fill
     POLITICS.budget.welfare.maxCredits = 1e9;
