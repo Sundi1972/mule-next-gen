@@ -2,7 +2,7 @@
  * WS4's steps in smoke.ts's whole game: a picked colour (B-AC-8), map zoom (B-AC-2, T-AC-9), the move to another device
  * (B-AC-7, B-AC-13) and plots you can read from the couch (B-AC-9, look A).
  */
-import { GOODS, type GameState, type Stock } from '@mule/engine';
+import { GOODS, monthNeeds, type GameState, type Stock } from '@mule/engine';
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
 import { COLOUR_NAME, SLOT_COLOR, type Slot } from '@mule/ui';
@@ -434,6 +434,14 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         }
         // (h): the plot above the selection, which the drone flags between two plots showing their dots.
         const flagged = neighbours[0]!;
+        // (j): the seat holds its month's Water, so its needs reads OK. A SHORT figure widens the hub's needs column at
+        // 844 wide and narrows the map under the plot size these marks are measured at (AM-18's plot Water made seed 1's
+        // Heiko SHORT 20 here; the layout is WS6's finding).
+        const water = me.stock.water;
+        undo.push(() => {
+          me.stock.water = water;
+        });
+        me.stock.water = Math.max(water, monthNeeds(state, seat).water);
         room.broadcast();
 
         const planning = ctx.phone.locator('[data-phase=planning]');
