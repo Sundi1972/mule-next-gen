@@ -477,6 +477,8 @@ export interface Colony {
   monthEnds: ColonyGauges[];
   /** The colony's mood, a whole number 0..100: it drifts at upkeep and events move it at once. See G-5 RULE-20. */
   happiness: number;
+  /** The share of the colonists who are sick, 0..HEALTH.cap. Absent until colony health first plays, and read as 0. */
+  sick?: number;
   /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
   strike: Strike | null;
   /** This month's Welfare payment (slice 5): who got it and how much; null when none. */
