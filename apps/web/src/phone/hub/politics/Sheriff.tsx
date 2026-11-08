@@ -1,14 +1,14 @@
 import { POLITICS } from '@mule/engine';
 import type { IncidentView, MuleView, MyPoliticsView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodIcon, HoloMap, type MapTile } from '@mule/ui';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { mapTiles, plotName } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { MapFit, useWide } from '../../Shell';
 import { useHub } from '../Hub';
 import { OnlyYou } from '../OnlyYou';
-import type { DeskSlot, HubSeat } from '../slots';
+import type { DeskSlot, HubSeat, PlotPickSlot, SubTabSlot, TabHubNav } from '../slots';
 import { Who } from './parts';
 
 /**
@@ -22,6 +22,11 @@ import { Who } from './parts';
  * Sheriff" bar; a tap posts or lifts; Done sends the whole list. The marks are on the Sheriff's map only. Until WS6's
  * tabbed shell gives the hub desk-only tools, Guard rides on the hub's own door: the Sheriff's desk opened with the
  * focus 'guard' (useGuarding), the map tool Look's map showing GuardMap meanwhile (today.tsx).
+ *
+ * The tabbed hub (SB-4, against SB-1a's frozen slots): SHERIFF_SUB is the Sheriff sub-tab of the Governor / Council tab,
+ * GUARD_PICK the Guard pick it hands to Overview's map. Both read the hub's navigation, SB-1a.2's frozen TabHubNav, from
+ * PickNavProvider, which the tabbed hub supplies (it moves into the hub's own context when SB-2 grafts it); today's
+ * SHERIFF_DESK and GuardMap stay for today's hub until the tabbed one replaces it.
  */
 
 type Sheriff = NonNullable<MyPoliticsView['sheriff']>;
@@ -268,8 +273,18 @@ type Asked = Record<string, { kind: 'investigate' | 'fine'; toast: number; refus
 
 const ORDER: Record<CaseState, number> = { fineable: 0, open: 1, cold: 2, closed: 3 };
 
-/** The Sheriff's desk, on the sitting Sheriff's phone. */
+/** The Sheriff's desk, on the sitting Sheriff's phone, in today's hub: Guard mode is the desk opened with focus 'guard'. */
 export function SheriffDesk() {
+  const nav = useHub();
+  const guard = () => {
+    nav.pickTool('look');
+    nav.openDesk('sheriff', GUARD_FOCUS);
+  };
+  return <DeskBody onGuard={guard} />;
+}
+
+/** The desk's body for the Sheriff: the waits before the votes are counted, else the case file; `onGuard` opens Guard mode. */
+function DeskBody({ onGuard }: { onGuard(): void }) {
   const { view, me } = usePhoneGame();
   const sheriff = me.politics?.sheriff;
   if (!sheriff) return null;
@@ -280,12 +295,11 @@ export function SheriffDesk() {
         <DeskWaits why={sheriff.canAct} />
       </>
     );
-  return <CaseFile view={view} sheriff={sheriff} incidents={view.politics?.sabotage?.incidents ?? []} />;
+  return <CaseFile view={view} sheriff={sheriff} incidents={view.politics?.sabotage?.incidents ?? []} onGuard={onGuard} />;
 }
 
-function CaseFile({ view, sheriff, incidents }: { view: MuleView; sheriff: Sheriff; incidents: IncidentView[] }) {
+function CaseFile({ view, sheriff, incidents, onGuard }: { view: MuleView; sheriff: Sheriff; incidents: IncidentView[]; onGuard(): void }) {
   const client = useClient();
-  const nav = useHub();
   const newestToast = useNewestToast();
   const [asked, setAsked] = useState<Asked>({});
   const [history, setHistory] = useState(false);
@@ -316,15 +330,11 @@ function CaseFile({ view, sheriff, incidents }: { view: MuleView; sheriff: Sheri
   const kept = places.current.filter((id) => fresh.includes(id));
   places.current = [...kept, ...fresh.filter((id) => !kept.includes(id))];
   live.sort((a, b) => places.current.indexOf(a.c.id) - places.current.indexOf(b.c.id));
-  const guard = () => {
-    nav.pickTool('look');
-    nav.openDesk('sheriff', GUARD_FOCUS);
-  };
   return (
     <div className="flex flex-col gap-2" data-testid="sheriff-desk-b">
       <DeskHead sheriff={sheriff} />
       <div data-testid="b-guard">
-        <GuardRow view={view} sheriff={sheriff} onMap={guard} />
+        <GuardRow view={view} sheriff={sheriff} onMap={onGuard} />
       </div>
       <section className="flex flex-col gap-1" data-testid="b-cases">
         <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]/shell:text-xs!">Cases</h3>
@@ -411,14 +421,26 @@ export function useGuarding(): boolean {
   return !!me.politics?.sheriff && nav.desk === SHERIFF_DESK.id && nav.focus === GUARD_FOCUS;
 }
 
-/**
- * The hub's one map in Guard mode, under its bar: a tap on any player's plot posts or lifts a guard, marked with the
- * shield on this map only. Done sends the whole list (intent `guard {tiles}`) and goes back to the Sheriff's desk.
- */
+/** Guard mode in today's hub: Done sends the list and takes the desk's focus, so Look's map comes back. */
 export function GuardMap() {
-  const { view, me } = usePhoneGame();
   const client = useClient();
   const nav = useHub();
+  return (
+    <GuardPicker
+      onDone={(tiles) => {
+        client.intent({ type: 'guard', tiles });
+        nav.takeFocus();
+      }}
+    />
+  );
+}
+
+/**
+ * The hub's one map in Guard mode, under its bar: a tap on any player's plot posts or lifts a guard, marked with the
+ * shield on this map only. Done hands over the whole list (intent `guard {tiles}`), for the caller to send and go back.
+ */
+function GuardPicker({ onDone }: { onDone(tiles: number[]): void }) {
+  const { view, me } = usePhoneGame();
   const wide = useWide();
   const sheriff = me.politics!.sheriff!;
   const [guards, setGuards] = useState(sheriff.guards);
@@ -432,10 +454,7 @@ export function GuardMap() {
     if (guards.length >= sheriff.max) return setHint(`All ${sheriff.max} guards are out. Tap a guarded plot to lift one.`);
     setGuards([...guards, i]);
   };
-  const done = () => {
-    client.intent({ type: 'guard', tiles: guards });
-    nav.takeFocus();
-  };
+  const done = () => onDone(guards);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5" data-testid="guard-map">
       <div className="flex items-center gap-2 rounded-control border border-holo bg-holo-soft px-2 py-1" data-testid="guard-bar">
@@ -490,4 +509,55 @@ export const SHERIFF_DESK: DeskSlot = {
   Body: SheriffDesk,
   show: isSheriff,
   first: isSheriff,
+};
+
+const PickNavContext = createContext<TabHubNav | null>(null);
+
+/** Hands the tabbed hub's navigation (SB-1a.2's TabHubNav) to the Sheriff sub-tab and the Guard pick. */
+export function PickNavProvider({ value, children }: { value: TabHubNav; children?: ReactNode }) {
+  return <PickNavContext.Provider value={value}>{children}</PickNavContext.Provider>;
+}
+
+function usePickNav(): TabHubNav {
+  const nav = useContext(PickNavContext);
+  if (!nav) throw new Error('Not inside the tabbed hub');
+  return nav;
+}
+
+/** The Sheriff sub-tab's body: the folded case file; "Guard a plot" hands Overview's map the Guard pick. */
+function SheriffSub() {
+  const nav = usePickNav();
+  return <DeskBody onGuard={() => nav.startPick(GUARD_PICK.id)} />;
+}
+
+/** The Guard pick's map, with its own bar: Done sends the list, ends the pick and opens the way back to the Sheriff sub-tab. */
+function GuardPickMap() {
+  const { me } = usePhoneGame();
+  const client = useClient();
+  const nav = usePickNav();
+  if (!me.politics?.sheriff) return null;
+  return (
+    <GuardPicker
+      onDone={(tiles) => {
+        client.intent({ type: 'guard', tiles });
+        nav.endPick();
+        const { label: _label, ...door } = GUARD_PICK.back;
+        nav.open(door);
+      }}
+    />
+  );
+}
+
+/** The Sheriff sub-tab of the Governor / Council tab: the holder's alone (SB-4). */
+export const SHERIFF_SUB: SubTabSlot = { id: 'sheriff', label: () => 'Sheriff', Body: SheriffSub, show: isSheriff };
+
+/** The Sheriff's Guard (P8, PM ruling 8 Nov): a pick the Sheriff sub-tab hands to Overview's one map, drawing its own bar. */
+export const GUARD_PICK: PlotPickSlot = {
+  id: 'guard',
+  label: 'Guarding',
+  hint: () => 'Tap a plot to guard it',
+  back: { tab: 'politics', sub: SHERIFF_SUB.id, label: 'Sheriff' },
+  ownBar: true,
+  Map: GuardPickMap,
+  show: isSheriff,
 };
