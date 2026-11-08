@@ -466,7 +466,8 @@ export function keptUnits(good: Good, n: number): number {
  */
 export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
   if (obs.month >= endMonth(obs)) return 0;
-  if (good === 'food') return needsOf(obs, me).food + keptUnits(good, needsOf(obs, me).food);
+  // No carry for Food: hunger reads the household's last meal (needs C15), so what upkeep eats keeps the seat whole (PM ruling, 8 Nov).
+  if (good === 'food') return needsOf(obs, me).food;
   if (good === 'energy') return keptUnits(good, monthNeeds(obs, me).energy);
   if (good === 'water' && !plotWaterOn()) {
     // AM-18 off: a seat with a farm to water carries next month's drink, as the farm halving reads it.
@@ -548,6 +549,25 @@ function offUnits(obs: GameState, me: string, good: BaseGood, P: (g: Good) => nu
   ];
 }
 
+/**
+ * What each unit of the Food next month end's upkeep eats is worth to the seat, in the order upkeep takes them (needs
+ * C14, C15): the household's first, each its share of the hunger its meal keeps off next development; then the crews',
+ * each its share of what going without would cut from next month's production, crewDrop of every plot's output but the
+ * Energy plants'. No carry: hunger reads the last meal (PM ruling, 8 Nov).
+ */
+export function foodUnits(obs: GameState, mind: Mind, P: (g: Good) => number): number[] {
+  const me = mind.me;
+  const eat = needsOf(obs, me).food;
+  const home = Math.min(eat, UPKEEP.baseFood);
+  const crews = eat - home;
+  const hunger = monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * secondValue(obs, me);
+  const made = (t: Tile) => (isFactory(t.outfit!) ? factoryFit(obs, t, t.outfit as ProcessedGood, me).output : rawOutput(obs, t));
+  const output = obs.tiles
+    .filter((t) => t.owner === me && t.outfit && t.outfit !== 'greenBelt' && t.outfit !== 'energy')
+    .reduce((n, t) => n + afterTax(obs, made(t) * P(t.outfit as Good)), 0);
+  return [...Array<number>(home).fill(hunger / Math.max(1, home)), ...Array<number>(crews).fill(crews > 0 ? (UPKEEP.crewDrop * output) / crews : 0)];
+}
+
 export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitValues {
   // Known gap (PR #510's review): the model's values skip buyForFactories, so with AI_VALUE.unit on a factory's Food or
   // Water is bought without FM-factory-input's buy-side fix. Inert while the switch is off; build it with the switch.
@@ -568,10 +588,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   let use = 0;
   let perUnit: number[] | null = null;
   if (good === 'food' && need > 0) {
-    // Eaten at upkeep, then what is left (after spoilage) keeps next month's walking at full pace.
-    const eat = needsOf(obs, me).food;
-    block = eat + Math.ceil(eat / keepRate);
-    use = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / block;
+    perUnit = foodUnits(obs, mind, P);
+    block = perUnit.length;
+    use = block > 0 ? perUnit.reduce((n, x) => n + x, 0) / block : 0;
   } else if (good === 'water' && !plotWaterOn()) {
     // AM-18 off: a month short of Water halves the seat's irrigated farms, over the drink and its carry.
     const farms = mine.filter((t) => UPKEEP.irrigated.includes(t.outfit as never));
