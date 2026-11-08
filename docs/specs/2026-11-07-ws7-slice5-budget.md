@@ -1689,7 +1689,7 @@ goal      S5-1 — unchanged
 ```
 
 ```
-AM-10 · 2026-11-09 · WS7 (build: S5-PR-2; the lead's ruling) · the engine counts passed tax overrules from the RC
+AM-10 · 2026-11-08 · WS7 (build: S5-PR-2; the lead's ruling) · the engine counts passed tax overrules from the RC
 
 target    S5-C6's hold; S5-C15's count (politics.overruled)
 said      the count was after-RC (S5-C15), but the RC's hold needs to see an earlier month's pass
