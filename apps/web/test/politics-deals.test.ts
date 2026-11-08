@@ -322,6 +322,18 @@ describe('the deal composer (S3-C17)', () => {
   });
 });
 
+describe('the standings door (S3-C17)', () => {
+  it('S3-B-AC-1: with one card to Ossa unanswered, the standings row offers Ossa no second card and says why; Brix still gets one', () => {
+    const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
+    mount(gameFor(myView(LENA, [waiting])), hub);
+    tap('standing');
+    const ossa = byTestid(`deal-standing-${OSSA}`);
+    expect(ossa.getAttribute('disabled'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').not.toBeNull();
+    expect(ossa.getAttribute('title')).toBe('Ossa has not answered your last card');
+    expect(byTestid(`deal-standing-${BRIX}`).getAttribute('disabled')).toBeNull();
+  });
+});
+
 // ---- S3-C18 · the incoming card and My cards ----------------------------------------------------------------------
 
 /** Brix's cards in month 2: Lena's pact offered to him, his vote offered to Ossa, a pact with Kai, two settled. */
