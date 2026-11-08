@@ -1,4 +1,4 @@
-import { Button, cx } from '@mule/ui';
+import { cx } from '@mule/ui';
 import { createContext, useContext, useState } from 'react';
 import { usePhoneGame } from '../../../../../../apps/web/src/phone/game';
 import { CouncilBody } from '../../../../../../apps/web/src/phone/hub/politics/Council';
@@ -13,6 +13,7 @@ import { OverruleBallot } from '../../copied/budget/OverruleBallot';
 import { OverruleCall } from '../../copied/budget/OverruleCall';
 import { PromisedElectionDay } from '../../copied/deals/ElectionDay';
 import { PromisedCouncilBallot } from '../../copied/deals/LawBallot';
+import { SheriffDeskB } from '../../copied/sheriff/VariantB';
 import { useDrawn, useHub } from '../Hub';
 import { TabBadge } from '../parts';
 import type { SubTabSlot } from '../slots';
@@ -147,28 +148,24 @@ function ElectionsSub() {
   return <CouncilBody focus={focus} />;
 }
 
-/** Sheriff: WS8 draws this desk. The stub shows where it sits and the one hand-off this mock owns: Guard a plot. */
+/**
+ * Sheriff: WS8's case file, variant B (PM ruling, 8 Nov), copied unchanged from politics-p2 at 73e797fd: the guard
+ * line, then the cases newest first, each with its next step. Its guard button hands Overview's map the Guard pick.
+ * Every other phone sees who the Sheriff is and the colony's cases in public (WS8's to draw; a stub here).
+ */
 function SheriffSub() {
-  const { view, self } = usePhoneGame();
+  const { view, self, me } = usePhoneGame();
   const { startPick } = useHub();
   const sheriff = view.politics?.sheriff;
   if (!sheriff) return null;
-  if (sheriff !== self.id)
-    return (
-      <div className="flex flex-col gap-1 rounded-panel border-2 border-dashed border-holo-line bg-holo-soft p-2.5" data-testid="slot-sheriff-public">
-        <span className="label-caps text-[10px]! text-holo">P7 · WS8 · Sheriff</span>
-        <span className="text-xs">
-          <Who view={view} id={sheriff} me={self.id} size={12} /> is the Sheriff. What the Sheriff does in public (cases, fines) is WS8’s to draw here.
-        </span>
-      </div>
-    );
+  const desk = me.politics?.sheriff;
+  if (sheriff === self.id && desk) return <SheriffDeskB view={view} start={desk} incidents={view.politics?.sabotage?.incidents ?? []} onMap={() => startPick('guard')} />;
   return (
-    <div className="flex flex-col gap-2 rounded-panel border-2 border-dashed border-holo-line bg-holo-soft p-2.5" data-testid="slot-sheriff">
-      <span className="label-caps text-[10px]! text-holo">P7–P8 · WS8 · the Sheriff’s desk</span>
-      <span className="text-xs text-ink-2">Investigate one case a month, fine a revealed culprit: WS8 draws it. The guard is a pick on Overview’s one map:</span>
-      <Button size="md" variant="outline" onClick={() => startPick('guard')} data-testid="sheriff-guard">
-        Guard a plot…
-      </Button>
+    <div className="flex flex-col gap-1 rounded-panel border-2 border-dashed border-holo-line bg-holo-soft p-2.5" data-testid="slot-sheriff-public">
+      <span className="label-caps text-[10px]! text-holo">P7 · WS8 · the Sheriff, in public</span>
+      <span className="text-xs">
+        <Who view={view} id={sheriff} me={self.id} size={12} /> is the Sheriff. The cases and fines everyone may see are WS8’s to draw here.
+      </span>
     </div>
   );
 }

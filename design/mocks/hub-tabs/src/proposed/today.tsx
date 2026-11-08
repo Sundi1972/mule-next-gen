@@ -1,13 +1,9 @@
-import { HoloMap, type MapTile } from '@mule/ui';
-import { mapTiles, plotName, tileAt } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { MarketDesk } from '../../../../../apps/web/src/phone/hub/desks';
 import { needRows } from '../../../../../apps/web/src/phone/hub/needs';
 import { COUNCIL_STAGE, ELECTION_AGENDA, ELECTION_DAY_STAGE, GOVERNOR_AGENDA, LAW_AGENDA, OFFICES_BANNER } from '../../../../../apps/web/src/phone/hub/politics/slots';
 import type { AgendaSlot } from '../../../../../apps/web/src/phone/hub/slots';
-import { useToday } from '../../../../../apps/web/src/phone/hub/state';
 import { HUB_SLOTS } from '../../../../../apps/web/src/phone/hub/today';
-import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { DEALS_AGENDA } from '../copied/deals/today';
 import { OVERRULE_CALL_LINE } from '../copied/budget/OverruleCall';
 import { OVERRULE_STAGE, overruleNow, overruleReadyWords } from '../copied/budget/OverruleBallot';
@@ -15,8 +11,10 @@ import { POLITICS_TABS, PoliticsBadge, PoliticsTab } from './tabs/Politics';
 import { ColonyTab } from './tabs/Colony';
 import { TalkBadge, TalkTab } from './tabs/Talk';
 import { OverviewTab, TAB_WORD } from './tabs/Overview';
-import { Button } from '@mule/ui';
 import type { PlotPickSlot, TabHubSlots } from './slots';
+import { useClient } from '../../../../../apps/web/src/net/react';
+import { GuardMap } from '../copied/sheriff/GuardMap';
+import { useHub } from './Hub';
 
 /*
  * GRAFT TARGET: apps/web/src/phone/hub/today.tsx — HUB_SLOTS becomes TAB_SLOTS. Today's tools, agenda, nows,
@@ -47,44 +45,36 @@ const ICON = {
 const tools = HUB_SLOTS.tools.map((t) => (t.id === 'list' ? { ...t, label: 'Sell', Panel: MarketDesk } : t));
 
 /**
- * The Sheriff's Guard, a pick the Sheriff tab (WS8's stub) hands to Overview's map. MOCK: the plot picked is Look's
- * (useToday().looked); WS8 owns the guard's own state and intent.
+ * The Sheriff's Guard (WS8's P8, PM ruling 8 Nov): a pick the Sheriff sub-tab hands to Overview's one map. WS8's GuardMap
+ * (variant B's, copied) is the map with its own bar, "Guarding · 1 of 2 · Done · back to Sheriff"; Done sends the
+ * whole list (the guard intent) and goes back to the Sheriff sub-tab.
  */
-function GuardMap() {
-  const { view, slot } = usePhoneGame();
-  const { looked, setLooked } = useToday();
-  const tap = (t: MapTile) => {
-    if (t.terrain === 'store') return;
-    setLooked(looked?.x === t.x && looked.y === t.y ? null : { x: t.x, y: t.y });
-  };
+function GuardPickMap() {
+  const { view, me } = usePhoneGame();
+  const client = useClient();
+  const { endPick, open } = useHub();
+  const start = me.politics?.sheriff;
+  if (!start) return null;
   return (
-    <MapFit width={view.width} height={view.height}>
-      <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={looked} focusSlot={slot} density="phone" />
-    </MapFit>
-  );
-}
-function GuardPanel() {
-  const { view } = usePhoneGame();
-  const { looked } = useToday();
-  const tile = looked ? tileAt(view, looked.x, looked.y) : undefined;
-  return (
-    <section className="flex flex-col gap-0.5 rounded-control border border-warn/60 bg-panel p-2 text-xs" data-testid="guard-panel">
-      <span className="label-caps text-[10px]!">Guard · WS8</span>
-      {tile ? <span>Plot {plotName(tile.x, tile.y)}: guarded this month. A saboteur here is caught.</span> : <span className="text-ink-2">Tap a plot on the map.</span>}
-      <Button size="md" variant="outline" className="mt-1 w-full" disabled={!tile} data-testid="guard-confirm">
-        Guard this plot
-      </Button>
-    </section>
+    <GuardMap
+      view={view}
+      start={start}
+      onBack={(tiles) => {
+        client.intent({ type: 'guard', tiles });
+        endPick();
+        open({ tab: 'politics', sub: 'sheriff' });
+      }}
+    />
   );
 }
 
 const GUARD_PICK: PlotPickSlot = {
   id: 'guard',
   label: 'Guarding',
-  hint: () => 'tap the plot to guard this month',
+  hint: () => 'tap a plot to post a guard there this month',
   back: { tab: 'politics', sub: 'sheriff', label: 'Sheriff' },
-  Map: GuardMap,
-  Panel: GuardPanel,
+  ownBar: true,
+  Map: GuardPickMap,
   show: ({ view, self }) => view.politics?.sheriff === self.id,
 };
 

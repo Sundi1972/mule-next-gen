@@ -1,4 +1,4 @@
-import { baseWorld, BROKEN_BY_KAI, OFFER_FROM_BRIX, OFFER_FROM_OSSA, PROMISED_BRIX, TAX_START, DEFAULT_SHARES, type MockWorld, type Seat } from './fixture';
+import { baseWorld, BROKEN_BY_KAI, card, PACT, OFFER_FROM_BRIX, OFFER_FROM_OSSA, PROMISED_BRIX, TAX_START, DEFAULT_SHARES, type MockWorld, type Seat } from './fixture';
 import type { Start } from './proposed/Hub';
 import type { TvFocus } from './tv/TvFor';
 
@@ -39,6 +39,20 @@ export const STEPS: { n: number; title: string }[] = [
 
 /** Month 5's planning as it opens: Brix has raised the tax 5 → 10% and set the budget; two cards wait for Lena; Kai broke a pact. */
 const opening = () => baseWorld({ cards: [OFFER_FROM_OSSA, OFFER_FROM_BRIX, BROKEN_BY_KAI] });
+/**
+ * The month end: Kai broke the pact with Lena, and Ossa · AI broke its promise to Kai (a No on the land tax); Brix's
+ * budget paid Welfare to Kai and the Observatory's credits.
+ */
+export const monthEnd = () =>
+  baseWorld({
+    stage: 'monthEnd',
+    cards: [
+      { ...BROKEN_BY_KAI, settled: 5 },
+      card({ id: 'deal-e4r7lb', from: 'ossa', to: 'kai', terms: { kind: 'vote', law: true, yes: false }, offered: 4, until: 5, status: 'broken', brokenBy: 'ossa', settled: 5 }),
+      card({ id: 'deal-w9t3pm', from: 'lena', to: 'ossa', terms: PACT, offered: 5, until: 7, status: 'active' }),
+    ],
+    rep: { lena: 53, ossa: 62, brix: 61, kai: 24 },
+  });
 /** The tax as the month began, and the budget as the game began: for the Governor to set. */
 const unset = () => baseWorld({ tax: TAX_START, budget: { shares: DEFAULT_SHARES, setBy: null } });
 
@@ -74,7 +88,7 @@ export const BEATS: Beat[] = [
   { id: '8-ready', step: 8, label: 'Ready', seat: 'lena', world: () => baseWorld({ cards: [PROMISED_BRIX] }), tv: 'planning', line: 'Done planning: “I’m ready”, bottom right.' },
   { id: '8-waiting', step: 8, label: 'Waiting for the others', seat: 'lena', world: () => baseWorld({ cards: [PROMISED_BRIX], ready: ['lena'] }), tv: 'waiting', line: 'You’re ready: the rail says whom the table waits for. The tabs stay open to look around.' },
 
-  { id: '9-month-end', step: 9, label: 'The month end', seat: 'lena', world: () => baseWorld({ stage: 'monthEnd' }), monthEnd: true, tv: 'month-end', line: 'The month end, outside the tabs as every other phase: the league, every card broken this month, and what the fund paid out.' },
+  { id: '9-month-end', step: 9, label: 'The month end', seat: 'lena', world: monthEnd, monthEnd: true, tv: 'month-end', line: 'The month end, outside the tabs as every other phase: the league, every card broken this month, and what the fund paid out.' },
 ];
 
 export const beatOf = (id: string | null): Beat => BEATS.find((b) => b.id === id) ?? BEATS[0]!;

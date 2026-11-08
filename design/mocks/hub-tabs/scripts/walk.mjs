@@ -28,8 +28,8 @@ await walk('?screen=shell&state=a&solo=1', V, async (p) => {
   await p.getByTestId('tab-overview').click(); await p.getByTestId('tool-list').click(); await see(p, 'list-asset');
 });
 await walk('?screen=handoff&state=sheriff&solo=1', V, async (p) => {
-  await p.getByTestId('sheriff-guard').click(); await see(p, 'pick-bar-guard');
-  await p.getByTestId('pick-back').click(); await see(p, 'slot-sheriff');
+  await p.getByTestId('guard-open-map').click(); await see(p, 'guard-bar');
+  await p.getByTestId('guard-back').click(); await see(p, 'sheriff-desk-b');
 });
 await walk('?screen=badges&state=ballot&solo=1', V, async (p) => {
   await see(p, 'politics-badge'); await p.getByTestId('now-go').click(); await see(p, 'ballot-card');

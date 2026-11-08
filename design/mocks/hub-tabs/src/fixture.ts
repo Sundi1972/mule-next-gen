@@ -3,6 +3,7 @@ import type { BudgetView, ChatMessage, ColonyView, CouncilView, ElectionView, Li
 import type { Slot } from '@mule/ui';
 import type { TableClient } from '../../../../apps/web/src/net/client';
 import { aMuleView, aPlayer } from '../../../../apps/web/test/fixtures/views';
+import { SABOTAGE, sheriffOf } from './copied/sheriff/fixture';
 
 /**
  * The hub-tabs mock's one table. Merged from the two mocks it re-hosts, so every tab draws from the same month:
@@ -486,7 +487,9 @@ function gameOf(w: World, me: MyView | null): MuleView {
     reputationReasons: reasons(w),
     budget: budgetView(w),
     overrule: overruleView(w),
-  };
+    // Slice 4 (WS8's P2 fixture): the colony's sabotage cases, public; the Sheriff's own desk is on the Sheriff's MyView.
+    sabotage: SABOTAGE,
+  } as PoliticsView;
   return aMuleView({
     players, me: me as MyView, politics, news: w.news,
     month: w.month, phase: monthEnd ? 'upkeep' : 'planning', width: W, height: H, tiles: TILES,
@@ -514,6 +517,8 @@ export function viewFor(seat: Seat, w: World): SeatView {
       reputation: w.rep[id] ?? 50, lawBallot: w.lawBallots[id] ?? null, promised: promised(w, id),
       overruleBallot: w.stage === 'overrule' || w.stage === 'overruleReveal' ? (mineBallot ?? null) : null,
       canOverrule: canOverrule(w, id),
+      sheriff: id === SHERIFF ? { ...sheriffOf(w.guards), canAct: w.stage === 'planning' ? true : 'notPlanning' } : null,
+      sabotage: { order: null, canOrder: true, owed: 0, mine: [] },
     },
     deals: { cards: mine, offersLeft: DEALS.maxOpenOffers - open, pactMonths: [...DEALS.pactMonths] },
     worthParts: { money: 640, goods: 180, plots: 7, land: 3500, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
