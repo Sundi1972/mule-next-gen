@@ -874,7 +874,7 @@ The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; th
 | T-AC-25 (B-AC-15) | RULE-13's examples; the recipe is read, not copied (Rare earth and Alloy follow RECIPES.electronics.inputs under a test override) | C17 | engine unit |
 | T-AC-26 (B-AC-16, 17) | RULE-14 and RULE-15's every row and example; needsOf's Medicine is +1 exactly when RULE-15 row 3 would apply; no copy of the cure in packages/ai (source scan, like T-AC-21) | C18 | engine unit + scan |
 | T-AC-27 (HC-13) | with HEALTH.enabled false, 10 seed-1 sim games give the same final state as the same games on the base commit (every number), so health off is inert | C17-C19 | sim, against the base at run time |
-| T-AC-28 (HC-13) | the switch-on PR's body reports, for 10 seed-1 games, months the colonists were short of Medicine (must be < 40 of 120), the mean sick share, months at the cap, colonists at the end, and player-sick months | C18 | sim report |
+| T-AC-28 (HC-13) — **waived, AM-10** | the switch-on PR's body reports, for 10 seed-1 games, months the colonists were short of Medicine (must be < 40 of 120), the mean sick share, months at the cap, colonists at the end, and player-sick months | C18 | sim report |
 
 ## §8 · Amendments
 
@@ -988,6 +988,17 @@ did       HEALTH.enabled is on (Heiko, 8 Nov, for the 13 Nov play-test); growthP
 because   WS1's measurement (SEAMS 05:30Z): at 0.05 full sickness cost 2 growth points a month against hunger's 9, so
           a colony short of Medicine lost nothing it could see; at 0.08 sickness bites like hunger
 goal      G-1 unchanged; colony size with health on is judged in the 13 Nov play-test
+
+AM-10 · 2026-11-08 · Heiko (chat, 8 Nov 06:47Z, SEAMS: "fewer balance and AI tests, test in real games") · T-AC-28 waived
+target    §6 T-AC-28 (HC-13's sim report on the switch-on PR)
+said      the switch-on PR's body reports, for 10 seed-1 games, Medicine-short months (< 40 of 120), the mean sick
+          share, months at the cap, colonists at the end and player-sick months
+did       waived: no sim runs for the switch-on PR (#820, PR-13). The property T-AC-28 measured, that a colony with
+          health on is not short of Medicine most of the game and does not sit at the sick cap, is judged in Heiko's
+          13 Nov play-test with health on. HC-13's other proofs stand: T-AC-9..11, B-AC-6 and the health-off pins
+because   Heiko's ruling replaces seed-set acceptance runs with real games; without this line T-AC-28 reads as silently
+          unmet
+goal      G-1 unchanged
 ```
 
 ## §9 · Ownership Boundaries
