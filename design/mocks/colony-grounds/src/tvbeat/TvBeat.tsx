@@ -45,6 +45,10 @@ if (params.get('worst')) {
   COLONY.gauges.happiness = 100;
   COLONY.projects = COLONY.projects.map((p) => ({ ...p, stage: 'standing', monthsLeft: null }));
 }
+// ?air=<0-100>: the air gauge (RULE-7's haze); ?damaged=<kind,...>: those buildings damaged (RULE-8's smoke)
+if (params.get('air')) COLONY.gauges.environment = Number(params.get('air'));
+const damaged = params.get('damaged')?.split(',') ?? [];
+COLONY.projects = COLONY.projects.map((p) => (damaged.includes(p.id) ? { ...p, stage: 'damaged', monthsLeft: null } : p));
 
 /** The opener always asks for dusk (RULE-1); the day shot swaps only the light, everything else as the game draws it. */
 const DayScene = (props: Omit<ColonyGroundsProps, 'manifest'>) => <Grounds {...props} light="day" />;

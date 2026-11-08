@@ -1,7 +1,8 @@
 import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
-import type { ElectionView, MuleView, MyView, PoliticsView } from '@mule/protocol';
+import type { ElectionView, MuleIntent, MuleView, MyPoliticsView, MyView, PoliticsView } from '@mule/protocol';
 import { cx } from '@mule/ui';
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { SeatWords } from '../../../components/SeatWords';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
@@ -31,6 +32,31 @@ export function ElectionDayRail() {
 
 /** The offices with a ballot: two candidates or more. */
 export const contested = (candidates: ElectionView['candidates']): Office[] => POLITICS.offices.filter((o) => (candidates[o]?.length ?? 0) >= 2);
+
+type Promised = NonNullable<MyPoliticsView['promised']>['election'][Office];
+
+/** "You promised Brix your vote", or, when the vote is for someone else: "You promised Kai your vote for Brix". */
+export function promisedLine(view: Pick<MuleView, 'players'>, p: { candidate: string; to: string[] }): string {
+  const name = (id: string) => view.players.find((q) => q.id === id)?.name ?? id;
+  const to = p.to.map(name).join(' and ');
+  return p.to.length === 1 && p.to[0] === p.candidate ? `You promised ${to} your vote` : `You promised ${to} your vote for ${name(p.candidate)}`;
+}
+
+/** The seats promisedLine names, in its words' order, for SeatWords. */
+const promisedWho = (p: { candidate: string; to: string[] }): string[] => (p.to.length === 1 && p.to[0] === p.candidate ? p.to : [...p.to, p.candidate]);
+
+/** The line under a promised ballot's legend: to whom, and what keeping and breaking it does. */
+export function YouPromised({ words, testid }: { words: ReactNode; testid: string }) {
+  const { voteBroken } = POLITICS.reputation.moves;
+  return (
+    <span className="flex flex-col gap-0.5 rounded-control border border-holo bg-holo-soft px-1.5 py-1" data-testid={testid}>
+      <span className="text-xs font-semibold leading-tight @min-[1100px]/shell:text-base">{words}</span>
+      <span className="text-[10px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm">
+        Keeping it builds your name. Breaking it costs −{-voteBroken}, and the table sees it. Your vote stays secret either way.
+      </span>
+    </span>
+  );
+}
 
 /** Election day on a phone's or laptop's stage: the card every step of it lives in. */
 function DayCard({ at, testid, children }: { at: 1 | 2; testid: string; children: ReactNode }) {
@@ -130,7 +156,8 @@ function Ballot({ election }: { election: ElectionView }) {
             office={o}
             cands={election.candidates[o]!}
             promises={o === 'governor' ? election.promises : {}}
-            pick={shownPick(mine, o, me.politics?.ballot[o])}
+            promised={me.politics?.promised?.election[o]}
+            pick={pickOrPromise(mine, o, me.politics)}
             onPick={(id) => {
               pickOn(mine, o, id, me.politics?.ballot[o]);
               client.intent({ type: 'vote', office: o, candidate: id || null });
@@ -145,13 +172,14 @@ function Ballot({ election }: { election: ElectionView }) {
 }
 
 /** One office's ballot paper: a candidate, or abstain. Your pick shows at once; nobody else sees it. */
-function BallotPaper({ office, cands, promises, pick, onPick }: { office: Office; cands: string[]; promises: Record<string, TaxPromise>; pick: string | undefined; onPick: (id: string) => void }) {
+function BallotPaper({ office, cands, promises, promised, pick, onPick }: { office: Office; cands: string[]; promises: Record<string, TaxPromise>; promised: Promised; pick: string | undefined; onPick: (id: string) => void }) {
   const { view, me } = usePhoneGame();
   const wide = useWide();
   const tax = view.politics!.tax.percent;
   return (
     <fieldset className="flex min-w-0 flex-col gap-1 @min-[1100px]/shell:gap-2" data-testid={`ballot-${office}`}>
       <legend className="mb-1 text-xs font-semibold @min-[1100px]/shell:text-lg">{OFFICE_NAME[office]}</legend>
+      {promised && <YouPromised words={<SeatWords text={promisedLine(view, promised)} who={promisedWho(promised)} players={view.players} />} testid={`ballot-${office}-promised`} />}
       {[...cands, ''].map((id) => (
         <label
           key={id || 'abstain'}
@@ -162,6 +190,11 @@ function BallotPaper({ office, cands, promises, pick, onPick }: { office: Office
           {id ? (
             <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
               <Person view={view} id={id} me={me.id} size={wide ? 24 : 15} className="self-center" />
+              {promised?.candidate === id && (
+                <span className="rounded-chip border border-holo px-1 font-mono text-[10px] font-bold text-holo" data-testid={`ballot-${office}-${id}-promised`}>
+                  PROMISED
+                </span>
+              )}
               {promises[id] && <span className="text-ink-2">{promiseWords(promises[id], tax)}</span>}
             </span>
           ) : (
@@ -295,8 +328,27 @@ function usePicks(): void {
   );
 }
 
-/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot. */
-export function ballotComplete({ view, me }: { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> }, election: ElectionView): boolean {
+/** The pick shown for an office: this phone's or the server's, else the candidate this seat promised (S3-RULE-12). */
+function pickOrPromise(ballot: BallotOf, office: Office, politics: MyView['politics']): string | undefined {
+  return shownPick(ballot, office, politics?.ballot[office]) ?? politics?.promised?.election[office]?.candidate;
+}
+
+type BallotSeat = { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> };
+
+/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot; a promise counts as one. */
+export function ballotComplete({ view, me }: BallotSeat, election: ElectionView): boolean {
   const mine: BallotOf = { seat: me.id, month: view.month };
-  return contested(election.candidates).every((o) => shownPick(mine, o, me.politics?.ballot[o]) !== undefined);
+  return contested(election.candidates).every((o) => pickOrPromise(mine, o, me.politics) !== undefined);
+}
+
+/**
+ * The votes Cast my vote sends before it (S3-RULE-12 row 4): each promised office where neither this phone nor the
+ * server holds a pick. Nothing is sent before the press, so the table can't tell a promise from a ballot opening.
+ */
+export function promisedFirst({ view, me }: BallotSeat, election: ElectionView): MuleIntent[] {
+  const mine: BallotOf = { seat: me.id, month: view.month };
+  return contested(election.candidates).flatMap((o) => {
+    const promised = me.politics?.promised?.election[o];
+    return promised && shownPick(mine, o, me.politics?.ballot[o]) === undefined ? [{ type: 'vote', office: o, candidate: promised.candidate }] : [];
+  });
 }

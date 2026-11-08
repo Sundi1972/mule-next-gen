@@ -7,6 +7,7 @@ import { SabotageNews } from '../events/SabotageNews';
 import { inCollapse, league, leaderWords, ordinal } from '../game/month-end';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
+import { BrokenCards } from './hub/politics/broken-cards';
 import { WaitingFor } from './hub/ReadyBar';
 import { connectedIn, hostMayContinue, namesOf, press, readyFooter, type Press } from './hub/ready';
 import { NewsPanel, ShipLine, StockPanel } from './parts';
@@ -40,6 +41,7 @@ function MonthEnd() {
       <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'gap-2' : 'gap-1.5')} data-testid={tv ? 'phone-monthend' : 'phone-only-monthend'}>
         {inCollapse(view) && <CollapseBanner density={density} donations={!!view.colony} />}
         <LeagueTable view={view} density={density} selfId={self.id} />
+        <BrokenCards view={view} month={view.month} density={density} />
         {/* WS8's named edit (S4-C17; PM ruling 8 Nov): beside a TV, which only counts them, the month's sabotage lines. */}
         {tv && <SabotageNews view={view} className="px-1" />}
         {tv ? (

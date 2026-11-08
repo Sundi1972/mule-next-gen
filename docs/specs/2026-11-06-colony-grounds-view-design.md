@@ -249,6 +249,22 @@ examples changed month → 6 s, then the month end · quiet month → 3 s still 
          Ready at 2 s → the planning screen (the opener ends) · reload mid-opener → no opener (RULE-5)
 RULE-5 · What leans in at the month end: the projects whose stage differs from the stage seen at the last month end
          on this screen; none seen before (a reload, a new screen) → no lean-in, the scene just shows
+RULE-7 · How thick the haze over the grounds is (C4; Task 2.2b)        shape: formula
+input    environment · 0–100, higher is dirtier (config.ts POLLUTION.bands: Clean 0, Smoggy 30, Toxic 60, Collapse 80; POLLUTION.airMax 100)
+unknown  no environment gauge → 0, as a clean colony: a missing reading never paints murk
+haze     environment < 30 → 0 (no haze drawn); else 0.18 + (environment − 30) / (airMax − 30) × (0.65 − 0.18), capped at airMax, the opacity at the far
+         (top) edge, thinning to 0.55 × that toward the camera
+colour   Smoggy a dusty grey, Toxic ochre, Collapse a brown murk; darker at dusk (packages/ui/src/grounds/live.ts::HAZE)
+examples 12 → 0 · 29 → 0 · 30 → 0.18 · 65 → 0.415 · 100 → 0.65
+RULE-8 · What smokes (C4; Task 2.2b)                                     shape: decision table
+  #  stage              then
+  1  damaged            a plume rises from the top of its picture (0.7 of its height); embers warm its base at dusk
+                        (the mock's smoke A, light puffs; PM 8 Nov: B, a dark column, read as fire and is not built)
+  2  anything else      no smoke (closed is dark and still; a site is bare)
+motion   each puff rises, widens, drifts with the wind and fades over its period; reduced motion → the plume shown still
+order    the plume is drawn just after its own building (col + row): a building or colonist nearer the camera covers it;
+         during the opener's lean-in it fades with its building (T-AC-12)
+examples Hospital damaged → one plume over the Hospital · all standing → none · reduced motion → the same plume, not moving
 ```
 
 ## §3 · Contracts & Data Models  [handoff]
@@ -270,7 +286,7 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
   picture's opaque pixels column by column (40 frame px each), top and bottom row as fractions of its height, written by
   `design/art/colony/skyline.py`; the live layer hides a colonist only where it covers the figure (C4, T-AC-13).
   Top-level `"walker"` · ADDED · non-breaking (absent → today's SVG figure) (AM-8):
-  `{ "cell": { "width": 192, "height": 224, "feet": [96, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
+  `{ "cell": { "width": 320, "height": 256, "feet": [120, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
      "headings": ["+x", "+y", "-x", "-y"], "sheets": { "<suit>-<trim>": { "day": "walker/…@800.webp", "dusk": "…" } },
      "outline": "walker/outline@800.webp" }` — a sheet's rows are the headings top to bottom, its columns the frames;
   `+x` is c rising (screen down-right), `+y` r falling (up-right). suit ∈ p1–p4; trim ∈ white, graphite, sand.
@@ -314,6 +330,8 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-13 (serves B-AC-3, G-2) | a colonist standing shallower than a building (col + row) is drawn before it, and where that building's picture covers its figure on screen (by the picture's silhouette, §3 `skyline`) its faint outline is drawn after every building; one in front draws over it with no outline; one behind a building but above its picture on screen has no outline; a site hides a colonist only where its picture's pixels cover the figure (Heiko, 8 Nov: a figure on the Hospital's upper floor) | C4 |
 | T-AC-14 (serves C4, AM-8) | a walker is drawn from the `walker` sheet: the row is its route leg's heading, the column advances with the cycle (frame 0 at reduced motion), the suit variant is its owner's colour; behind a building its ghost is the outline sheet faded on the image itself; with no `walker` entry, today's SVG figure | C4 |
 | T-AC-12 (serves C5, B-AC-6) | during the opener's lean-in, a building nearer the camera than a place the caption names and across it on screen fades to 1 − ⅔ × lean (a third at full lean); the named place, a level or off-to-the-side building, and a view that leans on nothing do not fade (PM, 8 Nov, from the visibility spike: a new site is up to ⅔ covered) | C5 |
+
+| T-AC-15 (serves C4, PM 8 Nov) | RULE-7's and RULE-8's examples at the rendered SVG: a clean colony (environment < 30) draws no haze; the haze's opacity rises with the gauge; smoke over a damaged place only, drawn just after its building and under nearer ones; at reduced motion the plume stands still | C4 |
 
 Invariant: the grounds never write state (HC-1).
 

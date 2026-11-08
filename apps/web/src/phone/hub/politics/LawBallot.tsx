@@ -1,9 +1,12 @@
 import { LAW_NAME, POLITICS, type LawId } from '@mule/engine';
-import type { CouncilView, MuleView, PoliticsView } from '@mule/protocol';
+import type { CouncilView, MuleIntent, MuleView, MyView, PoliticsView } from '@mule/protocol';
 import { Button, cx, PlayerMark } from '@mule/ui';
+import { useEffect, useSyncExternalStore } from 'react';
+import { SeatWords } from '../../../components/SeatWords';
 import { toSlot } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
+import { YouPromised } from './ElectionDay';
 import { chipWords, forYouWords, LAW_IDS, LAW_MEANING, proposalWords } from './LawPicker';
 import { Who } from './parts';
 import { listNames, namer } from './words';
@@ -52,9 +55,26 @@ export function CouncilBallot() {
   const { view, self, me } = usePhoneGame();
   const client = useClient();
   const c = view.politics!.council!;
+  useLawPick();
+  // The pick outlives this card leaving the screen (another sub-tab) while the vote is open; the vote's close forgets it.
+  useEffect(() => {
+    if (c.stage !== 'ballot') forgetLawPick();
+  }, [c.stage]);
   if (c.stage === 'reveal' && c.result) return <PhoneReveal view={view} c={c} result={c.result} />;
-  const mine = me.politics?.lawBallot ?? null;
+  const mine = shownLawPick({ view, me });
+  const promised = me.politics?.promised?.law ?? null;
   const weight = view.politics!.weights.find((w) => w.id === self.id)?.votes ?? POLITICS.weight.base;
+  const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? id;
+  const vote = (yes: boolean) => {
+    lawPickOn({ seat: me.id, month: view.month }, yes);
+    client.intent({ type: 'voteLaw', yes });
+  };
+  const answer = (yes: boolean) => (
+    <Button size="md" variant={mine === yes ? 'holo' : 'outline'} aria-pressed={mine === yes} onClick={() => vote(yes)} data-testid={`ballot-${yes ? 'yes' : 'no'}`}>
+      {yes ? 'Yes' : 'No'}
+      {promised?.yes === yes && <span className={cx('ml-1.5 rounded-chip border px-1 font-mono text-[10px] font-bold', mine === yes ? 'border-on-holo' : 'border-holo text-holo')}>PROMISED</span>}
+    </Button>
+  );
   return (
     <section className="flex flex-col gap-2 rounded-panel border-2 border-holo bg-panel p-3" data-testid="phone-ballot">
       <span className="flex items-baseline justify-between gap-2">
@@ -75,13 +95,10 @@ export function CouncilBallot() {
       <span className="text-sm font-semibold" data-testid="ballot-for-you">
         For you: {forYouWords(c.proposal, c.impact[self.id], view.air.level)}.
       </span>
+      {promised && <YouPromised words={<SeatWords text={`You promised ${promised.to.map(name).join(' and ')} a ${promised.yes ? 'yes' : 'no'}`} who={promised.to} players={view.players} />} testid="ballot-promised" />}
       <span className="grid grid-cols-2 gap-2">
-        <Button size="md" variant={mine === true ? 'holo' : 'outline'} aria-pressed={mine === true} onClick={() => client.intent({ type: 'voteLaw', yes: true })} data-testid="ballot-yes">
-          Yes
-        </Button>
-        <Button size="md" variant={mine === false ? 'holo' : 'outline'} aria-pressed={mine === false} onClick={() => client.intent({ type: 'voteLaw', yes: false })} data-testid="ballot-no">
-          No
-        </Button>
+        {answer(true)}
+        {answer(false)}
       </span>
       <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-2" data-testid="ballot-voted">
         Voted:
@@ -128,4 +145,66 @@ export function CouncilRail() {
       <span className="text-[11px] text-ink-2">A law passes on more yes than no, by vote weight; a tie goes the Governor’s way. It takes effect once the result is shown.</span>
     </div>
   );
+}
+
+/*
+ * This phone's own Yes or No on the open law ballot, a seat's in a month. Only a phone holding a promise reads it: there
+ * it shows over the promise at once and tells the Done press the player chose (S3-RULE-12 row 2), even before the
+ * server's answer comes back. Without a promise the ballot shows the server's vote, as before.
+ */
+interface LawPick {
+  seat: string;
+  month: number;
+  yes: boolean;
+}
+let lawPick: LawPick | null = null;
+const lawListeners = new Set<() => void>();
+let lawVersion = 0;
+
+function lawChanged(): void {
+  lawVersion++;
+  for (const l of lawListeners) l();
+}
+
+function lawPickOn(ballot: { seat: string; month: number }, yes: boolean): void {
+  lawPick = { ...ballot, yes };
+  lawChanged();
+}
+
+/** Forgets this phone's law pick; the ballot does this when it closes. */
+export function forgetLawPick(): void {
+  lawPick = null;
+  lawChanged();
+}
+
+function useLawPick(): void {
+  useSyncExternalStore(
+    (l) => (lawListeners.add(l), () => lawListeners.delete(l)),
+    () => lawVersion,
+    () => lawVersion,
+  );
+}
+
+type LawSeat = { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> };
+
+const ownLawPick = ({ view, me }: LawSeat): boolean | null => (lawPick && lawPick.seat === me.id && lawPick.month === view.month ? lawPick.yes : null);
+
+/** The answer the ballot shows: with a promise, this phone's tap, else the server's vote, else the promised answer. */
+function shownLawPick(seat: LawSeat): boolean | null {
+  const server = seat.me.politics?.lawBallot ?? null;
+  const promised = seat.me.politics?.promised?.law;
+  if (!promised) return server;
+  return ownLawPick(seat) ?? server ?? promised.yes;
+}
+
+/** Whether Done is live on the law ballot: a vote in, this phone's own, or a promise to send at the press. */
+export function lawBallotComplete(seat: LawSeat): boolean {
+  return shownLawPick(seat) !== null;
+}
+
+/** The vote Done sends before it (S3-RULE-12 row 4): the promised answer, when neither this phone nor the server has one. */
+export function lawPromisedFirst(seat: LawSeat): MuleIntent[] {
+  const promised = seat.me.politics?.promised?.law;
+  if (!promised || ownLawPick(seat) !== null || (seat.me.politics?.lawBallot ?? null) !== null) return [];
+  return [{ type: 'voteLaw', yes: promised.yes }];
 }

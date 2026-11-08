@@ -1,4 +1,4 @@
-import type { TaxPromise } from '@mule/engine';
+import { POLITICS, type DealCard, type TaxPromise } from '@mule/engine';
 import type { MuleView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { TableApp } from '../src/table/TableApp';
+import { TvDeals } from '../src/table/TvDeals';
 
 const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2)];
@@ -131,5 +132,85 @@ describe("the TV's planning header (T-AC-70, E-7)", () => {
 
   it('T-AC-70: a game without politics has no promise line', () => {
     expect(tagOf(onTv(game(null, 2)), 'tv-governor-promise')).toBeUndefined();
+  });
+});
+
+describe("the TV's break banner (S3-C20)", () => {
+  /** Month 8's table: Ossa is a computer seat; reputations as after the breaks below. */
+  const SEATS: PlayerView[] = [
+    { ...player('lena', 'Lena', 0), reputation: 40 },
+    { ...player('ossa', 'Ossa', 1), isAi: true, reputation: 62 },
+    { ...player('brix', 'Brix', 2), reputation: 61 },
+    { ...player('kai', 'Kai', 3), reputation: 44 },
+  ];
+  const card = (over: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to' | 'terms'>): DealCard => ({ offered: 5, until: 8, status: 'broken', brokenBy: over.from, settled: 8, ...over });
+  const LENA_VOTE = card({ id: 'deal-b3x8re', from: 'lena', to: 'brix', terms: { kind: 'vote', office: 'governor', candidate: 'brix' } });
+  const OSSA_LAW = card({ id: 'deal-z5n1yq', from: 'ossa', to: 'kai', terms: { kind: 'vote', law: true, yes: true } });
+  const LENA_PACT = card({ id: 'deal-q7k2m9', from: 'lena', to: 'brix', terms: { kind: 'pact' } });
+
+  const atMonth = (brokenDeals: DealCard[] | undefined, month = 8): MuleView => ({ ...game(politics({ ...(brokenDeals ? { brokenDeals } : {}) }), month), players: SEATS });
+  const banner = (g: MuleView) => renderToStaticMarkup(createElement(TvDeals, { game: g })).replaceAll('<!-- -->', '');
+  const marks = (html: string) => html.match(/data-testid="ai-mark"/g)?.length ?? 0;
+
+  /** The test ids in the banner, in order, that start with `prefix`. */
+  const ids = (html: string, prefix: string) => [...html.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1]!).filter((id) => id.startsWith(prefix));
+  const { voteBroken, pactBroken } = POLITICS.reputation.moves;
+
+  it('S3-B-AC-2: when a card in politics.brokenDeals is new, TvDeals shows a banner naming who broke a promise to whom, what was promised and the drop', () => {
+    const html = banner(atMonth([LENA_VOTE]));
+    expect(html).toContain('data-testid="tv-break-banner"');
+    expect(textOf(html, 'tv-break-lena')).toContain('A promise was broken');
+    expect(textOf(html, 'tv-break-deal-b3x8re-words')).toBe('Lena broke a promise to Brix: a vote for Brix');
+    // The drop alone, beside the breaker's chip with the number now: no "before" worked back from it.
+    expect(textOf(html, 'tv-break-lena-drop')).toBe(`−${-voteBroken}`);
+    expect(textOf(html, 'tv-break-lena-rep')).toBe('40');
+    expect(textOf(html, 'tv-break-lena')).not.toContain('→');
+    expect(marks(html), 'Lena is a person: no AI mark').toBe(0);
+  });
+
+  it("S3-B-AC-2: the drop is POLITICS' move, never a typed number: a pact's, and a retuned move", () => {
+    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-lena-drop')).toBe(`−${-pactBroken}`);
+    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-lena')).toContain('A pact was broken');
+    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9-words')).toBe('Lena broke a pact with Brix');
+    const moves = POLITICS.reputation.moves as { voteBroken: number };
+    const was = moves.voteBroken;
+    try {
+      moves.voteBroken = -7;
+      expect(textOf(banner(atMonth([LENA_VOTE])), 'tv-break-lena-drop')).toBe('−7');
+    } finally {
+      moves.voteBroken = was;
+    }
+  });
+
+  it("S3-B-AC-2: one breaker's cards broken in the month make one line with the drops summed; another breaker has a line of its own", () => {
+    const html = banner(atMonth([LENA_VOTE, OSSA_LAW, LENA_PACT]));
+    expect(ids(html, 'tv-break-').filter((id) => !/-(words|drop|rep|label)$/.test(id) && id !== 'tv-break-banner')).toEqual(['tv-break-lena', 'tv-break-ossa']);
+    expect(textOf(html, 'tv-break-lena-drop')).toBe(`−${-(voteBroken + pactBroken)}`);
+    expect(textOf(html, 'tv-break-ossa-drop')).toBe(`−${-voteBroken}`);
+    // Several cards from one breaker: their name and the count, in the news's "broke a promise"; one card says its kind.
+    expect(textOf(html, 'tv-break-lena-label')).toBe('Lena broke 2 promises');
+    expect(textOf(html, 'tv-break-ossa-label')).toBe('A promise was broken');
+    const ossaTwice = banner(atMonth([OSSA_LAW, { ...OSSA_LAW, id: 'deal-z9w4tt', to: 'lena' }]));
+    expect(textOf(ossaTwice, 'tv-break-ossa-label'), 'the name through SeatWords').toBe('Ossa · AI broke 2 promises');
+    expect(ids(html, 'tv-break-deal-').filter((id) => id.endsWith('-words'))).toEqual(['tv-break-deal-b3x8re-words', 'tv-break-deal-q7k2m9-words', 'tv-break-deal-z5n1yq-words']);
+  });
+
+  it('S3-B-AC-2: a computer seat that breaks a promise is named "Ossa · AI" on the banner, from players[].isAi; a person\'s name has no mark', () => {
+    const html = banner(atMonth([OSSA_LAW, LENA_VOTE]));
+    expect(textOf(html, 'tv-break-deal-z5n1yq-words')).toBe('Ossa · AI broke a promise to Kai: a yes on the law');
+    expect(textOf(html, 'tv-break-deal-b3x8re-words')).toBe('Lena broke a promise to Brix: a vote for Brix');
+    // The mark follows the seat, not the name: a person and a computer seat may share one.
+    const twins = { ...atMonth([LENA_VOTE]), players: SEATS.map((p) => (p.id === 'lena' || p.id === 'brix' ? { ...p, name: 'Sam', isAi: p.id === 'brix' } : p)) };
+    expect(textOf(banner(twins), 'tv-break-deal-b3x8re-words')).toBe('Sam broke a promise to Sam · AI: a vote for Sam · AI');
+  });
+
+  it.each<[string, MuleView]>([
+    ['a kept card: brokenDeals holds none', atMonth([])],
+    ['a card broken in an earlier month', atMonth([{ ...LENA_VOTE, settled: 6 }])],
+    ['a card broken last month', atMonth([{ ...LENA_VOTE, settled: 7 }])],
+    ['an older server with no brokenDeals', atMonth(undefined)],
+    ['a game without politics', { ...game(null, 8), players: SEATS }],
+  ])('S3-B-AC-2: no new broken card, no banner (%s)', (_, g) => {
+    expect(banner(g)).toBe('');
   });
 });
