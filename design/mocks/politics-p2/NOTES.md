@@ -53,7 +53,7 @@ Draw inside `design/mocks/politics-frame` (`src/slots.tsx`, `src/App.tsx`). No n
 
 ## The contract (slice 4, on trunk since #662 / batch 78, e1e4794a; Heiko approved the six choices 7 Nov 12:54Z)
 
-Files: `packages/protocol/src/index.ts` (IncidentView ~:328, MyView.sabotage/sheriff ~:394, MuleView.sabotage ~:513,
+Files: `packages/protocol/src/index.ts` (IncidentView ~:328, MyPoliticsView.sabotage/sheriff ~:405, PoliticsView.sabotage ~:524,
 ShowEventView.sabotage ~:753, intents ~:49), `packages/engine/src/types.ts:640` (SabotageTarget, SabotageOrder).
 - Intents: `{type:'sabotage', target: SabotageTarget|null}` (null withdraws this month's order) · Sheriff after the
   votes: `{type:'guard', tiles:number[]}` (the whole list), `{type:'investigate', order}`, `{type:'fine', order, amount}`
@@ -61,11 +61,11 @@ ShowEventView.sabotage ~:753, intents ~:49), `packages/engine/src/types.ts:640` 
 - `SabotageTarget`: `{kind:'powerCut', tile}` | `{kind:'rumour', good, dir:'up'|'down'}`.
 - `IncidentView` (public): id (opaque), month, kind, victim|null, at|null, good, dir?, worked, culprit|null (public or
   own), how: 'guard'|'caught'|'investigation'|null, investigated, fine {due, paid, toVictim, by:'sheriff'|'standard'}|null.
-- `MyView.sabotage` (own phone): order (this month's pending), canOrder: true|'off'|'notPlanning', owed (crew cost at
+- `MyView.politics.sabotage` (MyPoliticsView, own phone): order (this month's pending), canOrder: true|'off'|'notPlanning', owed (crew cost at
   upkeep), mine: IncidentView & {public, outcome: 'pending'|'done'|'failed'|'caught'}.
-- `MyView.sheriff` (the sitting Sheriff only): canAct: true|'off'|'notPlanning'|'votesOpen', guards (tile indices), max,
+- `MyView.politics.sheriff` (MyPoliticsView, the sitting Sheriff only): canAct: true|'off'|'notPlanning'|'votesOpen', guards (tile indices), max,
   investigationsLeft, fineable (order ids), steps (fine bases allowed), multiplier (the ban's, now).
-- `MuleView.sabotage` (everyone): terms per kind {cost, success, detect}, incidents (public), sheriff {guards,
+- `MuleView.politics.sabotage` (PoliticsView, everyone): terms per kind {cost, success, detect}, incidents (public), sheriff {guards,
   investigations, investigationsLeft}. `reputationReasons[player]` gains `{kind:'caught', month}`.
 - Show event: `sabotage?: {order, culprit|null, worked, guarded}`.
 - Heiko's rulings: an investigation finds the culprit half the time ("Solved: it was Lena" / "The trail went cold");
