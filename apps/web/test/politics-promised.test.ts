@@ -216,7 +216,7 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     mount(electionFor({ promised: BRIX_VOTE }));
 
     expect(text('ballot-governor-promised')).toContain('You promised Brix your vote');
-    expect(text('ballot-governor-promised'), 'what keeping and breaking it does, from POLITICS').toContain('Keep it: +3. Break it: −10, and the table sees it.');
+    expect(text('ballot-governor-promised'), 'what keeping and breaking it does: no figure for keeping, the cost from POLITICS').toContain(`Keeping it builds your name. Breaking it costs −${-POLITICS.reputation.moves.voteBroken}, and the table sees it. Your vote stays secret either way.`);
     expect(text('ballot-governor-s2-promised')).toBe('PROMISED');
     expect(findTestid('ballot-governor-s3-promised'), 'only the promised candidate is tagged').toBeUndefined();
     expect(checked('s2'), 'Brix starts picked').toBe(true);
@@ -281,7 +281,7 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     mount(lawFor({ promised: LAW_YES }));
 
     expect(text('ballot-promised')).toContain('You promised Brix a yes');
-    expect(text('ballot-promised')).toContain('Keep it: +3. Break it: −10, and the table sees it.');
+    expect(text('ballot-promised'), 'the law ballot draws the same line').toContain(`Keeping it builds your name. Breaking it costs −${-POLITICS.reputation.moves.voteBroken}, and the table sees it. Your vote stays secret either way.`);
     expect(text('ballot-yes')).toContain('PROMISED');
     expect(text('ballot-no')).not.toContain('PROMISED');
     expect(pressed('ballot-yes'), 'Yes starts picked').toBe(true);
