@@ -303,7 +303,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
         {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" data-fit-gives>
-          <News news={game.news} />
+          <News game={game} />
         </div>
         {phase !== 'planning' ? (
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? 'READY' : p.isAi ? '' : '…'}</span>} />
@@ -468,17 +468,48 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
   );
 }
 
-function News({ news }: { news: string[] }) {
+function News({ game }: { game: MuleView }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
-      {news.map((n, i) => (
+      {game.news.map((n, i) => (
         // The newest stays whole when the column runs short: older ones give way (FitHeight's data-fit-keep).
         <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
-          {n}
+          <NewsWords text={n} who={game.newsLines?.[i]?.text === n ? game.newsLines[i]!.who : []} players={game.players} />
         </li>
       ))}
     </ul>
   );
+}
+
+/**
+ * A news line with " · AI" after each computer seat's name (Heiko, 7 Nov: in every ticker). `who` names the seats in the
+ * words' order, so each is found after the one before; a name matches only as a whole word ("Al", never "Also").
+ */
+function NewsWords({ text, who, players }: { text: string; who: readonly string[]; players: MuleView['players'] }) {
+  const parts: ReactNode[] = [];
+  let from = 0;
+  for (const id of who) {
+    const p = players.find((q) => q.id === id);
+    if (!p) continue;
+    const at = wholeWordAt(text, p.name, from);
+    if (at < 0) continue;
+    const end = at + p.name.length;
+    // A person's name is passed over unmarked, so a computer seat of the same name is found in its own place.
+    if (p.isAi) parts.push(text.slice(from, end), <AiMark key={end} />);
+    else parts.push(text.slice(from, end));
+    from = end;
+  }
+  parts.push(text.slice(from));
+  return <>{parts}</>;
+}
+
+const WORD = /[\p{L}\p{N}]/u;
+function wholeWordAt(text: string, name: string, from: number): number {
+  if (name === '') return -1;
+  for (let at = text.indexOf(name, from); at >= 0; at = text.indexOf(name, at + 1)) {
+    if (!WORD.test(text[at - 1] ?? '') && !WORD.test(text[at + name.length] ?? '')) return at;
+  }
+  return -1;
 }
 
 function MarketTiles({ game }: { game: MuleView }) {
@@ -807,7 +838,7 @@ function HarvestSide({ game }: { game: MuleView }) {
   const food = game.market.find((r) => r.good === 'food');
   return (
     <>
-      <News news={game.news} />
+      <News game={game} />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
         <div className="flex flex-col gap-1 bg-panel p-4">
           <span className="label-caps">Colonists</span>
