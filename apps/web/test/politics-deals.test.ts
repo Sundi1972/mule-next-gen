@@ -396,14 +396,22 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
 });
 
 describe('the standings door (S3-C17)', () => {
-  it('S3-B-AC-1: with one card to Ossa unanswered, the standings row offers Ossa no second card and says why; Brix still gets one', () => {
+  it('S3-B-AC-1: with one card to Ossa unanswered, the composer from his standings row holds Send and says why, not "a pact"; Brix still gets one', () => {
     const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
     mount(gameFor(myView(LENA, [waiting])), hub);
     tap('standing');
-    const ossa = byTestid(`deal-standing-${OSSA}`);
-    expect(ossa.getAttribute('disabled'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').not.toBeNull();
-    expect(ossa.getAttribute('title')).toBe('Ossa has not answered your last card');
-    expect(byTestid(`deal-standing-${BRIX}`).getAttribute('disabled')).toBeNull();
+    tap(`deal-standing-${OSSA}`);
+    expect(text('composer-a-refusal'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').toBe('Ossa has not answered your last card');
+    expect(findTestid('composer-a-pact-no'), 'an unanswered offer is not a pact').toBeUndefined();
+    expect(byTestid('composer-a-send').getAttribute('disabled')).not.toBeNull();
+    tap('composer-a-kind-vote');
+    expect(text('composer-a-refusal'), 'whatever the card').toBe('Ossa has not answered your last card');
+    tap('composer-a-close');
+
+    tap('standing');
+    tap(`deal-standing-${BRIX}`);
+    expect(findTestid('composer-a-refusal')).toBeUndefined();
+    expect(byTestid('composer-a-send').getAttribute('disabled')).toBeNull();
   });
 });
 
