@@ -19,7 +19,27 @@ export function sabotageSeat(view: MuleView): EventSabotageSeat | undefined {
   const cards = me.deals?.cards;
   // The loss only when the view can say it all: the ban in force and this player's own deal cards.
   if (!laws || !cards) return seat;
-  return { ...seat, reputation: { ban: laws.sabotageBan?.setting ?? 1, pacts: pactsThisMonth(cards, me.id, view.month) } };
+  const pacts = pactsThisMonth(cards, me.id, view.month);
+  const brokeNow = pactsThisMonth(cards.filter((c) => c.status === 'broken'), me.id, view.month);
+  return { ...seat, reputation: { ban: laws.sabotageBan?.setting ?? 1, pacts, unsure: unplaced(view, me.id, brokeNow) } };
+}
+
+/**
+ * The pacts broken this month whose break the view cannot put on this production's catch (review of #750). An
+ * investigation in planning can solve an older order on the same partner and break the pact first; then this catch's
+ * pactBreach finds no pact and takes no pactBroken, but the card reads the same: broken by me, this month. The view
+ * can rule that out only when no older order of mine on that partner was solved by investigation, or when the reveal
+ * months (reputationReasons' 'caught', dated the investigation's month) hold none this month beyond this month's own
+ * catches. Otherwise: unsure, and the line gives no number.
+ */
+function unplaced(view: MuleView, me: string, brokeNow: readonly string[]): string[] {
+  const mine = view.me?.politics?.sabotage?.mine ?? [];
+  const month = view.month;
+  const reasons = view.politics?.reputationReasons?.[me];
+  const revealedNow = reasons?.filter((r) => r.kind === 'caught' && r.month === month).length;
+  const caughtNow = mine.filter((o) => o.month === month && o.how !== null).length;
+  const earlierRevealNow = revealedNow === undefined || revealedNow > caughtNow;
+  return brokeNow.filter((p) => earlierRevealNow && mine.some((o) => o.month < month && o.victim === p && o.how === 'investigation'));
 }
 
 /**

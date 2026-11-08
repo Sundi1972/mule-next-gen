@@ -338,6 +338,12 @@ describe('S4-C17 · each phone’s private line after the show (P10Page PHONE_LI
     expect(rail(cut(GUARDED), 'lena', { ...lena, reputation: { ban: 1, pacts: ['brix'] } })).toContain('−10 reputation; the Sheriff');
   });
 
+  it('a pact whose break the phone cannot place (an investigation broke it this month too): no number, never "20 more"', () => {
+    const line = rail(cut(GUARDED), 'lena', { ...lena, reputation: { ban: 1, pacts: ['ossa'], unsure: ['ossa'] } });
+    expect(line).toContain('Caught by a guard at Ossa’s plot. You lost reputation; the Sheriff can fine you.');
+    expect(line).not.toContain('20 more');
+  });
+
   it('a phone that cannot know the loss gives no number', () => {
     const { reputation: _r, ...unknown } = lena;
     const line = rail(cut(GUARDED), 'lena', unknown);

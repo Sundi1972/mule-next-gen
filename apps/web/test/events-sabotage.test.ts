@@ -100,8 +100,8 @@ describe('S4-C17 · what a phone knows for its own line after the show', () => {
   const pact = (other: string, over: object) => ({ id: `deal-${other}`, from: 'lena', to: other, terms: { kind: 'pact' }, offered: MONTH - 1, until: MONTH + 1, status: 'active', brokenBy: null, settled: null, ...over });
 
   it('the caught loss it can know: no ban is ×1, a ban in force its setting', () => {
-    expect(known({}, [])?.reputation).toEqual({ ban: 1, pacts: [] });
-    expect(known({ sabotageBan: { setting: 2, since: 3 } }, [])?.reputation).toEqual({ ban: 2, pacts: [] });
+    expect(known({}, [])?.reputation).toEqual({ ban: 1, pacts: [], unsure: [] });
+    expect(known({ sabotageBan: { setting: 2, since: 3 } }, [])?.reputation).toEqual({ ban: 2, pacts: [], unsure: [] });
   });
 
   it('the players it held a pact with this month: running, or broken by it this month (the reveal breaks it before the show)', () => {
@@ -113,6 +113,48 @@ describe('S4-C17 · what a phone knows for its own line after the show', () => {
       { ...pact('zed', {}), terms: { kind: 'vote', law: true, yes: true } },
     ];
     expect(known({}, cards)?.reputation?.pacts).toEqual(['ossa', 'brix']);
+  });
+
+  /**
+   * Review of #750: month 5. In planning the Sheriff's investigation solves Lena's month-3 cut on Ossa, and that reveal
+   * breaks their pact; in production Lena cuts Ossa again and is caught. The engine's pactBetween finds no pact left,
+   * so this catch costs no 20 more, yet the card reads "broken by Lena in month 5" either way.
+   */
+  const may = (orders: object[], reasons: object[] | undefined, cards: object[]) =>
+    sabotageSeat(
+      aMuleView({
+        players: PLAYERS,
+        month: MONTH,
+        phase: 'production',
+        me: { id: 'lena', politics: { sabotage: { mine: orders } }, deals: { cards, offersLeft: 0, pactMonths: [] } } as unknown as MyView,
+        politics: { sheriff: 'brix', laws: {}, sabotage: { incidents: [] }, ...(reasons ? { reputationReasons: { lena: reasons } } : {}) } as unknown as PoliticsView,
+      }),
+    )?.reputation;
+  const broke = [pact('ossa', { offered: MONTH - 3, status: 'broken', brokenBy: 'lena', settled: MONTH })];
+  const older = { ...incident({ id: 'sab-old', month: MONTH - 2, culprit: 'lena', how: 'investigation', investigated: true }), public: true, outcome: 'done' };
+  const now = { ...incident({ id: 'sab-new', worked: false, culprit: 'lena', how: 'guard' }), public: true, outcome: 'caught' };
+
+  it('an investigation broke the pact this month, before this catch: the phone cannot say the pact’s 20, so it names no number for Ossa', () => {
+    // Two reveals dated this month: the investigation's and this catch's.
+    const r = may([older, now], [{ kind: 'caught', month: MONTH }, { kind: 'caught', month: MONTH }], broke);
+    expect(r?.unsure).toEqual(['ossa']);
+  });
+
+  it('the older order was solved in an earlier month: this month’s break is this catch’s, and the 20 counts', () => {
+    const r = may([older, now], [{ kind: 'caught', month: MONTH - 1 }, { kind: 'caught', month: MONTH }], broke);
+    expect(r).toMatchObject({ pacts: ['ossa'], unsure: [] });
+  });
+
+  it('a view without the reveal months cannot tell either way: no number for Ossa', () => {
+    expect(may([older, now], undefined, broke)?.unsure).toEqual(['ossa']);
+  });
+
+  it('a pact still running is never unsure: the engine breaks it on this catch', () => {
+    expect(may([older, now], undefined, [pact('ossa', {})])).toMatchObject({ pacts: ['ossa'], unsure: [] });
+  });
+
+  it('no older solved order on Ossa: nothing is ambiguous', () => {
+    expect(may([now], undefined, broke)).toMatchObject({ pacts: ['ossa'], unsure: [] });
   });
 
   it('a view without its laws or its deal cards cannot know the loss: no reputation, so no number', () => {

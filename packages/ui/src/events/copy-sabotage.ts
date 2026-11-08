@@ -27,7 +27,8 @@ const MINUS = '−';
  */
 function lost(seat: EventSabotageSeat | undefined, victim: string | null, cast: ShowCast): string {
   const r = seat?.reputation;
-  if (!r) return 'You lost reputation; the Sheriff can fine you.';
+  // A pact the view cannot say this catch broke (an investigation may have broken it this month first): no number.
+  if (!r || (victim !== null && r.unsure?.includes(victim))) return 'You lost reputation; the Sheriff can fine you.';
   const base = `${MINUS}${Math.abs(POLITICS.reputation.moves.caught) * r.ban} reputation`;
   const pact = victim !== null && r.pacts.includes(victim) ? `, and ${Math.abs(POLITICS.reputation.moves.pactBroken)} more: your pact with ${cast.name(victim)}` : '';
   return `${base}${pact}; the Sheriff can fine you.`;
