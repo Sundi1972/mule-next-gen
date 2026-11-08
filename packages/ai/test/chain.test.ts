@@ -294,6 +294,9 @@ describe('a factory chain (AM-33)', () => {
     // ground, one a month, half the Alloy works' run, the chain wins only from about 3500: the share halves the works.)
     const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], DEAR);
     for (const t of state.tiles) if (!t.owner && t.terrain !== 'store') t.owner = 'ai1';
+    // The colony's Energy on the shelf, so the seat's own Energy plant, at the 100 an empty shelf posts, is no rival the
+    // chain must outweigh: the case is where the links go (review of #743 moved Food's forecast, and the plant edged it).
+    state.store.stock.energy = 200;
     expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).toBe('electronics');
   }));
 
