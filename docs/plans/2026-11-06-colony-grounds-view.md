@@ -383,6 +383,11 @@ The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK)
 - [x] `T-AC-9: the gauges' count starts when TvMonthEnd mounts`. FAIL → C9 → PASS. Commit.
 - [x] `T-AC-5`: politics off, no opener. Then route the opener; TvMonthEnd unchanged (`git diff` of TvMonthEnd empty). Commit. Send both SHAs to the PM for WS4's OK.
 
+### Task 5.6: T-AC-12 — the buildings in front of the named place fade during the lean-in (C5; PM, 8 Nov)
+
+**Altitude:** the rendered markup (each building's group opacity). **Files:** `packages/ui/test/grounds-opener-fade.test.tsx`, `packages/ui/src/grounds/framing.ts` (inFrontOf, frontOpacity), `ColonyGrounds.tsx`.
+- [x] `T-AC-12: at full lean the Stadium and the hall in front of the new site are at 1/3 …` red c673b989, then green. The visibility spike's worst case (design/mocks/colony-grounds/spike.html) is the fixture.
+
 ### Task 5.5: B-AC-6 — browser test (front to back)
 
 - [x] In `apps/web/e2e/`, the test command owns its stack: at the month end after the Park comes to stand, the TV shows `tv-grounds-opener` after the event show, then `tv-monthend`; everyone Ready during the opener → planning at once; reduced motion → the still. Also Task 1.5 Step 4's checks (failed picture → shape and its glow gone; back-to-front order). TV-FIT ≥ 0.7 at six seats on the opener and the month end (`theTvScalesHeld`).

@@ -3,7 +3,7 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useId, useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
-import { leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
+import { frontOpacity, leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
 import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
@@ -166,6 +166,12 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   // The plate's lamps light as a standing building's do (RULE-2).
   const plateGlow = glowOpacity({ light, stage: 'standing', wealth: colony.gauges.wealth });
 
+  // During the lean-in, a building standing in front of a place the caption names fades, so the place shows through.
+  const fade = (block: GridPlace) => {
+    const o = frontOpacity(block, framing);
+    return o < 1 ? Number(o.toFixed(3)) : undefined;
+  };
+
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
   const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode) => {
@@ -216,9 +222,9 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
           depth: c + r,
           node:
             !p || !block ? (
-              <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>
+              <g key="hall" data-testid="place-hall" opacity={fade(HALL_BLOCK)}>{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>
             ) : (
-              <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
+              <g key={n} data-testid={`place-${n}`} data-stage={p.stage} opacity={fade(block)}>
                 {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
               </g>
             ),
