@@ -227,7 +227,7 @@ as the file owner who OKs and reviews against the spec.
 |---|---|---|
 | every engine rule function (S3-PR-1, S5-PR-1, S4-PR-1) and every politics hand (S3-PR-4, S5-PR-2, S4-PR-4) | WS7 | the rules' and hands' owner |
 | S3-PR-7, the deal-card phone and laptop screens (the composer, My cards, the reputation chip, the "You promised" ballot line) in `hub/politics/**` | **WS6**, named edits with WS7's OK per PR | WS7 carries three slices of engine and hands; its screens would be the long pole |
-| slice 4's screens (S4-PR-6 desks, S4-PR-7 show) | **WS8** | the PM's ruling |
+| slice 4's screens (S4-PR-6 desks, S4-PR-7 show) | **WS8**, except S4-PR-6's WS7 part (below, 8 Nov split) | the PM's ruling; split 8 Nov |
 | every TV part: `TvDeals.tsx` (S3-PR-7's TV task), the ban in `TvCouncil.tsx` (S4-PR-6), the overrule panel and the budget line in `TvCouncil.tsx` / `TvGovernorPromise.tsx` (S5-PR-6) | **WS4**, named edits in WS7's files | WS4 owns the TV's placement and TV-FIT |
 | S5-PR-6, the Governor's budget and the overrule desks and ballot (phone) | WS7 | kept by WS7 |
 | mocks: WS6 draws slice 3's and slice 5's (its dates: P3 8 Nov 12:00Z, P1 8 Nov 18:00Z, P4 9 Nov 18:00Z); WS8 draws slice 4's Sheriff desk (variants 8 Nov 12:00Z, whole mock 9 Nov 12:00Z) | WS6, WS8 | the PM's ruling |
@@ -1279,6 +1279,20 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
 ### S4-PR-6 · the desks (`ws7-s4-desks`)
 
 #### Task S4-6.0 — base and builder
+
+> **PM ruling, 8 Nov (Heiko's rulings relayed): S4-PR-6 is split three ways.** The rows of this PR in the file
+> table and the PR table read through it.
+> - **WS7** (`ws7-s4-screens`, #747): Task S4-6.3 (the Offices card's Sheriff line in `hub/politics/parts.tsx::OfficesCard`;
+>   `ElectionDay.tsx`, `TvElection.tsx` and `words.ts` are already generic over `POLITICS.offices` and need no change), the
+>   LawPicker part of Task S4-6.4 (`LAW_MEANING.sabotageBan`, P11's words), and Task S4-6.5 (the defaults flip).
+> - **WS8**: Tasks S4-6.1 and S4-6.2 (`Sabotage.tsx`, `Sheriff.tsx`, the Guard pick, the web intents,
+>   `politics-sabotage.test.tsx`) and S4-PR-7.
+> - **WS4**: the ban chip in `TvCouncil.tsx` (Task S4-6.4's TV part).
+> - The mock is WS8's P2, `design/mocks/politics-p2` (d6977e1a, approved 8 Nov), on WS6's tabbed planning hub. No new
+>   desk-placed politics screen starts before Heiko's verdict on the tabs.
+> - **The flip (Task S4-6.5) lands no earlier than both WS8 PRs and S4-PR-5**, in the order the PM accepted:
+>   hands (S4-PR-4) → server (S4-PR-5) → WS1's values (S4-PR-3) → WS8's screens and show plus WS4's chip → both
+>   switches in one commit with T-AC-62 → S4-PR-8.
 
 - [ ] **Step 1: Branch `ws7-s4-desks` off the lane at a commit containing the approved mock** (Task S4-M.1's SHA) and S4-PR-5. The PM confirms the builder; the files are WS7's. Until Task S4-6.5 flips the defaults, the screen tests build their views with the Sheriff and sabotage on in the fixture.
 
