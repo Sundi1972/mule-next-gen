@@ -446,7 +446,7 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
     const { obs, o, mind } = seatOf([farm]);
     const target = unitNeed(obs, mind, 'water').target;
     const y = yieldOf(obs, obs.tiles[6]!, 'water', 'ai0');
-    const net = y.made - y.water;
+    const net = y.made - (y.water ?? 0);
     expect(target, 'the premise: the target covers spoilage over the screen need').toBeGreaterThan(monthNeeds(obs, 'ai0').water);
     expect(net, 'the premise: what the well nets is all needed').toBeLessThanOrEqual(target);
     const [S = 0] = shortCosts(obs, o, 'water', mind, 1);

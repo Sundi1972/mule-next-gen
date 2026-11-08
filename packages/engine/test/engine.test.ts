@@ -82,10 +82,10 @@ describe('createGame', () => {
   });
 
   it.each([
-    [2, 24],
-    [4, 48],
-    [6, 72],
-  ])("a %i-seat game's store starts with %i Energy, 12 a seat (S1 lever (c), PM rulings 7 and 8 Nov)", (n, energy) => {
+    [2, 36],
+    [4, 72],
+    [6, 108],
+  ])("a %i-seat game's store starts with %i Energy, 18 a seat (Heiko, 8 Nov)", (n, energy) => {
     expect(newGame(n).store.stock.energy).toBe(energy);
   });
 

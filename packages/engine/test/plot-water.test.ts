@@ -64,9 +64,9 @@ function produce(plots: { good: Outfit; out?: number }[], spare: number, stock: 
 }
 
 describe('AM-18: every plot uses Water at production, and turns off without it', () => {
-  it('the numbers are config: a farm 2, every other raw plot 1, a factory its recipe', () => {
+  it('the numbers are config: a farm 2, every other raw plot 1, a factory its factoryWaterUse', () => {
     expect(UPKEEP.waterUse).toEqual({ food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 });
-    expect([RECIPES.alloy.inputs.water, RECIPES.electronics.inputs.water, RECIPES.medicine.inputs.water]).toEqual([1, 1, 1]);
+    expect(UPKEEP.factoryWaterUse).toEqual({ alloy: 1, electronics: 1, medicine: 1 });
   });
 
   it('a farm with Water takes 2 and makes its full output', () => {
