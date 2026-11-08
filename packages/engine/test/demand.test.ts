@@ -158,14 +158,18 @@ describe("needs C13: the store's demand is players + crews + colonists (RULE-11)
     expect(monthlyDemand(state).food).toBe(19);
   });
 
+  const DIRTY = POLLUTION.bands.find((b) => b.name === 'smoggy')!.from;
+
   /** The players' part of the store's Medicine demand: all of it but the colonists' need and the export ship's take. */
-  function playersMedicine(sick: number): number {
+  function playersMedicine(sick: number, air = 0): number {
     const state = createGame({ seed: 7, politics: true, players: ['p0', 'p1', 'p2', 'p3'].map((id) => ({ id, name: id, isAi: false })) });
     state.colonists = 400;
     state.colony!.sick = sick;
-    state.air = 0;
+    state.air = air;
     for (const p of state.players) p.stock.medicine = 0;
-    return monthlyDemand(state).medicine - colonistMedicineNeed(state) - exportDemand(state).medicine;
+    // Dirty air multiplies the colonists' need, never the crews' cure.
+    const airFactor = air >= DIRTY ? POLLUTION.sickMedicineDemand : 1;
+    return monthlyDemand(state).medicine - colonistMedicineNeed(state) * airFactor - exportDemand(state).medicine;
   }
 
   it("needs B-AC-12 (the Medicine case): health on, h 0.3, 4 seats holding no Medicine: the crews' cure adds 4; health off, today's", () => {
@@ -174,6 +178,7 @@ describe("needs C13: the store's demand is players + crews + colonists (RULE-11)
     try {
       expect(0.3, 'the premise: h at or over crewSickFrom').toBeGreaterThanOrEqual(HEALTH.crewSickFrom);
       expect(playersMedicine(0.3)).toBeCloseTo(4, 9);
+      expect(playersMedicine(0.3, DIRTY), 'in dirty air the cure is still 1 a seat: the air factor is the colonists\'').toBeCloseTo(4, 9);
       expect(playersMedicine(0), "h 0: no crew falls sick, today's").toBeCloseTo(0, 9);
     } finally {
       HEALTH.enabled = false;
