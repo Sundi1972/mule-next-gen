@@ -7,7 +7,7 @@ import { GovernorDesk } from './Governor';
 import { CouncilBallot, CouncilRail } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
-import { BudgetSub, electionAsking, ElectionsSub, isGovernor, lawBallotOpen, LawsSub } from './tabs';
+import { BudgetSub, electionVoting, ElectionsSub, isGovernor, lawVoting, LawsSub } from './tabs';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
@@ -178,8 +178,8 @@ export function councilNow({ view, self }: HubSeat): Now | null {
 
 /** The Governor / Council tab's sub-tabs (Sheriff is WS8's). A ballot, when open, sits first in its sub-tab. */
 export const POLITICS_TABS: SubTabSlot[] = [
-  { id: 'laws', label: () => 'Laws', Body: LawsSub, show: politicsOn, first: lawBallotOpen },
+  { id: 'laws', label: () => 'Laws', Body: LawsSub, show: politicsOn, first: lawVoting },
   // Only the Governor has a Budget body until S5-PR-6 builds the Council's.
   { id: 'budget', label: () => 'Budget', Body: BudgetSub, show: isGovernor },
-  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, show: politicsOn, first: electionAsking },
+  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, show: politicsOn, first: electionVoting },
 ];

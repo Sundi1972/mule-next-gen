@@ -1,8 +1,10 @@
 import type { ColonyView, CouncilView, ElectionView, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
-import { createElement, type ComponentType } from 'react';
+import { act, createElement, type ComponentType } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { document, type FakeElement } from './fake-dom';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -10,9 +12,10 @@ import { POLITICS_TABS } from '../src/phone/hub/politics/slots';
 import type { HubSeat } from '../src/phone/hub/slots';
 
 /* Only the open desk's focus is read from the hub, so the hub's navigation is a stub: these bodies are drawn outside a Hub. */
+const hub = vi.hoisted(() => ({ focus: null as string | null, takeFocus: vi.fn() }));
 vi.mock('../src/phone/hub/Hub', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/phone/hub/Hub')>()),
-  useHub: () => ({ desk: 'council', tool: 'look', focus: null, openDesk: () => {}, pickTool: () => {}, takeFocus: () => {} }),
+  useHub: () => ({ desk: 'council', tool: 'look', focus: hub.focus, openDesk: () => {}, pickTool: () => {}, takeFocus: hub.takeFocus }),
 }));
 
 const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
@@ -128,6 +131,28 @@ describe('SB-3: the politics sub-tabs', () => {
     it('SB-3: Elections shows the offices and running for office', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       const html = draw('elections', view(politics({ governor: 's2' })));
       expect(html).toContain('data-testid="run-any-month"');
+      expect(html).toContain('data-testid="offices-card"');
+    });
+
+    it('SB-3: a door that asks for a focus has it taken once, so pressing the door again asks again', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+      hub.focus = 'run';
+      hub.takeFocus.mockClear();
+      const game = view(politics({ governor: 's2' }));
+      const value = { table: { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>, view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
+      const Body = sub('elections').Body;
+      const host = document.createElement('div');
+      const root = createRoot(host as unknown as HTMLElement);
+      (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+      (document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement }).createElementNS ??= (_ns, tag) => document.createElement(tag);
+      (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
+      (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame ??= () => 0;
+      try {
+        act(() => root.render(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(Body) }) })));
+        expect(hub.takeFocus).toHaveBeenCalledTimes(1);
+      } finally {
+        act(() => root.unmount());
+        hub.focus = null;
+      }
     });
   });
 
@@ -142,6 +167,12 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(at(html, 'phone-ballot')).toBeLessThan(at(html, 'laws-in-force'));
     });
 
+    it('SB-3: on the Governor’s phone the ballot comes before the Governor’s desk', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+      const html = draw('laws', view(politics({ governor: 's1', council: council() })));
+      expect(at(html, 'phone-ballot')).toBeGreaterThan(-1);
+      expect(at(html, 'phone-ballot')).toBeLessThan(at(html, 'gov-tax'));
+    });
+
     it('SB-3: with no ballot open Laws does not ask to open first', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       expect(sub('laws').first?.(seatOf(view(politics())))).toBeFalsy();
     });
@@ -154,6 +185,10 @@ describe('SB-3: the politics sub-tabs', () => {
       const html = draw('elections', game);
       expect(html).not.toContain('data-testid="run-any-month"');
       expect(html).toContain('data-testid="day-title"');
+    });
+
+    it('SB-3: during the ceremony Elections does not ask first', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+      expect(sub('elections').first?.(seatOf(view(politics({ election: election('ceremony') }))))).toBe(false);
     });
 
     it('SB-3: once the election is over Elections shows the offices and does not ask first', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
