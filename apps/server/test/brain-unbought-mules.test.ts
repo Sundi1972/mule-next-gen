@@ -151,7 +151,7 @@ describe("unbought-mules fix: the next land brief says what the seat's own hands
     const fitted = t.state.tiles.flatMap((tile, i) => (tile.owner === 'p0' && tile.outfit ? [{ plot: i, outfit: tile.outfit }] : []));
     expect(fitted).toHaveLength(1);
     const next = t.landBriefs()[1]!;
-    expect(next).toContain(`${HANDS_HEAD} bought 1 MULE; installed a ${outfitName(fitted[0]!.outfit)} on plot ${fitted[0]!.plot}.`);
+    expect(next).toContain(`${HANDS_HEAD} bought 1 MULE; installed ${/^[AEIOU]/.test(outfitName(fitted[0]!.outfit)) ? 'an' : 'a'} ${outfitName(fitted[0]!.outfit)} on plot ${fitted[0]!.plot}.`);
     expect(next).not.toContain('What happened in your last phase');
   });
 
@@ -172,7 +172,7 @@ describe("unbought-mules fix: the next land brief says what the seat's own hands
 
     const fitted = t.state.tiles.flatMap((tile, i) => (tile.owner === 'p0' && tile.outfit ? [{ plot: i, outfit: tile.outfit }] : []));
     expect(fitted).toHaveLength(1);
-    expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought 1 MULE; installed a ${outfitName(fitted[0]!.outfit)} on plot ${fitted[0]!.plot}.`);
+    expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought 1 MULE; installed ${/^[AEIOU]/.test(outfitName(fitted[0]!.outfit)) ? 'an' : 'a'} ${outfitName(fitted[0]!.outfit)} on plot ${fitted[0]!.plot}.`);
   });
 
   it('unbought-mules fix: FM-dev-outcome-today (floor, clock cut): a MULE bought before the clock cut the walk to its outfit is told as bought, with time run out, never as a refused buy', async () => {
@@ -214,6 +214,15 @@ const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** The outfit named `good` in the brief, by its key. */
 const outfitOf = (good: string) => GOODS.find((g) => GOOD_NAME[g] === good)!;
 
+/**
+ * Gives seat p0 an Energy plant before month 1, so Energy first (STRATEGIST.energyFirst) has nothing to force and the
+ * draft's first MULE is a choice the hands weigh against keeping the cash.
+ */
+const withEnergyPlant = (t: ReturnType<typeof table>) => {
+  const plant = t.state.tiles.findIndex((tile) => tile.terrain === 'plains' && tile.owner === null && !tile.isStore);
+  Object.assign(t.state.tiles[plant]!, { owner: 'p0', outfit: 'energy' });
+};
+
 describe('hands-why fix: the next land brief says why the hands stopped', { timeout: 30_000 }, () => {
   it("hands-why fix: FM-dev-stop-reason (walk veto): the hands keep the cash because the walk to the draft's plot no longer fits the clock, and the next brief names that MULE and the walk", async () => {
     const t = table();
@@ -228,8 +237,9 @@ describe('hands-why fix: the next land brief says why the hands stopped', { time
 
   it("hands-why fix: FM-dev-stop-reason (keep the cash): a cautious seat with little cash keeps it over the draft's MULE, and the next brief says it kept the cash over that MULE", async () => {
     const t = table({ persona: 'cautious' });
+    withEnergyPlant(t);
     await monthOne(t, undefined, (state, seat) => {
-      state.players.find((p) => p.id === 'p0')!.money = 230;
+      state.players.find((p) => p.id === 'p0')!.money = 300;
       developTurn(state, seat);
     });
 
@@ -239,7 +249,7 @@ describe('hands-why fix: the next land brief says why the hands stopped', { time
     const stop = t.seat.brain.log.filter((r) => r.kind === 'develop').at(-1)!;
     expect(stop.pick.key).toBe('stop');
     expect(stop.candidates.find((c) => c.key === `install:${outfitOf(good)}:${plot}`)?.veto).toBeNull();
-    expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought no MULE; then kept the cash, which scored above a ${outfitName(outfitOf(good))} on plot ${plot}.`);
+    expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought no MULE; then kept the cash, which scored above ${/^[AEIOU]/.test(outfitName(outfitOf(good))) ? 'an' : 'a'} ${outfitName(outfitOf(good))} on plot ${plot}.`);
   });
 
   it("hands-why fix: FM-dev-stop-reason (keep the cash, not the best): a decider that keeps the cash over a MULE that scored higher is never told the cash scored above it", async () => {
@@ -247,6 +257,7 @@ describe('hands-why fix: the next land brief says why the hands stopped', { time
     // among near ties. This one keeps the cash whenever it is offered.
     const keepsCash: Decider = { name: 'keeps-cash', decide: (list) => ({ optionId: (list.find((o) => o.key === 'stop') ?? list[0]!).id, line: null, by: 'llm' }) };
     const t = table({ persona: 'cautious', decider: keepsCash });
+    withEnergyPlant(t);
     await monthOne(t, undefined, (state, seat) => {
       state.players.find((p) => p.id === 'p0')!.money = 500;
       developTurn(state, seat);

@@ -394,8 +394,13 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     ]);
   });
 
-  /** Production's state, the plan shown for it, and the plan the auction would draft once a raid takes all of p0's goods. */
+  /**
+   * Production's state, the plan shown for it, and the plan the auction would draft once a raid takes all of p0's goods.
+   * p0 first gets a surplus of Water, Energy and Smithore, so the plan shown sells some of it and the raid has a role to
+   * flip (on the start values a month-1 seat holds nothing to sell).
+   */
   const raided = (state: GameState, seat: AiSeat) => {
+    Object.assign(state.players[0]!.stock, { water: 12, energy: 12, smithore: 12 });
     const shown = seat.draft(atAuctionStart(state), 'auction').auction!;
     const later = structuredClone(state);
     advanceTo(later, 'auction');
