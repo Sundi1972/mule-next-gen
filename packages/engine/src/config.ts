@@ -1150,6 +1150,10 @@ export const POLITICS = {
         aggressive: { welfare: 0.5, security: 1 },
         saboteur: { welfare: 0.5, security: 0.5 },
       } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+      /** Credits a month one point of the colony's mood target is worth to a seat (the unrest it keeps off). WS1, S5-PR-3; judged in play (Heiko, 8 Nov). */
+      moodPoint: 5,
+      /** How many times more a mood point is worth to the sitting Governor, whose re-election it sways. WS1, S5-PR-3; judged in play. */
+      governorMood: 3,
     },
     /** How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them. */
     overrule: {

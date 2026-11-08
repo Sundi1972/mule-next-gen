@@ -13,6 +13,13 @@
 import {
   auctionNeed,
   banMultiplier,
+  budgetCredits,
+  colonyPrestige,
+  GOODS,
+  HAPPINESS,
+  PRESTIGE,
+  stillNeeds,
+  welfareRecipient,
   isPublicOrder,
   lawImpact,
   orderTerms,
@@ -27,6 +34,7 @@ import {
   type OverruleTarget,
   type SabotageOrder,
 } from '@mule/engine';
+import { endMonth } from './outlook.js';
 import { yieldOf } from './value.js';
 
 // Slice 3: deal cards.
@@ -189,20 +197,69 @@ function sufferedAMonth(obs: GameState, me: string): number {
   return damage / Math.max(1, obs.month - 1);
 }
 
-// Slice 5: the budget.
+// Slice 5: the budget and the overrule (spec §3.2, S5-C9). In credits, from public facts; RC values Projects, Welfare and
+// the tax, and the after-RC targets are 0.
 
-/**
- * What `amount` credits on `line` this month are worth to `me`: its share of the benefit less its share of the cost.
- * A `budget` of null is the default, Projects 100.
- */
-export function lineWorth(_obs: GameState, _me: string, _line: BudgetLine, _amount: number): number {
-  return 0;
+/** What one point of the colony's mood target is worth to `me` a month: more to the sitting Governor, whose re-election it sways. */
+function moodPointWorth(obs: GameState, me: string): number {
+  const { moodPoint, governorMood } = POLITICS.ai.budget;
+  return moodPoint * (obs.politics?.governor === me ? governorMood : 1);
 }
 
 /**
- * What passing an overrule of the target (by default the called overrule's, else the tax) is worth to `me`: undoing this
- * month's tax or budget change, or no confidence in the Governor. Reads only `obs`: a hand also calls it for other seats.
+ * What `amount` credits on `line` at this upkeep are worth to `me`, against the line paying 0; never falls as `amount`
+ * rises. Welfare: the credits, if `me` is the recipient now, and the mood they buy (S5-RULE-5) at `me`'s mood point.
+ * Projects: for each commissioned building short of credits, in the order the fund pays them, the share of it the
+ * credits pay, times its prestige's mood (within the prestige cap) for the months left, at `me`'s mood point. 0 with
+ * none, or when every one waits only for goods. A building's perk is not counted yet, nor is the fund's own wealth.
+ * Security is after RC: 0.
  */
-export function overruleWorth(obs: GameState, _me: string, _target: OverruleTarget = obs.politics?.overrule?.target ?? 'tax'): number {
-  return 0;
+export function lineWorth(obs: GameState, me: string, line: BudgetLine, amount: number): number {
+  const w = HAPPINESS.weights;
+  const point = moodPointWorth(obs, me);
+  if (line === 'welfare') {
+    const mood = w.welfare * Math.min(Math.max(0, amount) / w.welfareUnit, w.welfareCap);
+    return (welfareRecipient(obs) === me ? Math.max(0, amount) : 0) + mood * point;
+  }
+  if (line !== 'projects' || !obs.colony) return 0;
+  const months = Math.max(0, endMonth(obs) - obs.month);
+  let room = Math.max(0, w.prestigeCap - colonyPrestige(obs));
+  let left = Math.max(0, amount);
+  let worth = 0;
+  for (const project of obs.colony.projects.filter((p) => p.stage === 'commissioned')) {
+    const need = Math.max(0, stillNeeds(project).credits);
+    if (need === 0 || left <= 0) continue;
+    const paid = Math.min(left, need);
+    left -= paid;
+    const row = PRESTIGE[project.id];
+    const prestige = Math.min(row.prestige, room);
+    room -= prestige;
+    worth += (paid / row.credits) * months * w.prestige * prestige * point;
+  }
+  return worth;
+}
+
+/** What `id` is expected to sell at this month's auctions, at the posted prices: what it holds beyond its need, as `obs` shows it. */
+function expectedSales(obs: GameState, id: string): number {
+  const p = obs.players.find((q) => q.id === id);
+  if (!p) return 0;
+  const need = auctionNeed(obs, id);
+  return GOODS.reduce((sum, g) => sum + Math.max(0, p.stock[g] - need[g]) * obs.store.posted[g], 0);
+}
+
+/**
+ * What passing an overrule of the target (by default the called overrule's, else the tax) is worth to `me`. The tax:
+ * the overrule puts back the tax at the month's start, so `me` saves (tax now − tax at start) on its expected sales,
+ * the seller paying (taxSale), less what the fund's change in tax income on everyone's expected sales would have
+ * brought `me` through Projects and Welfare. Negative when the Governor cut the tax. Reads only `obs`: a hand also
+ * calls it for other seats. The budget and no-confidence targets are after RC: 0.
+ */
+export function overruleWorth(obs: GameState, me: string, target: OverruleTarget = obs.politics?.overrule?.target ?? 'tax'): number {
+  if (target !== 'tax' || !obs.politics) return 0;
+  const delta = obs.treasury.salesTax - obs.politics.taxAtStart;
+  if (delta === 0) return 0;
+  const lost = delta * obs.players.reduce((sum, p) => sum + expectedSales(obs, p.id), 0);
+  const credits = budgetCredits(obs);
+  const through = (['projects', 'welfare'] as const).reduce((sum, line) => sum + lineWorth(obs, me, line, credits[line]) - lineWorth(obs, me, line, Math.max(0, credits[line] - lost)), 0);
+  return delta * expectedSales(obs, me) - through;
 }
