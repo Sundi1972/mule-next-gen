@@ -481,6 +481,19 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
   });
 
+  it('S3-B-AC-1: + Deal from the standings closes them, so only the composer is up; Escape gives the focus to the standings door, still on the screen', () => {
+    listenForKeys();
+    mount(gameFor(myView(LENA, [])), hub);
+    tapFocused('standing');
+    tapFocused(`deal-standing-${BRIX}`);
+    expect(findTestid('standings-sheet'), 'one sheet at a time').toBeUndefined();
+    expect(findTestid('composer-a')).toBeDefined();
+    press('Escape');
+    expect(findTestid('composer-a')).toBeUndefined();
+    expect(focused(), 'the door that opened the standings').toBe('standing');
+    expect(findTestid('standing'), 'and it is mounted').toBeDefined();
+  });
+
   it("S3-B-AC-6: a player card opened over the incoming sheet closes alone on Escape, and the sheet's chip has the focus back", () => {
     listenForKeys();
     mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
