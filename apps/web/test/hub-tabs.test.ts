@@ -530,7 +530,7 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     byTestid('gov-tax');
   });
 
-  it('SB-3 (M18a): the summary’s "To your Governor’s desk" link, on a phone with no TV, opens Laws', () => {
+  it('SB-3 (M18a): the summary’s "To your Governor’s desk" link, on a phone with no TV, opens Laws', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     const result: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: [{ id: 's1', votes: 2 }, { id: 's2', votes: 1 }] } };
     const beats = ceremonyBeats(['s1', 's2', 's3'], result);
     const total = beats.total / 1000;
