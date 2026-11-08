@@ -402,6 +402,17 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
     for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news.join(' '), String(viewer)).not.toMatch(/Ossa's .* plot\.$|void/);
   });
 
+  it('S4-T-AC-8: when planning closes on an unfined caught case, the standard fine is the first news line of the phase that opens (the land grant writes none of its own)', () => {
+    const w = world();
+    force('powerCut', true, true);
+    w.game.handle('lena', cut(w.brixPlot));
+    until(w, 'planning', 2);
+    expect(w.state.politics!.sabotage[0]).toMatchObject({ culpritPublic: true });
+    for (const id of ['lena', 'brix', 'ossa']) w.game.handle(id, { type: 'ready' });
+    expect(w.state.phase, 'planning closed').not.toBe('planning');
+    for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news[0], String(viewer)).toBe(`Lena was fined ${POLITICS.sheriff.fine.standard} for sabotage; ${POLITICS.sheriff.fine.standard / 2} to Brix.`);
+  });
+
   it('S4-T-AC-8: the news is a ring of three with the phase headline first: three caught cases never push out the harvest line, and three fines at the last upkeep never push out the game-over line', () => {
     const w = world(1);
     force('powerCut', true, true);
