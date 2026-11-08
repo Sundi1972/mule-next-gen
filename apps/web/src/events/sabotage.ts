@@ -44,7 +44,9 @@ export function sabotageNewsLine(view: MuleView, incident: IncidentView): string
   if (incident.kind === 'rumour') {
     const moved = `moved ${good ? `${good}’s` : 'an'} opening price ${shift} ${incident.dir === 'down' ? 'down' : 'up'}`;
     if (culprit === null) return `Sabotage: a rumour ${moved}.`;
-    return incident.worked ? `Sabotage: ${culprit}’s rumour ${moved}, and was seen.` : `Sabotage: ${culprit} was caught starting a rumour${good ? ` on ${good}` : ''}.`;
+    // WS6, 8 Nov: a rumour that took but was seen says so first, then what it did.
+    const opened = good ? ` ${good} opened ${shift} ${incident.dir === 'down' ? 'lower' : 'higher'}.` : '';
+    return incident.worked ? `Sabotage: ${culprit} was seen starting a rumour.${opened}` : `Sabotage: ${culprit} was caught starting a rumour${good ? ` on ${good}` : ''}.`;
   }
   const whose = incident.victim === null ? 'a' : `${name(incident.victim)}’s`;
   const plot = good ? `${whose} ${good.toLowerCase()} plot` : `${whose} plot`;

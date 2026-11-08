@@ -319,6 +319,11 @@ describe('S4-C17 · each phone’s private line after the show (P10Page PHONE_LI
     }
   });
 
+  it('a cut seen that did not work: the owner’s line, its good capitalised (WS6, 8 Nov)', () => {
+    const ev = cut({ order: 'sab-f', culprit: 'lena', worked: false, guarded: false });
+    expect(rail(ev, 'ossa', ossa)).toContain('Lena was seen at your Smithore plot. The power stayed on.');
+  });
+
   it('the caught line counts the sabotage ban: ×2 doubles the loss', () => {
     const banned = { ...lena, reputation: { ban: 2, pacts: [] } };
     expect(rail(cut(GUARDED), 'lena', banned)).toContain('Caught by a guard at Ossa’s plot. −20 reputation; the Sheriff can fine you.');

@@ -64,7 +64,7 @@ export function sabotageYou(ev: ShowEventView, me: string, cast: ShowCast, seat?
     if (sab.guarded) return { line: `A guard caught ${culprit} at your ${plot}. The power stayed on.`, short: 'power on', tone: 'ok' };
     return sab.worked
       ? { line: `Your ${plot} went dark. ${culprit} was seen doing it.`, short: 'plot dark', tone: 'alert' }
-      : { line: `${culprit} was seen at your ${plot}. The power stayed on.`, short: 'power on', tone: 'ok' };
+      : { line: `${culprit} was seen at your ${good ? `${GOOD_NAME[good]} plot` : 'plot'}. The power stayed on.`, short: 'power on', tone: 'ok' };
   }
   // A rumour has no victim: only its orderer and the Sheriff hear of it.
   const good = ev.good ? GOOD_NAME[ev.good] : undefined;

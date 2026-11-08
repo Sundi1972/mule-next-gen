@@ -60,6 +60,11 @@ describe('S4-C17 · the month end’s sabotage line, everyone’s (MONTH_END)', 
     expect(line(rumour({ worked: false, culprit: 'lena', how: 'caught' }))).toBe('Sabotage: Lena was caught starting a rumour on Food.');
   });
 
+  it('a rumour that worked but was seen (WS6, 8 Nov): seen, then what it did, higher or lower', () => {
+    expect(line(rumour({ culprit: 'lena', how: 'caught' }))).toBe('Sabotage: Lena was seen starting a rumour. Food opened 25% higher.');
+    expect(line(rumour({ culprit: 'lena', how: 'caught', dir: 'down' }))).toBe('Sabotage: Lena was seen starting a rumour. Food opened 25% lower.');
+  });
+
   it('one line per incident of this month only, in the view’s order', () => {
     const view = atMonthEnd([incident({ id: 'a' }), incident({ id: 'old', month: MONTH - 1, culprit: 'lena' }), rumour({ id: 'b' })]);
     expect(sabotageNews(view)).toEqual(['Sabotage: someone cut the power to Ossa’s smithore plot.', 'Sabotage: a rumour moved Food’s opening price 25% up.']);
