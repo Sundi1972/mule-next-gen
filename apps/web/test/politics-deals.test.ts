@@ -292,7 +292,7 @@ const hub = () => createElement(Planning);
 const offers = () => sent.filter((i) => (i as { type: string }).type === 'offerDeal');
 
 describe('the deal composer (S3-C17)', () => {
-  it("S3-B-AC-1: a pact's months in the composer stop at the game's last month, as S3-RULE-1's until does: month 11 of 12", () => {
+  it("S3-B-AC-1: a pact's months in the composer stop at the game's last month, as S3-RULE-1's until does: month 11 of 12, month 2 of 2", () => {
     const longest = Math.max(...POLITICS.deals.pactMonths);
     mount(gameFor(myView(LENA, []), politics(), { month: 11, maxMonths: 12 }), hub);
     tap('desk-talk');
@@ -302,6 +302,13 @@ describe('the deal composer (S3-C17)', () => {
     expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, months 11 to 12.');
     tap('composer-a-months-1');
     expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, in month 11.');
+    tap('composer-a-close');
+
+    // The last month of a two-month game: every length binds that month alone.
+    rerender(gameFor(myView(LENA, []), politics(), { month: 2, maxMonths: 2 }));
+    tap('add-deal');
+    tap(`composer-a-months-${longest}`);
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, in month 2.');
   });
 
   it("S3-B-AC-1: the composer opened from Lena's whisper to Brix offers a pact of POLITICS.deals pactMonths lengths or her own vote, sends offerDeal, and shows the engine's refusal words", () => {
