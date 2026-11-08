@@ -5,6 +5,7 @@ import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
 import { frontOpacity, leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
 import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
+import { occluderOf } from './occlusion';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
 import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
@@ -177,6 +178,17 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
     return o < 1 ? Number(o.toFixed(3)) : undefined;
   };
 
+  // Each picture with its silhouette: a colonist it covers is hidden by it, with an outline over it (T-AC-13). The SVG
+  // shapes (no manifest) need none: drawn in the same order, they hide the colonists behind them as they are.
+  const occluders = manifest
+    ? scene.flatMap(({ p, col: c, row: r }) => {
+        const kind: PictureKind = p?.id ?? 'hall';
+        const picked = pick(kind, p ?? HALL_PLACE, light, manifest);
+        const skyline = picked.shows === 'picture' ? manifest.pictures[kind]?.[picked.stage]?.skyline : undefined;
+        return skyline ? [occluderOf(manifest.pictures[kind]?.frame ?? manifest.frame, skyline, c, r, c + r)] : [];
+      })
+    : [];
+
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
   const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode, fade?: number) => {
@@ -238,6 +250,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         walkers={walkers}
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
+        occluders={occluders}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
       {chips &&

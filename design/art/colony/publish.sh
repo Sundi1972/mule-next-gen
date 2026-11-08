@@ -154,3 +154,6 @@ with open(os.path.join(pub, "manifest.json"), "w") as f:
 n = sum(1 for k in pictures.values() for s, e in k.items() if s != "frame" for v in e.values() if v)
 print(f"publish: {n} pictures + {3 * len(plates)} plate pictures x {len(SIZES)} sizes = {(n + 3 * len(plates)) * len(SIZES)} WebP, {total / 1e6:.2f} MB, manifest at {pub}/manifest.json")
 PY
+
+# each picture's silhouette, for the live layer's occlusion (spec C4, T-AC-13)
+python3 -I "$HERE/skyline.py" "$PUB"
