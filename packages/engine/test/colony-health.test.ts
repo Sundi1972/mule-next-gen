@@ -7,6 +7,7 @@ import {
   GOOD_CONFIG,
   HAPPINESS,
   HEALTH,
+  moodInputs,
   moodTarget,
   nextSickShare,
   PERCENT,
@@ -137,6 +138,16 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       }
       expect(Math.max(...seen)).toBeLessThanOrEqual(0.4);
       expect(seen.at(-1), 'it reaches the cap and holds there').toBe(0.4);
+    });
+  });
+
+  it("FM-medicine-shortage: an upkeep the colonists go short of Medicine reports Medicine short, as Food and Water, and the mood still counts only Food and Water", () => {
+    withHealth(() => {
+      const state = stockedAtAuction();
+      state.store.stock.medicine = 0;
+      const { shortages } = runUpkeep(state);
+      expect(shortages, "the store's prices and the computer players' outlook read the month's shortages").toContain('medicine');
+      expect(moodInputs(state, shortages).short, 'Medicine reaches the mood only through sickness').toBe(0);
     });
   });
 });
