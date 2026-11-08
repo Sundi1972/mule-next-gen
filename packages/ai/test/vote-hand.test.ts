@@ -197,6 +197,14 @@ function tickAlone(state: GameState, hand: VoteHand): { refused: AiAction[]; sen
 }
 
 afterEach(() => vi.unstubAllEnvs());
+// S5-C6 pin: these rows predate the budget. With Welfare at 0% an AI Governor's split is the budget in force (Projects 100), so it sends no setBudget and the fund reaches the buildings whole.
+const SAVED_WELFARE_MAX = POLITICS.budget.welfare.maxShare;
+beforeEach(() => {
+  POLITICS.budget.welfare.maxShare = 0;
+});
+afterEach(() => {
+  POLITICS.budget.welfare.maxShare = SAVED_WELFARE_MAX;
+});
 
 /** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
 function bothOffices(): void {

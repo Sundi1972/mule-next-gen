@@ -107,7 +107,8 @@ function where(view: unknown, value: string, path = ''): string[] {
   if (typeof view !== 'object' || view === null) return [];
   return Object.entries(view).flatMap(([key, v]) => [...(key === value ? [`${path}.${key}`] : []), ...where(v, value, `${path}.${Array.isArray(view) ? '*' : key}`)]);
 }
-const SEAT_LISTS = ['.players.*.id', '.politics.weights.*.id', '.politics.reputationReasons.lena'];
+// welfareTo (S5-C8) is a seat the Welfare share would go to: public money, a seat id like the others.
+const SEAT_LISTS = ['.players.*.id', '.politics.weights.*.id', '.politics.reputationReasons.lena', '.politics.budget.welfareTo'];
 const orders = (w: World): SabotageOrder[] => w.state.politics!.sabotage;
 
 describe('S4-B-AC-6: a pending order and the guards reach nobody but their party', () => {

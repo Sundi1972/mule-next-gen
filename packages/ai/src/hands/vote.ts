@@ -1,4 +1,5 @@
 import {
+  budgetCredits,
   canRun,
   commissionRefusal,
   createRng,
@@ -25,10 +26,12 @@ import {
   type PrestigeId,
   type Rng,
   type TaxPromise,
+  votesOpen,
 } from '@mule/engine';
 import type { Act } from '../actions.js';
 import { breakGain, lawWorth, reputationCost } from '../politics-value.js';
 import type { Mind } from '../value.js';
+import { BudgetHand, OverruleHand } from './budget.js';
 import { SabotageHand } from './sabotage.js';
 import { SheriffHand } from './sheriff.js';
 
@@ -162,6 +165,9 @@ export class VoteHand {
   /** Slice 4's hands (S4-C10): each draws from its own seat-salted stream, never from this hand's rng. */
   private readonly sabotage: SabotageHand;
   private readonly sheriff: SheriffHand;
+  /** Slice 5's hands (S5-C6). */
+  private readonly budget: BudgetHand;
+  private readonly overrule: OverruleHand;
 
   constructor(
     readonly mind: Mind,
@@ -170,6 +176,8 @@ export class VoteHand {
   ) {
     this.sabotage = new SabotageHand(mind);
     this.sheriff = new SheriffHand(mind);
+    this.budget = new BudgetHand(mind);
+    this.overrule = new OverruleHand(mind);
   }
 
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
@@ -177,7 +185,13 @@ export class VoteHand {
     if (state.phase !== 'planning' || !state.politics) return;
     // The law ballot, once the election is over: it votes per RULE-46 and presses Done at once. Its draws come from
     // the council's own stream, so the election's seeded stream stays as it was (HC-41) and no ballot waits on an AI seat.
-    const { council, election } = state.politics;
+    const { council, election, overrule } = state.politics;
+    // The overrule ballot opens as planning ends: one vote and Done, from the overrule's own stream (S5-RULE-12, D-S5-2).
+    if (overrule?.stage === 'ballot') {
+      if (!overrule.done.includes(this.mind.me)) this.overrule.vote(observe(state, this.mind.me), act);
+      return;
+    }
+    if (overrule?.stage === 'reveal') return;
     if (council?.stage === 'ballot' && (!election || election.stage === 'over')) {
       if (!council.done.includes(this.mind.me)) {
         if (council.ballots[this.mind.me] === undefined) act({ type: 'voteLaw', yes: this.lawVote(observe(state, this.mind.me), council) });
@@ -185,6 +199,8 @@ export class VoteHand {
       }
       return;
     }
+    // A tax that moved is judged once per setting, on every tick with no vote open (S5-RULE-12).
+    if (!votesOpen(state) && (election?.stage ?? 'over') === 'over' && this.overrule.due(state)) this.overrule.call(observe(state, this.mind.me), act);
     // The reveal: votes are still open, so the Governor waits it out rather than spend its month's turn on refusals.
     if (council?.stage === 'reveal') return;
     const stage: Election['stage'] | 'none' = state.politics.election?.stage ?? 'none';
@@ -201,7 +217,7 @@ export class VoteHand {
 
     const obs = observe(state, this.mind.me);
     if (stage === 'over' || stage === 'none') {
-      this.govern(obs, act);
+      this.govern(obs, act, () => observe(state, this.mind.me));
       this.sabotage.order(obs, act);
       this.sheriff.run(obs, act, () => observe(state, this.mind.me));
       this.declareAhead(obs, act);
@@ -362,19 +378,31 @@ export class VoteHand {
       for (const { id } of damaged) if (PRESTIGE[id].repairCost <= fund && act({ type: 'repair', id })) fund -= PRESTIGE[id].repairCost;
     }
     if (!commissions[this.persona]) return;
+    // S5-RULE-13: with a budget set, only the Projects share's credits are all that upkeep will give to buildings.
+    const room = obs.politics!.budget === null ? fund : Math.min(fund, budgetCredits(obs).projects);
     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
-      .filter((id) => PRESTIGE[id].credits * commissionShare <= fund && goodsInReach(obs, id) && commissionRefusal(obs, id) === null)
+      .filter((id) => PRESTIGE[id].credits * commissionShare <= room && goodsInReach(obs, id) && commissionRefusal(obs, id) === null)
       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
     const pick = choices[0];
     if (pick) act({ type: 'commission', id: pick });
   }
 
-  private govern(obs: GameState, act: Act): void {
+  /** S5-RULE-11, S5-C6: after an overrule passed this term (the engine's count, AM-10), the Governor holds its tax and its budget. */
+  private holding(obs: GameState): boolean {
+    return obs.politics!.overruled > 0;
+  }
+
+  private govern(obs: GameState, act: Act, look: () => GameState): void {
     if (obs.politics!.governor !== this.mind.me) return;
-    const current = Math.round(obs.treasury.salesTax * PERCENT);
-    const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
-    if (next !== current) act({ type: 'setTax', percent: next });
+    let seen = obs;
+    if (!this.holding(obs)) {
+      const current = Math.round(obs.treasury.salesTax * PERCENT);
+      const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
+      if (next !== current) act({ type: 'setTax', percent: next });
+      // The colony acts below read the budget just set, so they see a fresh copy; none sent, the same obs.
+      if (this.budget.split(obs, act)) seen = look();
+    }
     this.proposeLaw(obs, act);
-    this.colonyActs(obs, act);
+    this.colonyActs(seen, act);
   }
 }

@@ -220,6 +220,25 @@ describe('S5-C5: the overrule ballot as planning ends', () => {
     expect(both.politics!.overrule!.done).toEqual([]);
   });
 
+  it('S5-T-AC-8: AM-10 - a passed tax overrule counts one in politics.overruled; a failed one, an abstained one and a lapsed call leave it at 0', () => {
+    const run = (yes: boolean, close: 'cast' | 'lapse' = 'cast'): number => {
+      const state = called();
+      openOverrule(state);
+      if (close === 'lapse') {
+        closeVotes(state);
+        return state.politics!.overruled;
+      }
+      for (const id of SEATS) voteOverrule(state, id, id === 'brix' || yes);
+      stepVotes(state, 0);
+      stepVotes(state, POLITICS.overrule.revealMs);
+      expect(state.politics!.overrule!.stage).toBe('over');
+      return state.politics!.overruled;
+    };
+    expect(run(true)).toBe(1);
+    expect(run(false)).toBe(0);
+    expect(run(false, 'lapse')).toBe(0);
+  });
+
   it('S5-T-AC-8: S5-RULE-8\'s examples — total 9 needs 5; yes 6 and yes 5 overrule, yes 4 stands; the two-player case needs 2; a passed tax overrule restores taxAtStart', () => {
     // Weights from plots and reputation: lena 2 (10 plots), brix 3 (20 plots), ossa 2 and kai 2 (reputation 80).
     const weighted = (): GameState => {

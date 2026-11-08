@@ -50,6 +50,8 @@ export function colonyView(state: GameState): ColonyView | null {
     strike: colony.strike && colony.strike.month === state.month ? { good: colony.strike.good, cost: colony.strike.cost, paid: colony.strike.paid } : null,
     // RULE-25, every month (AM-12): scored from the state as it stands, so every screen shows the same terms.
     score: colonyScore(state),
+    // S5-RULE-10: public money, so every screen is told. Only this month's payment (the engine keeps last month's until the next).
+    welfare: colony.welfare && colony.welfare.month === state.month ? { ...colony.welfare } : null,
   };
 }
 
