@@ -138,11 +138,11 @@ describe('RULE-4 AI: a held AI seller presses ▼ again only when it chose to se
 
   it('RULE-4 AI: a held AI seller whose keep floor is below its need holds ▼ and sells on, down to its floor', () => {
     const state = foodScreen();
-    // Its works stands on a plot polluted by 1, so it makes 1 Medicine, not 2. With no Food carry the unit between its
-    // floor and its need is the works' Food past spoilage, priced by what the works and its crews make (needs C15, PM
-    // ruling 8 Nov): at 2 Medicine that is over the board's top, so no bid could buy it; at 1 it sits inside the board,
-    // where ai1, hungrier, bids for it.
-    state.tiles.find((t) => t.owner === ME && t.outfit === 'medicine')!.pollution = 1;
+    // Its works stands on a plot polluted by 2, so it makes no Medicine. With no Food carry the unit between its floor
+    // and its need is the works' Food past spoilage, worth the works' run (needs C15, PM ruling 8 Nov): a running works
+    // prices it at 76, or 38 polluted by 1, over the store's ask, so ai1 buys from the store instead; a works that
+    // makes nothing leaves it its resale, inside the board, where ai1, hungrier, bids for it.
+    state.tiles.find((t) => t.owner === ME && t.outfit === 'medicine')!.pollution = 2;
     const need = state.auction!.status.find((r) => r.id === ME)!.need;
     // Its own draft for the good, set to hold 2 under its need: the hand keeps the larger of that hold and the units it
     // never sells (floorUnits: what upkeep and the works eat), one under the status need, which also carries the works'
