@@ -9,6 +9,7 @@ import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
+import { closeCases, newSabotageMonth } from './sabotage.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
 import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Overrule, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
@@ -34,7 +35,7 @@ function edit(state: GameState): Politics {
   return state.politics;
 }
 
-/** edit() for diplomacy.ts, the only other writer of Politics (the deal cards). */
+/** edit() for diplomacy.ts, which writes the deal cards; sabotage.ts keeps its own copy for the sabotage fields (§9). */
 export { edit as editPolitics };
 
 function currentElection(state: GameState): Shared<Election> | null {
@@ -69,6 +70,7 @@ export function openPlanning(state: GameState): void {
   p.council = null;
   p.overrule = null;
   if (!p.election) openCouncil(state, p);
+  newSabotageMonth(state);
 }
 
 /** The next election month after this one, or null if the game ends first. See WS7 spec RULE-1. */
@@ -165,7 +167,7 @@ function refusal(why: Exclude<CanRun, true>, office: Office | null): string {
 function checkPromise(office: Office, promise: TaxPromise | undefined): TaxPromise | null {
   const { min, max } = POLITICS.tax;
   if (office === 'sheriff') {
-    if (promise) throw new RuleError('Sheriff candidates make no promise yet');
+    if (promise) throw new RuleError('Sheriff candidates make no promise');
     return null;
   }
   switch (promise?.kind) {
@@ -460,7 +462,7 @@ export function officeScore(state: GameState, playerId: string): number {
 
 // ---- The council: laws proposed by the Governor, voted at the next planning, after the election. See WS7 slice 2a.
 
-export const LAW_NAME: Record<LawId, string> = { exportTax: 'Export tax', landTax: 'Land tax', pollutionTax: 'Pollution tax', emissionCap: 'Emission cap' };
+export const LAW_NAME: Record<LawId, string> = { exportTax: 'Export tax', landTax: 'Land tax', pollutionTax: 'Pollution tax', emissionCap: 'Emission cap', sabotageBan: 'Sabotage ban' };
 
 function electionLive(state: GameState): boolean {
   const election = state.politics?.election;
@@ -489,6 +491,11 @@ function inWords(settings: readonly number[]): string {
   return settings.length === 1 ? `${settings[0]}` : `${settings.slice(0, -1).join(', ')} or ${settings.at(-1)}`;
 }
 
+/** Whether a law is on the colony's book right now: the sabotage ban only while sabotage is on (S4-C7, AM-2). The one place that rule lives. */
+export function lawOffered(law: LawId): boolean {
+  return law !== 'sabotageBan' || POLITICS.sabotage.on;
+}
+
 /** The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. See slice 2a RULE-41. */
 export function proposeLaw(state: GameState, playerId: string, proposal: LawProposal | null): void {
   const politics = state.politics;
@@ -500,6 +507,7 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
     return;
   }
   if (!Object.hasOwn(POLITICS.laws, proposal.law)) throw new RuleError("That law is not in the colony's book");
+  if (!lawOffered(proposal.law)) throw new RuleError('This game plays without sabotage');
   const { retryMonths, maxInForce } = POLITICS.council;
   const failedIn = politics.failed[`${proposal.kind}:${proposal.law}`];
   if (failedIn !== undefined && state.month <= failedIn + retryMonths) {
@@ -643,6 +651,8 @@ export function closeVotes(state: GameState): ElectionResult | null {
   // A proposal from an earlier month had this planning for its ballot; one that never got it is dropped.
   const pending = state.politics?.proposal;
   if (pending && pending.month < state.month) edit(state).proposal = null;
+  // Last, so the standard fine reads the ban in force once planning's votes have taken effect (S4-C5).
+  closeCases(state);
   return result;
 }
 
@@ -717,6 +727,12 @@ function enactImpact(state: GameState, law: LawId, setting: number, playerId: st
       const plots = state.tiles.filter((t) => t.owner === playerId && t.outfit !== null && blocks.includes(t.outfit)).length;
       const blocksNow = state.air > setting;
       return { cost: blocksNow ? plots * POLITICS.ai.council.capPlotCost : 0, capped: { blocksNow, plots } };
+    }
+    // S4-RULE-10: the player's record of revealed cases, as a share of the months played (planning, where laws are voted, has played month - 1), times the standard fine and the extra the setting adds.
+    case 'sabotageBan': {
+      const attributed = (state.politics?.sabotage ?? []).filter((o) => o.by === playerId && o.culpritPublic).length;
+      const monthsPlayed = Math.max(1, state.month - 1);
+      return { cost: Math.round((attributed / monthsPlayed) * POLITICS.sheriff.fine.standard * (setting - 1)) };
     }
   }
 }

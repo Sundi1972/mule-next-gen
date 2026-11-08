@@ -107,6 +107,8 @@ function shown<T extends { show?: (seat: HubSeat) => boolean }>(xs: readonly T[]
 /** MOCK PLUMBING: where a state's link opens the phone. The build starts on Overview, or where a door leads. */
 export interface Start extends Partial<Door> {
   pick?: string;
+  /** Look's plot as the phone opens, as a tap on the map would set it (the Sheriff path's order). */
+  look?: { x: number; y: number };
   sheet?: 'help' | 'standings';
 }
 

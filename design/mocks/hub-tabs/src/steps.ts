@@ -20,6 +20,11 @@ export interface Beat {
   world: () => MockWorld;
   start?: Start;
   tv: TvFocus;
+  /**
+   * The TV focus this beat needs from mock-hub-tv when it is not built yet (the Sheriff path): the TV pane says so and
+   * shows `tv` meanwhile; once TV_NOTE carries it, the pane draws it.
+   */
+  tvWanted?: string;
   /** The P3 budget variant the Budget sub-tab opens on. */
   budget?: 'a' | 'b';
   /** The phone draws the month end (outside the tabs, as every other phase), not the hub. */

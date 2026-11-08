@@ -6,6 +6,7 @@ import { Prototype } from './Prototype';
 import { MEASURED, SHERIFF_MEASURED } from './measured';
 import { TV_NOTE, type TvFocus } from './tv/TvFor';
 import { TV_FIT, TV_FLOOR } from './tv/measured';
+import { POLITICS } from '@mule/engine';
 import type { ShellVariant } from './proposed/Shell';
 import { SCREENS, stateOf, type State } from './scenarios';
 
@@ -46,6 +47,7 @@ const DECISIONS: [string, string][] = [
   ['D15', 'The cast: Brix is the human Governor (runs again in month 8), Kai the Sheriff and the caller, Ossa the AI seat and Land Baron, Lena the phone with no office. One table gives every state.'],
   ['D16', 'The colony picture is WS10’s rendered grounds, mounted exactly as the phone colony desk does: <Grounds colony={view.colony} size="phone" light={view.phase === \'upkeep\' ? \'dusk\' : \'day\'} /> (apps/web/src/components/Grounds.tsx; PM ruling 8 Nov, per WS10). The real buildings at their stage on their plate, lit by wealth; screens never draw buildings. It leads the Colony tab in the desk’s 212 px box, letterboxed on wider stages; Overview shows no colony picture (its map is the land, not the grounds).'],
   ['D17', '“This month” under Overview’s map is a fixed box, two lines of two, so the map is the same size whatever the needs or the month say (PM height check, 8 Nov; scripts/measure-needs.mjs). The figures never moved it (the Short row is one truncated line, 1 or 120); the row count did, through the box’s height: at 844 (A) 506 × 304 with nothing waiting, 312 × 187 with five rows. Now: nothing waiting is a quiet line; past four, three rows and “+N more” naming what waits behind it, which turns the box’s page.'],
+  ['D18', 'The Sheriff’s month is played at the planning month’s table: Kai is the Sheriff (D15), Brix the Governor and the victim, Lena the one caught (PM, 8 Nov, replacing “Brix guards his own plot”). Three phones get three different WS8 lines, and the table is the one Heiko already knows; “+75 to Brix” stays. On the TV (PM, 8 Nov): the fine is the news’s first line, “Lena was fined 150 for sabotage; half to Brix”, with no incidents list (incidents are news lines only; the side column has no room within the fit); at month 6’s end the fund panel shows its total only (P15): “Fines 150 in” and “To victims 75 out” are the phones’ alone, and Brix’s phone keeps “+75 cr (half of Lena’s fine)”.'],
 ];
 
 /**
@@ -277,6 +279,26 @@ function Index() {
               <span className="text-ink-2">{line}</span>
             </li>
           ))}
+        </ul>
+      </Section>
+      <Section title="The Sheriff’s month (?path=sheriff)" id="sheriff-path">
+        <a href="?path=sheriff" className="text-sm font-semibold text-holo" data-testid="to-sheriff-path">
+          → The Sheriff’s month: a guard, a cut, a fine
+        </a>
+        <ul className="flex max-w-5xl list-disc flex-col gap-1 pl-5 text-sm text-ink-2" data-testid="sheriff-path-notes">
+          <li>Same table as the planning month: Kai is the Sheriff (D15) and guards Brix’s Food plot; Lena cuts it and is caught; next month Kai fines Lena and half goes to Brix at that month’s end. Step 4: an unguarded cut that works, then Kai’s investigation, solved or cold.</li>
+          <li>Real pieces: Lena’s order is the build’s own S4-C14 (LookSabotage under Look, MarketSabotage under Sell, from WS8’s #p6 at d6977e1a), with its real sabotage intent; the Sheriff sub-tab is WS8’s case file B at d6977e1a with WS7’s tips (a cold case wears no chip; “One investigation a month: used”), sending the real investigate and fine intents. The planning month keeps the case file at d0a52c1a.</li>
+          <li>Every number is the config’s (POLITICS.sabotage.orders, POLITICS.sheriff, reputation.moves.caught); every line WS8’s #p10 PHONE_LINES and MONTH_END (#750 builds them word for word) or the spec’s month-end row, with this table’s names, a good capitalised as the PM’s 8 Nov ruled lines write it.</li>
+          <li>STAND-IN: the phone during production (proposed/PhoneProduction.tsx) draws the end state of the real Production screen with #750’s rail card: the map, the public line, this seat’s own line. The TV’s production layer (#p10) is mock-hub-tv’s, behind the focuses production-caught, fine-set, month-end-fine, production-dark and investigation; until each is built the TV pane says so.</li>
+          <li data-testid="sheriff-path-numbers">
+            The numbers, each from trunk’s config: the power cut {POLITICS.sabotage.orders.powerCut.cost} cr (POLITICS.sabotage.orders.powerCut.cost), works {Math.round(POLITICS.sabotage.orders.powerCut.success * 100)}% (.success), seen{' '}
+            {Math.round(POLITICS.sabotage.orders.powerCut.detect * 100)}% (.detect); the rumour {POLITICS.sabotage.orders.rumour.cost} cr and {Math.round(POLITICS.sabotage.orders.rumour.shift * 100)}% (POLITICS.sabotage.orders.rumour.cost, .shift);
+            caught {POLITICS.reputation.moves.caught} reputation (POLITICS.reputation.moves.caught); {POLITICS.sheriff.guards} guards a month (POLITICS.sheriff.guards); {POLITICS.sheriff.investigations} investigation a month at{' '}
+            {Math.round(POLITICS.sheriff.investigateOdds * 100)}% (POLITICS.sheriff.investigations, .investigateOdds); fines {POLITICS.sheriff.fine.steps.join(', ')} (POLITICS.sheriff.fine.steps), standard {POLITICS.sheriff.fine.standard} (.fine.standard);
+            the victim’s share {POLITICS.sheriff.victimShare} (POLITICS.sheriff.victimShare).
+          </li>
+          <li>Holder-only (PM RULED, for the RC): on this path the Sheriff sub-tab is Kai’s alone; Lena’s and Brix’s phones have none. The planning month keeps the public stub on the other phones (“P7 · WS8 · the Sheriff, in public”), post-RC.</li>
+          <li>Found on trunk: HoloMap’s guard flag is built (MapFlag 'guard', WS4), so the planning month’s DS-GAP overlay on WS8’s GuardMap can give way to it in the build.</li>
         </ul>
       </Section>
       <Section title="Key decisions" id="decisions">
