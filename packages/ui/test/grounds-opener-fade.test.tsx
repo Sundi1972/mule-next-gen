@@ -8,7 +8,10 @@ const ALL: PictureStage[] = ['site', 'build1', 'build2', 'standing', 'closed', '
 const MANIFEST: GroundsManifest = {
   frame: FRAME,
   pictures: Object.fromEntries(
-    ['hall', 'park', 'hospital', 'observatory', 'stadium', 'spaceport'].map((kind) => [kind, Object.fromEntries(ALL.map((s) => [s, { day: `${kind}/${s}-day@800.webp`, dusk: `${kind}/${s}-dusk@800.webp`, glow: null }]))]),
+    ['hall', 'park', 'hospital', 'observatory', 'stadium', 'spaceport'].map((kind) => [
+      kind,
+      Object.fromEntries(ALL.map((s) => [s, { day: `${kind}/${s}-day@800.webp`, dusk: `${kind}/${s}-dusk@800.webp`, glow: s === 'closed' ? null : `${kind}/${s}-glow@800.webp` }])),
+    ]),
   ),
   sizes: [800, 400],
 };
@@ -29,11 +32,17 @@ const COLONY: GroundsColony = {
   ],
 };
 
-/** The opacity each building's group is drawn at, by its testid ('place-hall' for the town hall), 1 where none is set. */
+/** The glow's own opacity at dusk for a standing building at the fixture's wealth (RULE-2: 0.25 + 0.75 × 2 000 / 4 000). */
+const GLOW = 0.625;
+
+function markup(lean: number, leanOn = [SITE]): string {
+  return renderToStaticMarkup(<ColonyGrounds colony={COLONY} size="tv" manifest={MANIFEST} light="dusk" chips={false} framing={{ aspect: 16 / 9, leanOn, lean }} />);
+}
+
+/** The opacity each picture and glow image is drawn at, by testid (picture-1, glow-1, …, picture-hall), 1 where none is set. */
 function opacities(lean: number, leanOn = [SITE]): Record<string, number> {
-  const html = renderToStaticMarkup(<ColonyGrounds colony={COLONY} size="tv" manifest={MANIFEST} light="dusk" chips={false} framing={{ aspect: 16 / 9, leanOn, lean }} />);
   const out: Record<string, number> = {};
-  for (const m of html.matchAll(/<g([^>]*data-testid="(place-\d+|place-hall)"[^>]*)>/g)) {
+  for (const m of markup(lean, leanOn).matchAll(/<image([^>]*data-testid="((?:picture|glow)-(?:\d+|hall))"[^>]*)>/g)) {
     const o = /opacity="([\d.]+)"/.exec(m[1]!);
     out[m[2]!] = o ? Number(o[1]) : 1;
   }
@@ -43,20 +52,30 @@ function opacities(lean: number, leanOn = [SITE]): Record<string, number> {
 describe('T-AC-12: during the lean-in, the buildings in front of the place the caption names fade to a third', () => {
   it('T-AC-12: at full lean the Stadium and the hall in front of the new site are at 1/3; the site itself, the Hospital level with it and the Park off to the side are not', () => {
     const o = opacities(1);
-    expect(o['place-1']).toBeCloseTo(1 / 3, 2); // the Stadium, on the block in front
-    expect(o['place-hall']).toBeCloseTo(1 / 3, 2); // the hall, nearer and across the site's right half
-    expect(o['place-2']).toBe(1); // the Hospital: level with the site, not in front of it
-    expect(o['place-3']).toBe(1); // the Park: nearer, but nowhere across the site on screen
-    expect(o['place-4']).toBe(1); // the site the caption names
+    expect(o['picture-1']).toBeCloseTo(1 / 3, 2); // the Stadium, on the block in front
+    expect(o['glow-1']).toBeCloseTo(GLOW / 3, 2); // …its lights fade with it
+    expect(o['picture-hall']).toBeCloseTo(1 / 3, 2); // the hall, nearer and across the site's right half
+    expect(o['glow-hall']).toBeCloseTo(GLOW / 3, 2);
+    expect(o['picture-2']).toBe(1); // the Hospital: level with the site, not in front of it
+    expect(o['glow-2']).toBeCloseTo(GLOW, 3);
+    expect(o['picture-3']).toBe(1); // the Park: nearer, but nowhere across the site on screen
+    expect(o['picture-4']).toBe(1); // the site the caption names
+  });
+
+  it('T-AC-12: the fade is on each image, never on a group round a screen-blended glow (a group would paint the glow\'s black as a dark box over the site)', () => {
+    expect(markup(1)).not.toMatch(/<g[^>]*\sopacity=/);
   });
 
   it('T-AC-12: the fade follows the lean — halfway in, the Stadium is at 2/3', () => {
-    expect(opacities(0.5)['place-1']).toBeCloseTo(2 / 3, 2);
+    expect(opacities(0.5)['picture-1']).toBeCloseTo(2 / 3, 2);
   });
 
   it('T-AC-12 (negative): before the lean-in starts, and on a view that leans on nothing, nothing fades', () => {
-    expect(Object.values(opacities(0)).every((v) => v === 1)).toBe(true);
-    expect(Object.values(opacities(1, [])).every((v) => v === 1)).toBe(true);
+    for (const o of [opacities(0), opacities(1, [])]) {
+      expect(o['picture-1']).toBe(1);
+      expect(o['picture-hall']).toBe(1);
+      expect(o['glow-1']).toBeCloseTo(GLOW, 3);
+    }
   });
 });
 
