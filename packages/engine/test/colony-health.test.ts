@@ -25,6 +25,7 @@ import {
   shipInPort,
   sickShare,
   stableJson,
+  STRATEGIST,
   UPKEEP,
   type GameState,
   type MoodInputs,
@@ -279,6 +280,14 @@ describe('needs C9: Electronics are a comfort (RULE-9)', () => {
     expect(off.store.stock.electronics, 'health off: nobody takes them').toBe(8);
     expect(comforted.colony!.happiness - without.colony!.happiness, 'the target is 4 higher').toBe(HEALTH.electronicsBonus);
     expect(without.colony!.happiness, 'none on the shelf: the mood is as with no comfort rule at all').toBe(off.colony!.happiness);
+  });
+});
+
+describe('needs HC-13: colony health is on', () => {
+  it('needs HC-13: colony health is on by default (Heiko, 8 Nov)', () => {
+    expect(HEALTH.enabled, 'health plays').toBe(true);
+    expect(STRATEGIST.medicineDespiteInputs, 'a hungry seat may still build a Medicine works').toBe(true);
+    expect(HEALTH.growthPerSick * HEALTH.cap, 'growth\'s cut at the cap: sickness bites like hunger').toBeCloseTo(0.08, 9);
   });
 });
 
