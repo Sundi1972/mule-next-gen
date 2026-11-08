@@ -127,10 +127,14 @@ interface Future {
  * except that the seats buy their MULE.corralPerPlayer MULEs a month, so the corral
  * drains as it does in play; plots produce, everyone eats, the store builds
  * MULEs and posts prices. Returns the prices posted `months` on, raised
- * where the rollout (run on to the horizon) shows a shortage the price
- * hasn't caught up with yet: Food or Water colonists went short of count at
- * what the store posts after such a month, and Smithore, when the corral can't build its
- * monthly target, at its price at the horizon.
+ * where the rollout shows a shortage by then that the price hasn't caught up
+ * with yet: a good colonists went short of in those months counts at what the
+ * store posts after such a month, and Smithore, when the corral can't build its
+ * monthly target before the horizon, at its price there.
+ *
+ * A shortage the rollout shows only after `months` doesn't count: nobody builds in the status quo, so it runs dry
+ * where play doesn't, and counted, it priced Water at 100 against a real 25-31 (forecast calibration, WS1 C, 8 Nov).
+ * Last month's real shortages don't count either: the store's posting already carries them (pricing RULE-6 row 2).
  */
 function rollForward(stage: GameState, months: number): Future {
   const sim = cloneForSim(stage);
@@ -153,7 +157,8 @@ function rollForward(stage: GameState, months: number): Future {
     }
   }
   prices = { ...prices };
-  for (const good of new Set(sim.history.slice(Math.max(0, from - 1)).flatMap((h) => h.shortages))) {
+  const byThen = sim.history.slice(from).filter((h) => h.month <= asked);
+  for (const good of new Set(byThen.flatMap((h) => h.shortages))) {
     // The store's own price for the month after its colonists went short of the good (pricing RULE-6 row 2).
     prices[good] = Math.max(prices[good], nextPostedPrice(sim, good, undefined, [good]));
   }
