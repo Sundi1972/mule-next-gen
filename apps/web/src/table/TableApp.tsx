@@ -25,6 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, paidOutThisMonth, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
+import { NewsWords } from '../components/SeatWords';
 import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -303,7 +304,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
         {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" data-fit-gives>
-          <News news={game.news} />
+          <News game={game} />
         </div>
         {phase !== 'planning' ? (
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? 'READY' : p.isAi ? '' : '…'}</span>} />
@@ -468,13 +469,13 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
   );
 }
 
-function News({ news }: { news: string[] }) {
+function News({ game }: { game: MuleView }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
-      {news.map((n, i) => (
+      {game.news.map((n, i) => (
         // The newest stays whole when the column runs short: older ones give way (FitHeight's data-fit-keep).
         <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
-          {n}
+          <NewsWords view={game} i={i} />
         </li>
       ))}
     </ul>
@@ -807,7 +808,7 @@ function HarvestSide({ game }: { game: MuleView }) {
   const food = game.market.find((r) => r.good === 'food');
   return (
     <>
-      <News news={game.news} />
+      <News game={game} />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
         <div className="flex flex-col gap-1 bg-panel p-4">
           <span className="label-caps">Colonists</span>
