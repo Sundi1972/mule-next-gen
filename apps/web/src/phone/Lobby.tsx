@@ -435,9 +435,9 @@ function SeatRow({
   const claude = isClaude(seat);
   const word: ChipWord = seat.isAi ? (claude ? claudeChip(seat) : 'AI') : host ? 'HOST' : seat.connected ? 'PHONE' : 'AWAY';
   return (
-    // The name keeps 6rem: where what follows it leaves less (the host's controls on a computer seat in the small phone's
-    // rail, a Claude seat's status chip), that goes to a line of its own under it, so a name never breaks inside a word
-    // (AM-18's "The Big Spender", C19). A person's chip (PHONE, HOST, AWAY) still fits beside it at 667.
+    // The name keeps 6rem: where what follows it leaves less (in the small phone's rail, the host's ✕ and Change beside
+    // a seat's chip, or a Claude seat's status chip), that goes to a line of its own under it, so a name never breaks
+    // inside a word (AM-18's "The Big Spender", C19). A chip alone (PHONE, HOST, AWAY, AI) still fits beside it at 667.
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-x-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2" data-testid={`seat-${seat.id}`}>
       <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
         <Creature species={seat.species} color={SLOT_COLOR[seat.slot]} size={22} />
