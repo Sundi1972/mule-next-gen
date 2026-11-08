@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { callOverrule, ceremonyBeats, openOverrule, openPlanning, POLITICS, RuleError, setSalesTax, voteOverrule, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { overruleNews } from '../src/politics-view.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
 import { fakeContext, readyAll, seats, throughSidePicks } from './fake-context.js';
 
@@ -641,7 +642,7 @@ describe('the politics view', () => {
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
     const reputation = engineOf(g.game).players.find((p) => p.id === 'brix')!.reputation;
-    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, candidates: expect.any(Object), promised: { election: {}, law: null }, sabotage: null });
+    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, overruleBallot: null, canOverrule: { tax: 'governor', budget: 'governor', confidence: 'governor' }, candidates: expect.any(Object), promised: { election: {}, law: null }, sabotage: null });
     // C46: Brix governs, the votes are over: his own view carries each proposal's cost (politics-candidates.test.ts).
     expect(brix.politics!.election!.stage, 'planning proper has started, so the Governor can set the tax').toBe('over');
     expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
@@ -1235,11 +1236,20 @@ describe('S5-C8 (server): the budget, the overrule and Welfare reach every scree
       if (viewer === 's3') expect(a.me!.politics!.overruleBallot).not.toBe(b.me!.politics!.overruleBallot);
       else expect(JSON.stringify(a), `the ${viewer ?? 'board'} view`).toBe(JSON.stringify(b));
     }
-    // canOverrule is the viewer's own reason; the Governor can't, the others have a call standing.
+    // canOverrule is the viewer's own reason: the ballot is a vote open, so nobody may call now.
+    expect(game.viewFor('s3').me!.politics!.canOverrule).toEqual({ tax: 'notNow', budget: 'notNow', confidence: 'notNow' });
+    // With no vote open: the Governor can't; the others can once the tax changed, and not after a call.
+    state.politics!.overrule = null;
     expect(game.viewFor('s1').me!.politics!.canOverrule!.tax).toBe('governor');
+    expect(game.viewFor('s3').me!.politics!.canOverrule!.tax).toBe(true);
+    expect(game.viewFor('s3').me!.politics!.overruleBallot, 'no ballot without a vote').toBeNull();
+    callOverrule(state, 's2', 'tax');
     expect(game.viewFor('s3').me!.politics!.canOverrule!.tax).toBe('called');
+    expect(game.viewFor(null).politics!.overrule).toMatchObject({ stage: 'called', caller: 's2' });
+    state.politics!.overrule = { month: 2, target: 'tax', caller: 's2', stage: 'ballot', clockMs: 0, ballots: { s2: true, s1: false, s3: true }, done: ['s3'], result: null };
     // The reveal: the totals reach every screen, the ballots still none.
     state.politics!.overrule = { ...state.politics!.overrule!, stage: 'reveal', result: { passed: true, yes: 5, no: 2, total: 9, needed: 5 } };
+    expect(overruleNews(state), 'a result line with totals, no voter named').toBe('The overrule vote on the tax passes, 5 votes to 2. The tax is back at 5%.');
     for (const viewer of VIEWERS) {
       expect(game.viewFor(viewer).politics!.overrule!.result).toEqual({ passed: true, yes: 5, no: 2 });
       expect(JSON.stringify(game.viewFor(viewer).politics)).not.toMatch(/"total":9,"needed":5,"ballots/);

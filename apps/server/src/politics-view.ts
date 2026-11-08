@@ -1,6 +1,10 @@
 import {
   banMultiplier,
+  budgetCredits,
+  budgetLines,
+  budgetShares,
   canOrder,
+  canOverrule,
   canRun,
   ceremonyBeats,
   fineable,
@@ -9,6 +13,7 @@ import {
   guardsMax,
   isElectionDone,
   isPublicOrder,
+  lineMaxCredits,
   LAW_NAME,
   lawImpact,
   lawOffered,
@@ -23,6 +28,8 @@ import {
   taxBounds,
   votesOpen,
   voteWeight,
+  welfareRecipient,
+  type BudgetLine,
   type CeremonyBeat,
   type CeremonyBeats,
   type DealCard,
@@ -35,10 +42,11 @@ import {
   type MonthEvent,
   type NoticeEntry,
   type Office,
+  type Overrule,
   type SabotageOrder,
   type SabotageTarget,
 } from '@mule/engine';
-import type { CeremonyView, CouncilView, ElectionView, IncidentView, MyDealsView, MyPoliticsView, NewsLine, OfficeReveal, PoliticsView } from '@mule/protocol';
+import type { BudgetView, CeremonyView, CouncilView, ElectionView, IncidentView, MyDealsView, MyPoliticsView, NewsLine, OfficeReveal, OverruleView, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
@@ -132,7 +140,78 @@ export function politicsView(state: GameState): PoliticsView | null {
       state.players.map(({ id }) => [id, reputationReasons(state, id).map((r) => (r.kind === 'broken' ? { kind: 'broken' as const, id: r.card.id } : { ...r }))]),
     ),
     sabotage: sabotageView(state),
+    budget: budgetView(state),
+    overrule: overruleView(state),
   };
+}
+
+/** The shares of a budget, a line not offered as 0 (as budgetShares does for the budget in force). */
+function sharesOf(state: GameState, set: { shares: Record<BudgetLine, number> } | null): Record<BudgetLine, number> {
+  const offered = budgetLines(state);
+  const shares = { ...(set?.shares ?? POLITICS.budget.default) };
+  for (const line of Object.keys(shares) as BudgetLine[]) if (!offered.includes(line)) shares[line] = 0;
+  return shares;
+}
+
+/** The colony budget as every screen sees it: public money, nothing secret (S5-RULE-10). Not frozen anywhere in RC. */
+function budgetView(state: GameState): BudgetView | null {
+  const p = state.politics;
+  if (!p) return null;
+  const now = budgetShares(state);
+  const start = sharesOf(state, p.budgetAtStart);
+  const credits = budgetCredits(state);
+  const lines = budgetLines(state).map((line) => ({
+    line,
+    share: now[line],
+    start: start[line],
+    maxShare: POLITICS.budget[line].maxShare,
+    step: POLITICS.budget.step,
+    credits: credits[line],
+    maxCredits: lineMaxCredits(line),
+  }));
+  return { lines, kept: PERCENT - lines.reduce((sum, l) => sum + l.share, 0), welfareTo: welfareRecipient(state), setBy: p.budget?.setBy ?? null, frozen: false };
+}
+
+/** What the call is about, as the setting a yes restores and the setting that stands now. */
+function overruleSettings(state: GameState, target: Overrule['target']): Pick<OverruleView, 'restores' | 'stands'> {
+  const p = state.politics!;
+  if (target === 'tax') return { restores: { tax: percent(p.taxAtStart) }, stands: { tax: percent(state.treasury.salesTax) } };
+  if (target === 'budget') return { restores: { shares: sharesOf(state, p.budgetAtStart) }, stands: { shares: budgetShares(state) } };
+  return { restores: { governor: p.governor! }, stands: { governor: p.governor! } };
+}
+
+/** Built field by field: `ballots` is read only for who has voted, never how; the yes and no only from the reveal (S5-RULE-10). */
+function overruleView(state: GameState): OverruleView | null {
+  const o = state.politics?.overrule;
+  if (!o || o.month !== state.month) return null;
+  const ballot = o.stage === 'ballot';
+  // The totals are fixed when the ballot closes; before that the weights are public, so the sum of them is too.
+  const total = o.result?.total ?? state.players.reduce((sum, { id }) => sum + voteWeight(state, id).total, 0);
+  return {
+    target: o.target,
+    caller: o.caller,
+    stage: o.stage,
+    ...overruleSettings(state, o.target),
+    voted: Object.keys(o.ballots),
+    done: [...o.done],
+    waitingFor: ballot ? state.players.filter((p) => !o.done.includes(p.id)).map((p) => p.id) : [],
+    clockMs: o.clockMs,
+    revealMs: POLITICS.overrule.revealMs,
+    total,
+    // literal-ok: more than half of all votes is the rule's definition (S5-RULE-8)
+    needed: o.result?.needed ?? Math.floor(total / 2) + 1,
+    result: o.stage === 'reveal' || o.stage === 'over' ? o.result && { passed: o.result.passed, yes: o.result.yes, no: o.result.no } : null,
+  };
+}
+
+/** The news line as an overrule's result is revealed: whether it passed, by the weighted totals; never who voted how. */
+export function overruleNews(state: GameState): string | null {
+  const o = state.politics?.overrule;
+  if (!o?.result || o.month !== state.month) return null;
+  const { passed, yes, no } = o.result;
+  const what = o.target === 'tax' ? 'tax' : o.target === 'budget' ? 'budget' : 'no-confidence';
+  const back = passed && o.target === 'tax' ? ` The tax is back at ${percent(state.politics!.taxAtStart)}%.` : '';
+  return `The overrule vote on the ${what} ${passed ? 'passes' : 'fails'}, ${yes} votes to ${no}.${back}`;
 }
 
 /** Built field by field: `ballots` is read only for who has voted, never how; the totals only from the reveal. See slice 2a RULE-47. */
@@ -197,6 +276,8 @@ export function myPoliticsView(state: GameState, playerId: string, voids: readon
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
+    overruleBallot: p.overrule?.stage === 'ballot' ? (p.overrule.ballots[playerId] ?? null) : null,
+    canOverrule: canOverrule(state, playerId),
     promised: structuredClone(promisedVotes(state, playerId)),
     sabotage: mySabotageView(state, playerId, voids),
     ...sheriffDesk(state, playerId),
