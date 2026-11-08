@@ -37,6 +37,14 @@ beforeAll(async () => {
     disconnect() {}
   };
   (FakeElement.prototype as unknown as { getBoundingClientRect?: () => object }).getBoundingClientRect ??= () => ({ x: 0, y: 0, top: 0, left: 0, width: 844, height: 390, right: 844, bottom: 390 });
+  // The whisper thread and the composer's sheet, for the AI mark's test: the thread scrolls, the sheet finds its shell.
+  const proto = FakeElement.prototype as unknown as Record<string, unknown>;
+  proto.scrollIntoView ??= () => undefined;
+  proto.closest ??= function (this: FakeElement, selector: string) {
+    const id = /^\[data-testid="(.+)"\]$/.exec(selector)?.[1];
+    for (let n: FakeElement | null = this; n; n = n.parentNode instanceof FakeElement ? n.parentNode : null) if (id && n.getAttribute('data-testid') === id) return n;
+    return null;
+  };
 });
 
 const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
@@ -349,8 +357,8 @@ describe('the AI mark on the deal words (S3-C17, S3-C21, F-11)', () => {
   const fromKai: DealCard = { id: 'deal-k1', from: 's3', to: 's1', terms: { kind: 'pact' }, offered: MONTH, until: MONTH + 2, status: 'offered', brokenBy: null, settled: null };
 
   it('S3-B-AC-2: a deal from an AI seat shows " · AI" after his name in the agenda, on the ballot lines and on the composer button', () => {
-    mount(withAi(electionFor({ promised: { election: { governor: { candidate: 's2', to: ['s3'] } }, law: null } }), [fromKai]));
-    expect(text('ballot-governor-promised'), 'the election ballot').toContain('You promised Kai · AI your vote for Brix');
+    const pol = politics({});
+    mount(withAi(aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, {}), politics: pol }), [fromKai]));
     expect(text('agenda-deals'), 'the agenda').toContain('From Kai · AI · answer before Ready');
     tap('desk-talk');
     tap('talk-chat');
@@ -358,6 +366,11 @@ describe('the AI mark on the deal words (S3-C17, S3-C21, F-11)', () => {
     tap('add-deal');
     expect(text('composer-a-send'), 'the composer button').toBe('Offer to Kai · AI');
     expect(text('composer-a-note')).toBe('Kai · AI answers before planning ends, or it expires.');
+    act(() => root!.unmount());
+    root = null;
+
+    mount(withAi(electionFor({ promised: { election: { governor: { candidate: 's2', to: ['s3'] } }, law: null } }), []));
+    expect(text('ballot-governor-promised'), 'the election ballot').toContain('You promised Kai · AI your vote for Brix');
     act(() => root!.unmount());
     root = null;
 

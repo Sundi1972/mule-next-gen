@@ -2,6 +2,7 @@ import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MuleIntent, MuleView, MyPoliticsView, MyView, PoliticsView } from '@mule/protocol';
 import { cx } from '@mule/ui';
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { SeatWords } from '../../../components/SeatWords';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
@@ -41,8 +42,11 @@ export function promisedLine(view: Pick<MuleView, 'players'>, p: { candidate: st
   return p.to.length === 1 && p.to[0] === p.candidate ? `You promised ${to} your vote` : `You promised ${to} your vote for ${name(p.candidate)}`;
 }
 
+/** The seats promisedLine names, in its words' order, for SeatWords. */
+const promisedWho = (p: { candidate: string; to: string[] }): string[] => (p.to.length === 1 && p.to[0] === p.candidate ? p.to : [...p.to, p.candidate]);
+
 /** The line under a promised ballot's legend: to whom, and what keeping and breaking it does. */
-export function YouPromised({ words, testid }: { words: string; testid: string }) {
+export function YouPromised({ words, testid }: { words: ReactNode; testid: string }) {
   const { kept, voteBroken } = POLITICS.reputation.moves;
   return (
     <span className="flex flex-col gap-0.5 rounded-control border border-holo bg-holo-soft px-1.5 py-1" data-testid={testid}>
@@ -175,7 +179,7 @@ function BallotPaper({ office, cands, promises, promised, pick, onPick }: { offi
   return (
     <fieldset className="flex min-w-0 flex-col gap-1 @min-[1100px]/shell:gap-2" data-testid={`ballot-${office}`}>
       <legend className="mb-1 text-xs font-semibold @min-[1100px]/shell:text-lg">{OFFICE_NAME[office]}</legend>
-      {promised && <YouPromised words={promisedLine(view, promised)} testid={`ballot-${office}-promised`} />}
+      {promised && <YouPromised words={<SeatWords text={promisedLine(view, promised)} who={promisedWho(promised)} players={view.players} />} testid={`ballot-${office}-promised`} />}
       {[...cands, ''].map((id) => (
         <label
           key={id || 'abstain'}

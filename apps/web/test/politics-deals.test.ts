@@ -324,7 +324,7 @@ describe('the deal composer (S3-C17)', () => {
     tap(`chat-to-${KAI}`);
     tap('add-deal');
     expect(text('composer-a-pact-no')).toBe('You already have a pact with Kai');
-    expect(text('composer-a-ai-warning'), 'the warning names the threshold from POLITICS.ai.deals').toBe(`Kai turns down cards from a name under ${refuseBelow}. Yours is ${refuseBelow - 1}.`);
+    expect(text('composer-a-ai-warning'), 'the warning names the threshold from POLITICS.ai.deals').toBe(`Kai · AI turns down cards from a name under ${refuseBelow}. Yours is ${refuseBelow - 1}.`);
     tap('composer-a-kind-vote');
     expect(text(`composer-a-choice-gov:${BRIX}-no`)).toBe('You already promised your vote on this ballot');
     expect(findTestid(`composer-a-choice-gov:${OSSA}`), 'the promised choice is still offered').toBeDefined();

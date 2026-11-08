@@ -251,7 +251,7 @@ function ComposerNotes({ c, testid }: { c: Composer; testid: string }) {
       )}
       {c.aiWarning && (
         <p className="rounded-control border border-dashed border-warn px-2 py-1 text-[11px] font-semibold leading-snug text-warn" data-testid={`${testid}-ai-warning`}>
-          {c.aiWarning}
+          <SeatWords text={c.aiWarning} who={[c.other.id]} players={c.view.players} />
         </p>
       )}
       {(c.blocked || c.refusal) && (
@@ -286,10 +286,10 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
       }
       action={
         <Button size="md" className="px-3" disabled={!c.canSend} onClick={c.send} data-testid="composer-a-send">
-          Offer to {c.other.name}
+          <SeatWords text={`Offer to ${c.other.name}`} who={[c.other.id]} players={c.view.players} />
         </Button>
       }
-      note={`${c.other.name} answers before planning ends, or it expires.`}
+      note={<SeatWords text={`${c.other.name} answers before planning ends, or it expires.`} who={[c.other.id]} players={c.view.players} />}
     >
       <ComposerFields c={c} testid="composer-a" />
       <ComposerNotes c={c} testid="composer-a" />
@@ -297,13 +297,12 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
   );
 }
 
-/** Gives the focus back, when the sheet closes, to what held it when the sheet opened: the door that opened it. */
 
 /**
  * A sheet over the whole rail at the rail's width, portalled into the shell: the hub has no slot over its rail. Its
  * buttons sit in its footer, under the thumb.
  */
-function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: string; children: ReactNode }) {
+function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: ReactNode; children: ReactNode }) {
   const box = useDialog(onClose);
   const sheet = (
     <div ref={box} className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>

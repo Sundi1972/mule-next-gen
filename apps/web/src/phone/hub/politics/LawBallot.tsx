@@ -2,6 +2,7 @@ import { LAW_NAME, POLITICS, type LawId } from '@mule/engine';
 import type { CouncilView, MuleIntent, MuleView, MyView, PoliticsView } from '@mule/protocol';
 import { Button, cx, PlayerMark } from '@mule/ui';
 import { useEffect, useSyncExternalStore } from 'react';
+import { SeatWords } from '../../../components/SeatWords';
 import { toSlot } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
@@ -94,7 +95,7 @@ export function CouncilBallot() {
       <span className="text-sm font-semibold" data-testid="ballot-for-you">
         For you: {forYouWords(c.proposal, c.impact[self.id], view.air.level)}.
       </span>
-      {promised && <YouPromised words={`You promised ${promised.to.map(name).join(' and ')} a ${promised.yes ? 'yes' : 'no'}`} testid="ballot-promised" />}
+      {promised && <YouPromised words={<SeatWords text={`You promised ${promised.to.map(name).join(' and ')} a ${promised.yes ? 'yes' : 'no'}`} who={promised.to} players={view.players} />} testid="ballot-promised" />}
       <span className="grid grid-cols-2 gap-2">
         {answer(true)}
         {answer(false)}
