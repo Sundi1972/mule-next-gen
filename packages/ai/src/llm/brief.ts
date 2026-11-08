@@ -538,16 +538,16 @@ function handsLines(hands: HandsDevelopment | null | undefined): string[] {
 }
 
 /**
- * Under the land brief's draft development, for a seat whose kept draft plays today's path (keptDevelopmentPlaysToday):
- * the draft is shown, but only an edit makes it play (unbought-mules fix, deep4: 26 of 29 Sonnet unbought MULEs).
- */
-/**
  * Under the auction brief's draft, for a seat whose kept draft plays today's path (keptPlaysToday): one accepted edit
  * adopts the whole validated draft, so every good left alone plays it; none adopts nothing (hands-why fix, deep4).
  */
 const KEPT_AUCTION =
   'Kept as is, with no edit to any good, this plan does not play: on the day your hands trade each good themselves. One accepted edit to any good makes the whole plan play.';
 
+/**
+ * Under the land brief's draft development, for a seat whose kept draft plays today's path (keptPlaysToday): the draft
+ * is shown, but only an edit makes it play (unbought-mules fix, deep4: 26 of 29 Sonnet unbought MULEs).
+ */
 const KEPT_DRAFT =
   'Kept as is, this route does not play: on the day your hands pick each MULE themselves, and may keep the cash or run short of time. To have it played, send it as /development/route.';
 
@@ -597,7 +597,7 @@ export function landBrief(
   development: DevelopmentPlay | null = null,
   /** The plot the development was drafted as granted (route fix, afterGrant): its steps on it read as "granted". */
   granted: number | null = null,
-  /** Whether the draft development, kept, plays today's path instead (keptDevelopmentPlaysToday): the brief says so. */
+  /** Whether the draft development, kept, plays today's path instead (keptPlaysToday): the brief says so. */
   keptPlaysToday = false,
 ): LandBrief {
   const obs = observe(state, mind.me);

@@ -72,11 +72,12 @@ function best(installs: readonly Install[]): Install | undefined {
  * Brain.log: a stop logs nothing in the develop log), in one clause; null when it did not end on such a decision. The
  * MULE it names is the one the shown draft route would have put on the first of its plots the decision weighed, with
  * the draft's outfit where the decision weighed it; else the decision's best. Ruled out, the veto says why; open, the
- * cash scored above it.
+ * cash kept over it, said to have scored above it only when it did: the pick need not be the best.
  */
 export function stopReason(month: number, me: PlayerId, decisions: readonly DecisionRecord[], draftRoute: DevelopmentPlay['route'] | null): string | null {
   const last = decisions.filter((r) => r.kind === 'develop' && r.month === month && r.seat === me).at(-1);
   if (!last || last.pick.key !== 'stop') return null;
+  const kept = last.candidates.find((c) => c.key === 'stop')?.utility;
   const installs: Install[] = last.candidates.flatMap((c) => {
     const m = /^install:([A-Za-z]+):(\d+)$/.exec(c.key);
     return m ? [{ key: c.key, outfit: m[1] as Outfit, plot: Number(m[2]), utility: c.utility, value: c.value, veto: c.veto }] : [];
@@ -93,7 +94,9 @@ export function stopReason(month: number, me: PlayerId, decisions: readonly Deci
   target ??= best(installs);
   if (!target) return null;
   const mule = `${withArticle(outfitName(target.outfit))} on plot ${target.plot}`;
-  return target.veto === null ? `then kept the cash, which scored above ${mule}` : `then ${mule} was ruled out: ${target.veto}`;
+  if (target.veto !== null) return `then ${mule} was ruled out: ${target.veto}`;
+  // A stop pick is no stop that scored best: a decider draws among near ties, or picks freely from the shortlist.
+  return kept !== undefined && target.utility <= kept ? `then kept the cash, which scored above ${mule}` : `then kept the cash over ${mule}`;
 }
 
 /**
