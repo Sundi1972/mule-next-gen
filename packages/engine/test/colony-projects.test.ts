@@ -90,13 +90,13 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     const row = PRESTIGE.hospital;
     const state = governedGame(row.upkeep - 1);
     standing(state, 'hospital');
-    runColony(state, []);
+    runColony(state);
     expect(project(state, 'hospital').stage).toBe('closed');
     expect(colonyPrestige(state)).toBe(0);
     expect(state.treasury.money).toBe(row.upkeep - 1);
 
     state.treasury.money = row.upkeep;
-    runColony(state, []);
+    runColony(state);
     expect(project(state, 'hospital').stage).toBe('standing');
     expect(state.treasury.money).toBe(0);
 
@@ -144,7 +144,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
       state.store.stock.alloy = 10;
       state.store.stock.electronics = 10;
       commission(state, 'lena', id);
-      runColony(state, []);
+      runColony(state);
       expect(project(state, id), id).toMatchObject({ stage: 'building', monthsLeft: PRESTIGE[id].buildMonths, funded: { credits: PRESTIGE[id].credits, goods: PRESTIGE[id].goods } });
     }
   });
@@ -162,7 +162,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     commission(state, 'lena', 'hospital');
     for (let i = 0; i < 4; i++) {
       payGrant(state);
-      runColony(state, []);
+      runColony(state);
     }
     expect(project(state, 'spaceport'), 'the Spaceport is paid in credits and waits for its goods').toMatchObject({ stage: 'commissioned', funded: { credits: PRESTIGE.spaceport.credits } });
     expect(project(state, 'hospital').funded.credits, 'the Hospital behind it is paid too').toBe(PRESTIGE.hospital.credits);
@@ -175,7 +175,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     commission(state, 'lena', 'hospital');
     // The Hospital has every credit and good in before the month end; the Spaceport in front of it has no goods.
     project(state, 'hospital').funded = { credits: PRESTIGE.hospital.credits, goods: { ...PRESTIGE.hospital.goods } };
-    runColony(state, []);
+    runColony(state);
     expect(project(state, 'spaceport'), 'the Spaceport still waits for its goods').toMatchObject({ stage: 'commissioned' });
     expect(project(state, 'hospital'), 'the Hospital starts behind it').toMatchObject({ stage: 'building', monthsLeft: PRESTIGE.hospital.buildMonths });
   });
@@ -185,12 +185,12 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     const state = noGoods(COLONY.reserve + spare);
     commission(state, 'lena', 'spaceport');
     commission(state, 'lena', 'hospital');
-    runColony(state, []);
+    runColony(state);
     expect(project(state, 'spaceport').funded.credits, 'the earlier project takes all the fund can spare').toBe(spare);
     expect(project(state, 'hospital').funded.credits, 'nothing is left for the later one').toBe(0);
     expect(state.treasury.money, 'the reserve stays').toBe(COLONY.reserve);
     state.treasury.money += 100;
-    runColony(state, []);
+    runColony(state);
     expect(project(state, 'spaceport').funded.credits, 'the earlier one is topped up first').toBe(PRESTIGE.spaceport.credits);
     expect(project(state, 'hospital').funded.credits, 'the rest goes to the later one').toBe(60);
     expect(state.treasury.money).toBe(COLONY.reserve);

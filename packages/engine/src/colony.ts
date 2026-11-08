@@ -236,6 +236,24 @@ export function hardship(short: number): number {
   return short <= tolerance ? 0 : ((short - tolerance) / (1 - tolerance)) ** power;
 }
 
+/** How short the colonists went this month, 0..1: the worse of Food and Water, since all Water and no Food is starving. See needs RULE-2. */
+export function severity(short: Pick<ColonistMonth['short'], 'food' | 'water'>): number {
+  return Math.max(short.food, short.water);
+}
+
+/** The colony's memory of hardship after a month that bit `bite` (hardship's 0..1): it fades by memoryKeep a month. See needs RULE-3. */
+export function hardshipMemory(memory: number, bite: number): number {
+  return Math.min(HARDSHIP.memoryCap, HARDSHIP.memoryKeep * memory + bite);
+}
+
+/**
+ * The month's mood from `h`: the capped step toward `target`, then the month's shock at once, so the step cannot undo
+ * it. See needs RULE-4.
+ */
+export function monthMood(h: number, target: number, bite: number): number {
+  return clampMood(moodStep(h, target) - Math.round(HARDSHIP.shock * bite));
+}
+
 /**
  * How the colonists fared at an upkeep: each need's share they went without (0..1), the share of their Electronics
  * want met, and the growth sickness can slow: the colony's size before it grew and the rate it grew at. No `growth`
@@ -276,7 +294,7 @@ export function sickShare(state: GameState): number | null {
  */
 export function nextSickShare(h: number, short: ColonistMonth['short']): number {
   const fallSick =
-    HEALTH.base + HEALTH.perHunger * hardship(Math.max(short.food, short.water)) + HEALTH.perMedicine * hardship(short.medicine) + HEALTH.contagion * h;
+    HEALTH.base + HEALTH.perHunger * hardship(severity(short)) + HEALTH.perMedicine * hardship(short.medicine) + HEALTH.contagion * h;
   const recover = h * HEALTH.recovery * (1 - HEALTH.medicineCut * short.medicine);
   return Math.min(HEALTH.cap, Math.max(0, h + (1 - h) * fallSick - recover));
 }
@@ -305,9 +323,9 @@ export function electronicsComfort(colonists: number, stock: number): { took: nu
 /**
  * At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is
  * funded, oldest first (G-5 RULE-21). Then, with colony health on, the sick share moves by how the colonists fared at
- * this upkeep's meal and slows the month's growth, and the month's mood steps.
+ * this upkeep's meal and slows the month's growth; the memory of hardship takes the month's bite, and the mood steps.
  */
-export function runColony(state: GameState, shortages: readonly Good[], month: ColonistMonth = WELL_MONTH): void {
+export function runColony(state: GameState, month: ColonistMonth = WELL_MONTH): void {
   if (!state.colony) return;
   const colony = edit(state);
   for (const p of colony.projects) {
@@ -336,7 +354,9 @@ export function runColony(state: GameState, shortages: readonly Good[], month: C
     // Upkeep grew the colony as if all were well; it grows again from the same size, slowed by the new share.
     if (month.growth) state.colonists = grownColonists(month.growth.from, month.growth.rate, colony.sick);
   }
-  colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages, month.comfort)));
+  const bite = hardship(severity(month.short));
+  colony.hardship = hardshipMemory(colony.hardship ?? 0, bite);
+  colony.happiness = monthMood(colony.happiness, moodTarget(moodInputs(state, month.comfort)), bite);
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
 }
@@ -458,8 +478,8 @@ export function keepPromise(state: GameState): void {
 
 /** What a month's mood target reads. See G-5 RULE-20. */
 export interface MoodInputs {
-  /** Goods the store ran short of this upkeep. */
-  short: number;
+  /** The colony's memory of hardship, 0..HARDSHIP.memoryCap (needs RULE-3). */
+  hardship: number;
   /** The air gauge, 0..100, higher is dirtier. */
   air: number;
   /** The sales tax in whole percent. */
@@ -483,14 +503,13 @@ export interface HealthMood {
 }
 
 /**
- * The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done;
- * `comfort` is the share of the colonists' Electronics want met at it.
+ * The month's inputs. The memory of hardship is the colony's own, so runColony writes this month's into it first;
+ * `comfort` is the share of the colonists' Electronics want met at this upkeep.
  */
-export function moodInputs(state: GameState, shortages: readonly Good[], comfort = 0): MoodInputs & Partial<HealthMood> {
+export function moodInputs(state: GameState, comfort = 0): MoodInputs & Partial<HealthMood> {
   const brokeNow = state.colony?.promises.some((p) => p.month === state.month && !p.kept) ?? false;
   return {
-    // Missing Medicine reaches the mood through sickness alone, so it is not one of the goods short here.
-    short: shortages.filter((g) => g !== 'medicine').length,
+    hardship: state.colony?.hardship ?? 0,
     air: state.air,
     tax: Math.round(state.treasury.salesTax * PERCENT),
     broken: brokeNow ? 1 : 0,
@@ -506,7 +525,7 @@ export function moodTarget(i: MoodInputs & Partial<HealthMood>): number {
   const w = HAPPINESS.weights;
   const target =
     HAPPINESS.base -
-    w.shortage * i.short -
+    HARDSHIP.targetPerHardship * i.hardship -
     w.air * Math.max(0, i.air - w.airFree) -
     w.tax * Math.max(0, i.tax - w.taxFree) -
     w.broken * i.broken +

@@ -3,7 +3,8 @@
   "auction": null,
   "colonists": 103,
   "colony": {
-    "happiness": 55,
+    "happiness": 56,
+    "hardship": 0.23676364231513122,
     "ledger": {
       "in": {
         "grant": 200
@@ -23,7 +24,7 @@
       },
       {
         "air": 0,
-        "happiness": 55,
+        "happiness": 56,
         "month": 3,
         "prestige": 0,
         "wealth": 4600

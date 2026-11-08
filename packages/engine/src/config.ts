@@ -302,8 +302,10 @@ export const UPKEEP = {
   colonistsPerMedicine: 50,
   /** Colonists want 1 Electronics a month per this many, and with it the Rare earth and Alloy its recipe takes. */
   colonistsPerElectronics: 50,
-  /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
-  colonistGrowth: { fed: 1.04, hungry: 0.95 },
+  /** The colony grows by this factor in a month its colonists were fed, or short no more than HARDSHIP.tolerance. */
+  colonistGrowth: { fed: 1.04 },
+  /** Past the tolerance, the colony's growth factor is 1 less this many times the share missing (needs RULE-5). */
+  colonistShrinkPerShortfall: 0.1,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
@@ -1234,8 +1236,6 @@ export const HAPPINESS = {
   /** The least happiness of each band; below `unhappy` is Unrest. */
   bands: { thriving: 80, content: 60, restless: 40, unhappy: 20 },
   weights: {
-    /** Off the target for each good the store ran short of this upkeep. */
-    shortage: 8,
     /** Off the target for each point of air above `airFree`. */
     air: 0.4,
     airFree: 30,
@@ -1256,6 +1256,8 @@ export const HAPPINESS = {
     welfareUnit: 50,
     welfareCap: 4,
   },
+  /** Added to the colony's monthly growth factor in each mood band: a happy colony draws settlers (needs RULE-5). */
+  migration: { thriving: 0.02, content: 0, restless: -0.01, unhappy: -0.03, unrest: -0.05 } satisfies Record<MoodBand, number>,
 };
 
 /** How hard a shortfall bites (needs RULE-2): a share short up to `tolerance` is shrugged off, beyond it the bite grows. */
@@ -1264,6 +1266,16 @@ export const HARDSHIP = {
   tolerance: 0.1,
   /** The curve's exponent above the tolerance: above 1, a small miss bites little and a large one much more. */
   power: 1.5,
+  /** Share of last month's memory of hardship a month keeps (needs RULE-3): a fed month halves it. */
+  memoryKeep: 0.5,
+  /** The most the memory of hardship ever holds. */
+  memoryCap: 2,
+  /** Mood points off the month's target per unit of the memory of hardship (needs RULE-4). */
+  targetPerHardship: 6,
+  /** Mood points off at once, after the month's step, at a total miss; in proportion to the month's bite (needs RULE-4). */
+  shock: 8,
+  /** Added to an unrest-band row's mood points, as a share of them, per unit of the memory of hardship (needs RULE-6). */
+  unrestPerHardship: 0.25,
 };
 
 /**

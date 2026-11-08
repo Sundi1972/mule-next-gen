@@ -54,7 +54,7 @@
 
 <!-- ============================================================ -->
 <h2 id="mood">Mood: happiness and its bands <span class="pill built">In the game</span></h2>
-<p>The colony starts every game at happiness <span class="num">60</span> (Content). At each month end it moves toward a <em>target</em> set by how the month went, but by at most <span class="num">5</span> points a month. One bad month dents the mood; a run of them sinks it. Events can also move it at once, by any amount, without that limit.</p>
+<p>The colony starts every game at happiness <span class="num">60</span> (Content). At each month end it moves toward a <em>target</em> set by how the month went, but by at most <span class="num">5</span> points a month. One bad month dents the mood; a run of them sinks it. Events can also move it at once, by any amount, without that limit, and so does a hungry month's blow (see <a href="#hardship">Hunger, hardship and health</a>).</p>
 
 <h3 id="mood-bands">The bands</h3>
 <div class="table-wrap"><table>
@@ -73,7 +73,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Input</th><th>Effect on the target</th></tr></thead>
 <tbody>
-<tr><td>Food or Water the store had too little of for the colonists this month</td><td><span class="num">−8</span> for each of the two</td></tr>
+<tr><td>The colony's memory of hardship: how short of Food or Water it went this month and before (see <a href="#hardship">Hunger, hardship and health</a>)</td><td><span class="num">−6</span> for each point of memory, at most <span class="num">2</span> points (so at most <span class="num">−12</span>)</td></tr>
 <tr><td>Dirty air</td><td><span class="num">−0.4</span> for each air point above <span class="num">30</span></td></tr>
 <tr><td>A high sales tax</td><td><span class="num">−2</span> for each percent above <span class="num">5</span>%</td></tr>
 <tr><td>The Governor broke their tax promise this month</td><td><span class="num">−10</span></td></tr>
@@ -81,10 +81,10 @@
 <tr><td>The gap between the richest and the poorest player, by cash plus land (<span class="num">300</span> cr a plot)</td><td><span class="num">−2</span> for each <span class="num">1,000</span> cr of gap, counting at most <span class="num">10</span> (so at most <span class="num">−20</span>)</td></tr>
 </tbody>
 </table></div>
-<div class="box example"><h4>Example</h4><p>The mood is <span class="num">60</span>. This month the store had too little Food and too little Water for the colonists (<span class="num">−16</span>), the air is at <span class="num">45</span> (<span class="num">15</span> points over, <span class="num">−6</span>), the Governor set the tax at <span class="num">7</span>% (<span class="num">−4</span>), the Hospital stands (prestige <span class="num">3</span>, <span class="num">+6</span>), and the richest player is <span class="num">2,500</span> cr ahead of the poorest (<span class="num">−5</span>). The target is 60 − 16 − 6 − 4 + 6 − 5 = <span class="num">35</span>. The mood can move only <span class="num">5</span> a month, so it ends the month at <span class="num">55</span>: Restless. If nothing changes, it keeps falling by 5 a month: 50, 45, 40, then 35, where it stops.</p></div>
-<p>The mood already changes how computer players vote: in an Unhappy or Unrest colony they will not back the sitting Governor if anyone else runs (see <a href="#ai-governor">Computer players in politics</a>). Next it will change which events happen (see <a href="#social-events">Social events</a>) and how fast the colony grows (see <a href="#migration">Mood and migration</a>).</p>
+<div class="box example"><h4>Example</h4><p>The mood is <span class="num">60</span>. The colonists were fed this month, but the colony still remembers a hungry spell (memory <span class="num">1.5</span>, <span class="num">−9</span>), the air is at <span class="num">45</span> (<span class="num">15</span> points over, <span class="num">−6</span>), the Governor set the tax at <span class="num">7</span>% (<span class="num">−4</span>), the Hospital stands (prestige <span class="num">3</span>, <span class="num">+6</span>), and the richest player is <span class="num">2,500</span> cr ahead of the poorest (<span class="num">−5</span>). The target is 60 − 9 − 6 − 4 + 6 − 5 = <span class="num">42</span>. The mood can move only <span class="num">5</span> a month, so it ends the month at <span class="num">55</span>: Restless. Fed again next month, the memory halves to 0.75 and the target rises to 46.5; the mood steps down to 50.</p></div>
+<p>The mood already changes how computer players vote: in an Unhappy or Unrest colony they will not back the sitting Governor if anyone else runs (see <a href="#ai-governor">Computer players in politics</a>). It also tilts which events happen (see <a href="#social-events">Social events</a>) and how fast the colony grows (see <a href="#migration">Mood and migration</a>).</p>
 <div class="box why"><h4>Why it is like this</h4><p>The mood is one gauge whose value shapes events, not a second event system (G-5, approved by Heiko 28 Oct). The monthly cap stops it flip-flopping. Welfare spending counts 0 until the budget lines exist (Heiko, G-5 card, 4 Nov: "5. ok"). The weights are WS1's placeholders, tuned at the end.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::moodTarget</code> · <code>::moodStep</code> · <code>::moodBand</code> · <code>::wealthGap</code> · <code>config.ts::HAPPINESS</code> · G-5 RULE-20</p>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::moodTarget</code> · <code>::moodStep</code> · <code>::monthMood</code> · <code>::moodBand</code> · <code>::wealthGap</code> · <code>config.ts::HAPPINESS</code> · <code>::HARDSHIP</code> · G-5 RULE-20 · colony-needs RULE-4</p>
 <p class="owner">Kept current by: WS7 (the rule), WS1 (the numbers).</p>
 
 <!-- ============================================================ -->
@@ -476,11 +476,22 @@
 <p class="owner">Kept current by: WS1 (events), WS7 (the colony's writers), WS8 (event shows).</p>
 
 <!-- ============================================================ -->
-<h2 id="migration">Mood and migration <span class="pill designed">Designed</span></h2>
-<p>Today the colony grows by <span class="num">4</span>% in a month its colonists were fed and shrinks by <span class="num">5</span>% when they went hungry, whatever the mood. The design says the mood will scale that growth and shrinkage: a happy colony attracts settlers, an unhappy one loses them. How much is not set yet; the numbers will live with the mood's.</p>
-<div class="box next"><h4>What is changing</h4><p>C27 is on hold: on 6 Nov Heiko asked to think the colonists concept through first. Owner: WS1.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP.colonistGrowth</code> · G-5 C27</p>
-<p class="owner">Kept current by: WS1.</p>
+<h2 id="migration">Mood and migration <span class="pill built">In the game</span></h2>
+<p>The mood pushes the colony's size: a happy colony draws settlers, an unhappy one loses them. Each month the mood's band adds its push to the colony's growth from the meal (see <a href="#severity">How short they went</a>). The band is the one the mood was in before the month's step. In Collapse air the colonists leave whatever the mood.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Band</th><th class="n">Added to the month's growth</th></tr></thead>
+<tbody>
+<tr><td>Thriving</td><td class="n">+2%</td></tr>
+<tr><td>Content</td><td class="n">0</td></tr>
+<tr><td>Restless</td><td class="n">−1%</td></tr>
+<tr><td>Unhappy</td><td class="n">−3%</td></tr>
+<tr><td>Unrest</td><td class="n">−5%</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example</h4><p>A Restless colony of 395, fed in full, grows 4% less 1%: 3%, to 407. With nothing to eat in Unrest it shrinks 10% and 5% more: to 85% of its size.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>G-5's C27 was held on 6 Nov while Heiko thought the colonists through; the colony-needs design (approved 6 Nov) folds its band push into the one growth rule, so the size tells the same story as the mood. With politics off there is no mood and no push.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::growthRate</code> · <code>config.ts::HAPPINESS.migration</code> · colony-needs RULE-5 (folds G-5 C27)</p>
+<p class="owner">Kept current by: WS7 (the rule), WS1 (the numbers).</p>
 
 <!-- ============================================================ -->
 <h2 id="colony-score">The colony score at game over <span class="pill built">In the game</span></h2>
@@ -528,35 +539,44 @@
 <!-- ============================================================ -->
 <h2 id="colonists-meal">The colonists' meal <span class="pill built">In the game</span></h2>
 <p>Colonists have no money and no wages, and pay no prices. At the month end, after the players eat, they take their Food and Water from the store's shelf, free: 1 Food and 1 Water for every <span class="num">20</span> colonists, and more Food in a festival month, as far as the shelf holds them. The store keeps their month back from the players at the auction, so their need comes out of the store first. A dear price never starves them while the shelf has stock; only an empty shelf does.</p>
-<p>Fed in full, the colony grows by <span class="num">4</span>% a month; short of either, it shrinks by <span class="num">5</span>%. The month end says how much they got. When nothing was missing: "The store fed the colony's 400 colonists". When something was, the line names it and turns red: "The store fed the colony's 400 colonists 19 of 20 Food and all their Water".</p>
+<p>Fed, or short a tenth or less, the colony grows by <span class="num">4</span>% a month; short of more, it shrinks in proportion to the share missing (see <a href="#severity">How short they went</a>). The month end says how much they got. When nothing was missing: "The store fed the colony's 400 colonists". When something was, the line names it: "The store fed the colony's 400 colonists 19 of 20 Food and all their Water". It turns red when they went more than a tenth short of Food or of Water.</p>
 <p>Because colonists pay nothing, nothing caps them in the store's sums: their full need counts in the store's demand at any price, and the store buys Food and Water at its step's own buying price, with no ceiling from what colonists could once pay (see <a href="store-and-prices.html#posted-price">How the posted price is set</a>).</p>
-<div class="box example"><h4>Example</h4><p>A colony of 400 needs 20 Food and 20 Water. Food is posted at 300; the shelf holds 19 Food and 30 Water. The colonists take 19 Food and 20 Water and pay nothing, so the store's money is unchanged. They went one Food short, so the colony shrinks 5% to 380, and the month end reads "The store fed the colony's 400 colonists 19 of 20 Food and all their Water": the line counts the colonists who ate, before the month changed their number. Before this change they paid the store's selling price out of wages of at most 150 a unit for Food, so at that price they would have bought less than half their Food.</p></div>
+<div class="box example"><h4>Example</h4><p>A colony of 400 needs 20 Food and 20 Water. Food is posted at 300; the shelf holds 19 Food and 30 Water. The colonists take 19 Food and 20 Water and pay nothing, so the store's money is unchanged. They went one Food short, a twentieth, which they shrug off: the colony still grows 4% to 416, and the month end reads "The store fed the colony's 400 colonists 19 of 20 Food and all their Water", not in red. The line counts the colonists who ate, before the month changed their number. Before this change they paid the store's selling price out of wages of at most 150 a unit for Food, so at that price they would have bought less than half their Food.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 6 Nov: colonists never hold or pay money, and the store's money is unlimited already, so nothing replaces their payment. With wages, a colony went hungry beside a stocked shelf whenever the price passed their wage. Under the store's new price steps the severe Food selling price (150) equals their old Food wage (150), so any trade that pulled the price higher would have starved them. WS7 agreed to ship the meal before the hardship rule (plan decision P-1).</p></div>
-<div class="box next"><h4>What is changing</h4><p>Medicine joins the free meal with colony health (WS7). How short they went will move the mood and the colony's size by degree rather than all-or-nothing: see <a href="#hardship">Hunger, hardship and health</a> (WS7, with the supply change).</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code>, <code>::colonistMeal</code> · <code>economy.ts::monthlyDemand</code>, <code>storeBuyAt</code>, <code>storeForSale</code> (their reserve) · <code>config.ts::UPKEEP.colonistsPerUnit</code>, <code>UPKEEP.colonistGrowth</code> · <code>apps/server/src/mule-game.ts</code> (the line's numbers) · <code>apps/web/src/components/MonthEnd.tsx</code> (the line) · colony-needs C1, C2, C6</p>
+<div class="box next"><h4>What is changing</h4><p>Medicine joins the free meal with colony health (WS7), built and switched off: see <a href="#colony-health">Colony health</a>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code>, <code>::colonistMeal</code> · <code>economy.ts::monthlyDemand</code>, <code>storeBuyAt</code>, <code>storeForSale</code> (their reserve) · <code>config.ts::UPKEEP.colonistsPerUnit</code>, <code>UPKEEP.colonistGrowth</code> · <code>apps/server/src/mule-game.ts</code> (the line's numbers) · <code>apps/web/src/components/MonthEnd.tsx</code> (the line, red through <code>colony.ts::hardship</code>) · colony-needs C1, C2, C6</p>
 <p class="owner">Kept current by: WS7 (the rule), WS1 (upkeep and the store's demand), WS3 (the month-end view).</p>
 
 <!-- ============================================================ -->
-<h2 id="hardship">Hunger, hardship and health <span class="pill designed">Designed</span></h2>
-<p>Decided by Heiko on 6 Nov (<a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a>, all recommendations approved). None of this is in the game yet: it ships together with the new Food and Medicine supply, so players first meet it in a colony that can be fed. Every number is a starting value, tuned with the rest.</p>
+<h2 id="hardship">Hunger, hardship and health <span class="pill built">In the game</span></h2>
+<p>Decided by Heiko on 6 Nov (<a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a>, all recommendations approved). How short the colonists went, the blow, the memory and the colony's size are in the game. Colony health and the Electronics comfort are built and switched off until the Medicine supply can carry them. Every number is a starting value, tuned with the rest.</p>
 <h3 id="free-meal">Colonists eat free</h3>
 <p>In the game for Food and Water: see <a href="#colonists-meal">The colonists' meal</a>. Still designed: with colony health they take their Medicine from the shelf the same way, free, as far as it holds it.</p>
-<h3 id="severity">How short they went</h3>
+<h3 id="severity">How short they went <span class="pill built">In the game</span></h3>
 <p>Each month counts the share of their need that was missing, 0 to 1. Food and Water count, and the worse of the two counts. Missing Medicine is not counted here: it reaches the mood only through sickness (see <a href="#colony-health">Colony health</a>), so nothing is counted twice (Heiko, 6 Nov). Energy does not touch the colonists. A tenth short or less costs nothing. Past that, a curve makes the cost grow faster than the shortfall: a little short is a nudge, very short is a blow.</p>
 <ul>
-<li><strong>The blow:</strong> the month's shortfall costs the mood at once, outside the usual 5-point monthly drift, up to <span class="num">8</span> points with nothing to eat.</li>
+<li><strong>The blow:</strong> the month's shortfall costs the mood at once, after the usual 5-point monthly drift and outside it, up to <span class="num">8</span> points with nothing to eat.</li>
 <li><strong>The memory:</strong> each hungry month adds to a memory of hardship and each fed month halves it (at most <span class="num">2</span>). It keeps the mood aiming up to <span class="num">12</span> points lower and makes the unrest-band events up to half again likelier.</li>
-<li><strong>The colony's size:</strong> fed or within the tenth, it grows <span class="num">4</span>% a month; short of more, it shrinks by a tenth of the share missing (2% at a fifth short, 10% with nothing). The mood adds its push on settlers on top (see <a href="#migration">Mood and migration</a>).</li>
+<li><strong>The colony's size:</strong> fed or within the tenth, it grows <span class="num">4</span>% a month; short of more, it shrinks by a tenth of the share missing (2% at a fifth short, 10% with nothing). The mood adds its push on settlers on top (see <a href="#migration">Mood and migration</a>). With politics off there is no mood and no memory, but the size follows the shortfall the same way.</li>
 </ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Short of Food (Water fed)</th><th class="n">Blow</th><th class="n">From 60, no memory</th><th class="n">Colony size (Content)</th></tr></thead>
+<tbody>
+<tr><td>A tenth or less</td><td class="n">0</td><td class="n">60</td><td class="n">+4%</td></tr>
+<tr><td>Half</td><td class="n">2</td><td class="n">56</td><td class="n">−5%</td></tr>
+<tr><td>All</td><td class="n">8</td><td class="n">47</td><td class="n">−10%</td></tr>
+</tbody>
+</table></div>
 <div class="box example"><h4>Example</h4><p>A colony of 400 at mood 60 needs 20 Food. Month 1 it gets 19: nothing happens and it grows to 416. Month 2 it gets 10: the mood drifts down 2 and takes a blow of 2, to 56, and the colony shrinks 5% to 395. Month 3 it is fed: the mood climbs to 59, still held a little low by the memory, and is back at 60 in month 4.</p></div>
-<h3 id="colony-health">Colony health</h3>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::severity</code> · <code>::hardship</code> · <code>::hardshipMemory</code> · <code>::monthMood</code> · <code>::runColony</code> · <code>upkeep.ts::growthRate</code> · <code>events.ts</code> (the unrest-band odds) · <code>config.ts::HARDSHIP</code> · <code>UPKEEP.colonistShrinkPerShortfall</code> · colony-needs C3, C4, C5, RULE-2..RULE-6</p>
+<h3 id="colony-health">Colony health <span class="pill designed">Designed: built, switched off</span></h3>
 <p>A health gauge shows the share of colonists who are well, from 100 down to 60: at most 4 in 10 are ever sick. Each month a few fall sick anyway; more when they went hungry or thirsty, more when Medicine was missing, and more the more are already sick (contagion). About half the sick recover each month, fewer when Medicine is short. Recovery is always stronger than contagion, so a colony that is fed and treated settles at about 3 in 100 sick: sickness cannot run away. Without Medicine it is a different story: in 10 simulated games where the store was short of Medicine almost every month, the sick share sat at the ceiling of 4 in 10 and stayed there. That is why colony health switches on only together with the Medicine supply. Sick colonists need up to <span class="num">40</span>% more Medicine, cost the mood up to <span class="num">4</span> points of its aim and slow the colony's growth by up to 8% a month, about as much as hunger (Heiko, 8 Nov; it was 2%). Health bites hard (Heiko, 8 Nov): hunger makes colonists sick at full strength. The 22 Medicine the store starts with (Heiko, 8 Nov) carries the colony to about month 6 when nobody makes it, and after that the players must make Medicine. How sickness spreads to players and crews is in the store and production chapters (WS5).</p>
 <p class="code-ref">Built, switched off until the Medicine supply can carry it (HC-13); in the code: <code>packages/engine/src/config.ts::HEALTH</code> · <code>::HARDSHIP</code> · <code>colony.ts::nextSickShare</code> · <code>::sickShare</code> · <code>::colonistMedicineNeed</code> · <code>::grownColonists</code> · <code>::electronicsComfort</code> · <code>::hardship</code> · <code>::runColony</code> · <code>upkeep.ts::runUpkeep</code> (the Medicine and Electronics they take)</p>
-<h3 id="electronics-comfort">Electronics, a comfort</h3>
+<h3 id="electronics-comfort">Electronics, a comfort <span class="pill designed">Designed: built, switched off</span></h3>
 <p>When the store can give the colonists their Electronics (1 per 50 colonists a month), the mood aims up to <span class="num">4</span> points higher. Missing them never costs anything.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko: "falling short of 1 food doesn't immediately make all colonists unhappy… the worse the resource crisis the more likely they get unhappy and the more unhappy they get." Measured on 10 simulated games: today's rule costs the same for one unit missing as for a famine; a first, harsher set of numbers and a first sickness model with contagion as strong as recovery both spiralled into Unrest, and these softer numbers did not.</p></div>
 <p class="code-ref">Spec: <code>docs/specs/2026-11-06-colony-needs.md</code> (branch ws7-colony-needs) · explainer fragments in <code>docs/explainers/</code> there · approved explainer 903f3b80</p>
-<p class="owner">Designed, not in the game yet. WS7 builds the colonists' side; WS5 the supply, demand and spillover to players and crews.</p>
+<p class="owner">Hardship in the game; colony health and the Electronics comfort built and switched off until the Medicine supply can carry them (HC-13). Kept current by: WS7 (the colonists' side); WS5 the supply, demand and spillover to players and crews.</p>
 
 <!-- ============================================================ -->
 <h2 id="reputation-deals">Reputation and deal cards <span class="pill designed">Designed, not in the game yet, WS7</span></h2>
@@ -625,7 +645,7 @@
 
 <!-- ============================================================ -->
 <h2 id="colonists-as-workers">Colonists as workers <span class="pill backlog">Backlog</span></h2>
-<p>Players&#x27; plots would be worked by the colony&#x27;s colonists, paid wages by the players, so the population limits production and players compete for workers. Today colonists only take Food and Water from the store, free; their numbers grow when they are fed and shrink when they go hungry or the air is in Collapse, and the immigration and emigration waves move them; the mood already tilts those waves (a happy colony draws immigrants, an unhappy one loses colonists). The mood steering their growth directly is designed, not built (see <a href="#migration">Mood and migration</a>).</p>
+<p>Players&#x27; plots would be worked by the colony&#x27;s colonists, paid wages by the players, so the population limits production and players compete for workers. Today colonists only take Food and Water from the store, free; their numbers grow when they are fed and shrink by how short they went or when the air is in Collapse, and the immigration and emigration waves move them; the mood tilts those waves (a happy colony draws immigrants, an unhappy one loses colonists) and pushes their monthly growth (see <a href="#migration">Mood and migration</a>).</p>
 <div class="box why"><h4>Why it is like this</h4><p>Parked by Heiko on 6 Nov: wages would add a second economy.</p></div>
 <div class="box next"><h4>What is changing</h4><p>Nothing; no lane is on it. Owner: not assigned.</p></div>
 <p class="owner">Kept current by: WS7.</p>

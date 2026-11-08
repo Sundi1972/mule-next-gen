@@ -7,6 +7,7 @@ import {
   POLITICS,
   PRESTIGE,
   runColony,
+  WELL_MONTH,
   storeQuotes,
   stableJson,
   welfareRecipient,
@@ -87,7 +88,8 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
     const state = governed(800);
     withProjects(state, [projectOf('hospital', 'standing'), projectOf('park', 'building'), projectOf('stadium', 'commissioned'), projectOf('observatory', 'commissioned')]);
     worth(state, { lena: 9_000, brix: 14_000, ossa: 16_000, kai: 10_500 });
-    runColony(state, ['food']);
+    // Half the colonists' Food missing: the memory of hardship and the month's shock land in the colony's output too.
+    runColony(state, { ...WELL_MONTH, short: { ...WELL_MONTH.short, food: 0.5 } });
     const seen = stableJson({ colony: state.colony, fund: state.treasury.money, players: state.players.map((p) => [p.id, p.money]) });
     expect(seen).toBe(GOLDEN);
   });
@@ -145,26 +147,26 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
     const hospital = PRESTIGE.hospital;
     expect(price, 'the fund could buy it').toBeLessThan(2_000 - hospital.credits);
     expect(price, 'the 70% limit (1,400) leaves less than that after the credits').toBeGreaterThan(Math.floor(0.7 * 2_000) - hospital.credits);
-    runColony(tight, []);
+    runColony(tight);
     expect(project(tight, 'hospital').funded).toEqual({ credits: hospital.credits, goods: {} });
     expect(tight.colony!.ledger.out.project).toBe(hospital.credits);
 
     const roomy = priced(80);
-    runColony(roomy, []);
+    runColony(roomy);
     expect(project(roomy, 'hospital').funded.goods).toEqual({ electronics: 1 });
     expect(roomy.colony!.ledger.out.project, 'the goods count in the Projects line').toBe(hospital.credits + price);
 
     // Flooring: 545 spare is not a multiple of 20. Every line pays its floor, so the fund keeps at least the reserve.
     const odd = commissioned(COLONY.reserve + 545, shares(80, 10));
-    runColony(odd, []);
+    runColony(odd);
     expect(odd.colony!.ledger.out).toEqual({ welfare: 54, project: 436 });
     expect(odd.treasury.money, '545 - 54 - 436 = 55 stays').toBe(COLONY.reserve + 55);
     const thin = commissioned(COLONY.reserve + 545, shares(85, 5));
-    runColony(thin, []);
+    runColony(thin);
     expect(thin.colony!.ledger.out).toEqual({ welfare: 27, project: 463 });
 
     const poor = commissioned(90, shares(80, 10));
-    runColony(poor, []);
+    runColony(poor);
     expect(poor.colony!.ledger.out).toEqual({});
     expect(poor.colony!.welfare).toBeNull();
     expect(poor.treasury.money).toBe(90);
@@ -201,7 +203,7 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
     worth(none, { lena: 9_000, kai: 10_500, brix: 14_000, ossa: 16_000 });
     expect(welfareRecipient(none), 'row 1 names the recipient at a 0% share too (AM-8)').toBe('kai');
     const before = money(none, 'kai');
-    runColony(none, []);
+    runColony(none);
     expect(money(none, 'kai'), 'and a 0% share pays nothing').toBe(before);
     expect(none.colony!.welfare, 'and records no payment').toBeNull();
     const off = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
@@ -244,5 +246,5 @@ describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects s
   });
 });
 
-/** Recorded on the base before S5-C2 (trunk 7ecddae5): the colony, the fund and every player's money after one runColony. */
-const GOLDEN = '{"colony":{"happiness":55,"ledger":{"in":{},"month":1,"out":{"project":677,"upkeep":23}},"monthEnds":[{"air":0,"happiness":55,"month":1,"prestige":5,"wealth":50704}],"permanentPrestige":0,"projects":[{"funded":{"credits":340,"goods":{"electronics":1}},"id":"hospital","monthsLeft":null,"plaque":{},"since":1,"stage":"standing"},{"funded":{"credits":210,"goods":{"alloy":1}},"id":"park","monthsLeft":null,"plaque":{},"since":1,"stage":"standing"},{"funded":{"credits":500,"goods":{"alloy":1}},"id":"stadium","monthsLeft":null,"plaque":{},"since":1,"stage":"commissioned"},{"funded":{"credits":73,"goods":{}},"id":"observatory","monthsLeft":null,"plaque":{},"since":1,"stage":"commissioned"}],"promises":[],"strike":null,"welfare":null},"fund":100,"players":[["lena",9000],["brix",14000],["ossa",16000],["kai",10500]]}';
+/** Recorded on the base before S5-C2 (trunk 7ecddae5): the colony, the fund and every player's money after one runColony. Its mood and memory of hardship re-recorded for needs C3 (the month half short of Food). */
+const GOLDEN = '{"colony":{"happiness":53,"hardship":0.29629629629629634,"ledger":{"in":{},"month":1,"out":{"project":677,"upkeep":23}},"monthEnds":[{"air":0,"happiness":53,"month":1,"prestige":5,"wealth":50704}],"permanentPrestige":0,"projects":[{"funded":{"credits":340,"goods":{"electronics":1}},"id":"hospital","monthsLeft":null,"plaque":{},"since":1,"stage":"standing"},{"funded":{"credits":210,"goods":{"alloy":1}},"id":"park","monthsLeft":null,"plaque":{},"since":1,"stage":"standing"},{"funded":{"credits":500,"goods":{"alloy":1}},"id":"stadium","monthsLeft":null,"plaque":{},"since":1,"stage":"commissioned"},{"funded":{"credits":73,"goods":{}},"id":"observatory","monthsLeft":null,"plaque":{},"since":1,"stage":"commissioned"}],"promises":[],"strike":null,"welfare":null},"fund":100,"players":[["lena",9000],["brix",14000],["ossa",16000],["kai",10500]]}';

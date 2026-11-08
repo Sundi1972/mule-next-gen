@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, callStrike, COLONY, colonyScore, colonyScoreOf, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
+import { advancePhase, callStrike, COLONY, colonyScore, colonyScoreOf, HAPPINESS, HARDSHIP, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -90,17 +90,35 @@ describe('the colony at the table', () => {
     expect(text).not.toMatch(/ballot|stock|drone|analysed/i);
   });
 
-  it('B-AC-24: from 60, a month ending with two goods short and the air at 70 shows every screen happiness 55, Restless: the mood falls, by no more than maxStep', () => {
+  it('B-AC-24: from 60, a month ending a fifth short of Food and Water with the air at 70 shows every screen happiness 55, Restless: the mood falls by the capped step alone', () => {
     const { game, state } = governed();
     expect(state.colony!.happiness).toBe(60);
     while (state.phase !== 'auction') advancePhase(state);
     state.air = 70;
-    state.store.stock.food = 0;
-    state.store.stock.water = 0;
+    // 400 colonists need 20 of each; a fifth short of both bites too little for a shock (needs RULE-4), so the month's
+    // fall is the capped step alone.
+    state.colonists = 400;
+    state.store.stock.food = 16;
+    state.store.stock.water = 16;
     advancePhase(state);
     expect(state.history.at(-1)!.shortages.length, 'two goods short').toBe(2);
     for (const viewer of [null, 's1', 's2']) {
       expect(game.viewFor(viewer).colony!.gauges, `${viewer ?? 'the TV'}'s view`).toMatchObject({ happiness: 60 - HAPPINESS.maxStep, band: 'restless' });
+    }
+  });
+
+  it('B-AC-24: from 60, a month ending with the shelf empty of Food and Water shows every screen happiness 47, Restless: the capped step, then the month\'s shock (G-5 AM-20)', () => {
+    const { game, state } = governed();
+    expect(state.colony!.happiness).toBe(60);
+    while (state.phase !== 'auction') advancePhase(state);
+    state.air = 70;
+    state.colonists = 400;
+    state.store.stock.food = 0;
+    state.store.stock.water = 0;
+    advancePhase(state);
+    const fell = HAPPINESS.maxStep + HARDSHIP.shock;
+    for (const viewer of [null, 's1', 's2']) {
+      expect(game.viewFor(viewer).colony!.gauges, `${viewer ?? 'the TV'}'s view`).toMatchObject({ happiness: 60 - fell, band: 'restless' });
     }
   });
 

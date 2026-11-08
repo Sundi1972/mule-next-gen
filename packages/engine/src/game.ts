@@ -597,7 +597,7 @@ export function advancePhase(state: GameState): void {
     settleSabotage(state);
     payGrant(state);
     payOffices(state);
-    runColony(state, shortages, colonistMonth);
+    runColony(state, colonistMonth);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;

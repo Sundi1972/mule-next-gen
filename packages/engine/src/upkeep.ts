@@ -1,5 +1,5 @@
-import { colonistMedicineNeed, electronicsComfort, grownColonists, type ColonistMonth } from './colony.js';
-import { GAME, GOOD_CONFIG, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { colonistMedicineNeed, electronicsComfort, grownColonists, moodBand, severity, type ColonistMonth } from './colony.js';
+import { GAME, GOOD_CONFIG, HAPPINESS, HARDSHIP, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
@@ -12,6 +12,19 @@ import { GOODS, type GameState, type Good, type MonthReport } from './types.js';
 export function colonistMeal(need: number, stock: number): { took: number; short: number } {
   const took = Math.min(need, Math.max(0, stock));
   return { took, short: need > 0 ? (need - took) / need : 0 };
+}
+
+/**
+ * The colony's growth factor this month from `short`, how short its colonists went (needs RULE-5): Collapse air drives
+ * them out whatever they ate; fed or within the tolerance it grows, past it it shrinks in proportion to the share
+ * missing. The mood's band adds its migration, read before this month's mood steps. Never below 0. Sickness slows it
+ * further once the month's sick share is known (grownColonists).
+ */
+export function growthRate(state: GameState, short: number): number {
+  if (airBand(state.air).name === 'collapse') return Math.max(0, 1 - POLLUTION.collapseLeave);
+  const meal = short <= HARDSHIP.tolerance ? UPKEEP.colonistGrowth.fed : 1 - UPKEEP.colonistShrinkPerShortfall * short;
+  const migration = state.colony ? HAPPINESS.migration[moodBand(state.colony.happiness)] : 0;
+  return Math.max(0, meal + migration);
 }
 
 /**
@@ -66,9 +79,8 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   if (report?.month === state.month && !state.whatIf) report.colonistMeal = meal;
   // In Collapse colonists leave whatever they eat. Otherwise they grow as if all were well: with colony health on,
   // runColony grows them again from the same size once the month's sick share is known.
-  const collapse = airBand(state.air).name === 'collapse';
-  const rate = collapse ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
-  if (!collapse) colonistMonth.growth = { from: state.colonists, rate };
+  const rate = growthRate(state, severity(colonistMonth.short));
+  if (airBand(state.air).name !== 'collapse') colonistMonth.growth = { from: state.colonists, rate };
   state.colonists = grownColonists(state.colonists, rate, 0);
 
   // Spoilage, then anything above the home depot is lost. Selling it in time

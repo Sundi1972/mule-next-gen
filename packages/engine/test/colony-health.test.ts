@@ -10,12 +10,12 @@ import {
   HEALTH,
   healthGauge,
   healthOf,
-  moodInputs,
   moodTarget,
   nextSickShare,
   PERCENT,
   PRICE,
   runUpkeep,
+  severity,
   shipInPort,
   sickShare,
   stableJson,
@@ -26,7 +26,7 @@ import {
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const W = HAPPINESS.weights;
-const QUIET: MoodInputs = { short: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
+const QUIET: MoodInputs = { hardship: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
 const FED = { food: 0, water: 0, medicine: 0 };
 
 /** Runs `body` with colony health switched on, and switches it back off whatever happens. */
@@ -171,12 +171,12 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
     withHealth(() => {
       const state = stockedAtAuction();
       state.store.stock.medicine = 0;
-      const { shortages } = runUpkeep(state);
+      const { shortages, colonistMonth } = runUpkeep(state);
       expect(shortages, "the store's prices and the computer players' outlook read the month's shortages").toContain('medicine');
-      expect(moodInputs(state, shortages).short, 'Medicine reaches the mood only through sickness').toBe(0);
+      expect(hardship(severity(colonistMonth.short)), 'Medicine reaches the mood only through sickness, not the bite of hardship').toBe(0);
 
       // At the table: a Medicine-short month's mood differs from a stocked one's by what the sick share explains,
-      // moodPerSick × the difference in h (0.21 against 0.01: 2 points), never by a shortage's 8 on top.
+      // moodPerSick × the difference in h (0.21 against 0.01: 2 points), never by a hardship shock on top.
       const short = stockedAtAuction();
       short.store.stock.medicine = 0;
       const stocked = stockedAtAuction();
@@ -225,7 +225,8 @@ describe('needs C9: Electronics are a comfort (RULE-9)', () => {
 
 describe('needs HC-13: health ships switched off', () => {
   // The snapshot is stableJson(state) of this game on b5e59dda, the base before colony health. It may change only when
-  // health-off behaviour is meant to change. Regenerate with `pnpm --filter @mule/engine test colony-health -u`.
+  // health-off behaviour is meant to change, as needs C3's hardship did (its mood and the colony's memory of hardship).
+  // Regenerate with `pnpm --filter @mule/engine test colony-health -u`.
   it('needs T-AC-11: health off, h stays 0 and a month\'s state is identical to the base; politics off, there is no h', async () => {
     expect(HEALTH.enabled, 'health ships off').toBe(false);
     const state = game();
