@@ -8,6 +8,8 @@ import {
   HAPPINESS,
   hardship,
   HEALTH,
+  healthGauge,
+  healthOf,
   moodInputs,
   moodTarget,
   nextSickShare,
@@ -245,5 +247,19 @@ describe('needs HC-13: health ships switched off', () => {
     const offOn = plain(true);
     expect(sickShare(offOn), 'politics off: no colony, so no sick share').toBeNull();
     expect(stableJson(offOn), 'and health on moves nothing without a colony').toBe(stableJson(plain(false)));
+  });
+});
+
+describe('needs C19: the gauge reads the engine, never a second copy of its numbers', () => {
+  it('needs C19 (bands): health is round(100 × (1 − h)); the gauge is well from 90, at the limit at the cap\'s health, and marks where crews fall sick', () => {
+    expect(healthOf(0.12)).toBe(88);
+    expect(healthGauge()).toEqual({ wellFrom: 90, atLimit: 60, crewSickAt: 80 });
+    const cap = HEALTH.cap;
+    try {
+      HEALTH.cap = 0.3;
+      expect(healthGauge().atLimit, 'the limit follows the cap, as a tuning --set moves it').toBe(70);
+    } finally {
+      HEALTH.cap = cap;
+    }
   });
 });
