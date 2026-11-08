@@ -1,5 +1,10 @@
 import type { IncidentView, MuleView, MyView, PoliticsView } from '@mule/protocol';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { TableClient } from '../src/net/client';
+import { ClientProvider } from '../src/net/react';
+import { TvMonthEnd } from '../src/table/TableApp';
 import { sabotageNews, sabotageNewsLine, sabotageSeat } from '../src/events/sabotage';
 import { aMuleView, aPlayer } from './fixtures/views';
 
@@ -84,5 +89,24 @@ describe('S4-C17 · what a phone knows for its own line after the show', () => {
 
   it('a phone with no politics: no orders, not the Sheriff', () => {
     expect(sabotageSeat(aMuleView({ players: PLAYERS, me: { id: 'lena', politics: null } as unknown as MyView, politics: null }))).toEqual({ mine: [], sheriff: false });
+  });
+});
+
+describe('S4-C17 · the TV’s month end says each sabotage of the month (WS4 named edit, MonthEnd.tsx ColonyPanel)', () => {
+  const words = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const client = { subscribe: () => () => {}, getState: () => ({ status: 'open', role: 'board', code: 'MULE', seatId: null, view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }), serverNow: () => 0, intent: () => {} } as unknown as TableClient;
+  const onTv = (game: MuleView) => renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvMonthEnd, { game }) }));
+
+  it('S4-B-AC-1: the colony panel carries one line per incident, naming only whom the view names', () => {
+    const game = atMonthEnd([incident({ id: 'a', worked: false, culprit: 'lena', how: 'guard' }), rumour({ id: 'b' })]);
+    const html = onTv(game);
+    const panel = html.slice(html.indexOf('data-testid="colony-panel"'));
+    expect(words(panel)).toContain('Sabotage: Lena was caught by a guard at Ossa’s plot. The power stayed on.');
+    expect(words(panel)).toContain('Sabotage: a rumour moved Food’s opening price 25% up.');
+  });
+
+  it('a month with no sabotage draws no sabotage line', () => {
+    const html = onTv(atMonthEnd([]));
+    expect(html).not.toContain('data-testid="sabotage-news"');
   });
 });

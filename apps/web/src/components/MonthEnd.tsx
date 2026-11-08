@@ -2,6 +2,7 @@ import { GAME, POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import { Fragment, type ReactNode } from 'react';
+import { sabotageNews } from '../events/sabotage';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
 import { collapseCutWords, colonyReport, type ColonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
 
@@ -375,6 +376,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
   // The TV puts everyone who went hungry on one line (TvHungryLine); the phone with no TV names a few and counts the rest.
   const shownHungry = r.hungry.slice(0, HUNGRY_LINES_COMPACT);
   const moreHungry = tv ? 0 : r.hungry.length - shownHungry.length;
+  const sabotage = sabotageNews(view);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1 px-2.5 py-1.5')} aria-label="How the colony is doing" data-testid="colony-panel">
       <header className={cx('flex flex-wrap items-baseline', tv ? 'gap-x-4' : 'gap-x-2')} {...(verdict ? { 'data-testid': 'tv-verdict' } : {})}>
@@ -459,6 +461,16 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
           </span>
         </Block>
       </div>
+      {/* WS8's named edit (S4-C17, approved mock politics-p2 @ d6977e1a): one line per sabotage this month, everyone's. */}
+      {sabotage.length > 0 && (
+        <div className={cx('flex flex-col', tv ? 'gap-1 border-t border-holo-faint pt-3' : 'gap-0.5')} data-testid="sabotage-news">
+          {sabotage.map((l, i) => (
+            <span key={i} className={cx(line, 'text-ink')} data-testid="sabotage-line">
+              {l}
+            </span>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
