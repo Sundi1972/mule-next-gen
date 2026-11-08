@@ -228,6 +228,11 @@ async function main() {
         { name: `phone-390-${light}`, view: 'phone', light, viewport: { width: 390, height: 844 } },
         { name: `phone-worst-${light}`, view: 'phone', light, viewport: { width: 390, height: 844 }, query: '&worst=1' },
       ]),
+      // Task 2.2b: the Hospital and the Observatory damaged (smoke), the air Toxic on the TV, Collapse on the phone (haze)
+      ...['day', 'dusk'].flatMap((light) => [
+        { name: `air-opener-1280-${light}`, view: 'opener', light, viewport: { width: 1280, height: 720 }, query: '&air=68&damaged=hospital,observatory' },
+        { name: `air-phone-390-${light}`, view: 'phone', light, viewport: { width: 390, height: 844 }, query: '&air=90&damaged=hospital,observatory' },
+      ]),
     ];
 
     for (const shot of plan) {
@@ -277,7 +282,7 @@ async function main() {
       }
     }
 
-    for (const shot of summary.shots) {
+    for (const shot of summary.shots.filter((s) => !s.name.startsWith('air-'))) {
       const file = join(OUT, `sbs-${shot.name}.png`);
       const dims = await sideBySide(browser, shot.file, shot.light, shot.height, file);
       summary.sideBySides.push({ file, ours: dims[0], look: dims[1] });
