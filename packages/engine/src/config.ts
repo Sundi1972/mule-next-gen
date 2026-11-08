@@ -249,23 +249,31 @@ export const ADJACENCY = {
   cluster: 2,
 };
 
+/** Food a plot's crew eats and Energy it burns a month, in whole quarters; a factory burns this on top of its recipe (needs RULE-10). */
+export const CONSUMPTION: Record<Outfit, { food: number; energy: number }> = {
+  food: { food: 0.25, energy: 1 },
+  water: { food: 0.25, energy: 1 },
+  energy: { food: 0.25, energy: 1 },
+  smithore: { food: 0.5, energy: 2 },
+  crystite: { food: 0.75, energy: 2 },
+  rareEarth: { food: 0.5, energy: 2 },
+  alloy: { food: 0.5, energy: 1 },
+  electronics: { food: 0.5, energy: 2 },
+  medicine: { food: 0.5, energy: 1 },
+  greenBelt: { food: 0, energy: 0 },
+};
+
 export const UPKEEP = {
-  /**
-   * A player's crew eats and drinks: the player alone needs baseFood and
-   * baseWater, and every few crew add one more. A raw plot has a crew of 1, a
-   * factory a crew of 2, so a bigger estate costs more to feed.
-   */
+  /** A player's household alone eats baseFood and drinks baseWater a month; its crews eat CONSUMPTION's Food on top. */
   baseFood: 2,
   baseWater: 1,
+  /** Read by the AI until WS1's needsWith switch; nothing in the engine reads it. */
   crewPerFood: 4,
+  /** Read by the AI until WS1's needsWith switch; nothing in the engine reads it. */
   crewPerWater: 6,
-  /** Crew a plot adds to its owner's, by kind: a raw plot, a factory, a green belt. */
+  /** Read by the AI until WS1's needsWith switch; nothing in the engine reads it. */
   crew: { raw: 1, factory: 2, greenBelt: 0 },
-  /**
-   * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
-   * use from its own output and is never turned off; an owner short of Energy turns its other plots off, biggest use
-   * first, until the rest fit (AM-17). Energy plots 1: Heiko, 5 Nov.
-   */
+  /** Read by the AI's manual until WS1's needsWith switch; nothing in the engine or web reads it. CONSUMPTION holds the numbers. */
   energyUse: { food: 1, water: 1, energy: 1, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
   /**
    * Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off

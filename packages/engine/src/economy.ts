@@ -1,10 +1,10 @@
-import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, OFF_WORLD, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
+import { CONSUMPTION, EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, OFF_WORLD, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { colonistMedicineNeed, fundIn, stillNeeds } from './colony.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput, waterUseOf } from './production.js';
 import { createRng, seedOf, type Rng } from './rng.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type ExportShip, type GameState, type Good, type PriceBand, type Stock } from './types.js';
+import { GOODS, RAW_GOODS, type ExportShip, type GameState, type Good, type PriceBand, type Stock } from './types.js';
 
 /** True from the month before the export ship calls: its wishlist is public and counts as demand. */
 export function shipAnnounced(state: GameState): boolean {
@@ -25,10 +25,10 @@ export function planShip(seed: number, arrives: number, players: number): Export
   return { arrives, goods, hold, bought: {} };
 }
 
-/** Energy a new MULE draws from the stock: the mean use of the outfits that buy Energy, a plant's own use being no demand (AM-17 A). Read on every call, so a run's `--set UPKEEP.energyUse` reaches it. */
+/** Energy a new MULE draws from the stock: the mean use of the raw outfits that buy Energy, a plant's own use being no demand (AM-17 A). Read on every call, so a run's `--set CONSUMPTION` reaches it. */
 function energyPerNewMule(): number {
-  const buyers = Object.entries(UPKEEP.energyUse).filter(([good]) => good !== 'energy');
-  return buyers.reduce((sum, [, use]) => sum + use, 0) / buyers.length;
+  const buyers = RAW_GOODS.filter((good) => good !== 'energy');
+  return buyers.reduce((sum, good) => sum + CONSUMPTION[good].energy, 0) / buyers.length;
 }
 
 /**
