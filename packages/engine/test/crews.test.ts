@@ -174,14 +174,35 @@ describe('needs C14: a crew left short works slower next month (RULE-12)', () =>
     // The works makes 3; cut to 2, the turned-off share of 2 rounds to 0: it makes nothing and spends none of its inputs.
     expect(lineOf(works!).parts.map((p) => [p.why, p.delta])).toEqual([['factory', 3], ['crewShort', -1], ['energyOff', -2]]);
     expect(p0(state).stock.smithore, "nothing spent for nothing: only the mine's Smithore comes in").toBe(10 + lineOf(mine!).made);
+
+    // Wholly short crews (f 0.25), Energy for all: an Alloy works that runs makes 2 × 0.25 = 0.5 → 1, a plant its full 4.
+    const whole = newGame();
+    const [wholePlant, wholeWorks] = lay(whole, [{ good: 'energy', out: 4 }, { good: 'alloy' }]);
+    p0(whole).crewShort = { food: 1, water: 1 };
+    Object.assign(p0(whole).stock, { food: 20, water: 50, energy: 20, smithore: 10 });
+    const wholeRun = runProduction(whole);
+    const wholeLine = (tile: Tile) => wholeRun.lines.find((l) => l.tile === whole.tiles.indexOf(tile))!;
+    expect([wholeLine(wholePlant!).made, wholeLine(wholeWorks!).made], 'the plant 4, the works 2 → 1').toEqual([4, 1]);
   });
 
-  it('needs T-AC-24 (AM-4): the farm halving does not run while AM-18 is on', () => {
-    const state = newGame();
-    const [farm] = lay(state, [{ good: 'food', out: 4 }]);
-    Object.assign(p0(state).stock, { energy: 20, water: 0 });
-    const run = runProduction(state);
-    const line = run.lines.find((l) => l.tile === state.tiles.indexOf(farm!))!;
-    expect(line.parts.map((p) => p.why), 'turned off for want of Water, never halved').not.toContain('noWater');
+  it('needs T-AC-24 (AM-4): the farm halving does not run while AM-18 is on; with it off (farm Water 0) it is the fallback', () => {
+    const dryFarm = () => {
+      const state = newGame();
+      const [farm] = lay(state, [{ good: 'food', out: 4 }]);
+      Object.assign(p0(state).stock, { energy: 20, water: 0 });
+      const run = runProduction(state);
+      return run.lines.find((l) => l.tile === state.tiles.indexOf(farm!))!;
+    };
+    expect(dryFarm().parts.map((p) => p.why), 'turned off for want of Water, never halved').not.toContain('noWater');
+
+    const was = UPKEEP.waterUse.food;
+    UPKEEP.waterUse.food = 0;
+    try {
+      const line = dryFarm();
+      expect(line.parts.map((p) => p.why), 'AM-18 off: halved for want of Water').toContain('noWater');
+      expect(line.made, 'half of 4').toBe(2);
+    } finally {
+      UPKEEP.waterUse.food = was;
+    }
   });
 });
