@@ -439,8 +439,11 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
   // The negative path first: a pact declined leaves the pair free to agree the next.
   const first = await offer();
   check(first.status === 'offered', `S3-B-AC-1: the card is offered, got ${first.status}`);
-  // This card, by its id: an AI seat may offer cards of its own in the same planning.
-  await to.page.getByTestId('agenda-deals').filter({ hasText: from.name }).waitFor({ timeout: PRESS_MS });
+  // The agenda's count and sender, then this card by its id: an AI seat may offer cards of its own in the same planning.
+  const fromWord = new RegExp(`From (.*, )?${from.name}\\b`);
+  await to.page.getByTestId('agenda-deals').filter({ hasText: /\d+ deal offers?/ }).filter({ hasText: fromWord }).waitFor({ timeout: PRESS_MS });
+  const held = truth.room().viewFor(toId).game?.me?.deals?.cards.find((d) => d.id === first.id);
+  check(held?.status === 'offered', `S3-B-AC-1: ${to.name}'s view holds ${first.id} as offered, got ${held?.status}`);
   await to.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
   await to.page.getByTestId('talk-cards').click({ timeout: PRESS_MS });
   await to.page.getByTestId(`incoming-${first.id}`).waitFor({ timeout: PRESS_MS });
