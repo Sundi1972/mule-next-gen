@@ -105,6 +105,9 @@ function ballotsFor(view: MuleView, me: MyView): BallotChoices[] {
   return [gov, lawBallot];
 }
 
+/** The pact length the composer starts on: the middle of the lengths offered. */
+const startingPact = (lengths: readonly number[]): number => lengths[Math.floor(lengths.length / 2)] ?? 1;
+
 /** The composer's draft and its send. Calls `onSent` once the server lists the new card. */
 function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void) {
   const { view, me } = usePhoneGame();
@@ -112,7 +115,7 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
   const { toasts } = useClientState();
   const cards = me.deals?.cards ?? [];
   const pactMonths = me.deals?.pactMonths ?? POLITICS.deals.pactMonths;
-  const [draft, setDraft] = useState<Draft>({ kind: kind ?? 'pact', months: pactMonths[Math.floor(pactMonths.length / 2)] ?? 1, choice: null });
+  const [draft, setDraft] = useState<Draft>({ kind: kind ?? 'pact', months: startingPact(pactMonths), choice: null });
   const before = useRef<Set<string> | null>(null);
   // This send's answer: the first toast after it, kept once seen, so a later toast is never read as this card's refusal.
   // The server's error names no intent, so the first one after the send is the nearest the phone can tie to it.
