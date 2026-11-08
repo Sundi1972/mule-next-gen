@@ -509,11 +509,31 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
   });
 });
 
+describe("the player card's door (S3-C17, S3-C19)", () => {
+  it("S3-B-AC-1: with one card to Ossa unanswered, his player card's + Deal is off and says why; the composer it opens holds Send in the same words", () => {
+    const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
+    mount(gameFor(myView(LENA, [waiting])), hub);
+    tap('desk-talk');
+    tap(`chat-to-${OSSA}`);
+    tap('whisper-rep');
+    const door = byTestid(`player-card-${OSSA}-deal`);
+    expect(door.getAttribute('disabled'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').not.toBeNull();
+    expect(text(`player-card-${OSSA}-deal-no`)).toBe('Ossa has not answered your last card');
+    // The composer refuses on its own, whichever door opened it: here the card's, tapped past its disabled state.
+    tap(`player-card-${OSSA}-deal`);
+    expect(text('composer-a-refusal')).toBe('Ossa has not answered your last card');
+    expect(byTestid('composer-a-send').getAttribute('disabled')).not.toBeNull();
+  });
+});
+
 describe('the standings door (S3-C17)', () => {
-  it('S3-B-AC-1: with one card to Ossa unanswered, the composer from his standings row holds Send and says why, not "a pact"; Brix still gets one', () => {
+  it('S3-B-AC-1: with one card to Ossa unanswered, his standings row is off and says why, and the composer holds Send in those words, not "a pact"; Brix still gets one', () => {
     const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
     mount(gameFor(myView(LENA, [waiting])), hub);
     tap('standing');
+    expect(byTestid(`deal-standing-${OSSA}`).getAttribute('disabled'), "Ossa's row offers no second card").not.toBeNull();
+    expect(byTestid(`deal-standing-${OSSA}`).getAttribute('title')).toBe('Ossa has not answered your last card');
+    // The composer refuses on its own too: the door tapped past its disabled state.
     tap(`deal-standing-${OSSA}`);
     expect(text('composer-a-refusal'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').toBe('Ossa has not answered your last card');
     expect(findTestid('composer-a-pact-no'), 'an unanswered offer is not a pact').toBeUndefined();
