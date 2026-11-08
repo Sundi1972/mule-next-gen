@@ -55,7 +55,7 @@ const ICON = {
   talk: 'M4 5h16v10H9l-5 4z',
 };
 
-/** The planning hub's tabs and their parts (SB-2, the approved hub-tabs mock). WS7 adds its politics as sub-tabs, WS8 its Guard as a pick; see ./slots.ts. */
+/** The planning hub's tabs and their parts (the approved hub-tabs mock); the politics sub-tabs and the plot picks register here too, see ./slots.ts. */
 export const TAB_SLOTS: TabHubSlots = {
   tabs: [
     { id: 'overview', label: TAB_WORD.overview, icon: ICON.overview, Body: OverviewTab },
@@ -63,7 +63,7 @@ export const TAB_SLOTS: TabHubSlots = {
     { id: 'colony', label: TAB_WORD.colony, icon: ICON.colony, Body: ColonyTab },
     { id: 'talk', label: TAB_WORD.talk, icon: ICON.talk, Body: TalkTab, Badge: TalkBadge },
   ],
-  // Today's politics desks, as they are, until SB-3 makes them Laws, Budget and Elections.
+  // Today's politics desks, as they are; the Sheriff's for its holder alone.
   politicsTabs: [COUNCIL_DESK, GOVERNOR_DESK, SHERIFF_DESK].map(asDeskSub),
   tools: [
     { id: 'look', label: 'Look', hint: () => 'Tap a plot to see what it can make and who owns it.', Map: LookOrGuardMap, Panel: LookOrGuardPanel },

@@ -160,8 +160,9 @@ function mount(view: MuleView): void {
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
   act(() => root!.render(onPhone(view)));
-  // Planning opens on Overview; the Sheriff's desk is Governor / Council's sub-tab, which opens on it as it asks first.
-  if (view.me?.politics?.sheriff && findTestid('tab-politics')) tap('tab-politics');
+  // Planning opens on Overview; the Sheriff's desk is Governor / Council's sub-tab, and as it asks first the Now line is
+  // the door to it (D8).
+  if (view.me?.politics?.sheriff && findTestid('now-go')) tap('now-go');
 }
 
 /** The server's next view, as a broadcast draws it. */
@@ -223,7 +224,7 @@ const plotLabel = (x: number, y: number) => byTestid(`map-plot-${x}-${y}`).getAt
 const caseRows = () => allTestids('b-case-row-', byTestid('b-cases')).map((id) => id.replace('b-case-row-', ''));
 
 describe("S4-C15, P7: the Sheriff's case file (B folded)", () => {
-  it("S4-B-AC-10: only the sitting Sheriff has the Sheriff's desk; on their phone Governor / Council opens on it", () => {
+  it("S4-B-AC-10: only the sitting Sheriff has the Sheriff's desk; on their phone the Now line is the door to it", () => {
     mount(viewOf());
     tap('tab-politics');
     expect(has('sub-sheriff'), "Lena's phone").toBe(false);
@@ -232,7 +233,7 @@ describe("S4-C15, P7: the Sheriff's case file (B folded)", () => {
 
     mount(brix());
     expect(allTestids('sub-', byTestid('sub-tabs')).filter((id) => id !== 'sub-tabs')).toContain('sub-sheriff');
-    expect(openDesk()).toBe('sub-sheriff');
+    expect(openDesk(), "through the Now line's door").toBe('sub-sheriff');
     expect(text('sheriff-head')).toContain('Sheriff');
     expect(text('sheriff-head')).toContain('Only you');
     expect(text('sheriff-left')).toBe('1 investigation left');

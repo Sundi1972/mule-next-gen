@@ -20,6 +20,7 @@ let Hub: ComponentType<{ slots: TabHubSlots }>;
 let TodayState: typeof import('../src/phone/hub/state').TodayState;
 let TAB_SLOTS: TabHubSlots;
 let useHub: () => HubNav;
+let DESK_DOORS: typeof import('../src/phone/hub/Hub').DESK_DOORS;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +30,7 @@ beforeAll(async () => {
   const hub = await import('../src/phone/hub/Hub');
   Hub = hub.Hub as unknown as ComponentType<{ slots: TabHubSlots }>;
   useHub = hub.useHub as unknown as () => HubNav;
+  DESK_DOORS = hub.DESK_DOORS;
   ({ TAB_SLOTS } = (await import('../src/phone/hub/today')) as unknown as { TAB_SLOTS: TabHubSlots });
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
@@ -230,6 +232,10 @@ describe('the tabbed planning hub (SB-2)', () => {
     ["openDesk('council', 'run')", (n) => n.openDesk('council', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
     ["openDesk('governor') on the Governor's phone", (n) => n.openDesk('governor'), 's2', { tab: 'politics', sub: 'governor' }],
     ["openDesk('market')", (n) => n.openDesk('market'), 's1', { tab: 'overview', tool: 'list' }],
+    // No Laws, Elections or Budget sub-tab is drawn yet: their doors land on the first sub-tab shown, with their focus.
+    ["openDesk('laws'), its sub-tab not drawn", (n) => n.openDesk('laws'), 's2', { tab: 'politics', sub: 'council' }],
+    ["openDesk('elections', 'run'), its sub-tab not drawn", (n) => n.openDesk('elections', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
+    ["openDesk('budget'), its sub-tab not drawn", (n) => n.openDesk('budget'), 's2', { tab: 'politics', sub: 'council' }],
     ["pickTool('drone')", (n) => n.pickTool('drone'), 's1', { tab: 'overview', tool: 'drone' }],
   ])("C17 (DESK_DOORS): today's %s lands on its tab, sub-tab or tool", (_door, move, self, to) => {
     mount(game({ self }));
@@ -273,6 +279,53 @@ describe('the tabbed planning hub (SB-2)', () => {
     expect(selected('sub-sheriff')).toBe(true);
   });
 
+  it('C17 (DESK_DOORS): every This month row in TAB_SLOTS has a door, and a door into a sub-tab names one TAB_SLOTS draws', () => {
+    const drawn = TAB_SLOTS.politicsTabs.map((t) => t.id);
+    const rows = TAB_SLOTS.agenda.map((a) => [a.key, a.opens] as const);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const [key, opens] of rows) {
+      if ('tool' in opens) continue;
+      const door = DESK_DOORS[opens.desk]?.(opens.focus);
+      expect(door, `agenda-${key}: desk "${opens.desk}" has a door`).toBeDefined();
+      if (door?.sub) expect(drawn, `agenda-${key}: its sub-tab "${door.sub}"`).toContain(door.sub);
+    }
+  });
+
+  it("C17 (D6, the hub's nav): a sub-tab and a plot pick whose bodies call useHub() draw on first render, and start, end and return from the pick", () => {
+    function StandSub() {
+      const n = useHub();
+      return createElement('button', { 'data-testid': 'stand-guard', onClick: () => n.startPick('stand-pick') }, n.sub);
+    }
+    function StandMap() {
+      const n = useHub();
+      return createElement('button', { 'data-testid': 'stand-done', onClick: () => (n.endPick(), n.open({ tab: 'politics', sub: 'stand' })) }, n.pick);
+    }
+    const slots: TabHubSlots = {
+      ...TAB_SLOTS,
+      politicsTabs: [...TAB_SLOTS.politicsTabs, { id: 'stand', label: () => 'Stand', Body: StandSub }],
+      picks: [{ id: 'stand-pick', label: 'Standing in', hint: () => 'tap', back: { tab: 'politics', sub: 'stand', label: 'Stand' }, ownBar: true, Map: StandMap }],
+    };
+    mount(game(), slots);
+    go((n) => n.open({ tab: 'politics', sub: 'stand' }));
+    expect(text('stand-guard'), 'the sub-tab reads the open sub-tab').toBe('stand');
+    tap('stand-guard');
+    expect(selected('tab-overview')).toBe(true);
+    expect(text('stand-done'), "the pick's map reads the pick").toBe('stand-pick');
+    byTestid('stand-done', byTestid('hub-map'));
+    tap('stand-done');
+    expect(nav!.pick).toBeNull();
+    expect(selected('sub-stand')).toBe(true);
+  });
+
+  it("B-AC-14 (D3): the Sheriff's sub-tab is its holder's alone: no other phone's Council tab draws it", () => {
+    mount(game());
+    tap('tab-politics');
+    expect(findTestid('sub-sheriff'), "Lena's Council tab").toBeUndefined();
+    rerender(game({ self: 's3', pol: politics({ sheriff: 's3' }), sheriff: true }));
+    tap('tab-politics');
+    byTestid('sub-sheriff');
+  });
+
   it("C17 (D6): startPick hands Overview's one map to the pick, its bar in place of the tool row; Back returns to its door, and endPick ends it", () => {
     const Map = () => createElement('div', { 'data-testid': 'test-pick-map' });
     const pick: PlotPickSlot = { id: 'test', label: 'Picking', hint: () => 'tap a plot', back: { tab: 'colony', label: 'Colony' }, Map };
@@ -309,15 +362,21 @@ describe('the tabbed planning hub (SB-2)', () => {
     expect(findTestid('help-sheet')).toBeUndefined();
   });
 
-  it('E-9 (D8): the sub-tab that asks first is the one the tab opens on; from another tab the Now line is a door to it, and a sub-tab picked away from it stays', () => {
+  it('E-9 (D8): a sub-tab that asks first opens nothing by itself; while another tab or sub-tab is open the Now line is a door to it, and inside it Now is plain', () => {
     mount(game({ self: 's2' }));
-    expect(selected('tab-overview')).toBe(true);
+    expect(selected('tab-overview'), 'planning opens on Overview, whatever asks').toBe(true);
+    tap('tab-politics');
+    expect(selected('sub-council'), 'the tab opens where it was, not on the asking sub-tab').toBe(true);
     tap('now-go');
     expect(selected('tab-politics')).toBe(true);
     expect(selected('sub-governor')).toBe(true);
+    expect(findTestid('now-go'), 'inside its own sub-tab, a plain Now').toBeUndefined();
     tap('sub-council');
     rerender(game({ self: 's2' }));
-    expect(selected('sub-council'), 'once picked away, the asking sub-tab does not take it back').toBe(true);
+    expect(selected('sub-council'), 'picked away, the asking sub-tab does not take it back').toBe(true);
+    byTestid('now-go');
+    tap('tab-colony');
+    byTestid('now-go');
   });
 
   it('C66 (frame, until SB-3 moves the ballots): a ballot stage takes the whole stage, the tabs hidden', () => {

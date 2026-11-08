@@ -8,7 +8,7 @@ import { ColonyWithFacts } from '../politics/Colony';
 import { StageTitle } from './parts';
 
 /*
- * The Colony tab (the approved hub-tabs mock, D10, D16): WS10's colony picture leads it, mounted exactly as the colony
+ * The Colony tab (the approved hub-tabs mock, D10, D16): the colony picture leads it, mounted exactly as the colony
  * desk does; then the standings on the page; then the colony desk's sections (the fund, the colony card, the build
  * site, what you need, the news, the ship, the facts), in two columns once the stage is wide enough (844).
  */

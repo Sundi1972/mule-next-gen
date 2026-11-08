@@ -8,7 +8,7 @@ import { Glyph } from './parts';
 /*
  * The tabbed hub's own parts of the shell, from the approved hub-tabs mock's TabShell: the tab column at the stage's
  * left edge, and the rail head every tab keeps (the phase line and the Now line with its "?"). They are drawn inside
- * today's PhoneShell until SB-1b gives the shell `tabs` and `head` of its own.
+ * PhoneShell, which has no `tabs` or `head` slot of its own.
  */
 
 export interface TabButton {

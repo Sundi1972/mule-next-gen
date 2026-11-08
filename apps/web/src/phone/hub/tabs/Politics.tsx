@@ -6,8 +6,8 @@ import { TabBadge } from './parts';
 
 /*
  * The Governor / Council tab (the approved hub-tabs mock): one tab, "Governor" on the Governor's phone and "Council" on
- * every other, its sub-tabs in a row and the open one's body under them, scrolling on its own. Until SB-3 splits them
- * into Laws, Budget and Elections, the sub-tabs are today's politics desks as they are (asDeskSub).
+ * every other, its sub-tabs in a row and the open one's body under them, scrolling on its own. Today's politics desks
+ * are its sub-tabs as they are (asDeskSub).
  */
 
 const isGovernor = ({ view, self }: Pick<HubSeat, 'view' | 'self'>) => view.politics?.governor === self.id;

@@ -114,8 +114,12 @@ function mount(view: MuleView, tab: 'politics' | 'overview' = 'politics'): void 
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
   act(() => root!.render(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) })));
-  // Planning opens on Overview; the desks below are Governor / Council's, which opens on the sub-tab that asks first.
-  if (tab === 'politics' && findTestid('tab-politics')) tap('tab-politics');
+  // Planning opens on Overview; the desks below are Governor / Council's. The Governor's sub-tab asks first, so the Now
+  // line is the door to it (D8); on any other phone the tab itself.
+  if (tab === 'politics') {
+    if (findTestid('now-go')) tap('now-go');
+    else if (findTestid('tab-politics')) tap('tab-politics');
+  }
 }
 
 afterEach(() => {

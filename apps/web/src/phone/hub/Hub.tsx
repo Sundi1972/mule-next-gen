@@ -12,7 +12,7 @@ import { PickNavProvider } from './politics/Sheriff';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
 import { Roadmap } from './Roadmap';
-import { firstGiven, goTo, settle, shown, type Door, type HubNav, type HubPlace, type HubSeat, type PlotPickSlot, type SubTabSlot, type TabHubSlots, type TabSlot } from './slots';
+import { firstGiven, goTo, shown, type Door, type HubNav, type HubPlace, type HubSeat, type PlotPickSlot, type SubTabSlot, type TabHubSlots, type TabSlot } from './slots';
 import { StandingsSheet, useStanding } from './Standings';
 import { NowLine, PhaseLine, TabColumn } from './tabs/head';
 
@@ -33,20 +33,25 @@ export function useHubIfAny(): HubNav | null {
 }
 
 /**
- * Today's desk ids, as doors into the tabs: every openDesk() today's components make lands through this table. The
- * politics desks are Governor / Council's sub-tabs under their own ids until SB-3 splits them into Laws, Budget and
- * Elections.
+ * Every desk id as a door into the tabs: openDesk() and an agenda row reach a tab only through an id this table knows
+ * (any other id has no door, and its row is not drawn).
  */
 export const DESK_DOORS: Record<string, (focus?: string) => Door> = {
   colony: () => ({ tab: 'colony' }),
-  talk: (focus) => ({ tab: 'talk', ...(focus ? { focus } : {}) }),
+  talk: (focus) => ({ tab: 'talk', ...withFocus(focus) }),
   market: () => ({ tab: 'overview', tool: 'list' }),
-  // The three politics rows are interim until SB-3: it changes them (a WS7 named edit) when the desks become Laws, Budget and Elections.
-  council: (focus) => ({ tab: 'politics', sub: 'council', ...(focus ? { focus } : {}) }),
-  governor: (focus) => ({ tab: 'politics', sub: 'governor', ...(focus ? { focus } : {}) }),
-  // Interim until SB-3 (and SB-4, which makes Guard a plot pick): the Sheriff's guard door turns Overview's Look map to Guard (useGuarding).
-  sheriff: (focus) => (focus === GUARD_FOCUS ? { tab: 'overview', tool: 'look', focus } : { tab: 'politics', sub: 'sheriff', ...(focus ? { focus } : {}) }),
+  laws: (focus) => ({ tab: 'politics', sub: 'laws', ...withFocus(focus) }),
+  elections: (focus) => ({ tab: 'politics', sub: 'elections', ...withFocus(focus) }),
+  budget: (focus) => ({ tab: 'politics', sub: 'budget', ...withFocus(focus) }),
+  // These three serve today's desk ids.
+  council: (focus) => ({ tab: 'politics', sub: 'council', ...withFocus(focus) }),
+  governor: (focus) => ({ tab: 'politics', sub: 'governor', ...withFocus(focus) }),
+  // The Sheriff desk's guard door turns Overview's Look map to Guard (useGuarding).
+  sheriff: (focus) => (focus === GUARD_FOCUS ? { tab: 'overview', tool: 'look', focus } : { tab: 'politics', sub: 'sheriff', ...withFocus(focus) }),
 };
+function withFocus(focus: string | undefined): { focus?: string } {
+  return focus ? { focus } : {};
+}
 const GUARD_FOCUS = 'guard';
 
 /** The desk today's components know a place by: a tab's id, Governor / Council's open sub-tab, or the Sheriff's while it guards on the map. */
@@ -97,12 +102,10 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
   const tabs = shown(slots.tabs, seat);
   const subs = shown(slots.politicsTabs, seat);
   const tools = shown(slots.tools, seat);
-  const [held, setPlace] = useState<HubPlace>(() => settle({ tab: 'overview', sub: subs[0]?.id ?? '', tool: tools[0]?.id ?? '', focus: null, pick: null, first: null }, subs, seat));
-  const place = settle(held, subs, seat);
-  if (place !== held) setPlace(place);
+  const [place, setPlace] = useState<HubPlace>(() => ({ tab: 'overview', sub: subs[0]?.id ?? '', tool: tools[0]?.id ?? '', focus: null, pick: null }));
   const [sheet, setSheet] = useState<'help' | 'standings' | null>(null);
   const go = (door: Door) => setPlace((p) => goTo(p, door));
-  // A slot that stops showing (an office handed on) gives way to the first one drawn.
+  // A slot that stops showing (an office handed on), or a door to a sub-tab nobody draws, gives way to the first one drawn.
   const tab = tabs.find((t) => t.id === place.tab) ?? tabs[0]!;
   const sub = subs.find((s) => s.id === place.sub) ?? subs[0];
   const tool = tools.find((t) => t.id === place.tool) ?? tools[0];
@@ -113,7 +116,7 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
     focus: place.focus,
     openDesk: (id, focus) => go(DESK_DOORS[id]?.(focus) ?? { tab: 'overview' }),
     pickTool: (id) => go({ tab: 'overview', tool: id }),
-    // Interim until SB-4: Guard on Overview's map is the Sheriff's, so its Done (the focus taken) goes back to the Sheriff's sub-tab.
+    // Guard on Overview's map (the Sheriff desk's guard door) is the Sheriff's, so its Done (the focus taken) goes back to the Sheriff's sub-tab.
     takeFocus: () => setPlace((p) => (p.tab === 'overview' && p.focus === GUARD_FOCUS ? goTo(p, DESK_DOORS.sheriff!()) : { ...p, focus: null })),
     tab: tab.id,
     sub: sub?.id ?? '',
@@ -144,7 +147,7 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
 
   return (
     <Nav.Provider value={nav}>
-      {/* WS8's Sheriff sub-tab and Guard pick (SB-4) read the hub's navigation through their own provider. */}
+      {/* The Sheriff's sub-tab and Guard pick read the hub's navigation through their own provider. */}
       <PickNavProvider value={nav}>
       <DrawnCtx.Provider value={{ slots: { ...slots, tools, agenda: shown(slots.agenda, seat), banners: shown(slots.banners, seat) }, seat, tabs, subs, pick }}>
         <Head.Provider value={{ now, onHelp: () => setSheet('help'), onGo: goAsk }}>

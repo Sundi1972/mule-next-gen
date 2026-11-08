@@ -4,14 +4,14 @@ import type { Now } from '../Shell';
 import type { ReadyWords } from './ready';
 
 /**
- * The hub's slots (C17, SB-2). Planning is the hub for the month, as four tabs (the approved hub-tabs mock): Overview
+ * The hub's slots (C17). Planning is the hub for the month, as four tabs (the approved hub-tabs mock): Overview
  * holds the one map with its tool row and "This month" as doors into the other tabs; Governor (Council on every other
  * phone) holds the politics sub-tabs; Colony and Talk the colony and the table's talk. The rail keeps the phase line,
  * Now with its "?", the open tool's panel and Ready on every tab. The hub draws only the entries present in its
  * TabHubSlots, and of those only the ones whose `show(seat)` says yes (omitted: always).
  *
- * Today's entries are in ./today.tsx (TAB_SLOTS). WS7 adds its politics as sub-tabs (politicsTabs), WS8 its Guard as a
- * plot pick (picks). An entry keeps its own state in its components and reads or changes where the hub is with useHub()
+ * Today's entries are in ./today.tsx (TAB_SLOTS): the politics sub-tabs (politicsTabs) and the Sheriff's Guard, a plot
+ * pick (picks), among them. An entry keeps its own state in its components and reads or changes where the hub is with useHub()
  * from ./Hub.tsx; `show` and the agenda's texts are plain functions of the seat, called on every render.
  */
 
@@ -23,7 +23,7 @@ interface Shown {
   show?(seat: HubSeat): boolean;
 }
 
-/** A politics desk as WS7 registers it today (politics/slots.ts), drawn as a Governor / Council sub-tab through asDeskSub until SB-3 registers SubTabSlots itself. */
+/** A politics desk as politics/slots.ts registers it, drawn as a Governor / Council sub-tab through asDeskSub. */
 export interface DeskSlot extends Shown {
   id: string;
   label: string;
@@ -102,7 +102,7 @@ export const shown = <T extends Shown>(slots: readonly T[], seat: HubSeat): T[] 
 /** The first answer any of them gives this seat. */
 export const firstGiven = <T>(gives: readonly ((seat: HubSeat) => T | null)[], seat: HubSeat): T | null => gives.reduce<T | null>((t, give) => t ?? give(seat), null);
 
-/* The tabbed hub's contract, as frozen in SB-1a (#755) for the lanes that build against it. */
+/* The tabbed hub's slots. */
 
 /** The four tabs, in order; `politics` is "Governor" on the Governor's phone and "Council" on every other. */
 export type TabId = 'overview' | 'politics' | 'colony' | 'talk';
@@ -136,7 +136,7 @@ export interface SubTabSlot extends Shown {
   label(seat: HubSeat): string;
   Body: ComponentType;
   Badge?: ComponentType;
-  /** Opens first, once, as it starts asking: an open ballot (as a desk's `first` did). */
+  /** While another tab is open, the Now line is a door to this sub-tab: an open ballot. */
   first?(seat: HubSeat): boolean;
 }
 
@@ -148,7 +148,7 @@ export interface PlotPickSlot extends Shown {
   /** One line under it: what a tap does. */
   hint(seat: HubSeat): string;
   back: Door & { label: string };
-  /** The pick draws its own bar inside Map (WS8's Guard: "Guarding · 1 of 2 · Done · back to Sheriff"). */
+  /** The pick draws its own bar inside Map (the Sheriff's Guard: "Guarding · 1 of 2 · Done · back to Sheriff"). */
   ownBar?: boolean;
   Map: ComponentType;
   Panel?: ComponentType;
@@ -172,15 +172,17 @@ export interface TabHubSlots {
   readyWords: ((seat: HubSeat) => ReadyBarWords | null)[];
 }
 
-/** Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, the plot pick, and the sub-tab that last asked first. */
+/** Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, and the plot pick. */
 export interface HubPlace {
   tab: TabId;
   sub: string;
   tool: string;
   focus: string | null;
   pick: string | null;
-  first: string | null;
 }
+
+/** The SB-1a name; kept so code built on the frozen contract compiles. Removed after the 12 Nov batch. */
+export type TabHubPlace = HubPlace;
 
 /** The tabbed hub's navigation: where it is, and the moves between tabs, sub-tabs, tools and picks. */
 export interface HubNav {
@@ -205,17 +207,10 @@ export interface HubNav {
   endPick(): void;
 }
 
-/** The place after a door: its tab, its sub-tab and tool where it names them, and only its focus. A door away from Overview ends a pick. */
-/** SB-1a.2's name for HubNav, kept while WS8's Sheriff slots (SB-4) still import it; SB-2 grafted it as HubNav. */
+/** The SB-1a name; kept so code built on the frozen contract compiles. Removed after the 12 Nov batch. */
 export type TabHubNav = HubNav;
 
+/** The place after a door: its tab, its sub-tab and tool where it names them, and only its focus. A door away from Overview ends a pick. */
 export function goTo(place: HubPlace, door: Door): HubPlace {
   return { ...place, tab: door.tab, sub: door.sub ?? place.sub, tool: door.tool ?? place.tool, focus: door.focus ?? null, pick: door.tab === 'overview' ? place.pick : null };
-}
-
-/** The place once a sub-tab starts asking to come first: Governor / Council opens on it, once, so a sub-tab picked away from it stays. Unchanged, the same object. */
-export function settle(place: HubPlace, subs: readonly SubTabSlot[], seat: HubSeat): HubPlace {
-  const first = subs.find((s) => s.first?.(seat))?.id ?? null;
-  if (first === place.first) return place;
-  return first ? { ...place, sub: first, first } : { ...place, first };
 }
