@@ -138,16 +138,14 @@ describe('S5-C6: the AI Governor splits the fund (S5-RULE-11)', () => {
     expect(sent.filter((a) => a.type === 'setTax' || a.type === 'setBudget')).toEqual([]);
   });
 
-  it("S5-T-AC-13: it holds for the rest of the term after it saw a tax overrule pass, even in a month with no overrule on record", () => {
+  it('S5-T-AC-13: AM-10 - a hand rebuilt mid-term still holds: the count is the engine\'s, not the hand\'s memory', () => {
     const state = governed();
-    const hand = new VoteHand(mindOf('ai0', 'trader'), createRng(1));
-    state.politics!.overrule = { month: 2, target: 'tax', caller: 'ai1', stage: 'reveal', clockMs: 0, ballots: {}, done: [], result: { passed: true, yes: 3, no: 1, total: 4, needed: 3 } };
-    hand.tick(state, 0, () => true);
-    state.month = 3;
-    state.politics!.overrule = null;
-    const { sent, act } = recorder(state, 'ai0');
-    hand.tick(state, 0, act);
-    expect(sent.filter((a) => a.type === 'setTax' || a.type === 'setBudget')).toEqual([]);
+    state.politics!.overruled = 1;
+    for (let rebuilt = 0; rebuilt < 2; rebuilt++) {
+      const { sent, act } = recorder(state, 'ai0');
+      new VoteHand(mindOf('ai0', 'trader'), createRng(1)).tick(state, 0, act);
+      expect(sent.filter((a) => a.type === 'setTax' || a.type === 'setBudget')).toEqual([]);
+    }
   });
 });
 
