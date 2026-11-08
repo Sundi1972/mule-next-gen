@@ -427,8 +427,10 @@ export function eventChance(state: GameState, row: EventRow, phase: Phase, input
   if (row.needsColony && !state.colony) return 0;
   if (state.colony && row.neverIn?.includes(moodBand(state.colony.happiness))) return 0;
   if (state.colony && row.neverInAir?.includes(airBand(state.air).name)) return 0;
-  const { air, pollution, wealth, follows, mood, objects, foodPrice, colonySick } = influences(state, row, input);
-  return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows + mood + objects + foodPrice + colonySick));
+  const { air, pollution, wealth, follows, mood, objects, foodPrice } = influences(state, row, input);
+  const today = Math.max(0, base + air + pollution + wealth + follows + mood + objects + foodPrice);
+  const colonySick = row === EVENTS.player.sickness ? (HEALTH.playerSpill * (sickShare(state) ?? 0)) / HEALTH.cap : 0;
+  return Math.min(row.cap, today + colonySick);
 }
 
 /** Each influence's share of a row's chance; 0 for one the row doesn't read, or with nothing to read. */
@@ -448,7 +450,6 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
     mood: state.colony ? moodPoints(row, state.colony) : 0,
     objects: (state.colony?.projects ?? []).filter((p) => p.stage === 'standing').reduce((sum, p) => sum + (row.objects?.[p.id] ?? 0), 0),
     foodPrice: row.foodPrice && state.store.posted.food > row.foodPrice.factor * GOOD_CONFIG.food.refPrice ? row.foodPrice.points : 0,
-    colonySick: row === EVENTS.player.sickness ? (HEALTH.playerSpill * (sickShare(state) ?? 0)) / HEALTH.cap : 0,
   };
 }
 
