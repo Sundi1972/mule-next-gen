@@ -157,6 +157,8 @@ describe('Month end: last month against this one (C20)', () => {
       // s2 held the household's 2: its crews went short, its household ate 2 of 2 and is fed (not 2 of 4).
       expect([ate(shown['s2']), shown['s2']!.foodNeed, shown['s2']!.foodShare], `s2, ${viewer ?? 'the board'}`).toEqual([UPKEEP.baseFood, UPKEEP.baseFood, 1]);
     }
+    expect(second.views.get('s2')!.me!.hungry, "s2's phone: not hungry, only its crews went short").toBe(false);
+    expect(second.views.get('s1')!.me!.hungry, "s1's phone: hungry, its household went short").toBe(true);
   });
 
   it("T-AC-15 (negative, HC-4): at a month end no view carries another player's parts, and the board carries none", () => {
