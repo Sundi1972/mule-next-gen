@@ -49,6 +49,7 @@ export * from './upkeep.js';
 export * from './pollution.js';
 export * from './game.js';
 export * from './politics.js';
+export * from './sabotage.js';
 export * from './diplomacy.js';
 export * from './observe.js';
 export type * from './playbook.js';

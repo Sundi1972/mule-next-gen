@@ -22,9 +22,10 @@ import {
   type DealRow,
 } from '../components/AuctionParts';
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, paidOutThisMonth, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
+import { NewsWords } from '../components/SeatWords';
 import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -287,10 +288,14 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
     const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
     const places = placesOf(game);
+    // From four seats the ready list alone says who the table waits for: the box above it put a table of people under
+    // TV-FIT's floor (0.636 with four, 0.568 with six; PM ruling 8 Nov). The host's row then says the table may go on.
+    const boxed = game.players.length <= TV_WAITING_BOX_SEATS;
+    const hostGoesOn = (id: string) => !boxed && hostCanContinue && waiting.length > 0 && id === host.id;
     side = (
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
-        {phase !== 'planning' ? null : waiting.length > 0 ? (
+        {phase !== 'planning' || !boxed ? null : waiting.length > 0 ? (
           <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
             <WaitingFor seats={waiting} me={null} tv />
             {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
@@ -303,7 +308,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
         {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" data-fit-gives>
-          <News news={game.news} />
+          <News game={game} />
         </div>
         {phase !== 'planning' ? (
           <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? 'READY' : p.isAi ? '' : '…'}</span>} />
@@ -360,7 +365,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               const s = row.seat;
               const status = claude(s.id);
               const isAway = !s.isAi && s.away;
-              const state = status ? STATUS_CHIP[status] : s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+              const state = status ? STATUS_CHIP[status] : s.isAi ? 'AI · READY' : s.ready ? (hostGoesOn(s.id) ? 'READY · CAN CONTINUE' : 'READY') : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               // HC-3: a Claude seat is never waited for here; its status is a label, and only READY dims it.
               const dim = status ? status === 'ready' : s.isAi || s.ready;
               const tone = status === 'thinking' ? 'text-holo' : playsBuiltIn(status) || isAway ? 'text-warn' : status || s.ready || s.isAi ? 'text-ink-3' : 'text-holo';
@@ -442,6 +447,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   );
 }
 
+/** The most seats at which TV planning keeps the box of who the table waits for (TV-FIT, PM ruling 8 Nov). */
+const TV_WAITING_BOX_SEATS = 3;
+
 function Players({ game, right, className }: { game: MuleView; right: (p: MuleView['players'][number]) => ReactNode; className?: string }) {
   return (
     <ul className={cx('flex flex-col gap-2', className)}>
@@ -468,13 +476,13 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
   );
 }
 
-function News({ news }: { news: string[] }) {
+function News({ game }: { game: MuleView }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
-      {news.map((n, i) => (
+      {game.news.map((n, i) => (
         // The newest stays whole when the column runs short: older ones give way (FitHeight's data-fit-keep).
         <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
-          {n}
+          <NewsWords view={game} i={i} />
         </li>
       ))}
     </ul>
@@ -807,7 +815,7 @@ function HarvestSide({ game }: { game: MuleView }) {
   const food = game.market.find((r) => r.good === 'food');
   return (
     <>
-      <News news={game.news} />
+      <News game={game} />
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line">
         <div className="flex flex-col gap-1 bg-panel p-4">
           <span className="label-caps">Colonists</span>
@@ -848,7 +856,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
               <LeagueTable view={game} density="tv" />
             </MonthScoreColumn>
             <div className="flex flex-col gap-4">
-              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
+              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} paidOut={paidOutThisMonth(game.colony, game.month)} />
               <ColonyPanel view={game} density="tv" besideGauges />
               {/* One line a project, so six seats fit TV-FIT's floor; the funding, pips and plaques are on the phones. */}
               <BuildSite colony={game.colony} players={game.players} size="tv" compact />

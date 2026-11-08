@@ -709,6 +709,19 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
   });
 });
 
+describe('S4-T-AC-15 (AI half): with both offices the low-fund line counts the two offices\' pay', () => {
+  bothOffices();
+
+  it.each([
+    { fund: POLITICS.ai.fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff) - 1, bumped: true },
+    { fund: POLITICS.ai.fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff), bumped: false },
+    { fund: POLITICS.ai.fundMonths * POLITICS.pay.governor, bumped: true },
+  ])('S4-T-AC-15: nextTax with fund $fund: the bump is $bumped (3 x 80 = 240 is the line, not the Governor-only 150)', ({ fund, bumped }) => {
+    expect(POLITICS.ai.fundMonths * (POLITICS.pay.governor + POLITICS.pay.sheriff)).toBe(240);
+    expect(nextTax(5, 5, fund, { low: 0, high: 10 }, 2)).toBe(bumped ? 5 + POLITICS.ai.taxFundBump : 5);
+  });
+});
+
 /** The seat's stream, wrapped so a test can count every draw from it. */
 function counted(seed: number): Rng & { draws: () => number } {
   const rng = createRng(seed);
