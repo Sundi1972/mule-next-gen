@@ -1,9 +1,10 @@
 import { POLITICS, SOCIAL_EVENTS, START, type DealCard } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AiMark } from '../../../chat/Chat';
+import { useEscape } from '../../dialog';
 import { slotOf } from '../../../game/derive';
 import { useHub, type HubNav } from '../Hub';
 import { SeatWords } from '../../../components/SeatWords';
@@ -190,11 +191,27 @@ export function shellOf(el: Element | null): Element | null {
 }
 
 /**
+ * A dialog's focus, as the lobby's dialogs keep it: on open its button marked `data-autofocus` takes it, and on close
+ * it goes back to the element that had it. Put the returned ref on the dialog's box.
+ */
+export function useDialogFocus(): RefObject<HTMLDivElement> {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    box.current?.querySelector?.<HTMLElement>('[data-autofocus]')?.focus?.();
+    return () => opener?.focus?.();
+  }, []);
+  return box;
+}
+
+/**
  * The player's card, from their chip or name: their reputation and its band in words, the public reasons it moved, and
  * in the hub, Whisper and + Deal.
  */
 export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; id: string; me: string | null; anchor: Element | null; onClose: () => void }) {
   const hub = useHubIfAny();
+  useEscape(onClose);
+  const box = useDialogFocus();
   const p = view.players.find((q) => q.id === id)!;
   const rep = reputationOf(view, id);
   const rows = reasonRows(view, id);
@@ -204,13 +221,13 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; 
     hub?.openDesk('talk', focus);
   };
   const sheet = (
-    <div className="absolute inset-0 z-50 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-label={`${p.name}'s card`} onClick={onClose} data-testid={`player-card-${id}`}>
+    <div ref={box} className="absolute inset-0 z-50 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-label={`${p.name}'s card`} onClick={onClose} data-testid={`player-card-${id}`}>
       <div className="flex w-full max-w-[340px] flex-col gap-2 rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center gap-2">
           <Creature species={p.species} color={colorOf(view, id)} size={22} />
           <h2 className="font-display text-lg font-semibold leading-tight">{mine ? `You (${p.name})` : p.name}</h2>
           <RepChip view={view} id={id} testid={`player-card-${id}-rep`} />
-          <Button size="md" variant="ghost" className="ml-auto -mr-2" onClick={onClose} data-testid={`player-card-${id}-close`}>
+          <Button size="md" variant="ghost" className="ml-auto -mr-2" onClick={onClose} data-autofocus data-testid={`player-card-${id}-close`}>
             Close
           </Button>
         </header>
