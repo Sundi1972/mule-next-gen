@@ -17,6 +17,7 @@ let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let ColonyWithFacts: typeof import('../src/phone/hub/politics/Colony').ColonyWithFacts;
 let ColonyDesk: typeof import('../src/phone/hub/desks').ColonyDesk;
+let BudgetSub: typeof import('../src/phone/hub/politics/tabs').BudgetSub;
 let createRoot: typeof import('react-dom/client').createRoot;
 
 beforeAll(async () => {
@@ -26,6 +27,7 @@ beforeAll(async () => {
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ ColonyWithFacts } = await import('../src/phone/hub/politics/Colony'));
   ({ ColonyDesk } = await import('../src/phone/hub/desks'));
+  ({ BudgetSub } = await import('../src/phone/hub/politics/tabs'));
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
@@ -183,6 +185,14 @@ function mount(view: MuleView): void {
   act(() => root!.render(onPhone(view, ColonyWithFacts)));
 }
 
+/** The Governor's Commission lives in the Budget sub-tab (SB-3), not on the Colony desk. */
+function mountBudget(view: MuleView): void {
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host as unknown as HTMLElement);
+  act(() => root!.render(onPhone(view, BudgetSub)));
+}
+
 /** Draws the mounted desk again from a new view, as a broadcast does. */
 function rerender(view: MuleView): void {
   act(() => root!.render(onPhone(view, ColonyWithFacts)));
@@ -223,7 +233,7 @@ function tap(testid: string): void {
 
 describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
   it('B-AC-35-1: the Governor sees "Commission a project"; the list shows every catalogue row with cost, months, prestige and upkeep, and no word of a plot (C48)', () => {
-    mount(game(colonyOf([])));
+    mountBudget(game(colonyOf([])));
     expect(text('commission-open')).toBe('Commission a project');
     tap('commission-open');
     for (const id of Object.keys(PRESTIGE) as PrestigeId[]) {
@@ -240,7 +250,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
   });
 
   it("B-AC-35-1: a row that isn't commissionable is disabled and shows the server's why, as the engine words it", () => {
-    mount(game(colonyOf([], { catalogue: catalogue({ observatory: 'The colony already has a Observatory', stadium: 'The colony funds one project at a time' }) })));
+    mountBudget(game(colonyOf([], { catalogue: catalogue({ observatory: 'The colony already has a Observatory', stadium: 'The colony funds one project at a time' }) })));
     tap('commission-open');
     expect(off('cat-observatory')).toBe(true);
     expect(text('cat-why-observatory')).toBe('The colony already has a Observatory');
@@ -251,7 +261,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
   });
 
   it("B-AC-35-1: picking a row and Commission sends {type:'commission', id}", () => {
-    mount(game(colonyOf([])));
+    mountBudget(game(colonyOf([])));
     tap('commission-open');
     tap('cat-park');
     expect(text('commission-confirm-line')).toBe(`Commission the Park: ${PRESTIGE.park.credits} cr and ${PRESTIGE.park.goods.alloy} Alloy, from the fund and donations`);
@@ -259,9 +269,9 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
     expect(sent).toEqual([{ type: 'commission', id: 'park' }]);
     expect(has('commission-news'), 'no news before the server has the project').toBe(false);
     // Refused: the server's next view still has no park, so still no news.
-    rerender(game(colonyOf([])));
+    act(() => root!.render(onPhone(game(colonyOf([])), BudgetSub)));
     expect(has('commission-news'), 'no news for a refused commission').toBe(false);
-    rerender(game(colonyOf([project('park', 'commissioned')])));
+    act(() => root!.render(onPhone(game(colonyOf([project('park', 'commissioned')])), BudgetSub)));
     expect(text('commission-news')).toBe('News: Lena commissions a Park');
   });
 
