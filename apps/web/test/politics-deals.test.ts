@@ -585,12 +585,12 @@ const brixGame = (cards: DealCard[] = BRIX_CARDS) => gameFor(myView(BRIX, cards)
 const lenasAnswer = (status: DealCard['status']) => ({ ...LENAS, status, settled: status === 'active' ? null : 2 });
 
 describe('the incoming card and My cards (S3-C18)', () => {
-  it('S3-B-AC-1: a pact says "Kept" with no figure, on the card offered and on its settled line', () => {
+  it('S3-B-AC-1: a pact offered says keeping it builds your name, with no figure, and what breaking it costs; its settled line says "Pact kept"', () => {
     const keptPact = card({ id: 'deal-kp1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
     mount(brixGame([...BRIX_CARDS, keptPact]), hub);
     tap('desk-talk');
     tap(`chat-to-${LENA}`);
-    expect(text(`incoming-${LENAS.id}-stakes`)).toMatch(/^Kept\. Broken: −\d+ to whoever breaks it/);
+    expect(text(`incoming-${LENAS.id}-stakes`)).toMatch(new RegExp(`^Keeping it builds your name\\. Breaking it costs −${-POLITICS.reputation.moves.pactBroken}, and the table sees\\.`));
     tap('talk-cards');
     expect(text('my-deal-deal-kp1-line')).toContain('Pact kept');
     expect(text('my-deal-deal-kp1-line'), 'no figure').not.toMatch(/\+\d/);
