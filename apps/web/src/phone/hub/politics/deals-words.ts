@@ -73,7 +73,7 @@ export function bindsWords(view: V, c: DealCard, me: string | null): Said {
 
 /** What keeping and breaking it cost, for the one who holds the promise. */
 export function stakesWords(view: V, c: Pick<DealCard, 'from' | 'to' | 'terms'>, me: string | null): Said {
-  if (c.terms.kind === 'pact') return [`Kept. Broken: −${-MOVES.pactBroken} to whoever breaks it, and the table sees it.`];
+  if (c.terms.kind === 'pact') return [`Keeping it builds your name. Breaking it costs −${-MOVES.pactBroken}, and the table sees.`];
   if (c.from === me) return [`Kept: +${MOVES.kept} to your name. Broken: −${-MOVES.voteBroken}, and the table sees it.`];
   const from = who(view, c.from, me);
   return ['You promise nothing. If ', from, ` breaks it: −${-MOVES.voteBroken} to `, from, ', in public.'];
