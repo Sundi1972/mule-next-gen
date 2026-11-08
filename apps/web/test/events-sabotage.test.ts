@@ -1,0 +1,88 @@
+import type { IncidentView, MuleView, MyView, PoliticsView } from '@mule/protocol';
+import { describe, expect, it } from 'vitest';
+import { sabotageNews, sabotageNewsLine, sabotageSeat } from '../src/events/sabotage';
+import { aMuleView, aPlayer } from './fixtures/views';
+
+/**
+ * S4-C17 (S4-PR-7, WS8): sabotage's words off the show, the approved mock's (design/mocks/politics-p2 @ d6977e1a,
+ * src/show/P10Page.tsx MONTH_END; Heiko, 8 Nov), from the views the server sends: the month end's news line, everyone's,
+ * and what a phone knows for its own private line after the show.
+ */
+
+const PLAYERS = [aPlayer({ id: 'lena', name: 'Lena', slot: 0 }), aPlayer({ id: 'ossa', name: 'Ossa', slot: 1 }), aPlayer({ id: 'brix', name: 'Brix', slot: 2 })];
+const MONTH = 4;
+
+const incident = (over: Partial<IncidentView>): IncidentView => ({
+  id: 'sab-x',
+  month: MONTH,
+  kind: 'powerCut',
+  victim: 'ossa',
+  at: { x: 12, y: 4 },
+  good: 'smithore',
+  worked: true,
+  culprit: null,
+  how: null,
+  investigated: false,
+  fine: null,
+  ...over,
+});
+const rumour = (over: Partial<IncidentView>): IncidentView => incident({ kind: 'rumour', victim: null, at: null, good: 'food', dir: 'up', ...over });
+
+/** Only the fields these words read: the Sheriff's seat and the month's public incidents. */
+const politics = (incidents: IncidentView[], sheriff: string | null = 'brix') => ({ sheriff, sabotage: { incidents } }) as unknown as PoliticsView;
+const mine = (id: string, ids: string[]): MyView => ({ id, politics: { sabotage: { mine: ids.map((i) => ({ ...incident({ id: i }), public: false, outcome: 'done' })) } } }) as unknown as MyView;
+const atMonthEnd = (incidents: IncidentView[], me: MyView | null = null): MuleView => aMuleView({ players: PLAYERS, me, politics: politics(incidents), month: MONTH, phase: 'upkeep' });
+
+describe('S4-C17 · the month end’s sabotage line, everyone’s (MONTH_END)', () => {
+  const line = (i: IncidentView) => sabotageNewsLine(atMonthEnd([i]), i);
+
+  it('S4-B-AC-2: a cut that worked unseen says "someone", never a name', () => {
+    expect(line(incident({}))).toBe('Sabotage: someone cut the power to Ossa’s smithore plot.');
+  });
+
+  it('S4-B-AC-1: caught by a guard names Lena; the power stayed on', () => {
+    expect(line(incident({ worked: false, culprit: 'lena', how: 'guard' }))).toBe('Sabotage: Lena was caught by a guard at Ossa’s plot. The power stayed on.');
+  });
+
+  it('a cut that worked but was seen', () => {
+    expect(line(incident({ culprit: 'lena', how: 'caught' }))).toBe('Sabotage: Lena cut the power to Ossa’s smithore plot, and was seen.');
+  });
+
+  it('a rumour that took, unseen; and one caught', () => {
+    expect(line(rumour({}))).toBe('Sabotage: a rumour moved Food’s opening price 25% up.');
+    expect(line(rumour({ dir: 'down' }))).toBe('Sabotage: a rumour moved Food’s opening price 25% down.');
+    expect(line(rumour({ worked: false, culprit: 'lena', how: 'caught' }))).toBe('Sabotage: Lena was caught starting a rumour on Food.');
+  });
+
+  it('one line per incident of this month only, in the view’s order', () => {
+    const view = atMonthEnd([incident({ id: 'a' }), incident({ id: 'old', month: MONTH - 1, culprit: 'lena' }), rumour({ id: 'b' })]);
+    expect(sabotageNews(view)).toEqual(['Sabotage: someone cut the power to Ossa’s smithore plot.', 'Sabotage: a rumour moved Food’s opening price 25% up.']);
+  });
+
+  it('no politics, or sabotage off: no lines', () => {
+    expect(sabotageNews(aMuleView({ players: PLAYERS, me: null, politics: null }))).toEqual([]);
+    expect(sabotageNews(aMuleView({ players: PLAYERS, me: null, politics: { sheriff: null, sabotage: null } as unknown as PoliticsView }))).toEqual([]);
+  });
+
+  it('an unseen incident never names anyone but its victim', () => {
+    for (const i of [incident({}), rumour({})]) expect(line(i)).not.toMatch(/Lena|Brix/);
+  });
+});
+
+describe('S4-C17 · what a phone knows for its own line after the show', () => {
+  it('its own orders by id, from its own view', () => {
+    expect(sabotageSeat(atMonthEnd([], mine('lena', ['sab-a', 'sab-b'])))).toEqual({ mine: ['sab-a', 'sab-b'], sheriff: false });
+  });
+
+  it('whether it is the Sheriff’s phone, from the public offices', () => {
+    expect(sabotageSeat(atMonthEnd([], mine('brix', [])))).toEqual({ mine: [], sheriff: true });
+  });
+
+  it('the TV (no player) knows nothing private', () => {
+    expect(sabotageSeat(atMonthEnd([]))).toBeUndefined();
+  });
+
+  it('a phone with no politics: no orders, not the Sheriff', () => {
+    expect(sabotageSeat(aMuleView({ players: PLAYERS, me: { id: 'lena', politics: null } as unknown as MyView, politics: null }))).toEqual({ mine: [], sheriff: false });
+  });
+});
