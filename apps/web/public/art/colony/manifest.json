@@ -363,5 +363,67 @@
         "hall": [5120, 3853]
       }
     }
+  },
+  "walker": {
+    "cell": {
+      "width": 192,
+      "height": 224,
+      "feet": [96, 197]
+    },
+    "px_per_m": 76.19,
+    "frames": 12,
+    "seconds": 1.333,
+    "headings": ["+x", "+y", "-x", "-y"],
+    "sheets": {
+      "p1-graphite": {
+        "day": "walker/p1-graphite-day@800.webp",
+        "dusk": "walker/p1-graphite-dusk@800.webp"
+      },
+      "p1-sand": {
+        "day": "walker/p1-sand-day@800.webp",
+        "dusk": "walker/p1-sand-dusk@800.webp"
+      },
+      "p1-white": {
+        "day": "walker/p1-white-day@800.webp",
+        "dusk": "walker/p1-white-dusk@800.webp"
+      },
+      "p2-graphite": {
+        "day": "walker/p2-graphite-day@800.webp",
+        "dusk": "walker/p2-graphite-dusk@800.webp"
+      },
+      "p2-sand": {
+        "day": "walker/p2-sand-day@800.webp",
+        "dusk": "walker/p2-sand-dusk@800.webp"
+      },
+      "p2-white": {
+        "day": "walker/p2-white-day@800.webp",
+        "dusk": "walker/p2-white-dusk@800.webp"
+      },
+      "p3-graphite": {
+        "day": "walker/p3-graphite-day@800.webp",
+        "dusk": "walker/p3-graphite-dusk@800.webp"
+      },
+      "p3-sand": {
+        "day": "walker/p3-sand-day@800.webp",
+        "dusk": "walker/p3-sand-dusk@800.webp"
+      },
+      "p3-white": {
+        "day": "walker/p3-white-day@800.webp",
+        "dusk": "walker/p3-white-dusk@800.webp"
+      },
+      "p4-graphite": {
+        "day": "walker/p4-graphite-day@800.webp",
+        "dusk": "walker/p4-graphite-dusk@800.webp"
+      },
+      "p4-sand": {
+        "day": "walker/p4-sand-day@800.webp",
+        "dusk": "walker/p4-sand-dusk@800.webp"
+      },
+      "p4-white": {
+        "day": "walker/p4-white-day@800.webp",
+        "dusk": "walker/p4-white-dusk@800.webp"
+      }
+    },
+    "outline": "walker/outline@800.webp"
   }
 }
