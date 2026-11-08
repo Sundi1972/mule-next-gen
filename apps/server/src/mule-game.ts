@@ -1676,8 +1676,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const report = state.history.at(-1);
     const shortages = report?.shortages ?? [];
     const hungry = state.players.filter((p) => p.hungry);
+    const ranOut = `The store ran out of ${shortages.join(' and ')}`;
+    // Only hungry colonists leave: a Medicine shortage drives nobody out.
+    const colony = shortages.length === 0 ? 'The colony is fed and growing.' : report?.colonistsHungry ? `${ranOut}! Colonists are leaving.` : `${ranOut}.`;
     this.news = [
-      { text: shortages.length > 0 ? `The store ran out of ${shortages.join(' and ')}! Colonists are leaving.` : 'The colony is fed and growing.', who: [] },
+      { text: colony, who: [] },
       ...(hungry.length > 0 ? [{ text: `Hungry this month: ${hungry.map((p) => p.name).join(', ')}.`, who: hungry.map((p) => p.id) }] : []),
     ];
   }

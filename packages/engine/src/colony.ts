@@ -254,15 +254,10 @@ export function monthMood(h: number, target: number, bite: number): number {
   return clampMood(moodStep(h, target) - Math.round(HARDSHIP.shock * bite));
 }
 
-/**
- * How the colonists fared at an upkeep: each need's share they went without (0..1), the share of their Electronics
- * want met, and the growth sickness can slow: the colony's size before it grew and the rate it grew at. No `growth`
- * when Collapse air overrode it.
- */
+/** How the colonists fared at an upkeep: each need's share they went without (0..1), and the share of their Electronics want met. */
 export interface ColonistMonth {
   short: { food: number; water: number; medicine: number };
   comfort: number;
-  growth?: { from: number; rate: number };
 }
 
 /** A month with nothing missing and no Electronics. */
@@ -304,9 +299,9 @@ export function colonistMedicineNeed(state: GameState): number {
   return (state.colonists / UPKEEP.colonistsPerMedicine) * (1 + (sickShare(state) ?? 0));
 }
 
-/** The colony's size after a month's growth at `rate`, slowed by the share sick (needs RULE-8), rounded once. */
+/** The colony's size after a month's growth at `rate`, slowed by the share sick (needs RULE-8), rounded once; never below 0. */
 export function grownColonists(from: number, rate: number, sick: number): number {
-  return Math.round(from * (rate - HEALTH.growthPerSick * sick));
+  return Math.max(0, Math.round(from * (rate - HEALTH.growthPerSick * sick)));
 }
 
 /**
@@ -323,8 +318,7 @@ export function electronicsComfort(colonists: number, stock: number): { took: nu
 /**
  * At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is
  * funded, oldest first (G-5 RULE-21). Then, with colony health on, the sick share moves by how the colonists fared at
- * this upkeep's meal (the last one kept for the gauge, and the run of Medicine-short upkeeps counted) and slows the
- * month's growth; the memory of hardship takes the month's bite, and the mood steps.
+ * this upkeep's meal (the last one kept for the gauge, and the run of Medicine-short upkeeps counted); the memory of hardship takes the month's bite, and the mood steps.
  */
 export function runColony(state: GameState, month: ColonistMonth = WELL_MONTH): void {
   if (!state.colony) return;
@@ -354,8 +348,6 @@ export function runColony(state: GameState, month: ColonistMonth = WELL_MONTH): 
     if (colony.sick !== undefined) colony.lastSick = colony.sick;
     colony.sick = nextSickShare(colony.sick ?? 0, month.short);
     colony.medicineShortRun = month.short.medicine > 0 ? (colony.medicineShortRun ?? 0) + 1 : 0;
-    // Upkeep grew the colony as if all were well; it grows again from the same size, slowed by the new share.
-    if (month.growth) state.colonists = grownColonists(month.growth.from, month.growth.rate, colony.sick);
   }
   const bite = hardship(severity(month.short));
   colony.hardship = hardshipMemory(colony.hardship ?? 0, bite);
