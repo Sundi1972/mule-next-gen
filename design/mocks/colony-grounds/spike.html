@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colony grounds spike</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #ffffff; --ink: #1d1f24; --ink-2: #5b606b; --line: #e3dfd6; --accent: #c2410c; --ok: #15803d; --warn: #b45309; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #14161a; --card: #1d2026; --ink: #eceae4; --ink-2: #a3a7b0; --line: #2e323a; --accent: #fb923c; --ok: #4ade80; --warn: #fbbf24; } }
+  :root[data-theme="dark"] { --bg: #14161a; --card: #1d2026; --ink: #eceae4; --ink-2: #a3a7b0; --line: #2e323a; --accent: #fb923c; --ok: #4ade80; --warn: #fbbf24; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 6px; }
+  .sub { color: var(--ink-2); margin: 0 0 20px; }
+  .verdict { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 12px 0 20px; }
+  .verdict strong { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  figure { margin: 12px 0; }
+  figure img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  figcaption { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
+  .pair { display: grid; grid-template-columns: 353px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+  .pending { background: var(--card); border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--ink-2); }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-2); }
+  .tag.ok { color: var(--ok); border-color: currentColor; } .tag.warn { color: var(--warn); border-color: currentColor; }
+  ul { padding-left: 20px; } li { margin: 4px 0; }
+  code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The colony grounds: walking colonists, and can every place be seen?</h1>
+  <p class="sub">WS10 spike, 8 Nov. Two questions from Heiko: nicer colonists with a real walk, and whether the one fixed view makes any building's place hard to see. Rotation and zoom are parked (zoom is Jira SA-1379).</p>
+
+  <h2 id="visibility">Can every place be seen in the one view?</h2>
+  <div class="verdict"><strong>Yes, enough to find it: no place is ever fully hidden.</strong> Nobody picks a place in the game. When the Governor commissions a building, it takes the first free block nearest the town hall (rule RULE-32b), so a building in front can never get in the way of a choice. What can happen is that a new building's site lands behind a tall one. At worst two thirds of its ground is covered, and its chip on the phone always shows.</div>
+
+  <h3>How it was measured</h3>
+  <p>Every order the five buildings can be commissioned in (120 orders, 120 different layouts), with every building standing at its tallest stage. Each layout was drawn by the game's own view: the phone desk at 390 px wide, the hub's tab at 353, and the TV opener at 1280. For every place it counts how much of its ground the pictures in front of it cover, using their real transparency. Chips are drawn above every building, so only another chip can cover one.</p>
+
+  <div class="scroll"><table>
+    <tr><th>What</th><th>Phone 390</th><th>Hub tab 353</th><th>TV 1280</th></tr>
+    <tr><td>The newest site (the last building commissioned): ground covered, worst</td><td class="n">67 %</td><td class="n">67 %</td><td class="n">67 %</td></tr>
+    <tr><td>… median over the 120 orders</td><td class="n">13 %</td><td class="n">13 %</td><td class="n">13 %</td></tr>
+    <tr><td>… orders where more than half is covered</td><td class="n">21 of 120</td><td class="n">21 of 120</td><td class="n">21 of 120</td></tr>
+    <tr><td>… its ground still showing, worst case</td><td class="n">≈ 340 px² (≈ 18 × 18)</td><td class="n">≈ 280 px² (≈ 17 × 17)</td><td class="n">≈ 3 600 px² (≈ 60 × 60)</td></tr>
+    <tr><td>A chip covered by a building</td><td class="n">never</td><td class="n">never</td><td class="n">no chips on the TV opener</td></tr>
+    <tr><td>A chip overlapped by another chip, worst</td><td class="n">24 %</td><td class="n">24 %</td><td class="n">—</td></tr>
+    <tr><td>Chip size</td><td class="n">≈ 43 × 12 px</td><td class="n">≈ 39 × 11 px</td><td class="n">—</td></tr>
+  </table></div>
+
+  <h3>Which places are worst</h3>
+  <ul>
+    <li><strong>(1,2), left of the town hall</strong>: a new site there is up to two thirds hidden when the Stadium has taken the block in front of it. This is the worst case for a <em>new</em> building.</li>
+    <li><strong>(2,1), right behind the town hall</strong>: its ground is mostly behind the hall (median 59 %). It is always the first 1 × 1 place taken, though, and a building standing there rises above the hall.</li>
+    <li>The 2 × 2 blocks (the Stadium and the Spaceport) and the front places: 0–30 %.</li>
+  </ul>
+
+  <div class="pair">
+    <figure><img src="/spike/vis-worst-tab353.webp" alt="Hub tab, 353 wide: the newest site outlined in red, behind the Stadium; its chip '5 SITE' shows"><figcaption>Worst case on the hub tab (353 wide). The Observatory's new site is outlined in red, behind the Stadium. Its chip, "5 SITE", shows above everything.</figcaption></figure>
+    <figure><img src="/spike/vis-worst-tv1280.webp" alt="TV opener, the same layout at dusk, the new site outlined in red"><figcaption>The same layout on the TV opener. There are no chips here, so the caption and the lean-in have to point at the place.</figcaption></figure>
+  </div>
+  <div class="pair">
+    <figure><img src="/spike/vis-median-tab353.webp" alt="Hub tab, a typical layout, the newest site outlined"><figcaption>A typical layout (the median, 13 % covered): the newest site sits in the clear.</figcaption></figure>
+    <figure><img src="/spike/vis-median-tv1280.webp" alt="TV opener, the typical layout"><figcaption>The same on the TV.</figcaption></figure>
+  </div>
+
+  <h3>If we want the newest site to stand out more</h3>
+  <ul>
+    <li><span class="tag ok">Recommended</span> <strong>On the TV opener, fade the buildings in front of the place the caption names</strong>, to about a third, during the lean-in only. This is in WS10's live layer, about 2 hours with a test.</li>
+    <li><strong>Lift the named place's outline</strong> above the buildings, as a soft glowing edge, during the lean-in. It costs about the same as the fade and can be combined with it.</li>
+    <li>The phone needs nothing: the chip shows, and the Colony desk's list names every building with its stage.</li>
+    <li>If players should one day <em>choose</em> places, that is a rule change (WS7, RULE-32b) and needs Heiko's ruling. The same measure then shows which places need help when picking.</li>
+  </ul>
+  <p class="sub">Owners: commissioning happens on the phone's Colony desk (WS7's screen). The grounds and their live layer (chips, colonists, glow) are WS10's.</p>
+
+  <h2 id="colonists">Walking colonists with a real walk cycle</h2>
+  <div class="verdict"><strong>Candidates found; the sample renders wait for the Mac to be free.</strong> The Mac is busy with WS2's measured games until about 09:30Z. Each sample is a short walk rendered in the grounds' own camera and sun, by day and at dusk, as sprite frames on the live layer next to today's colonists.</div>
+
+  <div class="scroll"><table>
+    <tr><th>Source</th><th>Licence (checked)</th><th>Walk cycle</th><th>Fit</th></tr>
+    <tr><td><strong>Quaternius Astronaut A</strong> (poly.pizza 3hC2i0CTuO)</td><td><span class="tag ok">CC0</span> stated on the model page</td><td>Walk, Run, Idle, Wave, Interact (24 clips)</td><td>A space-suited colonist; suits the frontier colony</td></tr>
+    <tr><td><strong>Quaternius Astronaut B</strong> (poly.pizza 0D54W8yfrA)</td><td><span class="tag ok">CC0</span> stated on the model page</td><td>Walk, Walk_Gun, Run, Idle, Wave, Yes/No (18 clips)</td><td>A rounder, cuter suit</td></tr>
+    <tr><td><strong>Quaternius Animated Human</strong> (OpenGameArt)</td><td><span class="tag ok">CC0</span> License.txt in the zip</td><td>Walk, Run, Idle, Work</td><td>A colonist in clothes, several skins</td></tr>
+    <tr><td>Kenney Animated Characters 1–3 (OpenGameArt)</td><td><span class="tag ok">CC0</span> License.txt in the zip</td><td><span class="tag warn">no walk</span> idle, jump, run only</td><td>Would need the run slowed down; ruled out</td></tr>
+    <tr><td>Mixamo (Adobe), a noted alternative</td><td><span class="tag warn">not CC0</span> free with an Adobe account; royalty-free inside a game; the downloaded files may not be redistributed as assets</td><td>Every motion there is, retargetable</td><td>Only if the CC0 walks fall short (Heiko's 6 Nov ruling: CC0 first)</td></tr>
+  </table></div>
+
+  <div class="pending" id="walk-samples">The walk-cycle samples (four headings × 12 frames, day and dusk, on the TV and the phone) and their bytes, frame cost and effort per colonist kind go here after the render window.</div>
+</main>
+</body>
+</html>
