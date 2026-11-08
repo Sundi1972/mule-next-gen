@@ -14,7 +14,11 @@ export function useSeconds(on: boolean): number {
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      // So a clock that starts again starts from 0, never from where the last run stopped.
+      setSeconds(0);
+    };
   }, [on]);
   return on ? seconds : 0;
 }
