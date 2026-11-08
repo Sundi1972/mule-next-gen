@@ -14,6 +14,11 @@ import { OFFICE_NAME, officeNames, promiseWords, termEnd } from './words';
 export function ElectionDay() {
   const { view, table } = usePhoneGame();
   const election = view.politics?.election;
+  // The picks belong to this room: a ballot of another room (seat ids restart at s1 in each) opens empty, whatever closed the last.
+  const other = enterRoom(table.code);
+  useEffect(() => {
+    if (other) changed();
+  });
   // The picks are forgotten when the ballot closes, not when it unmounts: a switch to another sub-tab unmounts it too (S3-RULE-12).
   useEffect(() => {
     if (election && election.stage !== 'ballot') forgetPicks();
@@ -211,8 +216,8 @@ const EXTRAS = [
  * answers to the earlier ones come back first and never replace it. Only a pick this phone didn't send in that time
  * (a vote changed on another device) shows the server's instead. The server's view can't tell an abstention from no
  * pick: only this phone knows, for the ballot and for Cast my vote.
- * The picks are a seat's in a month, not a room's: the ready bar has no room code. Closing the ballot forgets them,
- * which keeps another room's ballot from opening with them.
+ * The picks are a seat's in a month; the ready bar has no room code, so drawing a ballot of another room forgets them,
+ * and so does closing the ballot.
  * Votes the server batches into one view can leave a later change elsewhere hidden, until numbered answers exist.
  */
 export interface BallotOf {
@@ -236,6 +241,16 @@ let version = 0;
 function changed(): void {
   version++;
   for (const l of listeners) l();
+}
+
+let heldRoom: string | null = null;
+/** Notes the room whose ballot is drawn and forgets another room's picks; true if it did. */
+function enterRoom(code: string): boolean {
+  if (heldRoom === code) return false;
+  heldRoom = code;
+  const had = held !== null;
+  held = null;
+  return had;
 }
 
 const sameBallot = (a: BallotOf, b: BallotOf) => a.seat === b.seat && a.month === b.month;
