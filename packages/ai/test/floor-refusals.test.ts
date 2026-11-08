@@ -29,7 +29,10 @@ import { outlook } from '../src/outlook.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { canFeed, installGain } from '../src/value.js';
-import { rulesOffInTest } from './rule-switches.js';
+import { analyseInTest, rulesOff } from './rule-switches.js';
+
+// These cases pin floor routes and canFeed's block, which the PM's two rules override (rule-switches.ts).
+rulesOff('energyFirst', 'medicineDespiteInputs');
 
 const ME = 'ai0';
 
@@ -243,6 +246,8 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     // A MULE won at the land auction is led into development (lots.ts: carriedMule = the lot's outfit). While it leads one,
     // a plot's button offers INSTALL, not ANALYSE, so analyses queued ahead of the install are refused on the plot.
     // Seed 14: since the colonists' full need counts in the demand (needs C2), seed 4's seat no longer wants an analysis.
+    // The case needs an analysis queued: since AM-18 the seat wants fewer, so the band is widened (rule-switches.ts).
+    analyseInTest();
     const state = development(14);
     ownNearest(state, 4);
     const me = state.players.find((p) => p.id === ME)!;
@@ -345,8 +350,6 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
 
 describe('a MULE led into development is never lost to the lead (FM-led-no-gain)', () => {
   it("FM-led-no-gain: a led Medicine MULE with nothing to feed it is installed on the seat's best idle plot, not lost at the pub", () => {
-    // The case is canFeed's block on a Medicine works, which S2's lever B lifts (rule-switches.ts).
-    rulesOffInTest('medicineDespiteInputs');
     // Review of 5 Nov: with no gain to be had (a factory it can't feed, or no plot it earns on), nothing was planned for
     // the led MULE. While it is led INSTALL outranks ANALYSE and FIT FILTER on every own plot and the corral offers no BUY,
     // so the seat lost its turn and the MULE ran off at the pub. It is paid for, and on the floor a MULE taken off a plot

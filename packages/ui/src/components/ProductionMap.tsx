@@ -26,7 +26,7 @@ import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
  */
 
 /** Why a plot's output moved from its base. The view may carry reasons this list lacks: they still show by sign. */
-export type ShowReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'energyOff' | 'noWater' | 'special' | 'floor' | (string & {});
+export type ShowReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'special' | 'floor' | (string & {});
 
 export interface ShowLine {
   x: number;
@@ -249,9 +249,9 @@ function useTargets(map: RefObject<HTMLDivElement>, t: number, flyStart: number)
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
-/** A cut for a missing good reads as its share, not a number: half without Water, a fifth for a plot turned off (AM-17). */
-const CUTS: Partial<Record<ShowReason, string>> = { noWater: '½', noEnergy: '½', energyOff: '20%' };
-const HALF_ICON: Partial<Record<ShowReason, Good>> = { noWater: 'water', noEnergy: 'energy', energyOff: 'energy' };
+/** A cut for a missing good reads as its share, not a number: a fifth for a plot turned off (AM-17, AM-18); half for the old cuts. */
+const CUTS: Partial<Record<ShowReason, string>> = { noWater: '½', noEnergy: '½', energyOff: '20%', waterOff: '20%' };
+const HALF_ICON: Partial<Record<ShowReason, Good>> = { noWater: 'water', noEnergy: 'energy', energyOff: 'energy', waterOff: 'water' };
 
 /** A part's badge: green for a bonus; amber for a loss; red with the missing good for a cut. */
 function badgeTone(why: ShowReason, delta: number): string {

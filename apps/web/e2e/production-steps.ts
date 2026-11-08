@@ -152,7 +152,7 @@ const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 
 /** The text of a reason badge, as the map draws it. */
 function badgeText(part: ProductionView['lines'][number]['parts'][number]): string {
-  if (part.why === 'energyOff') return '20%';
+  if (part.why === 'energyOff' || part.why === 'waterOff') return '20%';
   return part.why === 'noWater' || part.why === 'noEnergy' ? '½' : signed(part.delta);
 }
 

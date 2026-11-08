@@ -1,4 +1,4 @@
-import { emptyStock, GAME, type Outfit, type Stock } from '@mule/engine';
+import { emptyStock, GAME, UPKEEP, type Outfit, type Stock } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { needRows, planNow } from '../src/phone/hub/needs';
 
@@ -7,10 +7,11 @@ const plots = (...outfits: (Outfit | null)[]) => outfits.map((outfit) => ({ outf
 
 describe("planning's This month you need (RULE-8)", () => {
   it('B-AC-14: Lena holds 3 Energy and her three farms and well burn 4: Energy SHORT 1, Food and Water OK', () => {
+    // Water: upkeep and the farms (UPKEEP.waterUse, AM-18), not the well: it pays its own use from its own output.
     const rows = needRows(stock({ food: 3, water: 2, energy: 4 }), stock({ food: 5, water: 2, energy: 3 }), plots('food', 'food', 'food', 'water', null));
     expect(rows).toEqual([
       { good: 'food', have: 5, need: 3, short: 0, why: 'upkeep' },
-      { good: 'water', have: 2, need: 2, short: 0, why: 'upkeep' },
+      { good: 'water', have: 2, need: 2, short: 0, why: 'upkeep and 3 farms' },
       { good: 'energy', have: 3, need: 4, short: 1, why: '3 farms and a well' },
     ]);
   });
@@ -25,13 +26,26 @@ describe("planning's This month you need (RULE-8)", () => {
     expect(rows.find((r) => r.good === 'energy')).toBeUndefined();
     expect(Object.fromEntries(rows.map((r) => [r.good, r.why]))).toEqual({
       food: 'upkeep',
-      water: 'upkeep',
+      water: 'upkeep, a power plant, a mine and 2 factories',
       smithore: 'Alloy inputs',
       alloy: 'Electronics inputs',
       rareEarth: 'Electronics inputs',
       medicine: 'bad air',
     });
     expect(rows.find((r) => r.good === 'smithore')).toMatchObject({ have: 2, need: 2, short: 0 });
+  });
+
+  it('AM-18 on (farm Water 2): the Water row names upkeep and the plots and factories that drink, not the well; at 0 only upkeep', () => {
+    const on = needRows(stock({ food: 3, water: 9 }), stock({ water: 9 }), plots('food', 'food', 'water', 'smithore', 'alloy'));
+    expect(on.find((r) => r.good === 'water')!.why).toBe('upkeep, 2 farms, a mine and a factory');
+    const was = UPKEEP.waterUse.food;
+    try {
+      UPKEEP.waterUse.food = 0;
+      const off = needRows(stock({ food: 3, water: 2 }), stock({ water: 2 }), plots('food', 'food', 'water', 'smithore', 'alloy'));
+      expect(off.find((r) => r.good === 'water')!.why).toBe('upkeep');
+    } finally {
+      UPKEEP.waterUse.food = was;
+    }
   });
 
   it('B-AC-14, H-1: Now says to plan and press Ready, names the land grant next with its claims from config, and lists the SHORT goods or says she has what she needs', () => {

@@ -15,6 +15,7 @@ import {
   stepOffWorld,
   emptyStock,
   energyUseOf,
+  waterUseOf,
   EVENTS,
   GOODS,
   MULE,
@@ -46,6 +47,8 @@ export interface Outlook {
    * never more than it made (min(made, use)), so a plant an event left making nothing paid nothing. 0 with no production.
    */
   plantsUse: number;
+  /** The Water the seat's wells paid of their own use in that production, the same way (AM-18 W5). 0 with no production. */
+  wellsUse: number;
   /** The posted price of a good at that auction, with `extra` more units in the colony (negative for fewer). */
   price(good: Good, extra?: number): number;
   /**
@@ -62,15 +65,16 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
   const months = options.months ?? STRATEGIST.outlookMonths;
   const sim = cloneForSim(obs);
   options.apply?.(sim);
-  const flat = (): Outlook => ({ stage: sim, final: obs.month >= endMonth(obs), made: emptyStock(), plantsUse: 0, price: (good) => obs.store.posted[good], later: (good) => obs.store.posted[good] });
+  const flat = (): Outlook => ({ stage: sim, final: obs.month >= endMonth(obs), made: emptyStock(), plantsUse: 0, wellsUse: 0, price: (good) => obs.store.posted[good], later: (good) => obs.store.posted[good] });
   if (!options.lookAhead) return flat();
 
   let made = emptyStock();
   let plantsUse = 0;
+  let wellsUse = 0;
   let lastShortages: readonly Good[];
   if (BEFORE_PRODUCTION.has(sim.phase)) {
     lastShortages = sim.history.at(-1)?.shortages ?? [];
-    ({ made, plantsUse } = produce(sim, me));
+    ({ made, plantsUse, wellsUse } = produce(sim, me));
   } else if (sim.phase === 'production') {
     lastShortages = sim.history.at(-2)?.shortages ?? []; // literal-ok: last month's report, a position in the history
   } else {
@@ -86,7 +90,7 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
     // The month opens as the engine opens it: on a what-if copy the ship's prices move along their expected path.
     stepOffWorld(sim);
     lastShortages = shortages;
-    ({ made, plantsUse } = produce(sim, me));
+    ({ made, plantsUse, wellsUse } = produce(sim, me));
   }
 
   const demand = monthlyDemand(sim);
@@ -99,6 +103,7 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
     final: false,
     made,
     plantsUse,
+    wellsUse,
     price(good, extra = 0) {
       const key = `${good}:${Math.round(extra)}`;
       const hit = cache.get(key);
@@ -170,7 +175,7 @@ function rollForward(stage: GameState, months: number): Future {
   return { prices };
 }
 
-function produce(sim: GameState, me: string): { made: Stock; plantsUse: number } {
+function produce(sim: GameState, me: string): { made: Stock; plantsUse: number; wellsUse: number } {
   // Development's end, as the game plays it: a MULE taken off a plot goes back to it, any other carried MULE runs off.
   for (const p of sim.players) endLead(sim, p.id);
   const { produced, lines, events } = runProduction(sim);
@@ -179,7 +184,10 @@ function produce(sim: GameState, me: string): { made: Stock; plantsUse: number }
   const plantsUse = lines
     .filter((l) => l.good === 'energy' && sim.tiles[l.tile]!.owner === me)
     .reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(sim, sim.tiles[l.tile]!) * cold), 0);
-  return { made: produced[me] ?? emptyStock(), plantsUse };
+  const wellsUse = lines
+    .filter((l) => l.good === 'water' && sim.tiles[l.tile]!.owner === me)
+    .reduce((n, l) => n + Math.min(Math.max(0, l.made), waterUseOf(sim.tiles[l.tile]!)), 0);
+  return { made: produced[me] ?? emptyStock(), plantsUse, wellsUse };
 }
 
 /** The last month that will be played, as far as anyone can tell today. */
