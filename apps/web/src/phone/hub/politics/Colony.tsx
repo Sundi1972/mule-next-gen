@@ -17,7 +17,7 @@ export function ColonyWithFacts() {
     <>
       <FundCard view={view} politics={view.politics} />
       <Commission />
-      {view.colony && <Grounds colony={view.colony} size="phone" light={view.phase === 'upkeep' ? 'dusk' : 'day'} />}
+      {view.colony && <Grounds colony={view.colony} size="phone" light={view.phase === 'upkeep' ? 'dusk' : 'day'} players={view.players.length} />}
       <ColonyDeskCard view={view} action={(p) => <ProjectActions p={p} />} />
       <ColonyDesk />
       <ColonyFacts view={view} politics={view.politics} />

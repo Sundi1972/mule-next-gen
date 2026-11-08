@@ -102,13 +102,15 @@ for (const as of ['lena', 'brix']) {
   });
 }
 await beat('s3-fined', 'lena', async ({ says, tvSays }) => { await says(`my-order-known-${ORDER}`, 'Everyone knows', 'Fined 150'); await tvSays('Lena was fined 150 for sabotage; half to Brix'); });
-await beat('s3-month-end', 'brix', async ({ says }) => { await says('phone-sabotage', 'Lena was fined 150 for sabotage; half to Brix'); await says(`phone-sabotage-restitution-${ORDER}`, '+75 cr'); });
+await beat('s3-month-end', 'brix', async ({ says }) => { await says('phone-sabotage', 'Lena was fined 150 for sabotage; half to Brix'); await says(`phone-sabotage-restitution-${ORDER}`, '+75 cr'); await says('fund-line-restitution', 'To victims', '75'); await says('fund-line-fine', 'Fines', '150'); });
 await beat('s3-month-end', 'lena', async ({ says }) => { await says(`phone-sabotage-fine-${ORDER}`, '150 cr'); });
 
 // 4 · Unguarded, it works; Kai investigates.
-await beat('s4-dark', 'brix', async ({ see, says, tvSays }) => { await tvSays('Sabotage: someone cut the power to Brix’s Food plot'); await see('map-plot-9-2'); await says(`production-public-${DARK}`, 'Someone cut the power'); await says(`production-mine-${DARK}`, 'Your Food plot went dark'); });
+await beat('s4-dark', 'brix', async ({ see, says }) => { await see('map-plot-9-2'); await says(`production-public-${DARK}`, 'Someone cut the power'); await says(`production-mine-${DARK}`, 'Your Food plot went dark'); });
 await beat('s4-dark', 'lena', async ({ says }) => { await says(`production-mine-${DARK}`, 'Nobody saw'); });
-await beat('s4-investigate', 'kai', async ({ tap, says }) => {
+// The production show has no news column; next planning, the unseen cut is the TV's news line.
+await beat('s4-investigate', 'kai', async ({ tap, says, tvSays }) => {
+  await tvSays('Sabotage: someone cut the power to Brix’s Food plot');
   await tap(`b-case-row-${DARK}`);
   await tap(`investigate-${DARK}`);
   await says(`investigate-result-${DARK}`, 'Lena');

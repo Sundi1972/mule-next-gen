@@ -39,6 +39,12 @@ const STILL: OpenerState = {
 const params = new URLSearchParams(location.search);
 const view = params.get('view') ?? 'beat';
 const lightParam = params.get('light');
+// ?worst=1: the phone's heaviest colony (B-AC-5): every building standing, the mood at its best, so the most colonists
+// and the most sheets the grounds ever load
+if (params.get('worst')) {
+  COLONY.gauges.happiness = 100;
+  COLONY.projects = COLONY.projects.map((p) => ({ ...p, stage: 'standing', monthsLeft: null }));
+}
 
 /** The opener always asks for dusk (RULE-1); the day shot swaps only the light, everything else as the game draws it. */
 const DayScene = (props: Omit<ColonyGroundsProps, 'manifest'>) => <Grounds {...props} light="day" />;

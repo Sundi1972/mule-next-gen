@@ -218,6 +218,15 @@ fec2bab9 by PM ruling. `TableApp.tsx` carries no change from this task. Steps be
 **Spec:** §1 C4. **Scaffold:** `design/mocks/colony-grounds/src/look/Living.tsx`. **Files:** `packages/ui/src/grounds/LiveLayer.tsx`, wired into `ColonyGrounds`.
 - [ ] Write `B-AC-2: lights dim to full by wealth; closed stays dark; none by day` and `B-AC-3: a strike empties the paths`, at the rendered SVG (glow `<image>` opacity; walker count). Run: FAIL. Implement. Respect `useEventReducedMotion` from `@mule/ui`. Run: PASS. Commit.
 
+### Task 2.2c: T-AC-13 — a colonist behind a building is hidden by it, with a faint outline (C4; Heiko, 8 Nov)
+
+**Altitude:** the live layer's rendered markup. **Files:** `packages/ui/test/grounds-occlusion.test.tsx`, `packages/ui/src/grounds/occlusion.ts` (hiddenBy, occluderOf), `LiveLayer.tsx` (occluders, the outline), `ColonyGrounds.tsx` (every picture's silhouette), `design/art/colony/skyline.py` (the manifest's `skyline`, run by publish.sh).
+- [x] `T-AC-13: behind the Hospital, the colonist is drawn before it … and its faint outline after it` red c1089146, then green.
+- [x] Review round 1 (CHANGES at 422b31e6): a ray test with REACH 3 outlined colonists in plain view (1386 of 2400 sampled
+  positions, 528 with no picture over the feet). Now the test is the picture's own silhouette, measured from its opaque
+  pixels: hidden only where a picture drawn after the colonist covers its shins, waist or head. Negative cases from the
+  review ((-2, -0.5), (-1, -0.5)) and a `ColonyGrounds`-level test; mutants (no wiring; the frame box for the silhouette) each fail one test.
+
 ### Task 2.2b: C4 — smoke over a damaged building, haze by air
 
 **Plan gap found at PR-2 build:** spec C4 lists smoke and haze; Tasks 2.1–2.2 built glow and walkers only.
@@ -232,6 +241,25 @@ defined` on unmount where a test stubs only `requestAnimationFrame` (`apps/web/t
 Built in worktree `ws10-mounts-raf` on top of #606; ships with #606.
 
 Built in 2.1–2.2 (ws10-grounds-pr2 @ b12f388c): RULE-2 glow on every stage by its factor (the hall counts as standing), RULE-3 walkers along the gaps between places, a paid strike counts as over (G-5 RULE-26), null mood → 0 walkers.
+
+### Task 2.2d: T-AC-14 — Astronaut A sprite walkers in the player colours, at walking pace (C4; Heiko, 8 Nov)
+
+**Heiko's pick, from the walking-colonists spike** (`design/mocks/colony-grounds/spike.html`, branch `ws10-spike-colonists` @ 9f823b55): **Astronaut A** (poly.pizza 3hC2i0CTuO, CC0), with
+the light suit panels carrying the player colour (a small palette where no player owns the walker), and the helmet and trims
+varying in place of hair (option (a), relayed by the PM 8 Nov). Kenney has no walk; Astronaut B (off-tone) and the Quaternius
+human are dropped; Mixamo is not used (licence). Builds on Task 2.2c (#776): the outline ghost becomes the sprite's outline.
+**Altitude:** the live layer's rendered markup, plus T-AC-2's manifest check for the `walker` entry. **Files:** `design/art/colony/walker/walk.py`
+(brought over from `ws10-spike-colonists`; neutral suit and trim, a mask sheet), `walker/tint.py` (tints, outline), `walker/publish.py` (WebP, the manifest's `walker` entry, spec §3), `publish.sh` (keeps that entry),
+`apps/web/public/art/colony/walker/**`, `packages/ui/src/grounds/LiveLayer.tsx` (a sprite `Colonist`), `walks.ts` (PACE),
+`packages/ui/test/grounds-walker.test.tsx`.
+- [x] Render astroA day and dusk (`yaw0 90`, 12 frames, the clip's 1.333 s cycle) with `COLONY_WALK_TINT` neutral, plus the mask sheet (suit red, trim green).
+- [x] Offline: tint the suit to p1–p4 (theme.css); trims warm white / graphite / sand (charcoal dropped: speckled the suit, vanished at dusk); an outline sheet (the mask's alpha grown 4 px, minus itself). WebP @800/@400: ~12.5 KB a sheet @400. The unowned palette waits on the PM's ruling (the colony view carries no owner per colonist).
+- [x] Test first, `T-AC-14`: a walker is an `<image>` crop of the `walker` sheet whose row is the heading of its route leg and whose column advances with the cycle; its suit variant is its owner's colour; at a still frame (reduced motion) frame 0; behind a building the ghost is the outline sheet, faded on the `<image>` itself (never a group opacity, Task 5.6); no `walker` entry → today's SVG figure. Run: FAIL. Implement. Run: PASS. Red 8ccd83c7 (6 of 7), green c2b7ae46.
+- [x] `walks.ts` PACE 2.9 → **1.3 m/s** (walking pace, Heiko). Game shots TV and phone, day and dusk, beside the spike page (`spike.html#in-the-game` @ d0374307); phone dusk 803,769 B. The PM checks side by side before Heiko sees them.
+- [x] PM ruling (b): colonists wear only the seated players' colours, the rest colony white/grey (`players` on ColonyGrounds/GroundsOpener; named edits WS4 44448751 and WS7 71ca4a90, both OK'd). Heiko approved the walking astronauts (8 Nov).
+- [x] Review round 1 (CHANGES at 71ca4a90): the sprite was √2 too big (METRE/px_per_m, not W/(12√2·px_per_m)), and a 2-unit
+  Icosphere helper in the model set the feet 35 px high and the figure 1.24 m. walk.py now bounds the skinned meshes only;
+  re-rendered. Placement and per-route heading tests added (red ca60363c, fix 0bfe5d85). Phone dusk 857,549 B.
 
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
@@ -383,6 +411,11 @@ The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK)
 - [x] `T-AC-9: the gauges' count starts when TvMonthEnd mounts`. FAIL → C9 → PASS. Commit.
 - [x] `T-AC-5`: politics off, no opener. Then route the opener; TvMonthEnd unchanged (`git diff` of TvMonthEnd empty). Commit. Send both SHAs to the PM for WS4's OK.
 
+### Task 5.6: T-AC-12 — the buildings in front of the named place fade during the lean-in (C5; PM, 8 Nov)
+
+**Altitude:** the rendered markup (each building's group opacity). **Files:** `packages/ui/test/grounds-opener-fade.test.tsx`, `packages/ui/src/grounds/framing.ts` (inFrontOf, frontOpacity), `ColonyGrounds.tsx`.
+- [x] `T-AC-12: at full lean the Stadium and the hall in front of the new site are at 1/3 …` red c673b989, then green. The visibility spike's worst case (design/mocks/colony-grounds/spike.html) is the fixture.
+
 ### Task 5.5: B-AC-6 — browser test (front to back)
 
 - [x] In `apps/web/e2e/`, the test command owns its stack: at the month end after the Park comes to stand, the TV shows `tv-grounds-opener` after the event show, then `tv-monthend`; everyone Ready during the opener → planning at once; reduced motion → the still. Also Task 1.5 Step 4's checks (failed picture → shape and its glow gone; back-to-front order). TV-FIT ≥ 0.7 at six seats on the opener and the month end (`theTvScalesHeld`).
@@ -393,11 +426,24 @@ The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK)
 
 ---
 
+## Done since the 8 Nov play-test prep
+
+- **art3 (PM fixes 1–3), MERGED** #762 → c6f42125 (code 9e94c860, art 6ce8dc28; 35 renders 06:07–06:35Z): warm pools on the lit
+  paving round each building in its glow pass (fading 2.5 m out), the dusk grass's hue, the Hospital's windows inset 0.12 m in
+  mid-grey frames. Measured on the game's 1920 dusk shot: free grass L 0.1215 → 0.1236; red/green 0.54 → 0.91 and blue/green
+  1.01 → 0.82 (look.html 0.77/0.77); the walkway in front of the Stadium 0.09 → 0.16, the Hospital's 0.28 → 0.33; phone dusk
+  689,264 B. The grass gap was hue, not brightness (the 0.66 / 1.08 readings were the wrong patches and camera). PM passed.
+- **Opener fade (Task 5.6), MERGED** #768 → 4c605e61. Round 1 CHANGES at 33e3d63e: a group opacity isolated the screen-blended
+  glow (a dark box), and the `place-hall` testid broke `apps/web/e2e/grounds-opener.ts:183`; fixed at 8a198296, `Review: APPROVE`.
+- **Visibility spike** (120 commission orders, `design/mocks/colony-grounds/review-loop/visibility.mjs`): the newest site's
+  ground is at most 67 % covered (median 13 %; over half in 21 of 120); chips are never covered by buildings, chip overlap
+  ≤ 24 %; worst places (1,2) and (2,1). → Task 5.6.
+- **Walking-colonists spike** → Heiko's pick Astronaut A, option (a) → Task 2.2d; occlusion → Task 2.2c.
+- **Rulings:** WS6's hub mounts `<Grounds size="phone">`, no @200 tier. Zoom parked as Jira SA-1379; rotation and live 3D
+  parked (spec non-goal). WS2's quiet game for Blender runs dropped (Heiko).
+
 ## Follow-ups (after the 8 Nov play-test; none blocks #535)
 
-- **Warm light pools** on the paving round each building's base, as in look.html's colony dusk (PM, non-blocking).
-- **Dusk grass:** the shots agent reads 0.66 of look.html between plots; the renderer's composite reads 1.08 — settle the
-  crop first, then lift if the PM agrees.
 - **Inner lamp heads** (the lamps' heads read unlit close up) and **far-to-near shadows** across neighbouring layers.
 - **Task 2.2b** smoke and haze — still open.
 - **WS4's SHOULD:** poll for the plate request in `apps/web/e2e/grounds-opener.ts` rather than a fixed wait (WS4's file).
