@@ -1,3 +1,4 @@
+import { fineNews, verdictWords } from './sheriff-words';
 import { baseWorld, CAUGHT_MOVE, FINE_STEPS_CFG, resolveOrders, STANDARD_FINE_CFG, tileIndex, VICTIM_SHARE, type MockWorld, type SabOrder } from './fixture';
 import type { Beat } from './steps';
 
@@ -36,7 +37,8 @@ const month6 = (over: Partial<MockWorld> = {}): MockWorld => ({ ...caught(), mon
 const fined = (): MockWorld => {
   const w = month6();
   const orders = w.sabotage!.orders.map((o) => ({ ...o, fine: { due: FINE, paid: 0, toVictim: TO_VICTIM, by: 'sheriff' as const }, finedMonth: 6 }));
-  return { ...w, sabotage: { orders } };
+  // As the fine intent writes it: the fine is the news's first line (the TV's one place for it, PM 8 Nov).
+  return { ...w, sabotage: { orders }, news: [fineNews(orders[0]!), ...w.news] };
 };
 const monthEnd6 = (): MockWorld => {
   const w = fined();
@@ -49,6 +51,14 @@ const darkOrdered = () => ({ ...month7(), sabotage: { orders: [...monthEnd6().sa
 const dark = () => resolveOrders(darkOrdered(), { worked: true, seen: false });
 /** Month 8's planning: one unsolved case for Kai to investigate; the seeded draw is `solved`. */
 const month8 = (solved: boolean) => ({ ...dark(), month: 8, stage: 'planning' as const, guards: [] as number[], ready: [], verdicts: { 'sab-7lexp': solved } });
+
+/** Kai's investigation as the investigate intent answers it: the case marked, the verdict the news's first line, a named culprit's reputation moved. */
+const investigated = (solved: boolean): MockWorld => {
+  const w = month8(solved);
+  const orders = w.sabotage!.orders.map((o) => (o.id === 'sab-7lexp' ? { ...o, investigated: true, solved } : o));
+  const o = orders.find((x) => x.id === 'sab-7lexp')!;
+  return { ...w, investigation: { order: o.id, solved }, sabotage: { orders }, rep: solved ? { ...w.rep, lena: (w.rep.lena ?? 50) + CAUGHT_MOVE } : w.rep, news: [verdictWords(o), ...w.news] };
+};
 
 export const SHERIFF_STEPS: { n: number; title: string }[] = [
   { n: 1, title: 'Planning: a guard, a secret order' },
@@ -103,11 +113,11 @@ export const SHERIFF_BEATS: Beat[] = [
     line: 'Month 8. An unsolved case: Investigate (one a month). This table’s draw solves it; the next beat shows a cold trail.',
   },
   {
-    id: 's4-solved', step: 4, label: 'Solved: it was Lena', seat: 'kai', world: () => ({ ...month8(true), investigation: { order: 'sab-7lexp', solved: true }, sabotage: { orders: month8(true).sabotage!.orders.map((o) => (o.id === 'sab-7lexp' ? { ...o, investigated: true, solved: true } : o)) }, rep: { ...month8(true).rep, lena: (month8(true).rep.lena ?? 50) + CAUGHT_MOVE } }), start: { tab: 'politics', sub: 'sheriff' }, tv: 'planning', tvWanted: 'investigation',
+    id: 's4-solved', step: 4, label: 'Solved: it was Lena', seat: 'kai', world: () => investigated(true), start: { tab: 'politics', sub: 'sheriff' }, tv: 'planning', tvWanted: 'investigation',
     line: 'Solved by the Sheriff: it was Lena. The TV says it as a moment; the case is Kai’s to fine.',
   },
   {
-    id: 's4-cold', step: 4, label: 'The trail went cold', seat: 'kai', world: () => ({ ...month8(false), investigation: { order: 'sab-7lexp', solved: false }, sabotage: { orders: month8(false).sabotage!.orders.map((o) => (o.id === 'sab-7lexp' ? { ...o, investigated: true } : o)) } }), start: { tab: 'politics', sub: 'sheriff' }, tv: 'planning', tvWanted: 'investigation',
+    id: 's4-cold', step: 4, label: 'The trail went cold', seat: 'kai', world: () => investigated(false), start: { tab: 'politics', sub: 'sheriff' }, tv: 'planning', tvWanted: 'investigation',
     line: 'The other draw: the trail went cold. A cold case cannot be reopened and wears no chip; the desk says the month’s investigation is used.',
   },
 ];

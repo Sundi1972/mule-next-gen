@@ -4,6 +4,9 @@ import type { Slot } from '@mule/ui';
 import type { TableClient } from '../../../../apps/web/src/net/client';
 import { aMuleView, aPlayer } from '../../../../apps/web/test/fixtures/views';
 import { SABOTAGE, sheriffOf } from './copied/sheriff/fixture';
+// The server's public sabotage lines, written at the head of the news (an import cycle: sheriff-words reads this module's
+// names and numbers only inside its functions).
+import { fineNews, monthEndNews, verdictWords } from './sheriff-words';
 
 /**
  * The hub-tabs mock's one table. Merged from the two mocks it re-hosts, so every tab draws from the same month:
@@ -178,7 +181,9 @@ export function resolveOrders(w: World, how: { worked: boolean; seen: boolean })
     if (guarded || seen) rep[o.by] = (rep[o.by] ?? 50) + CAUGHT_MOVE;
     return { ...o, guarded, seen, worked, outcome: guarded || seen ? 'caught' : worked ? 'done' : 'failed' };
   });
-  return { ...w, stage: 'production', ready: [], sabotage: { orders }, rep };
+  // Every public outcome is the news's first line, as a broken card's is (S4-RULE-4): "someone" or a name, never more.
+  const resolved = orders.filter((o) => o.month === w.month && o.outcome !== 'pending' && (o.worked || isPublic(o)));
+  return { ...w, stage: 'production', ready: [], sabotage: { orders }, rep, news: [...resolved.map(monthEndNews), ...w.news] };
 }
 
 /** The seat's own sabotage (MyPoliticsView.sabotage): this month's pending order, what it owes, every order it made. */
@@ -483,7 +488,7 @@ export function mockTable(start: World): MockTable {
           const solved = world.verdicts?.[o.id] ?? false;
           const orders = world.sabotage.orders.map((x) => (x.id === o.id ? { ...x, investigated: true, solved } : x));
           const rep = solved ? { ...world.rep, [o.by]: (world.rep[o.by] ?? 50) + CAUGHT_MOVE } : world.rep;
-          return set({ ...world, sabotage: { orders }, investigation: { order: o.id, solved }, rep });
+          return set({ ...world, sabotage: { orders }, investigation: { order: o.id, solved }, rep, news: [verdictWords({ ...o, solved }), ...world.news] });
         }
         case 'fine': {
           // Once per revealed case, within the steps; half to the victim when it is paid (S4-RULE-8).
@@ -492,7 +497,8 @@ export function mockTable(start: World): MockTable {
           if (!o || !isPublic(o) || o.fine) return;
           const victim = incidentOf(o).victim;
           const fine = { due: intent.amount, paid: 0, toVictim: victim ? Math.floor(intent.amount * VICTIM_SHARE) : 0, by: 'sheriff' as const };
-          return set({ ...world, sabotage: { orders: world.sabotage.orders.map((x) => (x.id === o.id ? { ...x, fine, finedMonth: world.month } : x)) } });
+          const finedOrder = { ...o, fine, finedMonth: world.month };
+          return set({ ...world, sabotage: { orders: world.sabotage.orders.map((x) => (x.id === o.id ? finedOrder : x)) }, news: [fineNews(finedOrder), ...world.news] });
         }
         case 'ready':
           if (world.stage === 'overruleReveal') return set({ ...world, continued: world.continued.includes(seat) ? world.continued : [...world.continued, seat] });
