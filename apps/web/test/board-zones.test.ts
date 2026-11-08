@@ -223,8 +223,10 @@ describe('RULE-6: every board draws the rest zones', () => {
     // Phones: the ship's words, as long as fit (the full short form is reached in the thin-band sweep below).
     for (const id of ['s1', 's2']) bandWords(phoneScreen(withShip(game.viewFor(id)), id), 'phone', 'seller', SHIP_INSIDE.phone, id);
     const tv = tvScreen(withShip(game.viewFor(null)));
-    // The TV names the ship (its full long form is reached in the thin-band sweep below, over a taller board).
-    expect(bandWords(tv, 'tv', 'seller', SHIP_INSIDE.tv, 'the TV')).toMatch(/SHIP/);
+    // The TV names the ship on a board tall enough for its words: the store's spread sets how much of the board the
+    // sellers' band takes (its full long form is reached in the thin-band sweep below).
+    const tall = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi: view.auction!.hi + 20 } });
+    expect(bandWords(tvScreen(tall(withShip(game.viewFor(null)))), 'tv', 'seller', SHIP_INSIDE.tv, 'the TV')).toMatch(/SHIP/);
     // The buyers' band never changes, and a ship at or under S leaves the sellers' band as it was.
     // On a taller board, so the band has room for the full words: a ship exactly at S is not inside it.
     const atS = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi: view.auction!.hi + 20, shipPays: S } });
@@ -288,6 +290,10 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     const tv = tvScreen(game.viewFor(null));
     expect(textOf(tv, 'tv-sold-out')).toBe(`Store sold out Bids can go past its old ${S}. Highest bid ${bid}`);
     expect(textOf(tv, 'tv-store'), "the TV's store box: it sells none").toMatch(/^Sells out /);
+    // Folded into the store box: a row under Sells, Buys and Stock, the
+    // same words, not a box of its own.
+    expect(textOf(tv, 'tv-store'), 'the sold-out words are a row of the store box').toMatch(new RegExp(`^Sells out Buys \\d+ Stock 0 Store sold out Bids can go past its old ${S}\\. Highest bid ${bid}$`));
+    expect(tv.match(/data-testid="tv-sold-out"/g), 'said once on the TV').toHaveLength(1);
   });
 
   it("B-AC-E1 (phone, TV): sold out with no bid past the old line, every board's line reads the store sold out at its old price, never a bid", () => {
@@ -306,6 +312,17 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     // A store that never had the good: no selling line, and a view without zones (a record from before them).
     const { zones: _, ...auction } = { ...view.auction!, storeSells: null };
     expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out No store price yet: bids set it.');
+  });
+
+  it("TV-FIT: on the walk the side's first box keeps the stage and the units traded; the header names the good, so the box doesn't; the side pick's box still does", () => {
+    const { game } = toWalk();
+    const view = game.viewFor(null);
+    const good = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore', crystite: 'Crystite', rareEarth: 'Rare earth', alloy: 'Alloy', electronics: 'Electronics', medicine: 'Medicine' }[view.auction!.good];
+    const walk = tvScreen(view);
+    expect(textOf(walk, 'tv-stage-box')).toMatch(/^(Walk|Trading · clock slowed) \d+ units? traded$/);
+    expect(walk).toContain(`${good} auction`);
+    const status = tvScreen({ ...view, auction: { ...view.auction!, stage: 'status' } });
+    expect(textOf(status, 'tv-stage-box')).toBe(`${good} Buy or sell?`);
   });
 
   it('B-AC-E1 (phone, TV): while the store sells, its line is its selling price, and no screen says sold out', () => {

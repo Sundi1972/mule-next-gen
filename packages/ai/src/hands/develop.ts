@@ -138,17 +138,16 @@ function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: Floo
 }
 
 /**
- * Whether lake plot `plot` can never get a MULE on the floor: no spot on its shore offers its install (installable,
- * the walk the hands price by). Judged for its owner; a plot nobody holds, as if each seat held it in turn.
+ * Whether plot `plot` can never get a MULE on the floor (installable, the walk the hands price by): a lake no spot on
+ * its shore offers the install from, or a plot no walk from the store reaches (one shut in by lake and the map's edge).
+ * Judged as if seat `me` held it; without `me`, for its owner, and a plot nobody holds as if each seat held it in turn.
+ * A seat's own land is no shore for its own install.
  */
-export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig()): boolean {
+export function unreachablePlot(state: GameState, plot: number, cfg: FloorConfig = floorConfig(), me?: string): boolean {
   const tile = state.tiles[plot]!;
-  if (tile.terrain !== 'lake') return false;
-  if (tile.owner !== null) return !installable(state, cfg, tile.owner, plot);
-  return state.players.every((p) => {
-    const held = { ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: p.id } : t)) };
-    return !installable(held, cfg, p.id, plot);
-  });
+  const unreachableFor = (seat: string) => !installable({ ...state, tiles: state.tiles.map((t, i) => (i === plot ? { ...t, owner: seat } : t)) }, cfg, seat, plot);
+  const seat = me ?? tile.owner;
+  return seat !== null ? unreachableFor(seat) : state.players.every((p) => unreachableFor(p.id));
 }
 
 /** One route MULE: the plot it is installed on and the outfit it is fitted with. */
@@ -157,12 +156,12 @@ export interface RouteMule {
   outfit: Outfit | null;
 }
 
-/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the hand can't fit a led MULE again. */
+/** Whether the MULE the seat leads came off a plot by a swap, fitted as it was: the engine's reoutfitMule would fit it again, but the hand never does. */
 const ledOffSwap = (p: Player): boolean => !!p.takenMule?.swapped && p.carriedMule === p.takenMule.outfit;
 
 /**
  * Why the hands refuse route MULE `mule` before it is bought, or null to play it: its plot is not the seat's, or has a
- * MULE it can't swap; on the floor (`floor`, its config), a lake plot no shore reaches (unreachablePlot); it would take
+ * MULE it can't swap; on the floor (`floor`, its config), a plot no walk or shore reaches (unreachablePlot); it would take
  * the cash under the cash floor an adopted playbook set; or the floor's walk does not fit the clock (AM-25). Without
  * `floor` the game taps, which installs on any lake. See RULE-9 row 3.
  *
@@ -178,7 +177,7 @@ export function routeVeto(state: GameState, mind: Mind, mule: RouteMule, walk?: 
   // The MULE installed is the one the seat leads if fitted already, so a swap needs it fitted for the route's outfit.
   const swaps = outfit !== null && tile.outfit !== outfit && (led === null || led === 'empty' || led === outfit) && !justSwappedOff(me, tile.x, tile.y);
   if (tile.owner !== mind.me || (tile.outfit !== null && !swaps)) return `stale: plot ${plot}`;
-  if (floor && unreachablePlot(state, plot, floor)) return `lake: no shore reaches plot ${plot}`;
+  if (floor && unreachablePlot(state, plot, floor, mind.me)) return `${tile.terrain === 'lake' ? 'lake: no shore reaches' : 'no walk reaches'} plot ${plot}`;
   // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
   const cashFloor = adoptedNow(state, mind)?.cashFloor != null ? cashReserve(state, mind) : null;
   if (cashFloor !== null && outfit !== null) {
@@ -666,11 +665,11 @@ export class DevelopHand {
     const plot = (x: number, y: number) => tileIndex(state.width, x, y);
     const stops: PlanStop[] = [];
     for (const { action: a } of this.queue) {
-      if (a.type === 'analyse') stops.push({ plot: plot(a.x, a.y), work: this.assaySeconds(state, cfg, a.x, a.y) + pause });
-      else if (a.type === 'filter') stops.push({ plot: plot(a.x, a.y), work: pause });
+      if (a.type === 'analyse') stops.push({ plot: plot(a.x, a.y), press: 'analyse', work: this.assaySeconds(state, cfg, a.x, a.y) + pause });
+      else if (a.type === 'filter') stops.push({ plot: plot(a.x, a.y), press: 'filter', work: pause });
       else if (a.type === 'buyMule') stops.push({ place: 'corral', work: pause, lead: false });
       else if (a.type === 'outfit') stops.push({ place: a.outfit as HallPlace, work: pause, lead: true });
-      else if (a.type === 'install') stops.push({ plot: plot(a.x, a.y), work: pause, lead: true });
+      else if (a.type === 'install') stops.push({ plot: plot(a.x, a.y), press: 'install', work: pause, lead: true });
       else if (a.type === 'pub') stops.push({ place: 'pub', work: 0 });
     }
     const last = stops.at(-1);
@@ -696,7 +695,7 @@ export class DevelopHand {
     if (a.type === 'buyMule') return this.restFrom(view, c) * (1 + cfg.steer.botPlanSlackShare) + this.restMargin(cfg, c) <= secondsLeft;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
     const work = a.type === 'analyse' ? this.assaySeconds(state, cfg, a.x, a.y) : 0;
-    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + this.restMargin(cfg, c) <= secondsLeft;
+    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work, a.type) + this.restMargin(cfg, c) <= secondsLeft;
   }
 
   /**
@@ -1057,6 +1056,13 @@ export class DevelopHand {
     if (a.type === 'analyse' && state.players.find((p) => p.id === me)!.analysed.includes(plotOf(a))) {
       this.queue.shift();
       this.log(head, false, 'skipped', 'already analysed');
+      return false;
+    }
+    // Nor, on the floor, an analysis of an own plot while it leads a fitted MULE (one a swap put on the lead): Reach
+    // offers INSTALL there first, so the walk would end refused.
+    if (a.type === 'analyse' && this.onFloor && led !== null && led !== 'empty' && state.tiles[plotOf(a)]!.owner === me) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'leading');
       return false;
     }
     return true;

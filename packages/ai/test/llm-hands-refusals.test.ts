@@ -10,7 +10,6 @@ import {
   AI_LEVELS,
   AI_PERSONAS,
   createGame,
-  floorConfig,
   GOOD_CONFIG,
   tileAt,
   tileIndex,
@@ -19,7 +18,6 @@ import {
   type Playbook,
   type Strategy,
 } from '@mule/engine';
-import { doorTable } from '../src/floor-time.js';
 import { unreachablePlot } from '../src/hands/develop.js';
 import { landBrief, phaseBrief } from '../src/llm/brief.js';
 import { toolsFor, type WhatIfSim } from '../src/llm/tools.js';
@@ -33,9 +31,6 @@ const LAKE_MARK = 'lake: no MULE can be installed';
 
 const game = (seed: number, ids = ['p0', 'p1', 'p2', 'p3']) => createGame({ seed, players: ids.map((id, i) => ({ id, name: `Seat ${i}`, isAi: true })) });
 
-/** Ground truth from the floor itself: no door of the store has a walk to the plot that ends. */
-const noWalk = (state: GameState, plot: number) => [...doorTable(state, floorConfig()).values()].every((walks) => walks[plot]!.seconds === Infinity);
-
 /** The brief's one line that starts with `head`. */
 const lineOf = (text: string, head: string) => text.split('\n').find((l) => l.startsWith(head))!;
 
@@ -43,52 +38,54 @@ const lineOf = (text: string, head: string) => text.split('\n').find((l) => l.st
 const waterOn = (plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit: 'water' }, { act: 'install', plot }, { act: 'pub' }];
 
 describe('hands-refusals fix: a plot the floor never walks to is one no MULE can be installed on', () => {
-  it('hands-refusals fix: FM-no-walk: the land brief marks a lake whose only shore is a corner (seed 4, plot 25: 2-4 AI 1 routed onto it six months) wherever it names it, and a cut-off plains plot too', () => {
-    const state = game(4);
-    const corner = tileIndex(state.width, 10, 1);
-    // The deep4 case: a shore stand exists, so the hands' lake check passes, but no walk reaches it.
-    expect(state.tiles[corner]!.terrain).toBe('lake');
-    expect(unreachablePlot(state, corner)).toBe(false);
-    expect(noWalk(state, corner)).toBe(true);
-
-    // Free and ranked: the land plans and the draft ranking mark it.
-    const landGrant: LandGrantPlay = { ranked: [{ plot: corner, value: 40 }], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 };
-    const draft: LandDraft = { strategy: STRATEGY, landGrant };
-    expect(lineOf(landBrief(state, mind, PERSONAS.trader, draft, []).text, 'Ranked:')).toBe(`Ranked: plot ${corner} ${LAKE_MARK} (40 cr)`);
-
-    // Owned: the seat's plot line marks it in place of idle, and the drafted route's install on it is marked.
-    state.tiles[corner]!.owner = 'p0';
-    const route = { route: waterOn(corner) as NonNullable<Playbook['development']>['route'], timeBudgetMs: 30_000, ifSoldOut: 'pub' as const };
-    const text = landBrief(state, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant: { ...landGrant, ranked: [] } }, [], {}, route).text;
-    expect(lineOf(text, 'Seat 0 (you):')).toBe(`Seat 0 (you): 1 plot — plot ${corner} ${LAKE_MARK}`);
-    expect(lineOf(text, 'Route:')).toBe(`Route: buy a MULE, outfit it for Water, install it on plot ${corner} (${LAKE_MARK}), the pub.`);
-
-    // Seed 14's plains pocket: land, so not a lake, and no walk reaches it either.
+  it('hands-refusals fix: FM-no-walk: the land brief marks a plot no walk reaches (seed 14\'s cut-off plains) wherever it names it, and no longer the corner-shore lake the hands now reach (seed 4, plot 25)', () => {
+    // Seed 14's plains pocket: land, so not a lake, and no walk reaches it.
     const pocket = game(14);
     const plains = tileIndex(pocket.width, 13, 6);
     expect(pocket.tiles[plains]!.terrain).toBe('plains');
-    expect(noWalk(pocket, plains)).toBe(true);
+    expect(unreachablePlot(pocket, plains)).toBe(true);
+    const landGrant: LandGrantPlay = { ranked: [{ plot: plains, value: 40 }], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 };
+    expect(lineOf(landBrief(pocket, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant }, []).text, 'Ranked:')).toBe(`Ranked: plot ${plains} cut off: no MULE can be installed (40 cr)`);
     pocket.tiles[plains]!.owner = 'p0';
-    const pocketText = landBrief(pocket, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant: { ...landGrant, ranked: [] } }, []).text;
+    const route = { route: waterOn(plains) as NonNullable<Playbook['development']>['route'], timeBudgetMs: 30_000, ifSoldOut: 'pub' as const };
+    const pocketText = landBrief(pocket, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant: { ...landGrant, ranked: [] } }, [], {}, route).text;
     expect(lineOf(pocketText, 'Seat 0 (you):')).toBe(`Seat 0 (you): 1 plot — plot ${plains} cut off: no MULE can be installed`);
+    expect(lineOf(pocketText, 'Route:')).toBe(`Route: buy a MULE, outfit it for Water, install it on plot ${plains} (cut off: no MULE can be installed), the pub.`);
+
+    // The deep4 case (2-4 AI 1 routed onto it six months): a lake whose only shore is a corner. Since WS1's walk prices a
+    // lake from its shore stands, corners included, the hands reach it, so the brief shows it as any idle plot.
+    const state = game(4);
+    const corner = tileIndex(state.width, 10, 1);
+    expect(state.tiles[corner]!.terrain).toBe('lake');
+    expect(unreachablePlot(state, corner)).toBe(false);
+    state.tiles[corner]!.owner = 'p0';
+    expect(lineOf(landBrief(state, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant: { ...landGrant, ranked: [] } }, []).text, 'Seat 0 (you):')).toBe(`Seat 0 (you): 1 plot — plot ${corner} idle`);
   });
 
-  it("hands-refusals fix: FM-no-walk: whatIf refuses a route MULE onto a plot no walk reaches, on its install step, with why, where the hands would refuse it a turn later as 'the walk takes Infinity s'", async () => {
+  it('hands-refusals fix: FM-no-walk: whatIf refuses a route MULE onto a plot no walk reaches, with why, and not one onto the corner-shore lake the hands now reach', async () => {
+    const whatIf = async (state: GameState, me: string, plot: number) => {
+      const sim: WhatIfSim = {
+        seats: state.players.map((p, i) => ({ id: p.id, persona: 'trader', level: 'trader', seed: 500 + i })),
+        playbook: () => ({
+          playbook: { v: 1, seat: me, month: state.month, phase: 'planning', strategy: { ...STRATEGY, reason: 'test' }, by: 'engine' } satisfies Playbook,
+          rejected: [],
+        }),
+      };
+      const answer = JSON.parse((await toolsFor(state, me, sim).run('whatIf', { edits: [{ path: '/development/route', to: waterOn(plot) }] })).content) as {
+        rejected: { path: string; to: unknown; why: string }[];
+      };
+      return answer.rejected;
+    };
+    const pocket = game(14, ['a', 'b', 'c', 'd']);
+    const plains = tileIndex(pocket.width, 13, 6);
+    tileAt(pocket.tiles, pocket.width, 13, 6)!.owner = 'a';
+    // The playbook gate refuses it (validate.ts's install check, as unreachablePlot judges it), naming the step.
+    expect(await whatIf(pocket, 'a', plains)).toEqual([{ path: '/development/route', to: waterOn(plains), why: `route: no walk reaches plot ${plains}, step 2` }]);
+
     const state = game(4, ['a', 'b', 'c', 'd']);
     const corner = tileIndex(state.width, 10, 1);
     tileAt(state.tiles, state.width, 10, 1)!.owner = 'a';
-    expect(noWalk(state, corner)).toBe(true);
-    const sim: WhatIfSim = {
-      seats: state.players.map((p, i) => ({ id: p.id, persona: 'trader', level: 'trader', seed: 500 + i })),
-      playbook: () => ({
-        playbook: { v: 1, seat: 'a', month: state.month, phase: 'planning', strategy: { ...STRATEGY, reason: 'test' }, by: 'engine' } satisfies Playbook,
-        rejected: [],
-      }),
-    };
-    const answer = JSON.parse((await toolsFor(state, 'a', sim).run('whatIf', { edits: [{ path: '/development/route', to: waterOn(corner) }] })).content) as {
-      rejected: { path: string; to: unknown; why: string }[];
-    };
-    expect(answer.rejected).toEqual([{ path: '/development/route/2', to: { act: 'install', plot: corner }, why: `route step 2: lake: no walk reaches plot ${corner}` }]);
+    expect(await whatIf(state, 'a', corner)).toEqual([]);
   });
 });
 

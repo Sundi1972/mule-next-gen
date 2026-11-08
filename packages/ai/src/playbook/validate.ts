@@ -1,6 +1,8 @@
 import {
   AI_PLANS,
   cloneForSim,
+  DEV_STEER,
+  floorConfig,
   GAME,
   GOOD_CONFIG,
   GOODS,
@@ -11,17 +13,21 @@ import {
   orderGeoDrone,
   outfitCostFor,
   outfitMule,
+  POLITICS,
   RuleError,
   STRATEGIST,
   unlist,
   type DevelopmentPlay,
+  type FloorConfig,
   type GameState,
   type Good,
+  type Office,
   type Outfit,
   type Playbook,
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
+import { installable } from '../floor-time.js';
 import { goodPlan, outfitName, shortfallHold } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import type { Mind } from '../value.js';
@@ -72,6 +78,8 @@ interface Ctx {
   pb: Playbook;
   /** The hold the engine's fresh draft plays for a good, under the strategy that plays. */
   freshHold: (good: Good) => number;
+  /** Where the game steers (DEV_STEER.on), the floor a route's installs are walked on; null where it taps. */
+  floor: FloorConfig | null;
 }
 
 type Row = (value: unknown, ctx: Ctx, unit: string[]) => Verdict;
@@ -140,7 +148,11 @@ function notes(v: unknown, max: number, maxName: string): Verdict {
 /** Why a route fails: the reason, the faulty step, and where the steps that cannot play begin (its group's first). */
 type RouteFault = [why: string, step: number, cut: number];
 
-/** RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. */
+/**
+ * RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. An
+ * install the hands could never play is refused here too, so the draft's route plays instead of a dropped MULE: a lake
+ * no shore reaches, or a plot no walk reaches, on the floor (as hands/develop.ts::unreachablePlot judges it), and a plot whose MULE already carries the outfit (no swap; routeVeto).
+ */
 function routeFault(route: unknown, ctx: Ctx): RouteFault | null {
   if (!Array.isArray(route)) return ['not a list of steps', 0, 0];
   const cap = AI_PLANS.bounds.routeSteps;
@@ -171,6 +183,10 @@ function routeFault(route: unknown, ctx: Ctx): RouteFault | null {
         if (!OUTFITS.includes(outfit.outfit as Outfit)) return ['no such outfit', outfitAt, start];
         if (install.act !== 'install') return ['buyMule not followed by outfit and install', installAt, start];
         if (!isMine(ctx, install.plot)) return [isPlot(ctx, install.plot) ? 'not your plot' : 'no such plot', installAt, start];
+        const plot = install.plot as number;
+        // hands/develop.ts::unreachablePlot for an own plot, read here through floor-time: the hands' module reaches brain.ts (INV-2).
+        if (ctx.floor && !installable(ctx.state, ctx.floor, ctx.seat, plot)) return [`${ctx.state.tiles[plot]!.terrain === 'lake' ? 'lake: no shore reaches' : 'no walk reaches'} plot ${plot}`, installAt, start];
+        if (ctx.state.tiles[plot]!.outfit === outfit.outfit) return [`plot ${plot} already has a ${outfitName(outfit.outfit as Outfit)}`, installAt, start];
         group = [start, installAt];
         i = installAt;
         break;
@@ -372,6 +388,26 @@ function sellerFloor(ctx: Ctx, good: Good): number {
 
 const perRow: Row = (v, ctx, unit) => (!ctx.others.has(unit[3]!) ? refuse('no such player') : oneOf(TACTICS, 'no such tactic')(v, ctx, unit));
 
+/** Who stands for `office` at its next ballot: on the ballot open now, and declared for the next. None without politics. */
+function onBallot(state: GameState, office: Office): string[] {
+  const p = state.politics;
+  if (!p) return [];
+  return [...(p.election?.stage === 'ballot' ? p.election.candidates[office] : []), ...p.candidates[office]];
+}
+
+/** RULE-1's politics rows (AM-37; spec B C12): a seat's recorded vote names a candidate standing; a law vote needs a law up. */
+const vote: Row = (v, ctx, unit) => {
+  const office = unit[2] as Office;
+  if (!(POLITICS.offices as readonly string[]).includes(office)) return refuse('no such office');
+  if (typeof v !== 'string' || !ctx.state.players.some((p) => p.id === v)) return refuse('no such player');
+  return onBallot(ctx.state, office).includes(v) ? ok(v) : refuse(`not on the ${office} ballot`);
+};
+const lawVote: Row = (v, ctx) => {
+  if (typeof v !== 'boolean') return refuse('not true or false');
+  const p = ctx.state.politics;
+  return p && (p.proposal !== null || p.council?.stage === 'ballot') ? ok(v) : refuse('no law on the ballot');
+};
+
 type Unit = { unit: string[]; row: Row } | { refused: string };
 const NO_FIELD: Unit = { refused: 'no such field' };
 const NOT_HERE: Unit = { refused: 'not in this playbook' };
@@ -390,6 +426,9 @@ function unitOf(segs: string[], pb: Playbook): Unit {
       return { unit: ['lessons'], row: lessons };
     case 'store':
       return { refused: 'no store play in v1' };
+    case 'politics':
+      if (a === 'votes') return b === undefined || c !== undefined ? NO_FIELD : { unit: ['politics', 'votes', b], row: vote };
+      return a === 'law' && b === undefined ? { unit: ['politics', 'law'], row: lawVote } : NO_FIELD;
     case 'planning':
     case 'landGrant':
     case 'development':
@@ -471,6 +510,8 @@ function unitsOf(pb: Playbook): string[][] {
     if (part?.market !== undefined) out.push(['auction', g, 'market']);
   }
   if (pb.store !== undefined) out.push(['store']);
+  for (const office of Object.keys(isObject(pb.politics) && isObject(pb.politics.votes) ? pb.politics.votes : {})) out.push(['politics', 'votes', office]);
+  if (isObject(pb.politics) && pb.politics.law !== undefined) out.push(['politics', 'law']);
   return out;
 }
 
@@ -485,6 +526,8 @@ function containersOf(pb: Playbook): string[][] {
     }
   }
   if (pb.rivalReads !== undefined) out.push(['rivalReads']);
+  if (pb.politics !== undefined) out.push(['politics']);
+  if (isObject(pb.politics) && pb.politics.votes !== undefined) out.push(['politics', 'votes']);
   return out;
 }
 
@@ -496,7 +539,7 @@ const holderOf = (unit: readonly string[]) => unit.slice(0, unit[0] === 'strateg
 
 /** A field the playbook may lack: one that fails step 5 is dropped; a field every playbook of its phase has stays. */
 const isOptional = (unit: readonly string[]) =>
-  ['rivalReads', 'lessons', 'store'].includes(unit[0]!) || (unit[1] === 'stances' && unit[2] !== undefined) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
+  ['rivalReads', 'lessons', 'store', 'politics'].includes(unit[0]!) || (unit[1] === 'stances' && unit[2] !== undefined) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
 
 const pathOf = (segs: readonly string[]) => `/${segs.map((k) => k.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -532,6 +575,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     pb,
     // A profile with no level has no draft of its own, so it buys nothing (RULE-2's safe side).
     freshHold: (good) => (profile.mind.level ? (engineDraft(['auction', good]).auction?.[good]?.hold ?? 0) : 0),
+    // The switch alone: a harness that plays with `walking` false taps, and there a lake no shore reaches still installs (AM-36).
+    floor: DEV_STEER.on ? floorConfig() : null,
   };
   /**
    * Each accepted edit, with the keys of the value it set (an append's `-` as the index it took) and the length of each

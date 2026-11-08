@@ -14,7 +14,6 @@ import {
   neighbours,
   outfitBlocked,
   POLLUTION,
-  PRICE,
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
@@ -25,9 +24,9 @@ import {
   storeForSale,
   storePaysFor,
   storeOnStrike,
-  storeBuyPrice,
+  storeBuyAt,
+  storeSellAt,
   storeSellLine,
-  storeSellPrice,
   tileIndex,
   walkSeconds,
   WALK,
@@ -218,7 +217,11 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
     const labels = top.map((s) => s.label).join(' and ');
     return candidate<LandPlan>(`land:${focus}`, `${FOCUS_LABEL[focus]}: ${labels || 'nothing left'}`, { focus, ranking }, worth, cons);
   });
-  return shortlist(plans, mind.level.shortlist, mind.level.shortlistTolerance);
+  const list = shortlist(plans, mind.level.shortlist, mind.level.shortlistTolerance);
+  // Worth, not only utility: the gain curve flattens near the top, so a far poorer plan can sit within the tolerance.
+  const best = Math.max(...list.options.map((c) => c.value));
+  if (best <= 0) return list;
+  return { ...list, options: list.options.filter((c, i) => i === 0 || c.value >= best * land.offerShare) };
 }
 
 /**
@@ -478,7 +481,25 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
     }
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
+  if (STRATEGIST.energyFirst && needEnergy) energyFirst(cands);
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+export const ENERGY_FIRST = 'no Energy plant of my own yet';
+
+/**
+ * STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. On
+ * the floor, the draft's shoreless narrows it to reachable installs: its vetoes come off when no reachable plant is left.
+ */
+function energyFirst(cands: Candidate<DevAction>[]): void {
+  const isPlant = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === 'energy';
+  if (!cands.some((c) => isPlant(c) && !c.veto)) return;
+  for (const c of cands) {
+    if (isPlant(c) || c.veto) continue;
+    c.veto = ENERGY_FIRST;
+    c.utility = 0;
+    c.rationale = `Ruled out: ${ENERGY_FIRST}`;
+  }
 }
 
 /**
@@ -654,7 +675,7 @@ function monthPlan(obs: GameState, mind: Mind, o: Outlook, good: Good, values: U
     mind,
     goods,
     (g) => (g === good ? values : unitValues(obs, o, g, mind)),
-    (g) => (g === good ? expectedPrices(obs, g).buy : belief(obs, o, g) * (1 + PRICE.storeSpread)),
+    (g) => (g === good ? expectedPrices(obs, g).buy : storeSellAt(obs, g, belief(obs, o, g), { exact: true })),
   );
   const share = money * STRATEGIST.budgetShare;
   const later = goods.reduce((n, g) => n + (g === good ? 0 : (plan.cost[g] ?? 0)), 0);
@@ -678,10 +699,10 @@ export function shortfallHold(obs: GameState, me: string, good: Good): { whole: 
 export function expectedPrices(obs: GameState, good: Good): { sell: number; buy: number } {
   const a = obs.auction;
   const posted = obs.store.posted[good];
-  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyPrice(posted);
+  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyAt(obs, good, posted);
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
-  const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);
+  const storeSell = a?.good === good ? a.storeSell : storeSellAt(obs, good, posted);
   return { sell, buy: storeSell };
 }
 

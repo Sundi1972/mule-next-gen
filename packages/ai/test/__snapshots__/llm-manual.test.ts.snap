@@ -8,7 +8,7 @@ The rules of the colony game you play, generated from the game itself.
 - planning: Everyone reads the colony's stores, prices and plots. Players may send a geo drone over 2 free or listed plots for 60 credits (their ground is known at once), and list up to 2 plots or MULEs for the land auction, 4 lots a month from all sellers. In months 1, 4, 7, 10 planning opens with an election for governor: announce, then a secret ballot if an office has two or more candidates, then the result. Planning ends when every player is Ready.
 - the land grant: The light passes over the free plots one at a time in reading order, 650 ms each, 1 pass; the first player to press claims the lit plot, up to 1 claims each. It ends after the pass, when no free land is left, or once every player has used their claims or is Done.
 - the land auction: The listed lots come up one at a time: an intro of 3000 ms, then a walk of 15000 ms where every player but the seller stands as a buyer, unless short of the minimum or leading a MULE when a MULE is up, and walks up to bid. The highest bid at the bell wins; a change of leader in the last 2000 ms sets the clock back to it. An unsold lot is kept, or sold to the store for 67% of the 300 a plot scores and 50% of the MULE price for a MULE, as the seller chose. Each month the colony puts one free plot up with a chance of 10%. With nothing listed it is skipped.
-- development: One clock of 60 s for every player. Each step from one map tile to the next takes 0.4 s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. At upkeep the store builds MULEs from its own Smithore, 1 Smithore each, until the corral holds 2 for each player plus 2; short of Smithore it builds fewer, so the corral can run dry. A MULE costs 120 plus 1 Smithore at the store's posted price, times a scarcity factor: up 15% after a development that sold the corral out, down 10% after one that left 50% or more of its MULEs unsold, never below 60% of that base. Every development move first passes these checks: it is development (else: "Not allowed during <phase>"); your development time has not run out (else: "Your development time is up"); you have not gone to the pub this turn (else: "Your turn is over: you went to the pub"); your colonist is not still walking to the last place you sent it (else: "Still walking"); your colonist is not still assaying a plot (else: "Still assaying").
+- development: One clock of 60 s for every player. Each step from one map tile to the next takes 0.4 s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. At upkeep the store builds MULEs from its own Smithore, 1 Smithore each, until the corral holds 2 for each player plus 2; short of Smithore it builds fewer, so the corral can run dry. A MULE costs 120 plus 1 Smithore at the store's posted price, times a scarcity factor: up 25% after a development that sold the corral out, down 10% after one that left 50% or more of its MULEs unsold, never below 60% of that base. Every development move first passes these checks: it is development (else: "Not allowed during <phase>"); your development time has not run out (else: "Your development time is up"); you have not gone to the pub this turn (else: "Your turn is over: you went to the pub"); your colonist is not still walking to the last place you sent it (else: "Still walking"); your colonist is not still assaying a plot (else: "Still assaying").
 - production: Every plot with a MULE makes its good, more on better ground, plus 1 when a neighbour of yours makes the same good, or 2 in a cluster of 4 or more. A raw plot burns Energy from your stock (Food 1, Water 1, Energy 1, Smithore 2, Crystite 2, Rare earth 2); an Energy plot pays its own from its output and is never turned off. An owner short of Energy has their other plots turned off, biggest use first, until the rest fit; a plot turned off makes 20% of its output, rounded half up. A Food plot also needs Water: when its owner holds less Water than their household and crew drink, it makes 50% of what it would, rounded down; one also turned off for want of Energy takes both cuts, the Water cut on what the Energy cut left. Who is short of Water is decided as production begins, before any plot runs, from the Water the last upkeep left, against what the household and crew drink with every MULE installed by then, that month's development included: a Food plot installed that month is checked at once, and Water made at a production waters the next one. A factory turns inputs from your stock into its good (Alloy: 2 Smithore + 2 Energy make 2; Electronics: 1 Rare earth + 1 Alloy + 1 Energy make 1; Medicine: 1 Food + 1 Water + 1 Energy make 2) and makes nothing without them. A factory turned off for want of Energy makes 20% of its output from 20% of each non-Energy input, rounded up, and takes no inputs when its share of output rounds to 0.
 - the goods auction: Goods come up one at a time (Food, Water, Energy, Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine). Each has a status screen where players pick buyer, seller or pass, with no clock: it waits for every player's Done or the host's Continue, then a walk of 20000 ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund. In a month the export ship calls it buys there too, from any seller, up to its hold of each good on its wishlist: the off-world price for its first unit of a good and 2% less for each one after, 10% more when the air is clean; a sale to it pays the sales tax and any export tax.
 - upkeep: Each player eats 2 Food and drinks 1 Water, plus 1 Food per 4 crew and 1 Water per 6, from their own stock. Your goods spoil (Food 50%, Water 5%, Energy 25%, Medicine 20%, rounded down), and anything above 10 units of a good is lost. Every 3 months, first in month 3, an export ship calls; its wishlist of 3 goods, drawn from Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine, is public from the month before. It buys from players at that month's goods auction, then at upkeep takes the store's surplus of those goods until its hold is full: what the store holds above 2 months of the colony's demand.
@@ -38,7 +38,7 @@ Cost: free.
 
 ### buyMule
 In: development.
-Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 15% after a month the corral sold out), and Gearlings pay 95% of it.
+Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 25% after a month the corral sold out), and Gearlings pay 95% of it.
 Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); the walk there ends before the clock does (else: "Not enough time to walk there"); you are not already leading a MULE (else: "Already leading a MULE"); the corral has a MULE left (else: "The store is out of MULEs"); you have the price in hand (else: "Not enough money").
 Cost: yes, as it says under Does.
 
@@ -117,7 +117,7 @@ Cost: free.
 ### setTax
 In: planning. Args: percent (number).
 Does: The Governor sets the sales tax on every sale, paid into the colony fund, in whole percent; it starts at 5%, stays within 0% to 15%, and moves at most 5 points from the month's starting rate.
-Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); no overrule vote on the tax is open (else: "An overrule vote on the tax is called: it holds until it is settled"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
 Cost: free.
 
 ### done
@@ -162,10 +162,46 @@ Does: Votes yes or no on the open law ballot; a later vote replaces it until the
 Legal when: the law ballot is open (else: "The law ballot is not open").
 Cost: free.
 
+### setBudget
+In: planning. Args: shares ({ projects, welfare, security }).
+Does: Shares the colony fund's spare credits between the budget's lines, in whole percent; the buildings, Welfare and the rest are paid from those shares at month end.
+Legal when: the game plays with a council (else: "This game plays without the colony's council"); the votes are over (else: "Set the budget once the votes are over"); you are the Governor (else: "Only the Governor sets the budget"); every line you share is one the colony has (else: "The colony has no <line> line yet"); a share is a whole number of percent, in steps of 5, up to its line's limit (else: "<Line> is 0% to <max>%, in steps of 5"); the shares add up to at most 100% (else: "The shares add up to <total>%: at most 100%").
+Cost: free.
+
+### callOverrule
+In: planning. Args: target (tax | null).
+Does: Calls this month's overrule vote on a setting the Governor changed; null takes your own call back.
+Legal when: the game plays with a council (else: "This game plays without the colony's council"); the votes are over (else: "Call an overrule once the votes are over"); the colony has a Governor (else: "There is no Governor to overrule"); you are not the Governor (else: "The Governor can't overrule themself"); no vote is called this month (else: "<name> already called this month's vote"); the target is the tax (else: "Only the tax can be overruled in this version"); the target is not the no-confidence vote (else: "Only the Sheriff's inquiry opens a no-confidence vote"); the setting changed since the month began (else: "The <target> is as it was when the month began"); you have a call to withdraw (else: "There is no call of yours to withdraw").
+Cost: free.
+
+### voteOverrule
+In: planning. Args: yes (boolean).
+Does: Votes yes (restore the setting the month began with) or no (keep the Governor's) on the open overrule ballot; a later vote replaces it until the ballot closes.
+Legal when: the overrule ballot is open (else: "The overrule vote is not open").
+Cost: free.
+
+### offerDeal
+In: planning. Args: to (player), terms ({ kind: 'pact' } | { kind: 'vote', office, candidate } | { kind: 'vote', law: true, yes }), months (1 | 3 | 6).
+Does: Offers another player a deal card: a pact for a few months, or a promise to vote for a candidate or on the next law; nothing binds until they accept.
+Legal when: the game plays with deals (else: "This game plays without deals"); it is planning (else: "Cards are offered in planning"); it names another player (else: "Pick another player"); you have fewer than 3 cards waiting for an answer (else: "You have <count> cards waiting for an answer"); they have answered your last card (else: "<name> has not answered your last card"); a pact runs 1, 3, 6 months (else: "A pact runs 1, 3 or 6 months"); you have no pact with them yet (else: "You already have a pact with <name>"); a vote for an office names an elected office (else: "The <office> is not elected yet"); an election is left this game (else: "No election is left this game"); you promise your vote to someone other than yourself (else: "Promise your vote to someone else"); the candidate is running for that office (else: "<name> is not running for <office>"); a vote on a law has a law up for a vote (else: "No law is up for a vote"); you have not promised your vote on this ballot (else: "You already promised your vote on this ballot").
+Cost: free.
+
+### withdrawDeal
+In: planning. Args: id (the card's id, 'deal-…').
+Does: Takes back a card this seat offered and the other player has not answered.
+Legal when: the game plays with deals (else: "This game plays without deals"); the card is yours and still waiting for an answer (else: "That card is no longer open").
+Cost: free.
+
+### answerDeal
+In: planning. Args: id (the card's id, 'deal-…'), accept (boolean).
+Does: Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.
+Legal when: it is planning (else: "Cards are answered in planning"); the card was offered to you and is still waiting for an answer (else: "That card is no longer open"); a pact accepted is your only pact with them (else: "You already have a pact with <name>").
+Cost: free.
+
 ## When a move is smart
 Each line names the move and the playbook field you set to play it.
 - claim (LandGrantPlay.ranked): a plot adds 300 to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes 1 more.
-- buyMule (DevelopmentPlay.route): buy early: the store fills the corral to 2 for each player plus 2 at upkeep, as its Smithore allows, and a sold-out corral raises next month's price by 15%.
+- buyMule (DevelopmentPlay.route): buy early: the store fills the corral to 2 for each player plus 2 at upkeep, as its Smithore allows, and a sold-out corral raises next month's price by 25%.
 - analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 60, so analyse only where the answer changes the outfit.
 - outfit (Strategy.moneyMaker): for the good the colony is short of or the export ship wants (3 goods, every 3 months): a scarce good sells dear.
 - pub (DevelopmentPlay.ifSoldOut): when the corral is out or your route is done: the pub pays more the earlier you go, 20 plus up to 60 + 20 times the month.

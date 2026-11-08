@@ -1,6 +1,7 @@
 import type { MuleView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
 import type { MuleGame } from '../../server/src/mule-game.js';
+import { theTvMonthEnd } from './grounds-opener-steps';
 import { check, type GameStepContext } from './harness';
 
 /**
@@ -37,6 +38,17 @@ function readNumber(text: string | null, what: string): number {
   return /^[−-]/.test(shown) ? -n : n;
 }
 
+/**
+ * The air as the TV month end shows it: with the colony on, the Environment gauge carries the level, rounded as the
+ * server's air level is (the panel beside it keeps only the change, PM ruling 7 Nov; the month end lands only happiness,
+ * so the gauge needs no wait); without, the panel's own Air block.
+ */
+async function tvAir(tvEnd: Locator): Promise<number> {
+  const gauge = tvEnd.getByTestId('gauge-environment');
+  if ((await gauge.count()) === 0) return readNumber(await tvEnd.getByTestId('air-level').textContent(), "the TV's air level");
+  return readNumber(await gauge.locator('[data-num]').first().textContent(), "the TV's Environment gauge");
+}
+
 const text = async (where: Locator) => ((await where.textContent({ timeout: PRESS_MS })) ?? '').replace(/\s+/g, ' ').trim();
 const fmt = (n: number) => Math.round(n).toLocaleString('en');
 /** The change since last month as the table prints it. */
@@ -62,14 +74,14 @@ export async function theMonthEndHoldsForThePhone(ctx: GameStepContext, month: n
   const tvEnd = tv.getByTestId('tv-monthend');
   const onTo = end.getByTestId('ready');
   await onTo.waitFor({ timeout: MONTH_END_MS });
-  await tvEnd.waitFor({ timeout: PRESS_MS });
+  await theTvMonthEnd(tv);
   check((await text(onTo)) === `On to month ${month + 1}`, `B-AC-13: the phone's Ready at month ${month}'s end reads "On to month ${month + 1}", got "${await text(onTo)}"`);
   check(board(ctx).phaseEndsAt === null, `B-AC-13: month ${month}'s end has no clock on the server`);
   await phone.waitForTimeout(HOLD_MS);
   check((await end.count()) === 1 && (await tvEnd.count()) === 1, `B-AC-13: ${HOLD_MS} ms on, month ${month}'s end is still up on the phone and the TV`);
 
   const { worth } = await readLeague(tvEnd);
-  const air = readNumber(await tvEnd.getByTestId('air-level').textContent(), "the TV's air level");
+  const air = await tvAir(tvEnd);
   await onTo.click({ timeout: PRESS_MS });
   await phone.locator('[data-phase=planning]').waitFor({ timeout: PRESS_MS });
   return { seen: { month, worth, air }, line: `month ${month}'s end held ${((Date.now() - started) / 1_000).toFixed(1)} s until the phone's tap` };
@@ -103,7 +115,7 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
   const end = phone.locator('[data-phase=upkeep]');
   const tvEnd = tv.getByTestId('tv-monthend');
   await end.getByTestId('league').waitFor({ timeout: MONTH_END_MS });
-  await tvEnd.waitFor({ timeout: PRESS_MS });
+  await theTvMonthEnd(tv);
   const truth = board(ctx);
   const month = truth.month;
   check(last ? month === last.month + 1 : month === 1, `B-AC-12: this is the month after ${last ? `month ${last.month}` : 'none (month 1)'}, got month ${month}`);
@@ -155,9 +167,11 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
   }
   check((await tvEnd.getByTestId('nobody-hungry').count()) === (hungry.length === 0 ? 1 : 0), `B-AC-12: the TV says nobody went hungry exactly when nobody did (${hungry.length} hungry)`);
   const colonists = await text(tvEnd.getByTestId('colonists'));
-  check(truth.colonistsFed ? colonists.startsWith('The store fed the colony’s') : colonists.endsWith('colonists went short'),`B-AC-12: the TV's colonists line reads "${colonists}", the server's colonistsFed is ${truth.colonistsFed}`);
+  // Fed, the plain line; short, it names what they got of their need (needs C6: "19 of 20 Food and all their Water").
+  const named = / \d[\d,]* of \d[\d,]* (Food|Water)/.test(colonists);
+  check(colonists.startsWith('The store fed the colony’s') && named === (truth.colonistsFed === false), `B-AC-12 / needs B-AC-1: the TV's colonists line reads "${colonists}", the server's colonistsFed is ${truth.colonistsFed}`);
   const air = truth.air.level;
-  check(readNumber(await tvEnd.getByTestId('air-level').textContent(), "the TV's air") === air, `B-AC-12: the TV's air is the server's ${air}`);
+  check((await tvAir(tvEnd)) === air, `B-AC-12: the TV's air is the server's ${air}`);
   const trend = await text(tvEnd.getByTestId('air-trend'));
   if (!last) {
     check(truth.lastAir === null && trend === 'The first month: nothing to compare yet', `B-AC-12: in month 1 the TV's air trend says there is no last month, got "${trend}"`);

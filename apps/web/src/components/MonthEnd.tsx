@@ -348,10 +348,13 @@ function TvHungryLine({ view, hungry }: { view: MuleView; hungry: ColonyReport['
 const HUNGRY_LINES_COMPACT = 2;
 
 /**
- * How the colony is doing, apart from the players: the air against last month, the colony fund's balance and who went
- * hungry. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band across the TV.
+ * How the colony is doing, apart from the players: the air against last month, the colony fund's balance, who went
+ * hungry and the colonists. At game over (`verdict`) it heads with the colony's verdict; `row` lays it out in one band
+ * across the TV. `besideGauges` is the TV
+ * month end's, where the Environment and Wealth gauges above already show the air's level and band and the fund: the
+ * panel keeps only the air's change, in its header (PM ruling 7 Nov, TV-FIT: five projects at six seats drew at 0.622).
  */
-export function ColonyPanel({ view, density, layout = 'stack', verdict = false }: { view: MuleView; density: Exclude<Density, 'phone'>; layout?: 'stack' | 'row'; verdict?: boolean }) {
+export function ColonyPanel({ view, density, layout = 'stack', verdict = false, besideGauges = false }: { view: MuleView; density: Exclude<Density, 'phone'>; layout?: 'stack' | 'row'; verdict?: boolean; besideGauges?: boolean }) {
   const r = colonyReport(view);
   const tv = density === 'tv';
   const row = tv && layout === 'row';
@@ -361,6 +364,14 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
   const big = tv ? 'text-3xl' : 'text-base';
   const line = tv ? 'text-lg leading-snug' : 'text-[11px] leading-tight';
   const trend = r.air.trend;
+  const trendLine = (
+    <span className={cx(line, trend === 'better' ? 'text-ok' : trend === 'worse' ? 'text-alert' : 'text-ink-3')} data-testid="air-trend">
+      {trend === null || then === null
+        ? 'The first month: nothing to compare yet'
+        : `${trend === 'better' ? '↑ better than' : trend === 'worse' ? '↓ worse than' : '± same as'} month ${view.month - 1} (${r.air.last}${r.air.lastBand !== r.air.band ? ` · ${then.label}` : ''})`}
+    </span>
+  );
+  const slim = tv && besideGauges;
   // The TV puts everyone who went hungry on one line (TvHungryLine); the phone with no TV names a few and counts the rest.
   const shownHungry = r.hungry.slice(0, HUNGRY_LINES_COMPACT);
   const moreHungry = tv ? 0 : r.hungry.length - shownHungry.length;
@@ -378,29 +389,35 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
             </span>
           </>
         )}
+        {slim && (
+          <span className="ml-auto flex items-baseline gap-2" data-testid="colony-air">
+            <span className="label-caps text-sm!">Air</span>
+            {trendLine}
+          </span>
+        )}
       </header>
       <div className={cx('grid', row ? 'grid-cols-3 gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
-        <Block label="Air" testid="colony-air" tv={tv}>
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            <span data-num className={cx('font-mono font-bold', big)} data-testid="air-level">
-              {r.air.level}
-            </span>
-            <span className={cx('font-display font-semibold', now.tone, tv ? 'text-2xl' : 'text-xs')} data-testid="air-band">
-              {now.label}
-            </span>
-          </span>
-          <span className={cx(line, trend === 'better' ? 'text-ok' : trend === 'worse' ? 'text-alert' : 'text-ink-3')} data-testid="air-trend">
-            {trend === null || then === null
-              ? 'The first month: nothing to compare yet'
-              : `${trend === 'better' ? '↑ better than' : trend === 'worse' ? '↓ worse than' : '± same as'} month ${view.month - 1} (${r.air.last}${r.air.lastBand !== r.air.band ? ` · ${then.label}` : ''})`}
-          </span>
-        </Block>
-        <Block label="Colony fund" testid="colony-fund" tv={tv}>
-          <span data-num className={cx('font-mono font-bold', big)} data-testid="fund-balance">
-            {fmt(r.fund.balance)} cr
-          </span>
-        </Block>
-        <Block label="Hunger" testid="colony-hungry" tv={tv} {...(tv && !row ? { className: 'col-span-2 border-t border-holo-faint pt-3' } : {})}>
+        {!slim && (
+          <>
+            <Block label="Air" testid="colony-air" tv={tv}>
+              <span className="flex flex-wrap items-baseline gap-x-2">
+                <span data-num className={cx('font-mono font-bold', big)} data-testid="air-level">
+                  {r.air.level}
+                </span>
+                <span className={cx('font-display font-semibold', now.tone, tv ? 'text-2xl' : 'text-xs')} data-testid="air-band">
+                  {now.label}
+                </span>
+              </span>
+              {trendLine}
+            </Block>
+            <Block label="Colony fund" testid="colony-fund" tv={tv}>
+              <span data-num className={cx('font-mono font-bold', big)} data-testid="fund-balance">
+                {fmt(r.fund.balance)} cr
+              </span>
+            </Block>
+          </>
+        )}
+        <Block label="Hunger" testid="colony-hungry" tv={tv} {...(slim ? { className: 'col-span-2' } : tv && !row ? { className: 'col-span-2 border-t border-holo-faint pt-3' } : {})}>
           <span className={cx('flex', tv && !row ? 'flex-wrap items-baseline gap-x-5 gap-y-1' : 'flex-col')}>
             {r.hungry.length === 0 ? (
               <span className={cx('font-display font-semibold text-ok', tv ? 'text-2xl' : 'text-xs')} data-testid="nobody-hungry">
@@ -437,13 +454,28 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
               </span>
             )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
-              {r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`}
+              {colonistsLine(view, r)}
             </span>
           </span>
         </Block>
       </div>
     </section>
   );
+}
+
+/**
+ * The month end's colonists line (needs C6): what the store fed them, and of Food and Water how much when something was
+ * missing ("19 of 20 Food and all their Water"). Without the meal in the view, the line says only fed or short.
+ */
+function colonistsLine(view: MuleView, r: ReturnType<typeof colonyReport>): string {
+  const meal = view.colonistMeal;
+  if (meal) {
+    const got = (g: { took: number; need: number }, name: string) => (g.took >= g.need ? `all their ${name}` : `${fmt(g.took)} of ${fmt(g.need)} ${name}`);
+    // The colonists who ate, from the meal itself: the month's growth or shrinking comes after.
+    const fed = `The store fed the colony’s ${fmt(meal.colonists)} colonists`;
+    return meal.food.took >= meal.food.need && meal.water.took >= meal.water.need ? fed : `${fed} ${got(meal.food, 'Food')} and ${got(meal.water, 'Water')}`;
+  }
+  return r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`;
 }
 
 // --- Your worth (your phone only) --------------------------------------------------------------------

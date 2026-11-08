@@ -39,3 +39,13 @@ export function createRng(seed: number) {
 }
 
 export type Rng = ReturnType<typeof createRng>;
+
+/** A seed from a game's seed, its month and some names: FNV-1a over them. */
+export function seedOf(seed: number, month: number, ...names: string[]): number {
+  let h = 2_166_136_261; // literal-ok: FNV-1a offset basis
+  for (const part of [String(seed), String(month), ...names]) {
+    for (let i = 0; i < part.length; i++) h = Math.imul(h ^ part.charCodeAt(i), 16_777_619); // literal-ok: FNV-1a prime
+    h = Math.imul(h ^ 0, 16_777_619); // literal-ok: FNV-1a prime, a separator between parts
+  }
+  return h >>> 0;
+}

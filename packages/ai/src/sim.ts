@@ -34,7 +34,7 @@ import {
   SIM_TARGETS,
   STORE_ID,
   storeForSale,
-  storeSellPrice,
+  storeSellAt,
   WALK,
   WOLVES,
   type AiLevelId,
@@ -468,7 +468,7 @@ export function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void
           if (cut && could) tally.cutCouldBuy++;
         }
       }
-      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, storeSellPrice(s.store.posted[g]))]))]));
+      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, storeSellAt(s, g, s.store.posted[g]))]))]));
       atStatus = new Map();
       atClose = new Map();
       foodAt = null;

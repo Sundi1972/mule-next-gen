@@ -1,5 +1,6 @@
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
 import { useEffect, type ReactNode } from 'react';
+import { NewsWords } from '../../components/SeatWords';
 import { useClientState } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { Chat, ShipLine } from '../parts';
@@ -69,10 +70,10 @@ export function News() {
     <section className="flex flex-col gap-1" data-testid="news">
       <span className="label-caps @min-[1100px]/shell:text-xs!">News</span>
       <ul className="flex flex-col gap-1 text-sm">
-        {view.news.map((n) => (
+        {view.news.map((n, i) => (
           <li key={n} className="flex gap-2">
             <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-holo" />
-            {n}
+            <NewsWords view={view} i={i} />
           </li>
         ))}
       </ul>
@@ -147,7 +148,7 @@ export function MarketStrip() {
             <span className="flex min-w-0 flex-col">
               <span className="truncate text-xs font-semibold @min-[1100px]/shell:text-sm">{GOOD_NAME[r.good]}</span>
               <span data-num className="font-mono text-sm font-bold @min-[1100px]/shell:text-lg">
-                {r.storeSells ?? '—'} <span className="text-[10px] font-normal text-ink-3">cr</span>
+                {r.storeSells === null ? '—' : <>{r.storeSells} <span className="text-[10px] font-normal text-ink-3">cr</span></>}
               </span>
             </span>
             <span className={cx('ml-auto font-mono text-[10px] @min-[1100px]/shell:text-xs', r.storeStock === 0 ? 'text-alert' : 'text-ink-3')}>{r.storeStock === 0 ? 'SOLD OUT' : `${r.storeStock} left`}</span>

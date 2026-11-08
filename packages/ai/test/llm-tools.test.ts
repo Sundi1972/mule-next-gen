@@ -188,7 +188,8 @@ describe('hands fix 1: whatIf refuses a route MULE the hands would refuse (route
     expect(state.tiles[plot]!.terrain).toBe('lake');
     expect(unreachablePlot(state, plot)).toBe(true);
     const rejected = await whatIfRoute(state, waterOn(plot));
-    expect(rejected).toEqual([{ path: '/development/route/2', to: { act: 'install', plot }, why: `route step 2: lake: no shore reaches plot ${plot}` }]);
+    // The playbook gate refuses it first (validate.ts's install check, as unreachablePlot judges it), naming the step.
+    expect(rejected).toEqual([{ path: '/development/route', to: waterOn(plot), why: `route: lake: no shore reaches plot ${plot}, step 2` }]);
   });
 
   it('hands fix 1: a MULE on a lake plot a shore reaches is not refused', async () => {

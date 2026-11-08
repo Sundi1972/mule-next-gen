@@ -1,12 +1,13 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { COLONY_SCORE, DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
-import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
+import { allPrices, mulePrice, openingOffWorld, planShip, postPrices, stepOffWorld } from './economy.js';
 import { firePhase, rollPlayerEvent, storeOnStrike } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { colonyPrestige, colonyWealth, keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
+import { closePlanningDeals, monthEndDeals } from './diplomacy.js';
 import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
@@ -80,7 +81,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
       capital: START.storeCapital,
       posted: { ...refPrice },
       refPrice,
-      offWorld: { ...refPrice },
+      offWorld: openingOffWorld(),
     },
     treasury: { money: 0, salesTax: TAX.salesTax, paid: {} },
     ship: planShip(options.seed, GAME.exportShipEvery, options.players.length),
@@ -96,8 +97,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     politics: options.politics === false ? null : newPolitics(),
     colony: options.politics === false ? null : newColony(1),
   };
-  // The first month's prices start where supply and demand put them.
-  for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  // The first month's prices are posted by the store's bands, from the normal prices.
+  postPrices(state);
   // Month 1's planning rolls here, as every later month's does in advancePhase (none fires before EVENTS.firstMonth).
   firePhase(state, 'planning');
   openPlanning(state);
@@ -519,6 +520,8 @@ export function advancePhase(state: GameState): void {
   if (state.phase === 'planning') {
     keepPromise(state);
     closeVotes(state);
+    // Offers nobody answered expire with planning, and so do vote cards whose ballot has passed.
+    closePlanningDeals(state);
   }
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
@@ -549,7 +552,7 @@ export function advancePhase(state: GameState): void {
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
-    if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
+    if (soldOut) state.store.muleFactor = Math.min(MULE.maxFactor, state.store.muleFactor * (1 + MULE.scarcityUp));
     else if (state.store.mules >= state.store.mulesAtStart * MULE.surplusShare) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
     const { produced, pollutionBy, lines, events } = runProduction(state);
@@ -601,10 +604,13 @@ export function advancePhase(state: GameState): void {
       // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
       if (!state.whatIf) report.events = [...state.monthEvents];
     }
+    // Pacts whose last month this is settle kept; at the game's end every card still running settles.
+    monthEndDeals(state, isGameOver(state));
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {
     state.month++;
+    stepOffWorld(state);
     state.monthEvents = [];
     for (const p of state.players) p.droneFound = [];
     // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.
