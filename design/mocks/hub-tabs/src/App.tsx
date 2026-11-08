@@ -1,16 +1,10 @@
 import { cx } from '@mule/ui';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ClientProvider } from '../../../../apps/web/src/net/react';
-import { PhoneGameProvider } from '../../../../apps/web/src/phone/game';
-import { Hub } from '../../../../apps/web/src/phone/hub/Hub';
-import { TodayState } from '../../../../apps/web/src/phone/hub/state';
-import { HUB_SLOTS } from '../../../../apps/web/src/phone/hub/today';
-import { clientFor, mockTable, SEAT_LABEL, viewFor, type MockTable } from './fixture';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { mockTable, SEAT_LABEL, type MockTable } from './fixture';
+import { PhoneBody } from './PhoneBody';
+import { Prototype } from './Prototype';
 import { MEASURED } from './measured';
-import { TabHub } from './proposed/Hub';
 import type { ShellVariant } from './proposed/Shell';
-import { BudgetVariantProvider } from './proposed/tabs/Politics';
-import { TAB_SLOTS } from './proposed/today';
 import { SCREENS, stateOf, type State } from './scenarios';
 
 // ---- Where we are: ?screen=&state=&w=, or &solo=1 for one phone at the window's own size (how the numbers were measured) ----
@@ -78,19 +72,8 @@ const GAPS: [string, string][] = [
 
 // ---- A phone on the mock table ----
 
-function PhoneBody({ store, state, variant }: { store: MockTable; state: State; variant: ShellVariant }) {
-  const world = useSyncExternalStore(store.subscribe, store.get);
-  const sv = useMemo(() => viewFor(state.seat, world), [state.seat, world]);
-  const client = useMemo(() => clientFor(store, state.seat), [store, state.seat]);
-  return (
-    <ClientProvider client={client}>
-      <PhoneGameProvider value={sv}>
-        <TodayState>
-          <BudgetVariantProvider initial={state.budget ?? 'a'}>{state.today ? <Hub slots={HUB_SLOTS} /> : <TabHub slots={TAB_SLOTS} variant={variant} start={state.start} />}</BudgetVariantProvider>
-        </TodayState>
-      </PhoneGameProvider>
-    </ClientProvider>
-  );
+function StatePhone({ store, state, variant }: { store: MockTable; state: State; variant: ShellVariant }) {
+  return <PhoneBody store={store} seat={state.seat} variant={variant} start={state.start} budget={state.budget} today={state.today} />;
 }
 
 /** The map's drawn size in this frame, measured live: MapFit's sized box inside [data-testid=hub-map]. */
@@ -134,7 +117,7 @@ function Phone({ state, w, h, label }: { state: State; w: number; h: number; lab
       </figcaption>
       {/* The device's screen: its width and height, and the rail its width gives. */}
       <div ref={frame} className="relative overflow-hidden rounded-panel border border-holo-line bg-void" style={{ width: w, height: h, ['--rail' as string]: `${railOf(w)}px` }}>
-        <PhoneBody store={store} state={state} variant={variant} />
+        <StatePhone store={store} state={state} variant={variant} />
       </div>
     </figure>
   );
@@ -276,8 +259,8 @@ function StatePage({ screenId, stateId }: { screenId: string; stateId: string | 
   return (
     <main className="flex min-h-dvh flex-col gap-5 bg-table p-6 text-ink" data-testid={`screen-${screen.id}`} data-state={state.id}>
       <header className="flex flex-col gap-2">
-        <a href="?" className="text-sm font-semibold text-holo" data-testid="back-to-index">
-          ← Index
+        <a href="?notes=1" className="text-sm font-semibold text-holo" data-testid="back-to-index">
+          ← Design notes
         </a>
         <h1 className="font-display text-2xl font-semibold">{screen.title}</h1>
         <p className="font-mono text-xs text-ink-3">GRAFT TARGET: {screen.graft}</p>
@@ -320,13 +303,15 @@ function Solo({ screenId, stateId }: { screenId: string; stateId: string | null 
   if (!found || !store) return <Index />;
   return (
     <div className="h-dvh w-dvw" data-testid="solo">
-      <PhoneBody store={store} state={found[1]} variant={found[1].shell ?? 'a'} />
+      <StatePhone store={store} state={found[1]} variant={found[1].shell ?? 'a'} />
     </div>
   );
 }
 
+/** The guided prototype is the landing page; ?notes=1 the design notes (decisions, measurements, files); ?screen= a state. */
 export default function App() {
   const screen = Q.get('screen');
-  if (!screen) return <Index />;
+  if (Q.has('notes')) return <Index />;
+  if (!screen) return <Prototype />;
   return Q.has('solo') ? <Solo screenId={screen} stateId={Q.get('state')} /> : <StatePage screenId={screen} stateId={Q.get('state')} />;
 }
