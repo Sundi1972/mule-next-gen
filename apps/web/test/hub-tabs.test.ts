@@ -5,7 +5,7 @@ import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
-import type { PlotPickSlot, TabHubNav as HubNav, TabHubSlots } from '../src/phone/hub/slots';
+import type { HubNav, PlotPickSlot, TabHubSlots } from '../src/phone/hub/slots';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /*
@@ -17,6 +17,7 @@ import { aMuleView, aPlayer } from './fixtures/views';
 let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Hub: ComponentType<{ slots: TabHubSlots }>;
+let TodayState: typeof import('../src/phone/hub/state').TodayState;
 let TAB_SLOTS: TabHubSlots;
 let useHub: () => HubNav;
 
@@ -24,12 +25,15 @@ beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
+  ({ TodayState } = await import('../src/phone/hub/state'));
   const hub = await import('../src/phone/hub/Hub');
   Hub = hub.Hub as unknown as ComponentType<{ slots: TabHubSlots }>;
   useHub = hub.useHub as unknown as () => HubNav;
   ({ TAB_SLOTS } = (await import('../src/phone/hub/today')) as unknown as { TAB_SLOTS: TabHubSlots });
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
+  // A browser's element scrolls itself into view (Talk's chat does on mount); the fake DOM's does nothing.
+  (FakeElement.prototype as unknown as { scrollIntoView?: () => void }).scrollIntoView ??= () => {};
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
   (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame ??= () => 0;
   (globalThis as { MutationObserver?: unknown }).MutationObserver ??= class {
@@ -66,7 +70,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
 });
 
 /** Lena's phone (or `self`'s): 2 Food against a need of 5, so This month carries what she is short of. */
-function game({ self = 's1', pol = politics() }: { self?: string; pol?: PoliticsView | null } = {}): MuleView {
+function game({ self = 's1', pol = politics(), sheriff = false }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean } = {}): MuleView {
   const me: MyView = {
     id: self,
     species: 'zipwing',
@@ -85,7 +89,14 @@ function game({ self = 's1', pol = politics() }: { self?: string; pol?: Politics
     mulePrice: 150,
     outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
     droneOrder: [],
-    politics: pol && { running: null, ballot: {}, canRun: { governor: true }, paid: 0, reputation: 50 },
+    politics: pol && {
+      running: null,
+      ballot: {},
+      canRun: { governor: true },
+      paid: 0,
+      reputation: 50,
+      ...(sheriff ? { sheriff: { canAct: true as const, guards: [], max: 2, investigationsLeft: 1, fineable: [], steps: [], multiplier: 1 } } : {}),
+    },
   };
   return aMuleView({ month: 5, width: 4, height: 1, tiles: TILES, players: PLAYERS, me, politics: pol });
 }
@@ -106,7 +117,7 @@ const withProbe = (slots: TabHubSlots): TabHubSlots => ({ ...slots, underNow: [.
 const onPhone = (view: MuleView, slots: TabHubSlots) => {
   const self = view.players.find((p) => p.id === view.me!.id)!;
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
-  return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Hub, { slots: withProbe(slots) }) }) });
+  return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(TodayState, { children: createElement(Hub, { slots: withProbe(slots) }) }) }) });
 };
 
 function mount(view: MuleView, slots: TabHubSlots = TAB_SLOTS): void {
@@ -180,10 +191,11 @@ describe('the tabbed planning hub (SB-2)', () => {
   });
 
   // [the door today's code opens, on whose phone, where it must land]
-  it.each<[string, (n: HubNav) => void, string, { tab: string; sub?: string; tool?: string; focus?: string | null }]>([
+  it.each<[string, (n: HubNav) => void, string, { tab: string; sub?: string; tool?: string; focus?: string | null; shows?: string }]>([
     ["openDesk('colony')", (n) => n.openDesk('colony'), 's1', { tab: 'colony' }],
     ["openDesk('talk', 'whisper:s2')", (n) => n.openDesk('talk', 'whisper:s2'), 's1', { tab: 'talk', focus: 'whisper:s2' }],
-    ["openDesk('council', 'run')", (n) => n.openDesk('council', 'run'), 's1', { tab: 'politics', sub: 'council', focus: 'run' }],
+    // On the Governor's phone, where Council is not the only sub-tab. The Council desk takes the focus as it opens; what the door promised is the promise sheet, open.
+    ["openDesk('council', 'run')", (n) => n.openDesk('council', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
     ["openDesk('governor') on the Governor's phone", (n) => n.openDesk('governor'), 's2', { tab: 'politics', sub: 'governor' }],
     ["openDesk('market')", (n) => n.openDesk('market'), 's1', { tab: 'overview', tool: 'list' }],
     ["pickTool('drone')", (n) => n.pickTool('drone'), 's1', { tab: 'overview', tool: 'drone' }],
@@ -196,6 +208,21 @@ describe('the tabbed planning hub (SB-2)', () => {
     if (to.sub) expect(selected(`sub-${to.sub}`), `the ${to.sub} sub-tab is open`).toBe(true);
     if (to.tool) expect(pressed(`tool-${to.tool}`), `the ${to.tool} tool is on`).toBe(true);
     if (to.focus !== undefined) expect(nav!.focus).toBe(to.focus);
+    if (to.shows) byTestid(to.shows);
+  });
+
+  it("C17 (DESK_DOORS, interim until SB-4): the Sheriff's Guard door turns Overview's one map to Guard, and Done goes back to the Sheriff's sub-tab", () => {
+    mount(game({ self: 's3', pol: politics({ sheriff: 's3' }), sheriff: true }));
+    go((n) => n.open({ tab: 'politics', sub: 'sheriff' }));
+    go((n) => {
+      n.pickTool('look');
+      n.openDesk('sheriff', 'guard');
+    });
+    expect(selected('tab-overview'), 'Guard is on the Overview map').toBe(true);
+    byTestid('guard-map', byTestid('hub-map'));
+    tap('guard-back');
+    expect(selected('tab-politics'), 'Done goes back to the Sheriff').toBe(true);
+    expect(selected('sub-sheriff')).toBe(true);
   });
 
   it("C17 (D6): startPick hands Overview's one map to the pick, its bar in place of the tool row; Back returns to its door, and endPick ends it", () => {
