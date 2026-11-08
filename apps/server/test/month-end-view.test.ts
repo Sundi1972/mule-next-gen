@@ -36,8 +36,10 @@ interface MonthEnd {
 /**
  * Plays a three-month game on the fake clock, seed 7, so months 1 and 2 both have a month end; the last month's end
  * is game over. Every human presses Ready in planning and at each month's end, as their phones would. s1 claims the
- * first plot lit in each land grant, so the players' worths differ. In month 2's planning s1 is left one Food, short of
- * what its household eats, so the month's condition says hungry, and s2 is given its need, so it is fed.
+ * first plot lit in each land grant, so the players' worths differ. At month 1's goods auction s1 is left one Food, short
+ * of what its household eats at that month end, so month 2's condition says hungry (needs C15: hunger is the last
+ * meal), and s2 is given its need, so it is fed. At month 2's auction s1 is given its need, so month 2's own meal is
+ * full and a condition re-read after it would say fed.
  */
 function playThreeMonths(options: { emptyIn?: number; stockedIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
@@ -50,10 +52,14 @@ function playThreeMonths(options: { emptyIn?: number; stockedIn?: number } = {})
   let starvedIn = 0;
   let airedIn = 0;
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) {
-    if (state.phase === 'planning' && state.month === 2 && starvedIn !== 2) {
+    if (state.phase === 'auction' && state.month === 1 && starvedIn !== 1) {
       player(state, 's1').stock.food = 1;
       // And s2 its month's Food, so the fed row has someone fed under the 5 Nov start values (2 Food a seat).
       player(state, 's2').stock.food = Math.max(player(state, 's2').stock.food, needsOf(state, 's2').food);
+      starvedIn = 1;
+    }
+    if (state.phase === 'auction' && state.month === 2 && starvedIn === 1) {
+      player(state, 's1').stock.food = Math.max(player(state, 's1').stock.food, needsOf(state, 's1').food);
       starvedIn = 2;
     }
     // An empty Food and Water shelf in that month's goods auction: the month's upkeep goes short.

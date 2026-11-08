@@ -304,7 +304,9 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
         shortOf('food', id, MONEY, (t) => monthNeeds(t, id).food + 2)(s);
         shortOf('food', RIVAL(id), MONEY)(s);
         if (fedColony) {
-          farmsFor(s, RIVAL(id), 4);
+          // 5 farms, not 4: with PR-8's slower crews, last-meal hunger and quarter spoilage (needs C14-C16) 4 left the
+          // margin too thin for ai0 to sell (each change alone tipped it); 5 restore the fed colony this case reads.
+          farmsFor(s, RIVAL(id), 5);
           // Watered: each farm drinks 2 at production (AM-18).
           s.players.find((p) => p.id === RIVAL(id))!.stock.water = 2 * (monthNeeds(s, RIVAL(id)).water + 2);
         }

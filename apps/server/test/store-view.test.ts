@@ -7,8 +7,9 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
 const FARMS = 9;
 
 /**
- * s1 holds 2 Food against a need of 5 and the corral is empty when development starts. A Medicine cures the
- * sickness roll, so s1 is hungry and well.
+ * s1 holds 2 Food against a need of 5 and the corral is empty when development starts; its household went without
+ * 3 in 5 of its Food at the last month end (needs C15: hunger is the last meal). A Medicine cures the sickness roll, so
+ * s1 is hungry and well.
  */
 function hungryWithAnEmptyCorral() {
   const { ctx, advance } = fakeContext();
@@ -19,6 +20,7 @@ function hungryWithAnEmptyCorral() {
   for (const t of free.slice(0, FARMS)) Object.assign(t, { owner: 's1', outfit: 'food' });
   const s1 = state.players.find((p) => p.id === 's1')!;
   s1.stock.food = 2;
+  s1.householdShort = 1 - 2 / 5;
   s1.stock.medicine = 1;
   state.store.mules = 0;
   const planning = game.viewFor(null);

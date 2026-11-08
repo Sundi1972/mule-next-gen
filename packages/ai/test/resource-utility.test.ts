@@ -199,12 +199,12 @@ describe('C8: a power plant is worth what its output saves', () => {
    * Energy and for Food as the row says. The other seats have no money, so they buy no MULE.
    */
   /** `store.normal`: Energy's normal (and off-world) price, for a row where Energy is cheap; the store never posts under it. */
-  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number; normal?: number }, more: { plots?: Plot[]; energy?: number } = {}): Outfit | null {
+  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number; normal?: number }, more: { plots?: Plot[]; energy?: number; food?: number } = {}): Outfit | null {
     const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
     while (state.phase !== 'development') advancePhase(state);
     for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
     const plots = [...RICH, { outfit: null, x: 6, ground: idle }, ...(more.plots ?? [])];
-    const seat: Seat = { plots, posted: { smithore: 100, energy: store.posted, food: 40 }, stock: { food: 20, water: 20, energy: more.energy ?? 0 }, money: 3000, store: { energy: store.energy } };
+    const seat: Seat = { plots, posted: { smithore: 100, energy: store.posted, food: 40 }, stock: { food: more.food ?? 20, water: 20, energy: more.energy ?? 0 }, money: 3000, store: { energy: store.energy } };
     const me = state.players.find((p) => p.id === ME)!;
     for (const plot of seat.plots) {
       const tile = state.tiles[plot.x]!;
@@ -233,9 +233,11 @@ describe('C8: a power plant is worth what its output saves', () => {
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
     // Food rated 4 (makes 6) against Energy rated 2 (makes 4): a rating of 3 no longer outweighs the mines' Energy at the
-    // store's band prices. C8's valuation alone: S1's Energy first would install the plant whatever it is worth.
+    // store's band prices. C8's valuation alone: S1's Energy first would install the plant whatever it is worth. The seat
+    // holds 3 Food: with Food spoiling a quarter (needs C16), the fixture's 20 last it long enough that the plant wins
+    // (measured at 6 and more); this row is about a seat that wants a farm.
     rulesOffInTest('energyFirst');
-    expect(develop({ energy: 2, food: 4 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
+    expect(develop({ energy: 2, food: 4 }, { energy: 200, posted: 10, normal: 10 }, { food: 3 })).toBe('food');
   });
 
   it('B-AC-5: a seat whose own farm feeds it builds a plant though a farm sells better, for the plots the plant keeps on', () => {
