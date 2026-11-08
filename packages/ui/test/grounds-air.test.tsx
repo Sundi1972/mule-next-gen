@@ -68,4 +68,29 @@ describe('T-AC-15: smoke over a damaged building, a haze by the air (RULE-7, RUL
     expect(at(2.5, true)).toBe(at(0, false));
     expect(at(7, true)).toBe(at(0, false));
   });
+
+  it('T-AC-12, T-AC-15: during the lean-in a damaged building in front of the named place fades its smoke with it; one level with the place keeps its smoke whole', () => {
+    // The visibility spike's worst case (as grounds-opener-fade): the new site at (1,2), the Stadium on the block in front
+    // of it, the Hospital level with it.
+    const SITE = { x: 1, y: 2, w: 1, h: 1 };
+    const c: GroundsColony = {
+      gauges: { happiness: 72, wealth: 2_000, environment: 40 },
+      projects: [
+        { id: 'stadium', name: 'Stadium', stage: 'damaged', monthsLeft: null, buildMonths: 3, place: { x: 1, y: 3, w: 2, h: 2 } },
+        { id: 'hospital', name: 'Hospital', stage: 'damaged', monthsLeft: null, buildMonths: 2, place: { x: 2, y: 1, w: 1, h: 1 } },
+        { id: 'observatory', name: 'Observatory', stage: 'commissioned', monthsLeft: null, buildMonths: 2, place: SITE },
+      ],
+    };
+    /** Each puff's drawn opacity in place n's plume (the ember over it included), at `lean`. */
+    const plumeOf = (lean: number, n: number) => {
+      const html = renderToStaticMarkup(<ColonyGrounds colony={c} size="tv" manifest={null} light="dusk" chips={false} framing={{ aspect: 16 / 9, leanOn: [SITE], lean }} />);
+      const g = new RegExp(`data-testid="smoke-${n}">(.*?)</g></g>(?=<g data-testid="smoke-|<rect|</g>)`).exec(html)![1]!;
+      return [...g.matchAll(/<circle[^>]*opacity="([\d.e-]+)"/g)].map((m) => Number(m[1]));
+    };
+    const [still, leant] = [plumeOf(0, 1), plumeOf(1, 1)];
+    expect(leant.length).toBe(still.length);
+    leant.forEach((o, k) => expect(o).toBeCloseTo(still[k]! / 3, 4));
+    expect(plumeOf(1, 2)).toEqual(plumeOf(0, 2));
+  });
 });
+
