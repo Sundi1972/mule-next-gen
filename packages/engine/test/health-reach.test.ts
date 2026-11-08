@@ -112,12 +112,12 @@ describe('needs C18: a sick colony reaches its players (RULE-14)', () => {
       }
 
       // The spill adds to today's chance after its floor at 0: a row whose own terms fall below 0 still gets it.
-      const wealth = EVENTS.player.sickness.wealth;
+      const row = EVENTS.player.sickness as typeof EVENTS.player.sickness & { wealth?: { richest: number; poorest: number } };
       try {
-        EVENTS.player.sickness.wealth = { richest: -0.2, poorest: -0.2 };
+        row.wealth = { richest: -0.2, poorest: -0.2 };
         expect(chance(0.4), 'today 0, then + 0.10').toBeCloseTo(0.1, 9);
       } finally {
-        EVENTS.player.sickness.wealth = wealth;
+        delete row.wealth;
       }
 
       const other = newGame();
