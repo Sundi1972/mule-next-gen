@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import { POLITICS, SOCIAL_EVENTS, type DealCard } from '@mule/engine';
+import { POLITICS, SOCIAL_EVENTS, START, type DealCard } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ReactElement } from 'react';
@@ -50,12 +50,15 @@ const LENA = 's1';
 const OSSA = 's2';
 const KAI = 's3';
 const BRIX = 's4';
+/** A person whose name holds the computer seat's: never marked as one. */
+const KAI_LEE = 's5';
 /** Each seat's reputation sits on one side of a threshold: 70, 69, 30, 29 as config has it today. */
 const PLAYERS: PlayerView[] = [
   aPlayer({ id: LENA, name: 'Lena', slot: 0, reputation: repHigh }),
   aPlayer({ id: OSSA, name: 'Ossa', slot: 1, reputation: repHigh - 1 }),
   aPlayer({ id: KAI, name: 'Kai', slot: 2, reputation: repLow, isAi: true }),
   aPlayer({ id: BRIX, name: 'Brix', slot: 3, reputation: repLow - 1 }),
+  aPlayer({ id: KAI_LEE, name: 'Kai Lee', slot: 4, reputation: START.reputation }),
 ];
 const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
@@ -193,9 +196,9 @@ const text = (testid: string) => byTestid(testid).textContent;
 
 describe('the reputation chip (S3-C19)', () => {
   it('S3-B-AC-6: a chip beside every name in the hub (Who) shows PlayerView.reputation with the 70/30 thresholds readable, and its tap lists the public reasons', () => {
-    // Brix broke a vote card to Lena in month 2 and was blamed for unrest in month 1; Ossa broke one too. Lena and Brix
+    // Brix broke a vote card to Kai Lee in month 2 and was blamed for unrest in month 1; Ossa broke one too. Lena and Brix
     // kept a pact: a kept card moves the number, never the reasons.
-    const brixBroke = card({ id: 'deal-b1', from: BRIX, to: LENA, terms: { kind: 'vote', office: 'governor', candidate: KAI }, status: 'broken', brokenBy: BRIX, settled: 2 });
+    const brixBroke = card({ id: 'deal-b1', from: BRIX, to: KAI_LEE, terms: { kind: 'vote', office: 'governor', candidate: KAI }, status: 'broken', brokenBy: BRIX, settled: 2 });
     const ossaBroke = card({ id: 'deal-o1', from: OSSA, to: LENA, terms: { kind: 'pact' }, status: 'broken', brokenBy: OSSA, settled: 2 });
     const kept = card({ id: 'deal-k1', from: LENA, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
     const p = politics({
@@ -229,7 +232,8 @@ describe('the reputation chip (S3-C19)', () => {
     expect(text(`player-card-${BRIX}-band`)).toBe(`Reputation ${repLow - 1} · Low name: −1 vote, and AI players turn down their cards.`);
     expect(text(`player-card-${BRIX}`), 'the thresholds, readable').toContain(`${repHigh} and up: +1 vote. Under ${repLow}: −1 vote, and AI players turn down their cards.`);
     expect(allTestids('reason-'), "Brix's public reasons, newest first").toEqual(['reason-deal-b1', 'reason-unrest-1']);
-    expect(text('reason-deal-b1')).toBe(`M2Broke a promise to Lena: a vote for Kai · AI−${-POLITICS.reputation.moves.voteBroken}`);
+    // The mark follows the computer seat's id, never its name in the words: Kai Lee is a person.
+    expect(text('reason-deal-b1')).toBe(`M2Broke a promise to Kai Lee: a vote for Kai · AI−${-POLITICS.reputation.moves.voteBroken}`);
     expect(text('reason-unrest-1')).toBe(`M1Blamed for the unrest−${-SOCIAL_EVENTS.player.blamedForUnrest.reputation}`);
     expect(findTestid('reason-deal-k1'), 'a kept card is never among the reasons').toBeUndefined();
     expect(findTestid('reason-deal-o1'), "Ossa's broken card is Ossa's reason, not Brix's").toBeUndefined();
