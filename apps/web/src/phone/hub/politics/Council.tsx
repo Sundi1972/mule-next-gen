@@ -3,29 +3,11 @@ import { cx } from '@mule/ui';
 import { useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
-import { useHub } from '../Hub';
-import { LawsInForce } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { colorOf, OfficesCard, Person, Section, Who } from './parts';
 import { Blocks } from './Reveal';
 import { RunBlock } from './Run';
 import { howWords, OFFICE_NAME } from './words';
-
-/** Council: the laws in force, this month's result once the election is over, then running for office and what the Governor does. */
-export function CouncilDesk() {
-  const { focus, takeFocus } = useHub();
-  const { view } = usePhoneGame();
-  useEffect(() => {
-    if (focus !== null) takeFocus();
-  }, [focus]);
-  return (
-    <>
-      {view.politics && <LawsInForce laws={view.politics.laws ?? {}} />}
-      <PendingLaw />
-      <CouncilBody focus={focus} />
-    </>
-  );
-}
 
 /** Next month's vote while a proposal is pending and no vote is open: the proposal, and what it costs this seat. */
 export function PendingLaw() {

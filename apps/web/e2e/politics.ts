@@ -90,8 +90,8 @@ async function main(): Promise<void> {
     const truth = serverTruth(server, code);
     const phones = [lena, ossa];
 
-    // B-AC-63, T-AC-66: month 1's announce is the time to run. Both humans run for Governor from the run block under
-    // Now, each on a promise, while the TV shows the announcement.
+    // B-AC-63, T-AC-66: month 1's announce is the time to run. Both humans run for Governor from the run block in
+    // the Elections sub-tab, each on a promise, while the TV shows the announcement.
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
     const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
     const taxNow = truth.board().politics!.tax.percent;
@@ -102,13 +102,19 @@ async function main(): Promise<void> {
       return politics.election!.stage === 'announce' ? politics.promises : politics.election!.promises;
     };
     await tv.getByTestId('tv-announce').waitFor({ timeout: 5_000 });
+    // The announce and the ballot are Elections' sub-tab on a phone (SB-3); the law ballot is Laws'. Both phones open it.
+    const openSub = async (p: Phone, sub: string) => {
+      await p.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+      await p.page.getByTestId(`sub-${sub}`).click({ timeout: PRESS_MS });
+    };
+    await everyone(phones, (p) => openSub(p, 'elections'));
     // Every tap below lands in announce; the game clock is held until the look-around is over, so the AI seat, which
     // acts on that clock, runs (if it does) only after the release.
     await held(server, code, async () => {
       await Promise.all([
         (async () => {
           // The cap starts at today's tax; plus steps it to her cap, and Run's label follows it.
-          await lena.page.locator('[data-phase=planning] [data-testid=guide]').getByTestId('run-governor').click({ timeout: 5_000 });
+          await lena.page.getByTestId('run-governor').click({ timeout: 5_000 });
           check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
           for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
           await lena.page.getByTestId('promise-run').filter({ hasText: `Run · up to ${LENA_CAP}%` }).click({ timeout: PRESS_MS });
@@ -186,6 +192,7 @@ async function main(): Promise<void> {
     check(JSON.stringify(election().waitingFor) === JSON.stringify([ossaId]), `B-AC-63: every screen is told it waits for Ossa, got ${JSON.stringify(election().waitingFor)}`);
     // She comes back and abstains: picking is still not Done, so nothing closes until her Cast.
     await ossa.page.goto(ossaUrl);
+    await openSub(ossa, 'elections');
     await untilServer(lena.page, () => seatOf(ossaId)?.connected === true || null, "Ossa's phone is back", within(PRESS_MS));
     await ossa.page.getByTestId('ballot-governor-abstain').locator('input').check({ timeout: PRESS_MS * 2 });
     await ossa.page.waitForTimeout(STILL_OPEN_MS);
@@ -214,16 +221,19 @@ async function main(): Promise<void> {
     check((await tv.locator('[data-testid^="reveal-row-sheriff-"]').count()) === 0 && ![reveal.lena, reveal.ossa].some((t) => t.includes('Sheriff')), 'T-AC-62: no screen names a Sheriff');
     console.log(`✓ B-AC-63: every screen showed the Governor's ceremony: the TV's title, candidates, bars and winner at ticks ${reveal.tvTicks.join(', ')}; both phones the result at ticks ${reveal.phoneTicks.join(', ')}, never before the server's winner beat`);
 
-    // The winner's Now is the door into her Governor sub-tab, which asks first (E-9, D8): through it, the tax desk with
-    // her promise above it. The other phone has no Governor sub-tab and keeps the whole result on its Council one (E-6).
+    // The winner reaches the tax desk through the Governor tab's Laws sub-tab, with her promise above it. The other phone's
+    // Laws holds the tax line, not the desk; the whole result stays on its Elections sub-tab (E-6).
     const taxValue = lena.page.getByTestId('tax-value');
-    await lena.page.getByTestId('now-go').click({ timeout: within(ELECTION_WAIT_MS) });
+    await lena.page.getByTestId('tab-politics').click({ timeout: within(ELECTION_WAIT_MS) });
+    await lena.page.getByTestId('sub-laws').click({ timeout: PRESS_MS });
     await taxValue.waitFor({ timeout: PRESS_MS });
     const start = truth.board().politics!.tax.percent;
     check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-63: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
     await lena.page.getByTestId('gov-promise').filter({ hasText: `You promised: no higher than ${LENA_CAP}%` }).waitFor({ timeout: PRESS_MS });
     await ossa.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
-    check((await ossa.page.getByTestId('sub-governor').count()) === 0, 'B-AC-63 (negative): Ossa, not Governor, has no Governor sub-tab');
+    await ossa.page.getByTestId('sub-laws').click({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('council-tax').waitFor({ timeout: PRESS_MS });
+    check((await ossa.page.getByTestId('gov-tax').count()) === 0, "B-AC-63 (negative): Ossa, not Governor, has the tax line and not the Governor's desk in Laws");
     // E-9 (D3, D8): a human holding an office finds it in their politics tab, named for it, open on the office's sub-tab;
     // everyone else's tabs are the same four. CI's pinned whole-game seed never makes a human Governor, so this is
     // where the office-first open is guarded on every run.
@@ -232,8 +242,9 @@ async function main(): Promise<void> {
     check((await lena.page.getByTestId('tab-politics').innerText()).trim() === 'Governor', `E-9 (D3): Lena's politics tab reads Governor, got "${await lena.page.getByTestId('tab-politics').innerText()}"`);
     check((await ossa.page.getByTestId('tab-politics').innerText()).trim() === 'Council', `E-9 (D3): Ossa's reads Council, got "${await ossa.page.getByTestId('tab-politics').innerText()}"`);
     const lenaSubs = await subs(lena.page);
-    check(lenaSubs.includes('sub-governor*'), `E-9 (D8): Lena's politics tab opened on the Governor's sub-tab, got ${lenaSubs.join(', ')}`);
+    check(lenaSubs.join(',') === 'sub-laws*,sub-budget,sub-elections', `E-9 (D8): Lena's politics tab has Laws open, then Budget and Elections, got ${lenaSubs.join(', ')}`);
     check(JSON.stringify(await tabs(lena.page)) === JSON.stringify(await tabs(ossa.page)), `E-9: Lena's tabs are Ossa's, got ${(await tabs(lena.page)).join(', ')}`);
+    await ossa.page.getByTestId('sub-elections').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('result-how-governor').waitFor({ timeout: PRESS_MS });
     // T-AC-70: the promise stands beside the tax on every phone, in the offices line under the "?" sheet's roadmap (D2).
     await everyone(phones, (p) => inTheSheet(p.page, () => p.page.getByTestId('office-governor').filter({ hasText: `promised up to ${LENA_CAP}%` }).getByTestId('promise-status').filter({ hasText: `tax ${start}%, kept` }).waitFor({ timeout: PRESS_MS })));
@@ -327,6 +338,7 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
     const council = () => truth.board().politics!.council;
     await untilServer(lena.page, () => (truth.board().month === 2 && council()?.stage === 'ballot') || null, "B-AC-46-7: month 2's planning opens with the law ballot", MONTH_END_MS);
+    await everyone(phones, (p) => openSub(p, 'laws'));
     await everyone(phones, (p) => p.page.getByTestId('ballot-proposal').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS }));
     await tv.getByTestId('tv-council-ballot').getByTestId('tv-proposal-words').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
     const ossaWeight = truth.board().politics!.weights.find((w) => w.id === ossaId)!.votes;
@@ -364,9 +376,9 @@ async function main(): Promise<void> {
     if (council()!.result!.passed) {
       check(JSON.stringify(truth.board().politics!.laws?.landTax) === JSON.stringify({ setting, since: 2 }), `B-AC-46-11: the server has Land tax ${setting} in force since month 2`);
       await ossa.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
-      await ossa.page.getByTestId('sub-council').click({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('sub-laws').click({ timeout: PRESS_MS });
       await ossa.page.getByTestId('law-chip-landTax').filter({ hasText: `Land tax ${setting} cr · since month 2` }).waitFor({ timeout: PRESS_MS });
-      console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and on Ossa's Council desk, since month 2`);
+      console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and in Ossa's Laws sub-tab, since month 2`);
     }
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);

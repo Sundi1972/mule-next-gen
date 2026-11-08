@@ -85,10 +85,10 @@ function draw(id: string, game: MuleView): string {
 const at = (html: string, testid: string) => html.indexOf(`data-testid="${testid}"`);
 
 describe('SB-3: the politics sub-tabs', () => {
-  it('SB-3: the sub-tabs are Laws, Budget, Elections, in that order, with no Badge (the tab row is SB-2)', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+  it('SB-3: the sub-tabs are Laws, Budget, Elections, in that order; Laws and Elections carry the VOTE badge', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     expect(POLITICS_TABS.map((t) => t.id)).toEqual(['laws', 'budget', 'elections']);
     expect(POLITICS_TABS.map((t) => t.label(seatOf(view(politics()))))).toEqual(['Laws', 'Budget', 'Elections']);
-    expect(POLITICS_TABS.every((t) => t.Badge === undefined)).toBe(true);
+    expect(POLITICS_TABS.map((t) => t.Badge !== undefined)).toEqual([true, false, true]);
   });
 
   it('SB-3: politics off, no sub-tab is shown', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
@@ -164,6 +164,21 @@ describe('SB-3: the politics sub-tabs', () => {
         hub.focus = null;
       }
     });
+  });
+
+  describe('the VOTE badge', () => {
+    const badge = (id: string, game: MuleView) => {
+    const Badge = sub(id).Badge!;
+    const value = { table: { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>, view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
+    return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(Badge) }) }));
+  };
+
+  it('SB-3: Laws is badged while a law ballot is open and Elections while an election votes, and neither otherwise', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+    expect(badge('laws', view(politics({ council: council() })))).toContain('sub-badge-laws');
+    expect(badge('elections', view(politics({ election: election('ballot') })))).toContain('sub-badge-elections');
+    expect(badge('laws', view(politics()))).not.toContain('sub-badge-laws');
+    expect(badge('elections', view(politics({ election: election('ceremony') })))).not.toContain('sub-badge-elections');
+  });
   });
 
   describe('an open law ballot', () => {

@@ -1,4 +1,5 @@
 import { document, FakeElement } from './fake-dom';
+import { ceremonyBeats, type ElectionResult } from '@mule/engine';
 import type { CouncilView, ElectionView, OverruleView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
@@ -21,6 +22,8 @@ let TodayState: typeof import('../src/phone/hub/state').TodayState;
 let TAB_SLOTS: TabHubSlots;
 let useHub: () => HubNav;
 let DESK_DOORS: typeof import('../src/phone/hub/Hub').DESK_DOORS;
+let OFFICES_BANNER: typeof import('../src/phone/hub/politics/slots').OFFICES_BANNER;
+let OVERRULE_CALL_LINE: typeof import('../src/phone/hub/politics/budget/OverruleCall').OVERRULE_CALL_LINE;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -31,6 +34,8 @@ beforeAll(async () => {
   Hub = hub.Hub as unknown as ComponentType<{ slots: TabHubSlots }>;
   useHub = hub.useHub as unknown as () => HubNav;
   DESK_DOORS = hub.DESK_DOORS;
+  ({ OFFICES_BANNER } = await import('../src/phone/hub/politics/slots'));
+  ({ OVERRULE_CALL_LINE } = await import('../src/phone/hub/politics/budget/OverruleCall'));
   ({ TAB_SLOTS } = (await import('../src/phone/hub/today')) as unknown as { TAB_SLOTS: TabHubSlots });
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
@@ -72,7 +77,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
 });
 
 /** Lena's phone (or `self`'s): 2 Food against a need of 5, so This month carries what she is short of. */
-function game({ self = 's1', pol = politics(), sheriff = false }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean } = {}): MuleView {
+function game({ self = 's1', pol = politics(), sheriff = false, month = 5, mine = {} }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean; month?: number; mine?: Partial<NonNullable<MyView['politics']>> } = {}): MuleView {
   const me: MyView = {
     id: self,
     species: 'zipwing',
@@ -97,10 +102,11 @@ function game({ self = 's1', pol = politics(), sheriff = false }: { self?: strin
       canRun: { governor: true },
       paid: 0,
       reputation: 50,
+      ...mine,
       ...(sheriff ? { sheriff: { canAct: true as const, guards: [], max: 2, investigationsLeft: 1, fineable: [], steps: [], multiplier: 1 } } : {}),
     },
   };
-  return aMuleView({ month: 5, width: 4, height: 1, tiles: TILES, players: PLAYERS, me, politics: pol });
+  return aMuleView({ month, width: 4, height: 1, tiles: TILES, players: PLAYERS, me, politics: pol });
 }
 
 const STATE = { status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
@@ -379,7 +385,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('now-go');
   });
 
-  it('C66 (frame): the election ceremony takes the whole stage, the tabs hidden; its ballot does not (SB-3)', () => { // trace-allow: an existing test whose title changed with SB-3 (its door or stage moved into a sub-tab); its id was never an AC id
+  it('C66 (frame): the election ceremony takes the whole stage, the tabs hidden', () => { // trace-allow: an existing test whose title changed with SB-3 (its door or stage moved into a sub-tab); its id was never an AC id
     const ceremony: ElectionView = { stage: 'ceremony', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: [], result: {} };
     mount(game({ pol: politics({ election: ceremony, next: 5 }) }));
     byTestid('hub-situation');
@@ -430,17 +436,18 @@ describe('SB-3: politics as sub-tabs, only the reveals take the stage', () => {
     expect(findTestid('tabs-a')).toBeUndefined();
   });
 
-  it.each<[string, Partial<PoliticsView>, string]>([
-    ['the election announce', { election: election('announce'), next: 5 }, 'elections'],
-    ['the election ballot', { election: election('ballot'), next: 5 }, 'elections'],
-    ['the law ballot', { council: council('ballot') }, 'laws'],
-    ['the overrule ballot', { overrule: overrule('ballot') }, 'laws'],
-  ])('SB-3 (S5-B-AC-3): %s does not take the stage; it is in its sub-tab', (_, pol, sub) => {
+  it.each<[string, Partial<PoliticsView>, string, string]>([
+    ['the election announce', { election: election('announce'), next: 5 }, 'elections', 'announce'],
+    ['the election ballot', { election: election('ballot'), next: 5 }, 'elections', 'ballot-governor'],
+    ['the law ballot', { council: council('ballot') }, 'laws', 'phone-ballot'],
+    ['the overrule ballot', { overrule: overrule('ballot') }, 'laws', 'overrule-ballot'],
+  ])('SB-3 (S5-B-AC-3): %s does not take the stage; it is in its sub-tab', (_, pol, sub, ballotCard) => {
     mount(game({ pol: politics(pol) }));
     byTestid('tabs-a');
     expect(findTestid('hub-situation')).toBeUndefined();
     go((n) => n.open({ tab: 'politics', sub }));
     expect(selected(`sub-${sub}`)).toBe(true);
+    expect(findTestid(ballotCard, byTestid(`sub-body-${sub}`)), `the ballot sits in sub-body-${sub}`).toBeDefined();
   });
 
   it('S5-B-AC-3 (hub): an open overrule ballot shows its Now line and the ready bar, and the reveal takes the stage', () => {
@@ -458,5 +465,73 @@ describe('SB-3: politics as sub-tabs, only the reveals take the stage', () => {
   ])('SB-3: the This month row "%s" opens its sub-tab', (key, _self, to) => {
     const row = TAB_SLOTS.agenda.find((a) => a.key === key)!;
     expect('desk' in row.opens ? DESK_DOORS[row.opens.desk]?.(row.opens.focus) : undefined).toMatchObject({ tab: 'politics', ...to });
+  });
+});
+
+describe('SB-3 part 2: the real hub reaches every politics action', () => {
+  const cap = { kind: 'cap', percent: 8 } as const;
+  const hold = { kind: 'hold' } as const;
+  const announce = (stage: 'announce' | 'ballot') =>
+    politics({ next: 7, candidates: { governor: ['s1', 's2'] }, promises: { s1: cap, s2: hold }, election: { stage, ceremony: null, candidates: { governor: ['s1', 's2'] }, promises: { s1: cap, s2: hold }, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], result: {} } });
+  const RUN_ACTIONS = ['run-office', 'run-governor', 'change-promise', 'promise-run', 'withdraw', 'agenda-run'];
+  const openElections = () => {
+    tap('tab-politics');
+    tap('sub-elections');
+  };
+
+  it("T-AC-66 (hub): month 1's announce takes a run, in the Elections sub-tab: the run block, its change-promise live", () => {
+    mount(game({ pol: announce('announce'), month: 1, mine: { running: 'governor', canRun: { governor: true } } }));
+    openElections();
+    byTestid('run-office');
+    expect(byTestid('change-promise').getAttribute('disabled')).toBeNull();
+  });
+
+  it.each(['announce', 'ballot'] as const)('T-AC-67 (hub): from month 4 the %s shows no Run anywhere on the phone: not in This month, not in Elections', (stage) => {
+    mount(game({ pol: announce(stage), month: 4, mine: { running: 'governor', canRun: { governor: 'closed' } } }));
+    for (const gone of RUN_ACTIONS) expect(findTestid(gone), `${gone} on Overview`).toBeUndefined();
+    openElections();
+    for (const gone of RUN_ACTIONS) expect(findTestid(gone), `${gone} in Elections`).toBeUndefined();
+  });
+
+  it('SB-3 (E-1): while an election is open the "Throw your hat in the ring" row is gone from This month; the Elections Now door carries it', () => {
+    mount(game({ pol: announce('announce'), month: 1, mine: { running: 'governor', canRun: { governor: true } } }));
+    expect(findTestid('agenda-run')).toBeUndefined();
+    rerender(game({ pol: politics({ next: 7 }), month: 1, mine: { canRun: { governor: true } } }));
+    byTestid('agenda-run');
+  });
+
+  it.each<[string, string, string]>([
+    ['the new Governor', 's1', 'sub-laws'],
+    ['another phone', 's3', 'sub-elections'],
+  ])('SB-3 (M14, M17): once the election is over the offices line opens %s on its sub-tab', (_, self, sub) => {
+    const over = politics({ governor: 's1', election: { stage: 'over', ceremony: null, candidates: {}, promises: {}, voted: [], done: [], waitingFor: [], result: {} } });
+    mount(game({ self, pol: over }), { ...TAB_SLOTS, banners: [OFFICES_BANNER] });
+    expect(nav!.tab).toBe('politics');
+    expect(selected(sub), `${sub} is open`).toBe(true);
+  });
+
+  it('SB-3 (M18): the new Governor’s "To your Governor’s desk" in the reveal opens Laws, on the tax', () => {
+    const result: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: [{ id: 's1', votes: 2 }, { id: 's2', votes: 1 }] } };
+    const beats = ceremonyBeats(['s1', 's2', 's3'], result);
+    const total = beats.total / 1000;
+    const reached: Record<string, { beat: string; at: number }> = {};
+    for (const { office, at } of beats.offices) reached[office] = { beat: 'end', at: at.end / 1000 };
+    const ceremony = { seconds: total, total, reached } as unknown as ElectionView['ceremony'];
+    const pol = politics({ governor: 's2', election: { stage: 'ceremony', ceremony, candidates: { governor: ['s1', 's2'] }, promises: {}, voted: [], done: [], waitingFor: [], result }, next: 7 });
+    mount(game({ self: 's1', pol }));
+    tap('companion-to-governor');
+    // The stage holds the screen until the server ends the election; the door has moved the place meanwhile.
+    rerender(game({ self: 's1', pol: politics({ governor: 's1', election: null, next: 7 }) }));
+    expect(nav!.tab).toBe('politics');
+    expect(selected('sub-laws')).toBe(true);
+    byTestid('gov-tax');
+  });
+
+  it('SB-3 (M15): the overrule call line opens Laws', () => {
+    const called = politics({ governor: 's2', tax: { percent: 9, start: 5, low: 0, high: 10 }, overrule: { target: 'tax', caller: 's3', stage: 'called', restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, total: 3, needed: 2, result: null } as unknown as OverruleView });
+    mount(game({ pol: called }), { ...TAB_SLOTS, underNow: [...TAB_SLOTS.underNow, OVERRULE_CALL_LINE] });
+    tap('overrule-call-line');
+    expect(nav!.tab).toBe('politics');
+    expect(selected('sub-laws')).toBe(true);
   });
 });

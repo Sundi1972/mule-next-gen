@@ -1,19 +1,19 @@
 import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
-import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
+import type { AgendaSlot, BannerSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
 import { OverruleBallot, OverruleRail } from './budget/OverruleBallot';
-import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
-import { GovernorDesk } from './Governor';
 import { CouncilBallot, CouncilRail } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
-import { BudgetSub, electionVoting, ElectionsSub, isGovernor, lawVoting, LawsSub, overruleVoting } from './tabs';
+import { BudgetSub, ElectionsBadge, electionVoting, ElectionsSub, LawsBadge, lawVoting, LawsSub, overruleVoting } from './tabs';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
 
 const politicsOn = ({ view }: HubSeat) => view.politics !== null;
+/** An election is under way: announced, balloting or being revealed. */
+const electionOpen = (politics: NonNullable<HubSeat['view']['politics']>) => politics.election !== null && politics.election !== undefined && politics.election.stage !== 'over';
 const electionCeremony = ({ view }: HubSeat) => view.politics?.election?.stage === 'ceremony';
 
 export const OFFICES_BANNER: BannerSlot = { id: 'offices', Body: Offices, show: politicsOn };
@@ -33,7 +33,8 @@ export const ELECTION_AGENDA: AgendaSlot = {
   },
   lead: () => true,
   opens: { desk: 'elections', focus: 'run' },
-  show: ({ view, me }) => view.politics?.next != null && (me.politics?.running != null || me.politics?.canRun.governor === true),
+  // While an election is open the Elections sub-tab's Now door carries it.
+  show: ({ view, me }) => view.politics?.next != null && !electionOpen(view.politics) && (me.politics?.running != null || me.politics?.canRun.governor === true),
 };
 
 /** The proposal pending for next month's vote while no vote is open, on a phone other than its Governor's; else null. */
@@ -56,17 +57,6 @@ export const LAW_AGENDA: AgendaSlot = {
 };
 
 export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'laws' } };
-
-export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
-
-export const GOVERNOR_DESK: DeskSlot = {
-  id: 'governor',
-  label: 'Governor',
-  icon: 'M4 18h16 M5 18l-1-9 5 4 3-7 3 7 5-4-1 9',
-  Body: GovernorDesk,
-  show: isGovernor,
-  first: isGovernor,
-};
 
 /** E-10: the host's line is the same in every stage that waits for people; only what you finish differs. */
 const STILL = 'Still waiting for';
@@ -215,7 +205,7 @@ export function overruleNow({ view, self }: HubSeat): Now | null {
 
 /** The Governor / Council tab's sub-tabs (Sheriff is WS8's). A ballot, when open, sits first in its sub-tab. */
 export const POLITICS_TABS: SubTabSlot[] = [
-  { id: 'laws', label: () => 'Laws', Body: LawsSub, show: politicsOn, first: (seat) => lawVoting(seat) || overruleVoting(seat) },
+  { id: 'laws', label: () => 'Laws', Body: LawsSub, Badge: LawsBadge, show: politicsOn, first: (seat) => lawVoting(seat) || overruleVoting(seat) },
   { id: 'budget', label: () => 'Budget', Body: BudgetSub, show: politicsOn },
-  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, show: politicsOn, first: electionVoting },
+  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, Badge: ElectionsBadge, show: politicsOn, first: electionVoting },
 ];

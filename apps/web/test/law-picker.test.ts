@@ -177,9 +177,11 @@ describe("B-AC-46-1: the Governor's law picker", () => {
     expect(sent).toEqual([{ type: 'propose', proposal: { kind: 'enact', law, setting: s } }]);
   });
 
-  it('B-AC-46-1 (negative): a phone that is not the Governor has no picker and no Governor sub-tab', () => {
+  it('B-AC-46-1 (negative): a phone that is not the Governor has no picker in Laws', () => {
     mount(viewFor('s2', politics()));
-    expect(findTestid('sub-governor')).toBeUndefined();
+    tap('tab-politics');
+    tap('sub-laws');
+    expect(findTestid('gov-tax'), "Laws holds the tax line, not the Governor's desk").toBeUndefined();
     expect(findTestid('picker-a')).toBeUndefined();
   });
 });
@@ -329,7 +331,8 @@ describe("B-AC-46-4: next month's vote on every other phone", () => {
 describe('B-AC-46-6 (negative): without politics', () => {
   it('B-AC-46-6: with politics off there is no Governor desk, no picker and no agenda line', () => {
     mount(viewFor('s1', null));
-    expect(findTestid('sub-governor')).toBeUndefined();
+    expect(findTestid('tab-politics')).toBeUndefined();
+    expect(findTestid('sub-laws')).toBeUndefined();
     expect(findTestid('picker-a')).toBeUndefined();
     expect(findTestid('agenda-law')).toBeUndefined();
   });

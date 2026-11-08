@@ -350,22 +350,9 @@ describe('election day on the phone (C66, E-2)', () => {
   const announce = (month: number, canRun: CanRun, extra: Partial<ElectionView> = {}) =>
     view(politics({ next: 7, pay: { governor: 50 }, candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, election: election({ waitingFor: SEATS, ...extra }) }), me({ running: 'governor', canRun: { governor: canRun } }), { month });
 
-  it("T-AC-66: month 1's announce takes a run: the rail under Now holds the run block, its button live", () => {
-    const html = inHub(announce(1, true));
-    const guide = html.slice(html.indexOf('data-testid="guide"'));
-    expect(guide).toContain('data-testid="run-office"');
-    expect(guide.indexOf('data-testid="now"')).toBeLessThan(guide.indexOf('data-testid="run-office"'));
-    expect(disabled(html, 'change-promise')).toBe(false);
-    expect(textOf(html, 'running')).toBe("You run for Governor, promising up to 8% (it's 5% now).Withdraw");
-  });
+  // T-AC-66 and T-AC-67 are proved on the real hub, in the Elections sub-tab: hub-tabs.test.ts (SB-3 part 2).
 
-  it('T-AC-67: from month 4 announce shows no Run: no run block, no run or promise button anywhere on the phone', () => {
-    const html = inHub(announce(4, 'closed'));
-    expect(tagOf(html, 'announce')).toBeDefined();
-    for (const gone of ['run-office', 'run-governor', 'change-promise', 'promise-run', 'withdraw', 'agenda-run']) expect(html, gone).not.toContain(`data-testid="${gone}"`);
-  });
-
-  it('C66, E-2, E-4: the announcement takes the stage: election day, step 1, who runs on which promise, what the Governor does, then vote on your phone', () => {
+  it('C66, E-2, E-4: the announce card (drawn on the stage as host here): election day, step 1, who runs on which promise, what the Governor does, then vote on your phone', () => {
     const html = inHub(announce(4, 'closed'));
     // The rail's phase name is one word, so it fits whole at 667 px; the stage card carries the full words.
     expect(html).toMatch(/>Election</);
@@ -404,7 +391,7 @@ describe('election day on the phone (C66, E-2)', () => {
       { month: 4, players: PLAYERS.map((p) => (p.id === 's3' ? { ...p, ready: true } : p.id === 's1' ? { ...p, plots: 7 } : p)) },
     );
 
-  it('C66, E-2, E-4: the ballot takes the stage: step 2, each candidate on a promise, Abstain, who has voted and never for whom', () => {
+  it('C66, E-2, E-4: the ballot card (drawn on the stage as host here): step 2, each candidate on a promise, Abstain, who has voted and never for whom', () => {
     const html = inHub(ballot());
     expect(tagOf(html, 'election-step-2')).toMatch(/aria-current="step"/);
     expect(textOf(html, 'ballot-governor-s1')).toBe("Youup to 8% (it's 5% now)");
