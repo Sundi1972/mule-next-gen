@@ -347,6 +347,7 @@ export interface IncidentView {
   worked: boolean;
   /** Only when the culprit is public, or on the orderer's own list. */
   culprit: string | null;
+  /** How the culprit became known; null while it is not (an unseen worked cut), whoever is looking. */
   how: 'guard' | 'caught' | 'investigation' | null;
   investigated: boolean;
   fine: { due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard' } | null;
@@ -408,7 +409,12 @@ export interface MyPoliticsView {
     canOrder: true | 'off' | 'notPlanning';
     /** The crew cost due at this month's upkeep. */
     owed: number;
-    /** Every order this player made: their culprit is themself, public or not. */
+    /**
+     * Every order this player made. On this list `culprit` is always them. `public` means the order is on the public
+     * record: every screen lists it as an incident, because it worked, was caught, or its culprit was revealed. It does
+     * NOT mean anyone knows it was them: others know only when `how` is not null (a guard, caught on the spot, or an
+     * investigation). A worked cut nobody saw is `public: true` with `how: null`.
+     */
     mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];
   } | null;
   /** The Sheriff's desk (slice 4), only on the sitting Sheriff's view. Optional only for older fixtures. */
