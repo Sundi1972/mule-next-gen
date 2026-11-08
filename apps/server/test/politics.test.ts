@@ -1191,6 +1191,30 @@ describe('S4-C13 (server): the four sabotage intents on the wire', () => {
   });
 });
 
+describe('S5-C7 (server): the three overrule intents on the wire', () => {
+  it('S5-T-AC-10: well-formed setBudget, callOverrule and voteOverrule reach the rules and are refused in words; malformed ones are Bad message', async () => {
+    const phone = await seatedPhone({ politics: true });
+    const refused = async (intent: object) => {
+      const error = phone.nextError();
+      phone.intent(intent);
+      return error;
+    };
+    // Month 1's election is open: no budget, no call, no ballot yet.
+    expect(await refused({ type: 'setBudget', shares: { projects: 80, welfare: 10, security: 0 } })).toBe('Set the budget once the votes are over');
+    expect(await refused({ type: 'callOverrule', target: 'tax' })).toBe('Call an overrule once the votes are over');
+    expect(await refused({ type: 'voteOverrule', yes: true })).toBe('The overrule vote is not open');
+    for (const bad of [
+      { type: 'setBudget' },
+      { type: 'setBudget', shares: 'all' },
+      { type: 'setBudget', shares: { projects: 'most' } },
+      { type: 'callOverrule' },
+      { type: 'callOverrule', target: 'everything' },
+      { type: 'voteOverrule' },
+      { type: 'voteOverrule', yes: 'yes' },
+    ]) expect(await refused(bad), JSON.stringify(bad)).toBe('Bad message');
+  });
+});
+
 describe('S5-C8 (server): the budget, the overrule and Welfare reach every screen by S5-RULE-10', () => {
   /** Month 2's planning, Heiko (s1) governing, his tax raised 5 → 10; Mia (s2) has called the tax overrule and the ballot is open. */
   function onTheOverrule(thirdVotes: boolean) {
