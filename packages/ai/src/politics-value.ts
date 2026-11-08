@@ -14,11 +14,14 @@ import {
   auctionNeed,
   banMultiplier,
   budgetCredits,
+  COLONY,
   colonyPrestige,
   GOODS,
   HAPPINESS,
   PRESTIGE,
   stillNeeds,
+  storeForSale,
+  storeQuotes,
   welfareRecipient,
   isPublicOrder,
   lawImpact,
@@ -227,14 +230,18 @@ export function lineWorth(obs: GameState, me: string, line: BudgetLine, amount: 
   let left = Math.max(0, amount);
   let worth = 0;
   for (const project of obs.colony.projects.filter((p) => p.stage === 'commissioned')) {
-    const need = Math.max(0, stillNeeds(project).credits);
+    // While the fund buys goods, its credits also buy the building's missing goods at the store, as far as it sells them
+    // (colony.ts::fund): those count in what is still needed and in its cost (AM-15).
+    const missing = Object.entries(stillNeeds(project).goods) as [Good, number][];
+    const goods = COLONY.fundBuysGoods ? missing.reduce((n, [g, m]) => n + Math.min(m, storeForSale(obs, g)) * (storeQuotes(obs, g).sell ?? 0), 0) : 0;
+    const need = Math.max(0, stillNeeds(project).credits) + goods;
     if (need === 0 || left <= 0) continue;
     const paid = Math.min(left, need);
     left -= paid;
     const row = PRESTIGE[project.id];
     const prestige = Math.min(row.prestige, room);
     room -= prestige;
-    worth += (paid / row.credits) * months * w.prestige * prestige * point;
+    worth += (paid / (row.credits + goods)) * months * w.prestige * prestige * point;
   }
   return worth;
 }
