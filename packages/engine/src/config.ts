@@ -1279,6 +1279,8 @@ export const HEALTH = {
   electronicsBonus: 4,
   /** The sick share from which players' crews fall sick too (read by the crews' rule). */
   crewSickFrom: 0.2,
+  /** The health gauge reads "well" from this health (0..100) up; below it, a sick spell, down to the limit at the cap. */
+  gaugeWellFrom: 90,
 };
 
 /** The colony fund's own rules. Placeholders until the colony's sim tuning. */

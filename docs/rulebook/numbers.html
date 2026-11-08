@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1371 settings in 55 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1372 settings in 55 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>6248d46b6beb</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>5fffe9da8870</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1351,6 +1351,7 @@
 <tr><td><code>HEALTH.growthPerSick</code></td><td class="n">0.05</td><td>Off the colony&#39;s monthly growth factor per unit of sick share.</td></tr>
 <tr><td><code>HEALTH.electronicsBonus</code></td><td class="n">4</td><td>Mood points onto the month&#39;s target with the colonists&#39; whole Electronics want met; in proportion when part.</td></tr>
 <tr><td><code>HEALTH.crewSickFrom</code></td><td class="n">0.2</td><td>The sick share from which players&#39; crews fall sick too (read by the crews&#39; rule).</td></tr>
+<tr><td><code>HEALTH.gaugeWellFrom</code></td><td class="n">90</td><td>The health gauge reads &quot;well&quot; from this health (0..100) up; below it, a sick spell, down to the limit at the cap.</td></tr>
 </tbody>
 </table></div>
 

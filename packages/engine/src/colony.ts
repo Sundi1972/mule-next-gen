@@ -250,6 +250,19 @@ export interface ColonistMonth {
 /** A month with nothing missing and no Electronics. */
 export const WELL_MONTH: ColonistMonth = { short: { food: 0, water: 0, medicine: 0 }, comfort: 0 };
 
+/** The colony's health as the gauge shows it, 0..100: the share of colonists who are well. */
+export function healthOf(sick: number): number {
+  return Math.round(PERCENT * (1 - sick));
+}
+
+/**
+ * The health gauge's marks, read from the rule so the gauge never keeps its own copy: well from HEALTH.gaugeWellFrom,
+ * at the limit at the cap's health, and the health at and below which players' crews fall sick too.
+ */
+export function healthGauge(): { wellFrom: number; atLimit: number; crewSickAt: number } {
+  return { wellFrom: HEALTH.gaugeWellFrom, atLimit: healthOf(HEALTH.cap), crewSickAt: healthOf(HEALTH.crewSickFrom) };
+}
+
 /** The share of the colonists who are sick: 0 while colony health is off, null without a colony (politics off). */
 export function sickShare(state: GameState): number | null {
   if (!state.colony) return null;
