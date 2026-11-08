@@ -18,8 +18,8 @@ export function SeatWords({ text, who, players }: { text: string; who: readonly 
 
 /**
  * News line `i` as a list shows it, through SeatWords. The seats come from newsLines, and only when that line's text is
- * the one shown, so an older server's view, or one whose lists drift, shows the words as they are. The TV's news
- * column draws its lines through this.
+ * the one shown, so an older server's view, or one whose lists drift, shows the words as they are. Every news list
+ * draws its lines through this: the TV's news column, the phone's colony desk and its harvest results.
  */
 export function NewsWords({ view, i }: { view: NewsView; i: number }) {
   const text = view.news[i] ?? '';

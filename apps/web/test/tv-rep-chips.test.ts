@@ -74,14 +74,14 @@ function chip(html: string, testid: string): { rep: string; band: string | undef
 const planning = (players: PlayerView[], on = true) => aMuleView({ phase: 'planning', month: 2, players, me: null, politics: on ? politics() : null });
 
 describe('reputation chips on the TV (S3-C19, mock #695)', () => {
-  it('planning, three seats: each ready-list row carries its chip after the name, and the waiting box its own', () => {
+  it('planning, three seats: each ready-list row carries its chip after the name; the waiting box above it none (the list has them)', () => {
     const html = onTv(planning(SMALL));
     expect(chip(element(html, 'tv-ready-s1'), 'tv-ready-rep-s1')).toEqual({ rep: '72', band: 'good' });
     expect(chip(element(html, 'tv-ready-s2'), 'tv-ready-rep-s2')).toEqual({ rep: '50', band: 'fair' });
     expect(chip(element(html, 'tv-ready-s3'), 'tv-ready-rep-s3')).toEqual({ rep: '25', band: 'low' });
     // The chip sits outside the name's truncation, so a long name gives way first.
     expect(element(element(html, 'tv-ready-s1'), 'tv-ready-name')).not.toContain('tv-ready-rep');
-    expect(chip(element(html, 'tv-waiting'), 'waiting-s1-rep')).toEqual({ rep: '72', band: 'good' });
+    expect(element(html, 'tv-waiting')).not.toContain('-rep');
   });
 
   it("planning, six seats: the Claude row's and the folded AI row's names each carry theirs", () => {

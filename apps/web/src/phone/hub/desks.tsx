@@ -1,5 +1,6 @@
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { NewsWords } from '../../components/SeatWords';
 import { useClientState } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { Chat, ShipLine, type Composing } from '../parts';
@@ -70,10 +71,10 @@ export function News() {
     <section className="flex flex-col gap-1" data-testid="news">
       <span className="label-caps @min-[1100px]/shell:text-xs!">News</span>
       <ul className="flex flex-col gap-1 text-sm">
-        {view.news.map((n) => (
+        {view.news.map((n, i) => (
           <li key={n} className="flex gap-2">
             <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-holo" />
-            {n}
+            <NewsWords view={view} i={i} />
           </li>
         ))}
       </ul>
