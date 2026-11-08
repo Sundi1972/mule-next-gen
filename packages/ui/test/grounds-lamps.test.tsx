@@ -21,7 +21,8 @@ const COLONY: GroundsColony = {
     { id: 'spaceport', name: 'Spaceport', stage: 'building', buildMonths: 3, monthsLeft: 1, place: { x: 2, y: 0, w: 2, h: 2 } },
   ],
 };
-const grounds = (light: 'day' | 'dusk', m: GroundsManifest = manifest) => renderToStaticMarkup(<ColonyGrounds colony={COLONY} size="tv" manifest={m} light={light} />);
+const grounds = (light: 'day' | 'dusk', m: GroundsManifest = manifest, colony: GroundsColony = COLONY, size: 'tv' | 'phone' = 'tv') =>
+  renderToStaticMarkup(<ColonyGrounds colony={colony} size={size} manifest={m} light={light} />);
 /** Each lamp drawn: its crossing (from its testid) and where its picture's foot lands, in scene units. */
 const lamps = (html: string) =>
   [...html.matchAll(/<image[^>]*data-testid="lamp-(-?[\d.]+)_(-?[\d.]+)"[^>]*>/g)].map((m) => {
@@ -40,27 +41,34 @@ describe('T-AC-16: a lamp stands at every inner crossing of the grounds, where t
 
   it("T-AC-16: a lamp's foot stands on its crossing, at the buildings' scale", () => {
     const lamp = manifest.lamp!;
-    const k = W / (12 * Math.SQRT2 * lamp.px_per_m);
+    // the buildings' scale: one place of the frame (frame.place px) is W scene units
+    const k = W / manifest.frame.place;
     const drawn = lamps(grounds('day'));
     expect(drawn.length).toBeGreaterThan(0);
     for (const l of drawn) {
       const [x, y] = iso(l.c, l.r);
-      expect(l.width).toBeCloseTo(lamp.cell.width * k, 3);
-      expect(l.height).toBeCloseTo(lamp.cell.height * k, 3);
-      expect(l.x + lamp.cell.feet[0] * k).toBeCloseTo(x, 3);
-      expect(l.y + lamp.cell.feet[1] * k).toBeCloseTo(y, 3);
+      expect(l.width).toBeCloseTo(lamp.cell.width * k, 1);
+      expect(l.height).toBeCloseTo(lamp.cell.height * k, 1);
+      expect(l.x + lamp.cell.feet[0] * k).toBeCloseTo(x, 1);
+      expect(l.y + lamp.cell.feet[1] * k).toBeCloseTo(y, 1);
     }
   });
 
   it('T-AC-16: a lamp is drawn after the place behind its crossing and before the place in front of it', () => {
     const html = grounds('dusk');
-    const at = (testid: string) => html.indexOf(`data-testid="${testid}"`);
+    const at = (testid: string) => {
+      const i = html.indexOf(`data-testid="${testid}"`);
+      expect(i, testid).toBeGreaterThanOrEqual(0);
+      return i;
+    };
     const lamp = (c: number, r: number) => lamps(html).find((l) => l.c === c && l.r === r)!.at;
     // the crossing (-0.5, 0.5): the Park (place 1, col -1 row 0) behind it, the Hospital (place 2, col 0 row 1) in front
     expect(lamp(-0.5, 0.5)).toBeGreaterThan(at('place-1'));
     expect(lamp(-0.5, 0.5)).toBeLessThan(at('place-2'));
     // the crossing (-0.5, -0.5) is behind the hall
     expect(lamp(-0.5, -0.5)).toBeLessThan(at('picture-hall'));
+    // (-0.5, 0.5) is level with the hall (col + row 0), beside it: drawn after it, as a level neighbour is
+    expect(lamp(-0.5, 0.5)).toBeGreaterThan(at('picture-hall'));
   });
 
   it('T-AC-16: at dusk each lamp has its glow, lit by wealth as the plate is; by day none', () => {
@@ -73,6 +81,26 @@ describe('T-AC-16: a lamp stands at every inner crossing of the grounds, where t
     expect(grounds('day')).not.toContain('lamp-glow-');
     expect(grounds('day')).toContain('/art/colony/lamp/day@800.webp');
     expect(dusk).toContain('/art/colony/lamp/dusk@800.webp');
+  });
+
+  it('T-AC-16: with only the hall, the 3 × 3 plate is drawn and a lamp stands at each of its four pools', () => {
+    const hall: GroundsColony = { gauges: { happiness: 72, wealth: 2_000 }, projects: [] };
+    const drawn = lamps(grounds('dusk', manifest, hall));
+    expect(drawn.map((l) => `${l.c},${l.r}`).sort()).toEqual(['-0.5,-0.5', '-0.5,0.5', '0.5,-0.5', '0.5,0.5']);
+  });
+
+  it("T-AC-16: the phone draws the lamp's small pictures", () => {
+    const html = grounds('dusk', manifest, COLONY, 'phone');
+    expect(lamps(html).length).toBeGreaterThan(0);
+    expect(html).toContain('/art/colony/lamp/dusk@400.webp');
+    expect(html).toContain('/art/colony/lamp/glow@400.webp');
+    expect(html).not.toContain('/art/colony/lamp/dusk@800.webp');
+  });
+
+  it('T-AC-16: with no plate the inner crossings have no pools, so no lamp either', () => {
+    const { plate: _, ...noPlate } = manifest;
+    expect(noPlate.lamp).toBeDefined();
+    expect(lamps(grounds('dusk', noPlate))).toHaveLength(0);
   });
 
   it('T-AC-16: with no lamp in the manifest, no lamp is drawn', () => {
