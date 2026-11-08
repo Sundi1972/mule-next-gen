@@ -434,7 +434,7 @@ today        crews have no state; a farm makes half when its owner holds less Wa
              UPKEEP.shortOutputShare) · verified_by: read + executed (59% of farm-months cut)
 tomorrow     MUST record, at upkeep after the household eats, each player's crew shortfall for Food and Water
              (missing ÷ crews' table need); MUST scale every plot of that player but Energy plants by RULE-12's
-             factor in the next production, before AM-17's Energy turn-off; the dry-farm halving goes
+             factor in the next production, before AM-17's Energy turn-off; the dry-farm halving never runs while AM-18 is on (the default); it stays as the AM-18-off fallback (AM-4)
 logic        → RULE-12 · written at upkeep, read at production
 seam         packages/engine/src/upkeep.ts::runUpkeep (writes) · packages/engine/src/production.ts::runProduction (reads)
 senior       junior would: judge crews at production from the stock in hand · senior does: last month's meal,
@@ -866,7 +866,7 @@ The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; th
 | T-AC-23 (B-AC-12) | `pnpm sim -- --games 10 --seed 1`, politics off and on: Water demand's 12-month mean rises from about 13 to about 16-17; hungry seat-months do not rise by more than 3% | C10-C13 | sim, against trunk at run time |
 | B-AC-13 | Given a player whose crews got half their Food at last month's end · When production runs · Then each of their plots but Energy plants makes 85% of its output, rounded half up (RULE-12). observed_at: the month report's production lines. negative: a crew 10% short loses nothing | C14 | engine test |
 | B-AC-14 | Given a player whose household ate in full and whose stock then spoiled below their need · When development starts · Then they are not hungry. observed_at: the player's walking pace. negative: a household short at upkeep is hungry | C15 | engine test |
-| T-AC-24 (B-AC-13) | RULE-12's examples; no farm halving remains (grep UPKEEP.irrigated, shortOutputShare); the curve is imported from WS7's function | C14 | engine unit + scan |
+| T-AC-24 (B-AC-13) | RULE-12's examples; the farm halving never runs while AM-18 is on (default); UPKEEP.irrigated and shortOutputShare stay as the AM-18-off fallback, live only at `--set UPKEEP.waterUse.food=0` (AM-4); the curve is imported from WS7's function | C14 | engine unit + scan |
 | B-AC-15 | Given 200 colonists and no Electronics works · When prices are next posted · Then monthlyDemand's Electronics, Rare earth and Alloy are each 4 more than today's terms, and Electronics' band is not off-world. observed_at: monthlyDemand as postPrices reads it. negative: 0 colonists adds nothing | C17 | engine test |
 | B-AC-16 | Given health on and h 0.4 · When a player's development sickness is rolled · Then its chance is today's + 0.10, within the row's cap. observed_at: eventChance for EVENTS.player.sickness. negative: h 0 leaves it unchanged | C18 | engine test |
 | B-AC-17 | Given health on, h 0.3 and a player with a farm making 4 and no Medicine · When production runs · Then the farm makes 3; with 1 Medicine in the depot it makes 4 and the depot holds 1 less. observed_at: the month report's production lines and the depot. negative: h 0.19 cuts nothing | C18 | engine test |
@@ -920,6 +920,17 @@ because   both were approved and unbuilt; together a farm would draw Water twice
 goal      G-1 unchanged; one rule per good, read once
 folded    §1 C10, C11, C14 and §2 RULE-10, RULE-12 read with AM-3; docs/rulebook/production.html#plot-consumption and
           #crew-shortfall describe it. WS1 builds AM-18 in PR-5's supply pass (S1 due 8 Nov 08:00Z)
+```
+
+```
+AM-4 · 2026-11-08 · PM ruling, for WS5's PR-8 (crews) · the dry-farm halving stays as the AM-18-off fallback
+target    §1 C14 (tomorrow); §6 T-AC-24
+said      "the dry-farm halving goes", and T-AC-24 scans that UPKEEP.irrigated and shortOutputShare no longer exist
+did       the halving never runs while AM-18 is on (the default); it stays as the AM-18-off fallback, live only at
+          `--set UPKEEP.waterUse.food=0`. T-AC-24 checks that it does not run with AM-18 on, instead of scanning for
+          the names. RULE-12's sW is unchanged
+because   since #723 the two values are WS1's AM-18-off fallback; removing them would remove WS1's switch
+goal      G-1 unchanged
 ```
 
 ## §9 · Ownership Boundaries
