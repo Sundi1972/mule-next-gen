@@ -359,12 +359,11 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
 
   it('B-AC-9: hungry, the pace line says her pace and the Food she ate, and her colonist wears the hunger tag at its level', () => {
     const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
-    const hungry = { foodShare: 1 - (hungryFrom + starvingFrom) / 2, conditionPace: 0.7 };
+    const hungry = { foodShare: 1 - (hungryFrom + starvingFrom) / 2, foodNeed: 4, conditionPace: 0.7 };
     const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, ...hungry } } : p));
-    const me = lenasMe();
-    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    const html = phone(devView(lenasMe({ hungry: true }), { players }), live(mine(5.5, 4.5)));
     expect(tag(html, 'pace-line')).toMatch(/data-pct="70"/);
-    expect(text(html, 'pace-line')).toMatch(/^Your pace 70%: you ate 2 of the 5 Food you need/);
+    expect(text(html, 'pace-line')).toMatch(/^Your pace 70%: you ate 2 of the 4 Food you need/);
     expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
   });
 
@@ -381,9 +380,8 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
   });
 
   it('B-AC-9 (sick and hungry): the line names the sickness first, then the pace and the Food she ate', () => {
-    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, sick: true, sickBecause: 'pollution' as const, conditionPace: 0.35 } } : p));
-    const me = lenasMe();
-    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, foodShare: 0.4, foodNeed: 5, sick: true, sickBecause: 'pollution' as const, conditionPace: 0.35 } } : p));
+    const html = phone(devView(lenasMe({ hungry: true, sick: true }), { players }), live(mine(5.5, 4.5)));
     expect(text(html, 'sick-cause')).toBe('✚ Sick: your own pollution fouled the air.');
     expect(text(html, 'pace-line')).toMatch(/35% pace this turn · you ate 2 of 5 Food/);
   });
@@ -408,6 +406,57 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
     const lit = phone(devView(lenasMe({ carriedMule: 'empty', reach: open.words })), live(mine(open.there.x, open.there.y, { space: 'hall' })));
     expect(text(lit, 'action-verb')).toBe(`OUTFIT · ${place.toUpperCase()}`);
     expect(tag(lit, 'action-button')).toMatch(/data-enabled="true"/);
+  });
+});
+
+describe("needs B-AC-14, phone half: the walking screen shows hunger as the server judged it, from the household's last meal", () => {
+  /** Lena's household ate this share of its 2 Food; her stock, 2 under the 4 her household and crews need, says otherwise. */
+  function lena(foodShare: number, conditionPace: number, sick = false) {
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, foodShare, foodNeed: 2, conditionPace, sick, sickBecause: sick ? ('air' as const) : null } } : p));
+    const me = lenasMe();
+    return devView(lenasMe({ hungry: foodShare < 1, sick, stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 4 } }), { players });
+  }
+  const here = live(mine(5.5, 4.5));
+
+  it('needs B-AC-14: her crews went short but her household ate in full: not hungry, full pace in the fed colour, "ate 2 of 2", never "2 of 4"', () => {
+    const view = lena(1, 1);
+    const html = phone(view, here);
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="100"/);
+    expect(tag(html, 'pace-line')).toMatch(/text-ok/);
+    expect(text(html, 'pace-line')).toBe('Your pace 100%: fed and well');
+    expect(tag(html, 'pace-next')).toBeNull();
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toBeNull();
+    expect(text(phone(view, here, 667), 'pace-line')).toBe('Pace 100%');
+    const rail = inside(laptop(view, here), 'your-pace');
+    expect(tag(rail, 'your-pace')).toMatch(/data-tone="ok"/);
+    expect(text(rail, 'your-pace')).toBe('Fed: full paceYou ate the 2 Food you need.');
+    for (const screen of [html, laptop(view, here)]) expect(screen.replace(/<[^>]+>/g, ' ')).not.toMatch(/\b2 of (the )?4\b/);
+  });
+
+  it('needs B-AC-14: sick, with her crews short and her household fed, the sick line claims no hunger', () => {
+    const html = phone(lena(1, 0.5, true), here);
+    expect(text(html, 'pace-line')).toMatch(/50% pace this turn/);
+    expect(text(html, 'pace-line')).not.toMatch(/Food/);
+    expect(text(phone(lena(1, 0.5, true), here, 667), 'pace-line')).toMatch(/^✚ Sick · 50% pace/);
+  });
+
+  it('needs B-AC-14 (negative): her household ate half its meal: hungry, the hungry pace and tag, "ate 1 of 2"', () => {
+    const view = lena(0.5, 0.8);
+    const html = phone(view, here);
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="80"/);
+    expect(tag(html, 'pace-line')).toMatch(/text-warn/);
+    expect(text(html, 'pace-line')).toMatch(/^Your pace 80%: you ate 1 of the 2 Food you need/);
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
+    expect(text(phone(view, here, 667), 'pace-line')).toMatch(/^Pace 80%: ate 1 of 2 Food/);
+    const rail = inside(laptop(view, here), 'your-pace');
+    expect(tag(rail, 'your-pace')).toMatch(/data-tone="warn"/);
+    expect(text(rail, 'your-pace')).toMatch(/You ate 1 of the 2 Food you need\./);
+  });
+
+  it('needs B-AC-14 (negative): sick and her household short, the sick line says "you ate 1 of 2 Food"', () => {
+    const html = phone(lena(0.5, 0.4, true), here);
+    expect(text(html, 'pace-line')).toMatch(/40% pace this turn · you ate 1 of 2 Food/);
+    expect(text(phone(lena(0.5, 0.4, true), here, 667), 'pace-line')).toMatch(/^✚ Sick · ate 1 of 2 · 40%/);
   });
 });
 
