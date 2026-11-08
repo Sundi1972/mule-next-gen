@@ -7,6 +7,7 @@ import {
   electronicsComfort,
   GOOD_CONFIG,
   grownColonists,
+  growthRate,
   HAPPINESS,
   hardship,
   HEALTH,
@@ -229,6 +230,23 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       expect(Math.abs(stocked.colony!.happiness - short.colony!.happiness - explained), 'the whole-number mood, within its rounding').toBeLessThan(1);
     });
   });
+
+  it('needs T-AC-9: growth reads the h this upkeep writes, also when the meal went short (Medicine short; hungry)', () => {
+    withHealth(() => {
+      for (const shelf of [{ food: 500, water: 500, medicine: 0 }, { food: 0, water: 500, medicine: 500 }]) {
+        const state = toAuction(game());
+        expect(shipInPort(state), 'the premise: no export ship this upkeep').toBe(false);
+        state.colonists = 2000;
+        state.colony!.sick = 0.1;
+        Object.assign(state.store.stock, shelf);
+        const short = { food: shelf.food === 0 ? 1 : 0, water: 0, medicine: shelf.medicine === 0 ? 1 : 0 };
+        const rate = growthRate(state, severity(short));
+        advancePhase(state);
+        expect(state.phase).toBe('upkeep');
+        expect(state.colonists, `shelf ${JSON.stringify(shelf)}: the cut reads the h the colony now holds`).toBe(grownColonists(2000, rate, sickShare(state)!));
+      }
+    });
+  });
 });
 
 describe('needs C9: Electronics are a comfort (RULE-9)', () => {
@@ -289,6 +307,22 @@ describe('needs HC-13: health ships switched off', () => {
     const offOn = plain(true);
     expect(sickShare(offOn), 'politics off: no colony, so no sick share').toBeNull();
     expect(stableJson(offOn), 'and health on moves nothing without a colony').toBe(stableJson(plain(false)));
+  });
+
+  it('needs T-AC-11: health off, or politics off, a hungry upkeep grows the colony at the plain rate, with no sick cut', () => {
+    const hungry = (politics: boolean) => {
+      const state = toAuction(game(politics));
+      expect(shipInPort(state), 'the premise: no export ship this upkeep').toBe(false);
+      state.colonists = 2000;
+      Object.assign(state.store.stock, { food: 0, water: 500, medicine: 500 });
+      const rate = growthRate(state, severity({ food: 1, water: 0 }));
+      advancePhase(state);
+      return { colonists: state.colonists, plain: Math.round(2000 * rate) };
+    };
+    const off = hungry(true);
+    expect(off.colonists, 'health off').toBe(off.plain);
+    const noColony = withHealth(() => hungry(false));
+    expect(noColony.colonists, 'health on, politics off').toBe(noColony.plain);
   });
 });
 
