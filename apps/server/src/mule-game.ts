@@ -103,6 +103,7 @@ import {
   type Outfit,
   type Phase,
   type PlaybookEntry,
+  type ProductionLine,
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
@@ -166,6 +167,9 @@ function isSpecies(pick: string | undefined): pick is Species {
 
 /** The parts that are a plot's base: its ground's yield, or a factory's run. Every other part but an event is a reason. */
 const BASE_PARTS: readonly string[] = ['ground', 'factory'];
+type PartWhy = ProductionLine['parts'][number]['why'];
+/** A part the map shows as a reason: every one but the base and the events. Typed so the protocol must name each. */
+const isReason = (why: PartWhy): why is Exclude<PartWhy, 'ground' | 'factory' | 'event'> => why !== 'event' && !BASE_PARTS.includes(why);
 /** The receipt of a seat that traded nothing in the good that closed. */
 const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] } };
 
@@ -398,7 +402,7 @@ function productionView(state: GameState, lengthMs: number, hurry: ProductionHur
       good: line.good,
       base: line.parts.reduce((n, p) => n + (BASE_PARTS.includes(p.why) ? p.delta : 0), 0),
       made: line.made - line.parts.reduce((n, p) => n + (p.why === 'event' ? p.delta : 0), 0),
-      parts: line.parts.flatMap(({ why, delta }) => (why !== 'event' && !BASE_PARTS.includes(why) && delta !== 0 ? [{ why: why as ProductionReason, delta }] : [])),
+      parts: line.parts.flatMap(({ why, delta }): { why: ProductionReason; delta: number }[] => (isReason(why) && delta !== 0 ? [{ why, delta }] : [])),
     }));
   const fired = phaseEvents(state, 'production');
   return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs, hurry };
