@@ -7,6 +7,7 @@ import { ColonyGrounds, type GroundsColony } from '../src/grounds/ColonyGrounds'
 import { frameAt, headingOf, WalkingScene, type Placed } from '../src/grounds/LiveLayer';
 import { occluderOf } from '../src/grounds/occlusion';
 import type { GroundsManifest, WalkerEntry } from '../src/grounds/pick';
+import { W } from '../src/grounds/projection';
 import { walkerAt, type Spot } from '../src/grounds/walks';
 
 /** The shipped manifest: the colonists are Heiko's pick, Astronaut A in the player colours (8 Nov). */
@@ -30,13 +31,25 @@ const crops = (html: string, testid = 'walker') =>
 describe('T-AC-14: the colonists are Astronaut A, from the walker sheets, in the player colours', () => {
   it('T-AC-14: a colonist is a crop of its sheet whose row is the heading of its route leg (+x, +y, -x, -y top to bottom)', () => {
     // c rising runs down-right on screen (+x); r falling runs up-right (+y).
-    const html = layer([[[0, 0], [1, 0]], [[0, 0], [0, -1]], [[0, 0], [-1, 0]], [[0, 0], [0, 1]]].map((r) => r as Spot[]));
-    const rows = crops(html).map(([, y]) => y / CH).sort();
-    expect(rows).toEqual([0, 1, 2, 3]);
+    // One colonist per render, so a row can only be its own leg's.
+    const legs: Spot[][] = [[[0, 0], [1, 0]], [[0, 0], [0, -1]], [[0, 0], [-1, 0]], [[0, 0], [0, 1]]];
+    expect(legs.map((leg) => crops(layer([leg]))[0]![1] / CH)).toEqual([0, 1, 2, 3]);
     expect(headingOf([0, 0], [1, 0])).toBe('+x');
     expect(headingOf([0, 0], [0, -1])).toBe('+y');
     expect(headingOf([0, 0], [-1, 0])).toBe('-x');
     expect(headingOf([0, 0], [0, 1])).toBe('-y');
+  });
+
+  it("T-AC-14: a colonist stands on its spot at the buildings' own scale: the cell's feet pixel on the spot, a pixel the size a building picture's is", () => {
+    // The same camera renders the sheets and the buildings: a place, 12 m a side, is W wide on screen, its diagonal at px_per_m.
+    const k = W / (12 * Math.SQRT2 * walker.px_per_m);
+    expect(k).toBeCloseTo(W / manifest.frame.place, 3);
+    const box = layer([[[0, 0], [1, 0]]]).match(/<svg x="([-\d.]+)" y="([-\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*data-testid="walker"/)!;
+    const [x, y, w, h] = box.slice(1).map(Number);
+    expect(x).toBeCloseTo(-walker.cell.feet[0] * k, 0);
+    expect(y).toBeCloseTo(-walker.cell.feet[1] * k, 0);
+    expect(w).toBeCloseTo(CW * k, 1);
+    expect(h).toBeCloseTo(CH * k, 1);
   });
 
   it('T-AC-14: the column advances with the walk cycle, frame 0 with reduced motion', () => {
