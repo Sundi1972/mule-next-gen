@@ -450,7 +450,11 @@ function GuardPicker({ onDone }: { onDone(tiles: number[]): void }) {
     const i = t.y * view.width + t.x;
     setHint(null);
     if (guards.includes(i)) return setGuards(guards.filter((g) => g !== i));
-    if (view.tiles[i]?.owner == null) return setHint('Guards stand on players’ plots.');
+    // The server's list decides (AM-11, canGuard): players' plots, never the Sheriff's own. Only an older view without
+    // one falls back to the owner filter. The client never re-derives the rule.
+    const owner = view.tiles[i]?.owner ?? null;
+    const guardable = sheriff.guardable ? sheriff.guardable.includes(i) : owner !== null;
+    if (!guardable) return setHint(owner === me.id ? 'You can’t guard your own plots.' : 'Guards stand on players’ plots.');
     if (guards.length >= sheriff.max) return setHint(`All ${sheriff.max} guards are out. Tap a guarded plot to lift one.`);
     setGuards([...guards, i]);
   };

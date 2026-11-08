@@ -418,6 +418,56 @@ describe("S4-C15, P7: the Sheriff's case file (B folded)", () => {
   });
 });
 
+describe('S4-PR-11 part 2: the guard pick offers only the plots the server says are guardable (AM-11)', () => {
+  /** What the server lets Brix guard: every player's plot but his own (Brix's is 1·2), minus Kai's energy plot, to show
+   * the client follows the list rather than re-deriving it. */
+  const GUARDABLE = [at(0, 0), at(1, 0), at(2, 0)];
+
+  it("S4-PR-11: on the Sheriff's own plot the hint says so and nothing is posted", () => {
+    mount(brix({ guardable: GUARDABLE }));
+    tap('guard-open-map');
+    tap('map-plot-0-1');
+    expect(text('guard-hint')).toBe('You can’t guard your own plots.');
+    expect(text('guard-bar-words')).toBe('Guarding · 1 of 2');
+    expect(plotLabel(0, 1)).not.toContain('guarded');
+  });
+
+  it('S4-PR-11: a plot not on the list posts nothing and keeps the existing hint; a listed one posts', () => {
+    mount(brix({ guardable: GUARDABLE }));
+    tap('guard-open-map');
+    tap('map-plot-1-1');
+    expect(text('guard-hint'), "Kai's energy plot is a player's, but not on the server's list").toBe('Guards stand on players’ plots.');
+    expect(text('guard-bar-words')).toBe('Guarding · 1 of 2');
+    tap('map-plot-3-0');
+    expect(text('guard-hint')).toBe('Guards stand on players’ plots.');
+    tap('map-plot-2-0');
+    expect(text('guard-bar-words')).toBe('Guarding · 2 of 2');
+    tap('guard-back');
+    expect(sent).toEqual([{ type: 'guard', tiles: [at(1, 0), at(2, 0)] }]);
+  });
+
+  it('S4-PR-11: a guard already posted can still be lifted, listed or not', () => {
+    mount(brix({ guards: [at(1, 1)], guardable: GUARDABLE }));
+    tap('guard-open-map');
+    tap('map-plot-1-1');
+    expect(text('guard-bar-words')).toBe('Guarding · 0 of 2');
+  });
+
+  it('S4-PR-11: with no list (an older view) the owner filter stands', () => {
+    mount(brix());
+    tap('guard-open-map');
+    tap('map-plot-1-1');
+    expect(text('guard-bar-words')).toBe('Guarding · 2 of 2');
+  });
+
+  it("S4-PR-11: the tabbed hub's Guard pick follows the same list", () => {
+    // GUARD_PICK's map is the same picker: mounted alone, the own plot says so.
+    mount(brix({ guardable: GUARDABLE }), () => createElement(Sheriff.PickNavProvider, { value: { desk: '', tool: '', focus: null, openDesk() {}, pickTool() {}, takeFocus() {}, tab: 'overview', sub: 'sheriff', pick: 'guard', open() {}, startPick() {}, endPick() {} }, children: createElement(Sheriff.GUARD_PICK.Map) }));
+    tap('map-plot-0-1');
+    expect(text('guard-hint')).toBe('You can’t guard your own plots.');
+  });
+});
+
 describe('S4-C15, P8: guarding on the one map', () => {
   it("S4-B-AC-10: Guard a plot turns the hub's map to Guard under its bar; a tap posts or lifts; Done sends {type:'guard', tiles} and goes back", () => {
     mount(brix());
