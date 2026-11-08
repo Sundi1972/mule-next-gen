@@ -458,7 +458,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
 /** A player's reputation chip on the TV, after their name, with politics on (S3-C19); nothing with it off. */
 function TvRep({ game, id, testid }: { game: MuleView; id: string; testid: string }) {
   return game.politics ? (
-    <span className="ml-2 inline-flex shrink-0 align-middle font-normal">
+    // Centred on its row, not on its first mark's baseline (a star or a warning sits higher than a bare number).
+    <span className="ml-2 inline-flex shrink-0 self-center align-middle font-normal">
       <RepChip view={game} id={id} tv testid={testid} />
     </span>
   ) : null;

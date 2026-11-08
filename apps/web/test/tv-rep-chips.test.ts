@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
+import { LeagueTable } from '../src/components/MonthEnd';
 import { TableApp } from '../src/table/TableApp';
 import { aMuleView, aPlayer } from './fixtures/views';
 
@@ -106,6 +107,14 @@ describe('reputation chips on the TV (S3-C19, mock #695)', () => {
     const html = onTv(aMuleView({ phase: 'upkeep', month: 2, players: SMALL, me: null, politics: politics() }));
     expect(chip(element(html, 'league-row-s1'), 'league-rep-s1')).toEqual({ rep: '72', band: 'good' });
     expect(chip(element(html, 'league-row-s3'), 'league-rep-s3')).toEqual({ rep: '25', band: 'low' });
+  });
+
+  it("the league beside a TV (phone density) carries the chips; the phone alone (compact) and game over's final table do not", () => {
+    const game = aMuleView({ phase: 'upkeep', month: 2, players: SMALL, me: null, politics: politics() });
+    const league = (density: 'phone' | 'compact', final = false) => renderToStaticMarkup(createElement(LeagueTable, { view: game, density, final }));
+    expect(chip(league('phone'), 'league-rep-s1')).toEqual({ rep: '72', band: 'good' });
+    expect(league('compact')).not.toContain('league-rep-');
+    expect(league('phone', true)).not.toContain('league-rep-');
   });
 
   it('with politics off, no chip anywhere', () => {
