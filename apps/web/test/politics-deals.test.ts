@@ -306,3 +306,86 @@ describe('the deal composer (S3-C17)', () => {
     expect(text('composer-a')).toContain('Brix');
   });
 });
+
+// ---- S3-C18 · the incoming card and My cards ----------------------------------------------------------------------
+
+/** Brix's cards in month 2: Lena's pact offered to him, his vote offered to Ossa, a pact with Kai, two settled. */
+const LENAS = card({ id: 'deal-in1', from: LENA, to: BRIX, terms: { kind: 'pact' }, offered: 2, until: 4 });
+const BRIX_CARDS: DealCard[] = [
+  LENAS,
+  card({ id: 'deal-out1', from: BRIX, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 2, until: 4 }),
+  card({ id: 'deal-act1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 3, status: 'active' }),
+  card({ id: 'deal-wd1', from: BRIX, to: KAI, terms: { kind: 'vote', law: true, yes: true }, offered: 1, until: 2, status: 'withdrawn', settled: 1 }),
+];
+const brixGame = (cards: DealCard[] = BRIX_CARDS) => gameFor(myView(BRIX, cards), politics({ candidates: { governor: [OSSA] } }));
+const lenasAnswer = (status: DealCard['status']) => ({ ...LENAS, status, settled: status === 'active' ? null : 2 });
+
+describe('the incoming card and My cards (S3-C18)', () => {
+  it("S3-B-AC-1: Brix's whisper thread and agenda show Lena's card with both reputations and Accept / Decline; My cards lists offered (Withdraw), incoming, active (what it binds, until when) and settled cards", () => {
+    mount(brixGame(), hub);
+    expect(text('agenda-deals')).toContain('1 deal offer');
+    expect(text('agenda-deals')).toContain('From Lena');
+
+    // The agenda's door opens the card over the rail, and lands the Talk desk on the pair's whisper.
+    tap('agenda-deals');
+    const face = 'sheet-card-deal-in1';
+    expect(text(`${face}-label`)).toBe('Card from Lena');
+    expect(text(`${face}-title`)).toBe('Pact · 3 months');
+    expect(text(`${face}-binds`)).toBe('Neither of you sabotages the other, months 2 to 4.');
+    expect(text(`${face}-from-rep`), "Lena's reputation").toBe(String(repHigh));
+    expect(text(`${face}-to-rep`), "Brix's own").toBe(String(repLow - 1));
+    expect(findTestid(`${face}-accept`)).toBeDefined();
+    expect(findTestid(`${face}-decline`)).toBeDefined();
+    tap('incoming-sheet-close');
+
+    const thread = `thread-deals-${LENA}`;
+    expect(text('whisper-line')).toContain('LENA');
+    expect(findTestid(thread), "the card sits at the foot of Brix's whisper with Lena").toBeDefined();
+    expect(text('incoming-deal-in1-from-rep')).toBe(String(repHigh));
+    expect(text('incoming-deal-in1-to-rep')).toBe(String(repLow - 1));
+    tap('incoming-deal-in1-accept');
+    expect(sent).toEqual([{ type: 'answerDeal', id: 'deal-in1', accept: true }]);
+
+    // The server's answer: the pact is active, until month 4; the thread says so in a line.
+    rerender(brixGame([lenasAnswer('active'), ...BRIX_CARDS.slice(1)]));
+    expect(findTestid('incoming-deal-in1')).toBeUndefined();
+    expect(text('thread-line-deal-in1')).toContain('Binds until the end of month 4');
+
+    tap('talk-cards');
+    expect(allTestids('my-deals-').filter((id) => /^my-deals-[a-z]+$/.test(id))).toEqual(['my-deals-waiting', 'my-deals-active', 'my-deals-settled']);
+    expect(text('my-deals-waiting')).toContain('Waiting for Ossa');
+    tap('outgoing-deal-out1-withdraw');
+    expect(sent.at(-1)).toEqual({ type: 'withdrawDeal', id: 'deal-out1' });
+    expect(text('my-deal-deal-in1-binds')).toBe('· Neither of you sabotages the other, months 2 to 4.');
+    expect(text('my-deal-deal-in1-line')).toContain('Binds until the end of month 4');
+    expect(text('my-deal-deal-act1-line')).toContain('Binds until the end of month 3');
+    expect(text('my-deal-deal-wd1-line')).toContain('Withdrawn by you');
+    expect(byTestid('my-deal-deal-wd1').getAttribute('data-status')).toBe('withdrawn');
+  });
+
+  it('S3-B-AC-1: My cards lists a card offered to me under For you to answer, and a second offer makes the agenda open My cards', () => {
+    const second = card({ id: 'deal-in2', from: OSSA, to: BRIX, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 2, until: 4 });
+    mount(brixGame([second, ...BRIX_CARDS]), hub);
+    expect(text('agenda-deals')).toContain('2 deal offers');
+    tap('agenda-deals');
+    expect(findTestid('incoming-sheet'), 'two offers: no single card to open').toBeUndefined();
+    expect(allTestids('incoming-deal-')).toEqual(expect.arrayContaining(['incoming-deal-in2', 'incoming-deal-in1']));
+    expect(text('my-deals-incoming')).toContain('For you to answer');
+    expect(text('talk-cards-badge')).toBe('2');
+  });
+
+  it('S3-B-AC-1 (negative): Brix taps Decline, and the card shows as declined, with nothing active from it', () => {
+    mount(brixGame(), hub);
+    tap('agenda-deals');
+    tap('sheet-card-deal-in1-decline');
+    expect(sent).toEqual([{ type: 'answerDeal', id: 'deal-in1', accept: false }]);
+    rerender(brixGame([lenasAnswer('declined'), ...BRIX_CARDS.slice(1)]));
+    expect(findTestid('incoming-sheet'), 'answered: the sheet closes itself').toBeUndefined();
+    expect(findTestid('agenda-deals'), 'nothing left to answer').toBeUndefined();
+    expect(text('thread-line-deal-in1')).toContain('Declined by you');
+    tap('talk-cards');
+    expect(byTestid('my-deal-deal-in1').getAttribute('data-status')).toBe('declined');
+    expect(text('my-deals-settled')).toContain('Declined by you');
+    expect(text('my-deals-active')).not.toContain('Pact · 3 months · Binds until the end of month 4');
+  });
+});
