@@ -73,15 +73,12 @@ describe('needs C7: the colonists\' sick share (RULE-7)', () => {
     for (let month = 0; month < 40; month++) h = nextSickShare(h, untreated);
     expect(h, 'no Medicine: it climbs to the cap').toBe(HEALTH.cap);
     expect(nextSickShare(HEALTH.cap, untreated), 'and stays there').toBe(HEALTH.cap);
-    // Half the Medicine missing cuts recovery linearly, by 0.3 × 0.5, not along the hardship curve:
-    // p = 0.01 + 0.2 × g(0.5) + 0.15 × 0.3 with g(0.5) = (0.4 / 0.9)^1.5 = 8/27; recover = 0.3 × 0.5 × (1 − 0.15).
-    expect(nextSickShare(0.3, { ...FED, medicine: 0.5 })).toBeCloseTo(0.3 + 0.7 * (0.01 + 0.2 * (8 / 27) + 0.045) - 0.3 * 0.5 * 0.85, 12);
-
-    // Hunger counts the worse of Food and Water: half the Food missing or half the Water, the same p = 0.01 + 0.2 × 8/27 + 0.045.
-    const hungry = 0.3 + 0.7 * (0.01 + 0.2 * (8 / 27) + 0.045) - 0.3 * 0.5;
-    expect(nextSickShare(0.3, { ...FED, food: 0.5 }), 'half the Food missing').toBeCloseTo(hungry, 12);
-    expect(nextSickShare(0.3, { ...FED, water: 0.5 }), 'half the Water missing').toBeCloseTo(hungry, 12);
-    expect(nextSickShare(0.3, { ...FED, food: 0.5, water: 0.2 }), 'the worse of the two, not the lesser').toBeCloseTo(hungry, 12);
+    // One month's step, worked by hand (WS7): g(0.5) = (0.4 / 0.9)^1.5 = 8/27, and the Medicine cut on recovery is linear.
+    expect(nextSickShare(0, { ...FED, food: 1 }), 'no Food: 0.01 + 0.2').toBeCloseTo(0.21, 6);
+    expect(nextSickShare(0, { ...FED, water: 1 }), 'no Water: the worse of the two').toBeCloseTo(0.21, 6);
+    expect(nextSickShare(0, { ...FED, medicine: 1 }), 'no Medicine').toBeCloseTo(0.21, 6);
+    expect(nextSickShare(0.2, { ...FED, medicine: 0.5 }), '0.2 + 0.8 × (0.04 + 0.2 × 8/27) − 0.2 × 0.5 × (1 − 0.3 × 0.5)').toBeCloseTo(0.194407, 6);
+    expect(nextSickShare(0.2, { ...FED, food: 0.5 }), '0.2 + 0.8 × (0.04 + 0.2 × 8/27) − 0.2 × 0.5').toBeCloseTo(0.179407, 6);
     expect(nextSickShare(0.3, { ...FED, food: 0.05 }), 'within the tolerance: no hunger at all').toBe(nextSickShare(0.3, FED));
 
     // Recovery beats contagion: a month on, an extra sick share h is less than h × (1 − p₀), what it would be if the sick
@@ -116,7 +113,8 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
         state.colony!.sick = sick;
         const need = colonistMedicineNeed(state);
         const medicine = state.store.stock.medicine;
-        runUpkeep(state);
+        advancePhase(state);
+        expect(state.phase).toBe('upkeep');
         return { need, medicine, left: state.store.stock.medicine, colonists: state.colonists };
       };
       const well = upkeep(0);
@@ -126,8 +124,10 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       // The store's Medicine then spoils at its slower rate, rounded down.
       const kept = 1 - GOOD_CONFIG.medicine.spoilage * PRICE.storeSpoilage;
       expect(sick.left, 'the colonists take that need from the shelf').toBe(Math.floor((sick.medicine - sick.need) * kept));
+      // From h 0 the month ends at 0.01: 400 × (1.04 − 0.0005) still rounds to 416.
       expect(well.colonists).toBe(Math.round(400 * UPKEEP.colonistGrowth.fed));
       // The growth reads the month's new share, not h_old's 0.2: fed and treated, 0.2 + 0.8 × (0.01 + 0.15 × 0.2) − 0.2 × 0.5 = 0.132.
+      // Rounded once: 400 × 1.0334 = 413.36 → 413 (h_old's 0.2 would give 412, no cut 416).
       expect(sick.colonists, 'the growth rate is 0.05 × 0.132 lower').toBe(Math.round(400 * (UPKEEP.colonistGrowth.fed - HEALTH.growthPerSick * 0.132)));
     });
   });
@@ -172,6 +172,18 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       const { shortages } = runUpkeep(state);
       expect(shortages, "the store's prices and the computer players' outlook read the month's shortages").toContain('medicine');
       expect(moodInputs(state, shortages).short, 'Medicine reaches the mood only through sickness').toBe(0);
+
+      // At the table: a Medicine-short month's mood differs from a stocked one's by what the sick share explains,
+      // moodPerSick × the difference in h (0.21 against 0.01: 2 points), never by a shortage's 8 on top.
+      const short = stockedAtAuction();
+      short.store.stock.medicine = 0;
+      const stocked = stockedAtAuction();
+      advancePhase(short);
+      advancePhase(stocked);
+      expect(short.history.at(-1)!.shortages).toContain('medicine');
+      const explained = HEALTH.moodPerSick * (sickShare(short)! - sickShare(stocked)!);
+      expect(explained).toBeCloseTo(2, 9);
+      expect(Math.abs(stocked.colony!.happiness - short.colony!.happiness - explained), 'the whole-number mood, within its rounding').toBeLessThan(1);
     });
   });
 });
