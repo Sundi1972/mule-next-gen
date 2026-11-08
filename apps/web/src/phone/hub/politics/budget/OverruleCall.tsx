@@ -70,7 +70,7 @@ function OverruleCallLine() {
     <button
       type="button"
       // The call and its ballot live in Governor / Council > Laws, so the line opens that sub-tab on every phone.
-      onClick={() => openDesk('council')}
+      onClick={() => openDesk('laws')}
       className={cx('rounded-control border border-warn/60 bg-holo-soft px-2 py-1 text-left text-xs leading-snug text-ink @min-[1100px]/shell:text-sm')}
       data-testid="overrule-call-line"
     >

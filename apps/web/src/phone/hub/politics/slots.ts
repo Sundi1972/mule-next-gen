@@ -1,7 +1,7 @@
 import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
 import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
-import { ballotOpen, OverruleBallot, OverruleRail } from './budget/OverruleBallot';
+import { OverruleBallot, OverruleRail } from './budget/OverruleBallot';
 import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
@@ -14,15 +14,12 @@ import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youP
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
 
 const politicsOn = ({ view }: HubSeat) => view.politics !== null;
-const electionOpen = ({ view }: HubSeat) => {
-  const stage = view.politics?.election?.stage;
-  return stage !== undefined && stage !== 'over';
-};
+const electionCeremony = ({ view }: HubSeat) => view.politics?.election?.stage === 'ceremony';
 
 export const OFFICES_BANNER: BannerSlot = { id: 'offices', Body: Offices, show: politicsOn };
 
-/** Election day takes the stage from the announcement through the reveal (E-2). */
-export const ELECTION_DAY_STAGE: StageSlot = { id: 'election-day', show: electionOpen, phase: () => 'Election', Body: ElectionDay, Rail: ElectionDayRail };
+/** The election's reveal takes the stage, as the table watches it together (E-2); the announce and the ballot are Elections' (./tabs.tsx). */
+export const ELECTION_DAY_STAGE: StageSlot = { id: 'election-day', show: electionCeremony, phase: () => 'Election', Body: ElectionDay, Rail: ElectionDayRail };
 
 /** E-1: running for office, any month an election is still to come; the door asks for a promise, or shows your candidacy. */
 export const ELECTION_AGENDA: AgendaSlot = {
@@ -35,7 +32,7 @@ export const ELECTION_AGENDA: AgendaSlot = {
     return `Run for Governor · election in month ${politics.next}`;
   },
   lead: () => true,
-  opens: { desk: 'council', focus: 'run' },
+  opens: { desk: 'elections', focus: 'run' },
   show: ({ view, me }) => view.politics?.next != null && (me.politics?.running != null || me.politics?.canRun.governor === true),
 };
 
@@ -54,11 +51,11 @@ export const LAW_AGENDA: AgendaSlot = {
     const p = pendingFor(seat)!;
     return `${namer(seat.view)(p.by)} proposes ${proposalWords(p.proposal)}. For you: ${forYouWords(p.proposal, p.impact[seat.self.id], seat.view.air.level)}.`;
   },
-  opens: { desk: 'council' },
+  opens: { desk: 'laws' },
   show: (seat) => pendingFor(seat) !== null,
 };
 
-export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'governor' } };
+export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'laws' } };
 
 export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
 
@@ -138,13 +135,10 @@ export function electionNow({ view, self }: HubSeat): Now | null {
   }
 }
 
-/** C46: next month's law ballot takes the stage, as election day does, through its reveal. */
-const councilOpen = ({ view }: HubSeat) => {
-  const stage = view.politics?.council?.stage;
-  return stage === 'ballot' || stage === 'reveal';
-};
+/** C46: next month's law vote takes the stage only for its reveal; the ballot is in Laws. */
+const councilReveal = ({ view }: HubSeat) => view.politics?.council?.stage === 'reveal';
 
-export const COUNCIL_STAGE: StageSlot = { id: 'council-ballot', show: councilOpen, phase: () => 'Law vote', Body: CouncilBallot, Rail: CouncilRail };
+export const COUNCIL_STAGE: StageSlot = { id: 'council-ballot', show: councilReveal, phase: () => 'Law vote', Body: CouncilBallot, Rail: CouncilRail };
 
 const LAW_BALLOT_WORDS: ReadyWords = {
   ready: 'Done',
@@ -177,8 +171,8 @@ export function councilNow({ view, self }: HubSeat): Now | null {
   return { step: 1, of: 2, title: 'Vote on the law', detail: 'Yes or No, then Done. Nobody sees how you voted. No clock: it closes once everyone is Done.' };
 }
 
-/** The overrule vote is the month's last, so its stage follows the law vote's: it takes the stage from the ballot through its reveal. */
-export const OVERRULE_STAGE: StageSlot = { id: 'overrule-ballot', show: ballotOpen, phase: () => 'Overrule vote', Body: OverruleBallot, Rail: OverruleRail };
+/** The overrule's reveal takes the stage; its ballot is in Laws. */
+export const OVERRULE_STAGE: StageSlot = { id: 'overrule-ballot', show: ({ view }) => view.politics?.overrule?.stage === 'reveal', phase: () => 'Overrule vote', Body: OverruleBallot, Rail: OverruleRail };
 
 const OVERRULE_WORDS: ReadyWords = {
   ready: 'Cast my vote',

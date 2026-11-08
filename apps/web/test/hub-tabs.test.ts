@@ -194,14 +194,14 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('tab-body-colony');
   });
 
-  it('C66, E-1 (D5): "Throw your hat in the ring" leads This month, strong, a door into Council that opens the promise', () => {
+  it('C66, E-1 (D5): "Throw your hat in the ring" leads This month, strong, a door into Elections that opens the promise', () => {
     mount(game());
     const rows = byTestid('agenda-box').findAll('button').map((b) => b.getAttribute('data-testid'));
     expect(rows[0]).toBe('agenda-run');
     expect(byTestid('agenda-run').getAttribute('class')).toMatch(/border-holo bg-holo-soft/);
     expect(text('agenda-run-tab')).toBe('Council');
     tap('agenda-run');
-    expect(selected('sub-council')).toBe(true);
+    expect(selected('sub-elections')).toBe(true);
     byTestid('promise-sheet');
   });
 
@@ -228,14 +228,13 @@ describe('the tabbed planning hub (SB-2)', () => {
   it.each<[string, (n: HubNav) => void, string, { tab: string; sub?: string; tool?: string; focus?: string | null; shows?: string }]>([
     ["openDesk('colony')", (n) => n.openDesk('colony'), 's1', { tab: 'colony' }],
     ["openDesk('talk', 'whisper:s2')", (n) => n.openDesk('talk', 'whisper:s2'), 's1', { tab: 'talk', focus: 'whisper:s2' }],
-    // On the Governor's phone, where Council is not the only sub-tab. The Council desk takes the focus as it opens; what the door promised is the promise sheet, open.
-    ["openDesk('council', 'run')", (n) => n.openDesk('council', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
-    ["openDesk('governor') on the Governor's phone", (n) => n.openDesk('governor'), 's2', { tab: 'politics', sub: 'governor' }],
+    // On the Governor's phone, where Council is not the only sub-tab. Elections takes the focus as it opens; what the door promised is the promise sheet, open.
+    ["openDesk('elections', 'run')", (n) => n.openDesk('elections', 'run'), 's2', { tab: 'politics', sub: 'elections', shows: 'promise-sheet' }],
+    ["openDesk('laws') on the Governor's phone", (n) => n.openDesk('laws'), 's2', { tab: 'politics', sub: 'laws' }],
+    ["openDesk('budget') on the Governor's phone", (n) => n.openDesk('budget'), 's2', { tab: 'politics', sub: 'budget' }],
     ["openDesk('market')", (n) => n.openDesk('market'), 's1', { tab: 'overview', tool: 'list' }],
-    // No Laws, Elections or Budget sub-tab is drawn yet: their doors land on the first sub-tab shown, with their focus.
-    ["openDesk('laws'), its sub-tab not drawn", (n) => n.openDesk('laws'), 's2', { tab: 'politics', sub: 'council' }],
-    ["openDesk('elections', 'run'), its sub-tab not drawn", (n) => n.openDesk('elections', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
-    ["openDesk('budget'), its sub-tab not drawn", (n) => n.openDesk('budget'), 's2', { tab: 'politics', sub: 'council' }],
+    // The old desk ids have no sub-tab of that name any more: their doors land on the first one shown.
+    ["openDesk('council'), a desk id with no sub-tab", (n) => n.openDesk('council'), 's2', { tab: 'politics', sub: 'laws' }],
     ["pickTool('drone')", (n) => n.pickTool('drone'), 's1', { tab: 'overview', tool: 'drone' }],
   ])("C17 (DESK_DOORS): today's %s lands on its tab, sub-tab or tool", (_door, move, self, to) => {
     mount(game({ self }));
@@ -363,25 +362,26 @@ describe('the tabbed planning hub (SB-2)', () => {
   });
 
   it('E-9 (D8): a sub-tab that asks first opens nothing by itself; while another tab or sub-tab is open the Now line is a door to it, and inside it Now is plain', () => {
-    mount(game({ self: 's2' }));
+    const asking = () => game({ self: 's2', pol: politics({ election: { stage: 'announce', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: ['s1'], result: {} }, next: 5 }) });
+    mount(asking());
     expect(selected('tab-overview'), 'planning opens on Overview, whatever asks').toBe(true);
     tap('tab-politics');
-    expect(selected('sub-council'), 'the tab opens where it was, not on the asking sub-tab').toBe(true);
+    expect(selected('sub-laws'), 'the tab opens where it was, not on the asking sub-tab').toBe(true);
     tap('now-go');
     expect(selected('tab-politics')).toBe(true);
-    expect(selected('sub-governor')).toBe(true);
+    expect(selected('sub-elections')).toBe(true);
     expect(findTestid('now-go'), 'inside its own sub-tab, a plain Now').toBeUndefined();
-    tap('sub-council');
-    rerender(game({ self: 's2' }));
-    expect(selected('sub-council'), 'picked away, the asking sub-tab does not take it back').toBe(true);
+    tap('sub-laws');
+    rerender(asking());
+    expect(selected('sub-laws'), 'picked away, the asking sub-tab does not take it back').toBe(true);
     byTestid('now-go');
     tap('tab-colony');
     byTestid('now-go');
   });
 
-  it('C66 (frame, until SB-3 moves the ballots): a ballot stage takes the whole stage, the tabs hidden', () => {
-    const ballot: ElectionView = { stage: 'ballot', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], result: {} };
-    mount(game({ pol: politics({ election: ballot, next: 5 }) }));
+  it('C66 (frame): the election ceremony takes the whole stage, the tabs hidden; its ballot does not (SB-3)', () => {
+    const ceremony: ElectionView = { stage: 'ceremony', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: [], result: {} };
+    mount(game({ pol: politics({ election: ceremony, next: 5 }) }));
     byTestid('hub-situation');
     expect(findTestid('tabs-a')).toBeUndefined();
   });

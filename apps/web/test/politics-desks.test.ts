@@ -17,7 +17,8 @@ import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/Elec
 import { GovernorDesk, setState, type SentTax } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
-import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
+import { ELECTION_DAY_STAGE, electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
+import type { HubSeat } from '../src/phone/hub/slots';
 import { howWords } from '../src/phone/hub/politics/words';
 import { TAB_SLOTS } from '../src/phone/hub/today';
 import { TvElection } from '../src/table/TvElection';
@@ -137,7 +138,11 @@ function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1, co
 
 /** Lena's whole planning hub, as the game draws it. */
 function inHub(game: MuleView, boards = 1, code = 'MULE'): string {
-  const hub = () => createElement(Hub, { slots: TAB_SLOTS });
+  // Election day's announce and ballot are Elections' sub-tab's now, and a static render opens Overview: these rows read the card, its
+  // Rail, Now and the ready bar, so the hub is drawn with the stage as host for them. The sub-tab itself is tested in politics-tabs.
+  const open = ({ view }: HubSeat) => view.politics?.election !== null && view.politics?.election?.stage !== 'over';
+  const slots = { ...TAB_SLOTS, stage: [{ ...ELECTION_DAY_STAGE, show: open }, ...TAB_SLOTS.stage.slice(1)] };
+  const hub = () => createElement(Hub, { slots });
   return onPhone(game, hub, boards, code);
 }
 
@@ -834,13 +839,13 @@ describe("the new Governor's promise (C68, E-7)", () => {
 });
 
 describe('the hub door (E-1)', () => {
-  it('C66, E-1: "Throw your hat in the ring" is in This month in any month before an election, a door into the Council desk, and names your candidacy once you run (drawn: hub-tabs.test.ts)', () => {
+  it('C66, E-1: "Throw your hat in the ring" is in This month in any month before an election, a door into Elections, and names your candidacy once you run (drawn: hub-tabs.test.ts)', () => {
     const run = TAB_SLOTS.agenda.find((a) => a.key === 'run')!;
     const seat = (game: MuleView) => ({ view: game, me: game.me!, self: game.players[0]! });
     const words = (game: MuleView) => (run.show?.(seat(game)) ?? true ? `${run.title(seat(game))} · ${run.sub(seat(game))}` : null);
     expect(words(view(politics({ election: null }), me(), { month: 2 }))).toBe('Throw your hat in the ring · Run for Governor · election in month 4');
     expect(run.lead?.(seat(view(politics({ election: null }), me(), { month: 2 }))), 'drawn strong').toBe(true);
-    expect(run.opens).toEqual({ desk: 'council', focus: 'run' });
+    expect(run.opens).toEqual({ desk: 'elections', focus: 'run' });
     const running = view(politics({ election: null, candidates: { governor: ['s1'] }, promises: { s1: CAP_4 } }), me({ running: 'governor' }), { month: 2 });
     expect(words(running)).toBe('Throw your hat in the ring · You run for Governor · up to 4%');
     expect(words(view(politics({ election: null, next: null }), me(), { month: 11 })), 'no election ahead').toBeNull();

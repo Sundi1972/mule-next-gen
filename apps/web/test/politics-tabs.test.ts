@@ -63,7 +63,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView =>
 const colony = { gauges: { wealth: 0, environment: 30, prestige: 0, happiness: 60, band: 'content' }, lastGauges: null, fund: 100, ledger: null, projects: [], catalogue: [], score: null } as unknown as ColonyView;
 
 const view = (p: PoliticsView | null): MuleView =>
-  ({ finished: false, month: 4, maxMonths: 12, phase: 'planning', phaseEndsAt: null, width: 1, height: 1, tiles: [], players: PLAYERS, me: mine(), market: [], air: { level: 22, band: 'clean' }, politics: p, colony }) as unknown as MuleView;
+  ({ finished: false, month: 4, maxMonths: 12, phase: 'planning', phaseEndsAt: null, width: 1, height: 1, tiles: [], players: PLAYERS, me: mine(), market: [], news: [], ship: { arrives: 3, inPort: false, wants: null }, air: { level: 22, band: 'clean' }, politics: p, colony }) as unknown as MuleView;
 
 const client = { subscribe: () => () => {}, getState: () => ({ status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }), serverNow: () => 0, intent: () => {} } as unknown as TableClient;
 
@@ -193,8 +193,9 @@ describe('SB-3: the politics sub-tabs', () => {
       const game = view(politics({ election: election(stage) }));
       expect(sub('elections').first?.(seatOf(game))).toBe(true);
       const html = draw('elections', game);
-      expect(html).not.toContain('data-testid="run-any-month"');
       expect(html).toContain('data-testid="day-title"');
+      // Month-1's announce is the time to run (AM-21): the card's Rail rides along; the ballot has none.
+      expect(html.includes('data-testid="run-office"')).toBe(stage === 'announce');
     });
 
     it('SB-3: during the ceremony Elections does not ask first', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock

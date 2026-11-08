@@ -74,7 +74,7 @@ function TermPromise({ view }: { view: MuleView }) {
 function useElectionDesks(stage: string | null, governor: boolean): void {
   const { openDesk } = useHub();
   useEffect(() => {
-    if (stage === 'over') openDesk(governor ? 'governor' : 'council');
+    if (stage === 'over') openDesk(governor ? 'laws' : 'elections');
     // Only a new stage or a new office moves the rail; openDesk is a new function on every render.
   }, [stage, governor]);
 }

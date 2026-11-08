@@ -1,7 +1,7 @@
 import { POLITICS } from '@mule/engine';
 import type { MuleView, PoliticsView } from '@mule/protocol';
 import { ColonyDeskCard } from '../../../components/Colony';
-import { Commission, ProjectActions } from '../../../components/ColonyActions';
+import { ProjectActions } from '../../../components/ColonyActions';
 import { Grounds } from '../../../components/Grounds';
 import { fmt } from '../../../game/derive';
 import { usePhoneGame } from '../../game';
@@ -9,14 +9,13 @@ import { ColonyDesk } from '../desks';
 import { Section, Who } from './parts';
 import { OFFICE_NAME } from './words';
 
-/** WS6's Colony desk, unchanged; while the table plays politics, the colony fund and WS8's colony card (gauges, build site, each project's buttons, the Governor's Commission above it) before it and the colony's facts after it. */
+/** WS6's Colony desk, unchanged; while the table plays politics, the colony fund and WS8's colony card (gauges, build site, each project's buttons) before it and the colony's facts after it. */
 export function ColonyWithFacts() {
   const { view } = usePhoneGame();
   if (!view.politics) return <ColonyDesk />;
   return (
     <>
       <FundCard view={view} politics={view.politics} />
-      <Commission />
       {view.colony && <Grounds colony={view.colony} size="phone" light={view.phase === 'upkeep' ? 'dusk' : 'day'} />}
       <ColonyDeskCard view={view} action={(p) => <ProjectActions p={p} />} />
       <ColonyDesk />

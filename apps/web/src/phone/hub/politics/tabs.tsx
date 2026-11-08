@@ -8,7 +8,7 @@ import { CouncilBudget } from './budget/CouncilBudget';
 import { OverruleBallot } from './budget/OverruleBallot';
 import { OverruleCall } from './budget/OverruleCall';
 import { CouncilBody, PendingLaw } from './Council';
-import { ElectionDay } from './ElectionDay';
+import { ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
 import { CouncilBallot, LawsInForce } from './LawBallot';
 import { Who } from './parts';
@@ -74,6 +74,13 @@ export function ElectionsSub() {
   useEffect(() => {
     if (focus !== null) takeFocus();
   }, [focus]);
-  if (electionVoting({ view })) return <ElectionDay />;
+  // The Rail's run block rides along: month 1's announce is the time to run (AM-21), and the card alone has no way to.
+  if (electionVoting({ view }))
+    return (
+      <>
+        <ElectionDay />
+        <ElectionDayRail />
+      </>
+    );
   return <CouncilBody focus={focus} />;
 }
