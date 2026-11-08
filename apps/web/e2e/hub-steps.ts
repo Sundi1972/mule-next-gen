@@ -25,8 +25,8 @@ const FIRST: Good[] = ['food', 'water', 'energy'];
 const TABS = (politics: boolean) => ['overview', ...(politics ? ['politics'] : []), 'colony', 'talk'];
 /** Every office's desk, a Governor / Council sub-tab. AI seats run in month 1, so whether the smoke's seat holds an office is read from the game. */
 const OFFICE_DESKS = ['governor', 'sheriff'] as const;
-/** SB-2 (interim until SB-3): Governor / Council's sub-tabs, in their order: the Council's for all, an office's for its holder. */
-const SUBS = (held: readonly string[]) => ['council', ...OFFICE_DESKS.filter((o) => held.includes(o))];
+/** Governor / Council's sub-tabs, in their order: Laws, Budget and Elections for all, the Sheriff's for its holder. */
+const SUBS = (held: readonly string[]) => ['laws', 'budget', 'elections', ...(held.includes('sheriff') ? ['sheriff'] : [])];
 const TODAYS_TOOLS = ['look', 'plots', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
@@ -504,7 +504,7 @@ const READ_GOV = `(async () => {
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const p = document.querySelector('[data-phase=planning]');
   const g = p?.querySelector('[data-testid=guide]');
-  const body = p?.querySelector('[data-testid=sub-body-governor]');
+  const body = p?.querySelector('[data-testid=sub-body-laws]');
   const box = (sel) => p?.querySelector(sel)?.getBoundingClientRect() ?? null;
   const row = box('[data-testid=governor-tax-row]');
   const verdict = box('[data-testid=governor-verdict]');
@@ -551,7 +551,7 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
   const floor = size.width === GOV_SIZES[0].width ? GOV_MARGIN_844 : 0;
   const seen: string[] = [];
   const fits = (f: GovFit, state: string, verdict: string) => {
-    check(f.desk === 'sub-governor', `E-11 at ${at} (${state}): the Governor's sub-tab is open, got ${f.desk}`);
+    check(f.desk === 'sub-laws', `E-11 at ${at} (${state}): the Governor's sub-tab is open, got ${f.desk}`);
     check(f.seatRow, `E-11 at ${at} (${state}): the chat's seat row is in the rail's body (C20)`);
     check(f.nowLine, `E-11 at ${at} (${state}): the rail keeps the Now line (D1)`);
     check(f.verdict === verdict, `E-11 at ${at} (${state}): the verdict reads "${verdict}", got "${f.verdict}"`);
@@ -575,7 +575,7 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     seen.push(`tabs ${tabs}`);
     // Test fixture: a fourth sub-tab, as SB-3's Laws, Budget and Elections beside an office's will need. No game draws
     // it today, so the Council's sub-tab, the longest word, is drawn twice for one read, then taken away.
-    await planning.getByTestId('sub-council').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
+    await planning.getByTestId('sub-laws').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
     const more = (await read()).tabs.filter((t) => t.id.startsWith('sub-'));
     await lena.evaluate(() => document.getElementById('extra-sub')?.remove());
     const moreTabs = more.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
