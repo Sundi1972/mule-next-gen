@@ -106,7 +106,7 @@ describe("PR-8 (needs C15, PM ruling 8 Nov): no Food carry; the household's Food
 });
 
 describe("PR-8 (needs C15): a factory's Food units are worth the factory's run, not the household's meal", () => {
-  it("with a Medicine works, the Food it turns is valued at its share of the works' output, unit by unit", () => {
+  it("with a Medicine works, the Food it turns past the floor keeps at its share of the works' output, unit by unit", () => {
     const m = mind();
     const state = development(undefined);
     state.tiles[0]!.outfit = 'medicine';
@@ -120,7 +120,8 @@ describe("PR-8 (needs C15): a factory's Food units are worth the factory's run, 
     const add = Math.ceil(q / (1 - GOOD_CONFIG.food.spoilage));
     const v = unitValues(obs, o, 'food', m);
     expect(v.block, "the block: the meal, then the works' Food").toBe(needsOf(obs, ME).food + add);
-    const near = v.buy.filter((x) => Math.abs(x - each) < 1e-6).length;
-    expect(near, "the works' units each buy at the works' share").toBeGreaterThanOrEqual(add);
+    // The buy side prices them apart already (buyForFactories, FM-factory-input); the keep side reads the units' own worth.
+    expect(v.floorUnits, 'the case: a works unit lies past the floor').toBeLessThan(v.block);
+    for (let k = v.floorUnits; k < v.block; k++) expect(v.keep[k], `keep[${k}]: the works' share`).toBeCloseTo(each, 6);
   });
 });
