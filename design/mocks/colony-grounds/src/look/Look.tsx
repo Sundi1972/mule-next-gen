@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { MONTH_12 } from '../fixture';
 import { Scene } from '../Scene';
 import { richness } from '../screens';
+import { Catalogue } from './Catalogue';
 import { Living } from './Living';
 
 /**
@@ -80,9 +81,10 @@ export function Look() {
         <h1 className="font-display text-4xl font-bold">The colony grounds: how good can it look?</h1>
         <div className="flex items-center justify-between gap-4" id="colony">
           <p className="text-base text-ink-2">
-            <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital, Observatory, Stadium and Spaceport,
-            three places free to grow into. Pre-rendered in Blender (C). Buildings other than the Park are quick script-built models
-            made today: they show the look, not final designs. This whole picture is about 0.5 MB; in the game each building is its own picture of 50–65 kB.
+            <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital and Observatory on one place each; the
+            Stadium and the Spaceport on 2×2 places, as WS7 ruled. The rocket stands 37 m, four times the Hospital, the tallest thing on the grounds.
+            Four places are free to grow into. Pre-rendered in Blender (C). Every building is our own Blender build, as you ruled; the game shows each
+            one as its own picture of 50–80 kB.
           </p>
           <LightToggle light={light} set={setLight} />
         </div>
@@ -105,7 +107,8 @@ export function Look() {
           </p>
         </div>
         <nav className="flex flex-wrap gap-4 text-sm text-holo">
-                    <a href="#stages">One building, every stage</a>
+          <a href="#every-stage">Every building, every stage</a>
+          <a href="#stages">One building, every stage</a>
           <a href="#three-ways">The Park three ways</a>
           <a href="#in-grounds">In today’s grounds</a>
           <a href="#numbers">The numbers</a>
@@ -115,7 +118,15 @@ export function Look() {
       </header>
 
 
-      <Section id="stages" title="One building, every stage: the Hospital" lead="Each stage in the game is a different picture of the same model. Closed and damaged are mostly the standing model with lights and materials changed; the scaffold is a kit built once and reused for every building.">
+      <Section
+        id="every-stage"
+        title="Every building, every stage: what the game ships today"
+        lead="These are the game's own pictures, read from its art manifest, so they are exactly what the TV and the phones show. 'Dusk, lights on' adds each building's light layer the way the game will when the colony is rich. The Stadium and the Spaceport stand on 2×2 places; the Observatory is still being made. Switch 'Pictures' to see every one dressed with your KitBash3D props (only on this Mac until the licence answer; shipping them is one switch). What we want from you: is each one right at TV size?"
+      >
+        <Catalogue />
+      </Section>
+
+      <Section id="stages" title="Earlier: the Hospital's first stages" lead="Each stage in the game is a different picture of the same model. Closed and damaged are mostly the standing model with lights and materials changed; the scaffold is a kit built once and reused for every building.">
         <div className="overflow-hidden rounded-panel border border-holo-line bg-[#070b12]">
           <Picture src={img('hospital-stages')} alt="The Hospital in its five stages" className="aspect-[4/1] w-full" />
         </div>
@@ -216,9 +227,10 @@ export function Look() {
 
       <Section id="decide" title="Decided, and what is still yours">
         <ol className="max-w-5xl list-decimal space-y-2 pl-6 text-base leading-snug">
-          <li><strong>Decided (Heiko, 6 Nov):</strong> direction C: rendered pictures with the live layer, the map’s painter for the ground, live 3D on the TV later from the same models. Free (CC0) assets for now.</li>
-          <li><strong>Still yours:</strong> whether to buy a professional asset pack. WS10’s answer, with prices and licences checked today, goes to you through the PM.</li>
-          <li><strong>Next from WS10:</strong> the art direction and the full picture list are written (85 pictures). The build spec and plan with the screens teams follow, through the PM.</li>
+          <li><strong>Decided (Heiko, 6 Nov):</strong> direction C: rendered pictures with the live layer, the map’s painter for the ground, live 3D on the TV later from the same models.</li>
+          <li><strong>Decided (Heiko, 6 Nov):</strong> our own Blender builds for every building and the rocket, dressed with KitBash3D props; no purchases.</li>
+          <li><strong>Yours now:</strong> each building at TV size (the table above), and the licence answer that lets the kit props ship.</li>
+          <li><strong>Next from WS10:</strong> the Observatory, then the grounds on the TV month end once WS7's places land in the game.</li>
         </ol>
       </Section>
     </main>

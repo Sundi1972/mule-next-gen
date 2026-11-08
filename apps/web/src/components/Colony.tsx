@@ -54,7 +54,7 @@ function Gauge({ label, value, band, tone, bar, fill, note, size, testid, pulse 
       </span>
       <span className={cx('flex items-baseline justify-between gap-2 whitespace-nowrap', tv ? 'text-xs' : 'text-[10px]')}>
         {band && <span className={cx('font-display font-semibold uppercase', tone)}>{band}</span>}
-        {note && <span className="truncate text-ink-3">{note}</span>}
+        {note && <span className="truncate text-ink-3" data-testid={`note-${testid}`}>{note}</span>}
       </span>
     </div>
   );
@@ -144,16 +144,17 @@ function useFrameClock(on: boolean, end: number): number {
 
 /**
  * The month end's mood drift, for the TV's gauges: it plays when this screen sees the month end come, once, and never
- * for a screen that joins (or rejoins) at the month end, which shows the end state. Reduced motion lands it at once.
- * Call it where the TV stays mounted across phases.
+ * for a screen that joins (or rejoins) at the month end, which shows the end state. Its count starts once `shown`, when
+ * TvMonthEnd mounts (after the grounds opener). Reduced motion lands it at once. Call it where the TV stays mounted
+ * across phases.
  */
-export function useMonthEndDrift(game: MuleView): GaugeLanding | undefined {
+export function useMonthEndDrift(game: MuleView, shown = true): GaugeLanding | undefined {
   const reduced = useEventReducedMotion();
   const seen = useRef<string | null>(null);
   const [drift, setDrift] = useState<GaugeChange | null>(null);
   const end = DRIFT_AT + LANDING.count + LANDING.pulse;
   // Reduced motion shows the end state, which needs no frames.
-  const t = useFrameClock(drift !== null && !reduced, end);
+  const t = useFrameClock(drift !== null && !reduced && shown, end);
   // Before paint, so the month end never shows the new number before it counts to it.
   useLayoutEffect(() => {
     const before = seen.current;
@@ -169,9 +170,10 @@ export function useMonthEndDrift(game: MuleView): GaugeLanding | undefined {
 
 /**
  * Wealth, Environment, Prestige and Happiness. Environment is the air, so it keeps the air's bands. A `landing` holds
- * each changed gauge at its old number until its change lands, then counts it, the band flipping with a pulse.
+ * each changed gauge at its old number until its change lands, then counts it, the band flipping with a pulse. `paidOut`,
+ * the TV month end's only, follows the fund in Wealth's note (#tv-month-end-paid-out).
  */
-export function ColonyGauges({ colony, size, className, landing }: { colony: ColonyView; size: Size; className?: string; landing?: GaugeLanding | undefined }) {
+export function ColonyGauges({ colony, size, className, landing, paidOut }: { colony: ColonyView; size: Size; className?: string; landing?: GaugeLanding | undefined; paidOut?: number | undefined }) {
   const g = colony.gauges;
   const last = colony.lastGauges;
   const wealth = landed('wealth', g.wealth, landing);
@@ -182,7 +184,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   const moodMove = last?.happiness == null || g.happiness === null ? null : g.happiness - last.happiness;
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
-      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
+      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr${paidOut === undefined ? '' : ` · paid out ${fmt(paidOut)}`}`} change={wealth.change} />
       <Gauge size={size} testid="gauge-environment" label="Environment" value={`${Math.round(environment.value)}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
       <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
@@ -799,4 +801,10 @@ export function PhoneColonyScore({ view, colony, selfId, className }: { view: Mu
       </span>
     </section>
   );
+}
+
+/** What the fund paid out this month, every line summed; undefined unless the ledger is this month's (its upkeep has run). */
+export function paidOutThisMonth(colony: ColonyView, month: number): number | undefined {
+  if (colony.ledger?.month !== month) return undefined;
+  return Object.values(colony.ledger.out).reduce((sum: number, n) => sum + (n ?? 0), 0);
 }
