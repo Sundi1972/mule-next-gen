@@ -1,4 +1,4 @@
-import { fineable, GOODS, guardsMax, isPublicOrder, POLITICS, sabotagePossible, score, sheriffCanAct, type GameState, type SabotageOrder } from '@mule/engine';
+import { canGuard, fineable, GOODS, guardsMax, isPublicOrder, POLITICS, sabotagePossible, score, sheriffCanAct, type GameState, type SabotageOrder } from '@mule/engine';
 import type { Act } from '../actions.js';
 import { guardValue, investigateValue } from '../politics-value.js';
 import type { Mind } from '../value.js';
@@ -27,7 +27,7 @@ export class SheriffHand {
   }
 
   private workingPlots(obs: GameState): number[] {
-    return obs.tiles.flatMap((t, tile) => (t.owner !== null && (GOODS as readonly string[]).includes(t.outfit ?? '') ? [tile] : []));
+    return obs.tiles.flatMap((t, tile) => (canGuard(obs, this.mind.me, tile) === true && (GOODS as readonly string[]).includes(t.outfit ?? '') ? [tile] : []));
   }
 
   /** The guardsMax plots with the highest guardValue, a tie at the cut drawn; a Rookie draws among the working plots. A plot worth nothing to guard is not posted. */

@@ -168,13 +168,17 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
     const before = structuredClone(state.politics);
     expect(refused(() => setGuards(state, 'ossa', [food, bare]))).toBe("Guards watch players' plots");
     expect(POLITICS.sheriff.guards).toBe(2);
-    expect(refused(() => setGuards(state, 'ossa', [food, ore, own]))).toBe('You have 2 guards');
+    // A third plot of another player's: AM-11 refuses the Sheriff's own plot before the count, so it can't make up the third.
+    Object.assign(state.tiles[bare]!, { owner: 'lena', outfit: 'food' });
+    expect(refused(() => setGuards(state, 'ossa', [food, ore, bare]))).toBe('You have 2 guards');
+    Object.assign(state.tiles[bare]!, { owner: null, outfit: null });
     expect(state.politics).toEqual(before);
     setGuards(state, 'ossa', [food, ore]);
     expect(state.politics!.guards).toEqual([food, ore]);
-    // The Sheriff's own plot is allowed; the new list replaces the old one whole.
-    setGuards(state, 'ossa', [own]);
-    expect(state.politics!.guards).toEqual([own]);
+    // AM-11 reversed the old "own plot is allowed": the Sheriff's own plot is refused (S4-T-AC-17); a new list replaces the old one whole.
+    expect(refused(() => setGuards(state, 'ossa', [own]))).toBe("You can't guard your own plots");
+    setGuards(state, 'ossa', [ore]);
+    expect(state.politics!.guards).toEqual([ore]);
     setGuards(state, 'ossa', []);
     expect(state.politics!.guards).toEqual([]);
   });

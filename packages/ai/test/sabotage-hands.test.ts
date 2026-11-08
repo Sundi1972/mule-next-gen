@@ -121,9 +121,10 @@ describe('S4-T-AC-9: SabotageHand per S4-RULE-13 (order)', () => {
 
   it("S4-T-AC-9 row 1: a Tycoon Saboteur takes the target with the best net, 1.5 x 240 - 120 - 0.3 x 300 = 150, over a dearer-looking worse one", () => {
     const { state, plots } = table();
-    gains((t) => (t.kind === 'powerCut' && t.tile === plots.A ? 240 : t.kind === 'powerCut' && t.tile === plots.C ? 200 : 0));
+    // Plots C and D are other players' (seen 30%); the Sheriff's own plots A and B are seen 50% (AM-11), which another row prices.
+    gains((t) => (t.kind === 'powerCut' && t.tile === plots.C ? 240 : t.kind === 'powerCut' && t.tile === plots.D ? 200 : 0));
     capture.mockReturnValue(300);
-    expect(run(state, SABOTEUR())).toEqual([{ type: 'sabotage', target: cut(plots.A) }]);
+    expect(run(state, SABOTEUR())).toEqual([{ type: 'sabotage', target: cut(plots.C) }]);
     // It asks WS1's values about the seat itself and a pending order literal (id '', outcome 'pending', the kind's cost).
     expect(gain).toHaveBeenCalledWith(expect.anything(), 'ai0', expect.objectContaining({ id: '', by: 'ai0', outcome: 'pending', cost: POLITICS.sabotage.orders.powerCut.cost }));
   });
@@ -137,7 +138,7 @@ describe('S4-T-AC-9: SabotageHand per S4-RULE-13 (order)', () => {
   it('S4-T-AC-9 row 2: a best net below minEdge orders nothing; at minEdge it orders', () => {
     const { state, plots } = table();
     capture.mockReturnValue(300);
-    gains((t) => (t.kind === 'powerCut' && t.tile === plots.A ? 240 : 0));
+    gains((t) => (t.kind === 'powerCut' && t.tile === plots.C ? 240 : 0));
     POLITICS.ai.sabotage.minEdge = 151;
     expect(run(state, SABOTEUR())).toEqual([]);
     POLITICS.ai.sabotage.minEdge = 150;
@@ -146,7 +147,7 @@ describe('S4-T-AC-9: SabotageHand per S4-RULE-13 (order)', () => {
 
   it('S4-T-AC-9 row 1: the captureOdds term counts: the same gain, a dearer capture, no order', () => {
     const { state, plots } = table();
-    gains((t) => (t.kind === 'powerCut' && t.tile === plots.A ? 240 : 0));
+    gains((t) => (t.kind === 'powerCut' && t.tile === plots.C ? 240 : 0));
     POLITICS.ai.sabotage.minEdge = 150; // net 1.5 x 240 - 120 - 0.3 x capture
     capture.mockReturnValue(300);
     expect(run(state, SABOTEUR())).toHaveLength(1);
@@ -236,7 +237,22 @@ describe('S4-T-AC-9: SheriffHand per S4-RULE-13 (guard, investigate, fine)', () 
     const worth: Record<number, number> = { [plots.A]: 10, [plots.B]: 30, [plots.C]: 20, [plots.D]: 5 };
     guardWorth.mockImplementation((_obs, _me, plot) => worth[plot] ?? 0);
     expect(guardsMax(observe(state, 'ai1'))).toBe(POLITICS.sheriff.guards);
-    expect(guards(run(state))).toEqual([{ type: 'guard', tiles: [plots.B, plots.C] }]);
+    // The Sheriff's own plots A and B are never guarded (AM-11): the two best of the others' plots.
+    expect(guards(run(state))).toEqual([{ type: 'guard', tiles: [plots.C, plots.D] }]);
+  });
+
+  it("S4-T-AC-17: the Sheriff's hand never sends its own plots, valued or Rookie, so the engine never refuses its list", () => {
+    const { state, plots } = table();
+    guardWorth.mockReturnValue(50);
+    for (const level of ['trader', 'rookie'] as const) {
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const sent = guards(run(state, mindOf('ai1', 'cautious', level, seed)));
+        const tiles = sent.flatMap((a) => (a.type === 'guard' ? a.tiles : []));
+        expect(tiles.length, level).toBeGreaterThan(0);
+        expect(tiles, level).not.toContain(plots.A);
+        expect(tiles, level).not.toContain(plots.B);
+      }
+    }
   });
 
   it('S4-T-AC-9 guard: a tie at the cut is a draw from its own stream, the same every time it is asked', () => {
@@ -538,6 +554,9 @@ describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
 
   it("S4-T-AC-10: the hands' streams are the seat's own: two seats' ties break from their own salts, and one seat's is the same twice", () => {
     const { state } = table();
+    // Four plots of other players' to choose two from (the Sheriff's own are never guarded, AM-11).
+    const spare = state.tiles.map((t, i) => ({ t, i })).filter(({ t }) => t.terrain !== 'store' && t.owner === null).slice(0, 2);
+    for (const { t } of spare) Object.assign(t, { owner: 'ai3', outfit: 'food' });
     guardWorth.mockReturnValue(5);
     const post = (seed: number) => {
       const { sent, act } = recorder();

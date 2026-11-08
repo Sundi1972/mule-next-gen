@@ -1053,6 +1053,10 @@ export const POLITICS = {
     securityDetect: 0.1,
     /** Investigations the Sheriff may open in a month. */
     investigations: 1,
+    /** Credits the fund pays the Sheriff for each culprit a guard or a solved investigation names (slice 4 AM-11, Heiko, 8 Nov): a catch on the spot earns none. */
+    bounty: 50,
+    /** Added to a power cut's chance of being seen when the plot is the Sheriff's own (slice 4 AM-11, Heiko, 8 Nov: sabotaging the Sheriff should be a bit harder). */
+    ownPlotDetectBonus: 0.2,
     /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3; Heiko, 8 Nov: 0.3, was 0.5, AM-10). */
     investigateOdds: 0.3,
     fine: {

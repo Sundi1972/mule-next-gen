@@ -11,6 +11,7 @@ import {
   fineable,
   fineCulprit,
   investigate,
+  canGuard,
   orderSabotage,
   POLITICS,
   proposeLaw,
@@ -319,9 +320,12 @@ describe('S4 §9 / §3: no order is ever stored without its orderer', () => {
       const by = SEATS[month % SEATS.length]!;
       const mine = (t: number) => state.tiles[t]!.owner === by;
       const target = tiles.find((t) => !mine(t) && state.tiles[t]!.owner !== null)!;
-      if (month % 3 === 0) orderSabotage(state, by, { kind: 'rumour', good: 'food', dir: month % 2 ? 'up' : 'down' });
-      else orderSabotage(state, by, { kind: 'powerCut', tile: target });
-      if (month % 2 === 0) setGuards(state, 'ossa', [target]);
+      // AM-11: the Sheriff does not order, and does not guard its own plots; the walk skips those turns.
+      if (state.politics!.sheriff !== by) {
+        if (month % 3 === 0) orderSabotage(state, by, { kind: 'rumour', good: 'food', dir: month % 2 ? 'up' : 'down' });
+        else orderSabotage(state, by, { kind: 'powerCut', tile: target });
+      }
+      if (month % 2 === 0 && canGuard(state, 'ossa', target) === true) setGuards(state, 'ossa', [target]);
       const open = state.politics!.sabotage.find((o) => o.outcome !== 'pending' && o.outcome !== 'failed' && !o.culpritPublic && o.investigated == null);
       if (open) investigate(state, 'ossa', open.id);
       const unfined = fineable(state, 'ossa')[0];
@@ -342,7 +346,7 @@ describe('S4 §9 / §3: no order is ever stored without its orderer', () => {
   it('S4-T-AC-11 (§3 invariant): in a twelve-month game no order, at any phase, has by === null; and the walk is not vacuous', () => {
     const state = walk(5, noOrderWithoutHand);
     const orders = state.politics!.sabotage;
-    expect(orders.length).toBeGreaterThanOrEqual(10);
+    expect(orders.length).toBeGreaterThanOrEqual(8); // was 10 before AM-11: the Sheriff's own turn orders nothing
     expect(orders.some((o) => o.culpritPublic)).toBe(true);
     expect(orders.some((o) => o.fine)).toBe(true);
   });
