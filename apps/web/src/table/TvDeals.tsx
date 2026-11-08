@@ -24,8 +24,12 @@ function byBreaker(cards: DealCard[]): { breaker: string; cards: DealCard[]; dro
   return [...lines.values()];
 }
 
-/** What broke, in a few words: one card's kind, or how many. */
-const labelOf = (cards: DealCard[]) => (cards.length > 1 ? `${cards.length} cards were broken` : cards[0]!.terms.kind === 'pact' ? 'A pact was broken' : 'A promise was broken');
+/** What broke, in a few words: one card's kind, or the breaker and how many, in the news's "broke a promise". */
+function Label({ game, breaker, cards }: { game: MuleView; breaker: string; cards: DealCard[] }) {
+  if (cards.length === 1) return <>{cards[0]!.terms.kind === 'pact' ? 'A pact was broken' : 'A promise was broken'}</>;
+  const name = game.players.find((p) => p.id === breaker)?.name ?? breaker;
+  return <SeatWords text={`${name} broke ${cards.length} promises`} who={[breaker]} players={game.players} />;
+}
 
 /**
  * This month's broken cards, or nothing when none broke. Beside the breaker's chip, which shows the number now, only
@@ -46,7 +50,9 @@ export function TvDeals({ game }: { game: MuleView }) {
             </span>
             <PlayerMark slot={toSlot(who.slot)} species={who.species} size={48} label={who.name} />
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="label-caps text-base! text-alert-ink">{labelOf(cards)}</span>
+              <span className="label-caps text-base! text-alert-ink" data-testid={`tv-break-${breaker}-label`}>
+                <Label game={game} breaker={breaker} cards={cards} />
+              </span>
               {cards.map((c) => (
                 <span key={c.id} className="font-display text-3xl font-semibold leading-tight text-alert-ink" data-testid={`tv-break-${c.id}-words`}>
                   <SeatWords text={brokenWords(game, c)} who={brokenWho(c)} players={game.players} />
