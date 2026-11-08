@@ -59,10 +59,10 @@ export function CaseHead({ view, c, state, solved }: { view: View; c: IncidentVi
 /** The case's state in a word or two, on the right of its head. */
 function CaseChip({ view, c, state, solved }: { view: View; c: IncidentView; state: CaseState; solved?: string | null }) {
   const culprit = solved ?? c.culprit;
+  // A cold case wears no chip: it cannot be reopened (S4-RULE-7, WS7's tip, 8 Nov); its row says it went cold.
+  if (solved === null || state === 'cold') return null;
   const [words, tone] =
-    solved === null ? ['Cold', 'border-holo-line text-ink-3']
-    : state === 'open' && !solved ? ['Unsolved', 'border-holo-line text-ink-2']
-    : state === 'cold' ? ['Cold', 'border-holo-line text-ink-3']
+    state === 'open' && !solved ? ['Unsolved', 'border-holo-line text-ink-2']
     : c.fine ? [`Fined ${c.fine.due} cr`, 'border-ok text-ok']
     : [`${name(view, culprit)} did it`, 'border-alert text-alert'];
   return (
@@ -195,7 +195,7 @@ export function DeskHead({ sheriff }: { sheriff: SheriffState }) {
         <OnlyYou />
       </span>
       <span className="font-mono text-[11px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="sheriff-left">
-        {sheriff.investigationsLeft} investigation{sheriff.investigationsLeft === 1 ? '' : 's'} left
+        {sheriff.investigationsLeft === 0 ? 'One investigation a month: used' : `${sheriff.investigationsLeft} investigation${sheriff.investigationsLeft === 1 ? '' : 's'} left`}
       </span>
     </div>
   );
@@ -245,12 +245,11 @@ export function GuardRow({ view, sheriff, onMap }: { view: View; sheriff: Sherif
 
 /** A folded case's next step, in its row: what the Sheriff can do with it, or how it came out. */
 export function StepChip({ view, c, state, result, fined }: { view: View; c: IncidentView; state: CaseState; result: string | null | undefined; fined: number | undefined }) {
+  if (result === null || (state === 'cold' && fined === undefined)) return null;
   const [words, tone] =
     fined !== undefined ? ['Fined', 'border-ok text-ok']
-    : result === null ? ['Cold', 'border-holo-line text-ink-3']
     : state === 'fineable' ? [`Fine ${name(view, c.culprit)}`, 'border-alert bg-alert-bg text-alert-ink']
     : state === 'open' ? ['Investigate', 'border-holo text-holo']
-    : state === 'cold' ? ['Cold', 'border-holo-line text-ink-3']
     : ['Closed', 'border-holo-line text-ink-3'];
   return (
     <span className={cx('shrink-0 whitespace-nowrap rounded-chip border px-1.5 text-[11px] font-semibold leading-5', tone)} data-testid={`step-chip-${c.id}`}>
