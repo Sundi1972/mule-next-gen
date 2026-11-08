@@ -15,6 +15,7 @@ import {
   banMultiplier,
   isPublicOrder,
   lawImpact,
+  orderTerms,
   pactBetween,
   POLITICS,
   score,
@@ -151,18 +152,34 @@ export function investigateValue(obs: GameState, me: string, suspect: SabotageOr
 
 /**
  * What `proposal` is worth to `me` a month: an enact is what the law at its setting gains `me` less what it costs; a
- * repeal is the negative of the law in force's worth (0 when it is not in force). Costs are slice 2a RULE-45's
- * (lawImpact). Only the sabotage ban gains: the power cuts `me` suffered a month (the public record, valued at today's
- * output and prices) times the share the ban deters, 1 − 1/setting, since it multiplies what a capture costs by the
- * setting (spec §10); its cost is the extra fines on `me`'s own revealed record (lawImpact).
+ * repeal is the negative of the law in force's worth (0 when it is not in force). Every law but the ban costs slice 2a
+ * RULE-45's lawImpact and gains nothing. The sabotage ban (spec §10) gains the power cuts `me` suffered a month (the
+ * public record, valued at today's output and prices) times the share it deters, 1 − 1/setting, since it multiplies
+ * what a capture costs by the setting. It costs what it adds to the fines and reputation `me` expects for its own
+ * orders: every past order of its own, caught or not (observe keeps them whole), a month, at its kind's odds of being
+ * seen. lawImpact's preview counts only the revealed ones, which is all a phone may show (review of #770).
  */
 export function lawWorth(obs: GameState, me: string, proposal: LawProposal): number {
   const setting = proposal.kind === 'enact' ? proposal.setting : obs.politics?.laws[proposal.law]?.setting;
   if (setting === undefined) return 0;
-  const cost = lawImpact(obs, { kind: 'enact', law: proposal.law, setting })[me]?.cost ?? 0;
-  const gain = proposal.law === 'sabotageBan' ? Math.round(sufferedAMonth(obs, me) * (1 - 1 / setting)) : 0;
+  const ban = proposal.law === 'sabotageBan';
+  const cost = ban ? banCost(obs, me, setting) : (lawImpact(obs, { kind: 'enact', law: proposal.law, setting })[me]?.cost ?? 0);
+  const gain = ban ? Math.round(sufferedAMonth(obs, me) * (1 - 1 / setting)) : 0;
   const worth = gain - cost;
   return (proposal.kind === 'enact' ? worth : -worth) || 0; // `|| 0`: never -0, so a worth of nothing compares as 0
+}
+
+/**
+ * What a ban at `setting` adds a month to what `me` expects to pay for its own orders: its past orders a month played,
+ * each at its kind's odds of being seen, times the standard fine and the caught move, each × (setting − 1).
+ */
+function banCost(obs: GameState, me: string, setting: number): number {
+  const terms = orderTerms(obs);
+  const own = (obs.politics?.sabotage ?? []).filter((o) => o.by === me && o.outcome !== 'pending');
+  const caughtAMonth = own.reduce((n, o) => n + terms[o.target.kind].detect, 0) / Math.max(1, obs.month - 1);
+  const extra = setting - 1;
+  const fines = caughtAMonth * POLITICS.sheriff.fine.standard * extra;
+  return Math.round(fines + caughtAMonth * reputationCost(obs, me, POLITICS.reputation.moves.caught * extra));
 }
 
 /** The damage of the power cuts done to `me` so far, a month played (planning has played month − 1), at today's output and prices. */
