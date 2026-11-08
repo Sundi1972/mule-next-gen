@@ -259,7 +259,10 @@ export function overruleWorth(obs: GameState, me: string, target: OverruleTarget
   const delta = obs.treasury.salesTax - obs.politics.taxAtStart;
   if (delta === 0) return 0;
   const lost = delta * obs.players.reduce((sum, p) => sum + expectedSales(obs, p.id), 0);
+  // Each line gets its share of the fund's change, within its cap, as budgetCredits pays it (review of #796, I1).
   const credits = budgetCredits(obs);
-  const through = (['projects', 'welfare'] as const).reduce((sum, line) => sum + lineWorth(obs, me, line, credits[line]) - lineWorth(obs, me, line, Math.max(0, credits[line] - lost)), 0);
-  return delta * expectedSales(obs, me) - through;
+  const without = budgetCredits({ ...obs, treasury: { ...obs.treasury, money: obs.treasury.money - lost } });
+  const through = (['projects', 'welfare'] as const).reduce((sum, line) => sum + lineWorth(obs, me, line, credits[line]) - lineWorth(obs, me, line, without[line]), 0);
+  // `|| 0`: a cut with no sales and nothing through it is 0, not −0.
+  return delta * expectedSales(obs, me) - through || 0;
 }
