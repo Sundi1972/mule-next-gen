@@ -1,4 +1,4 @@
-import { POLITICS } from '@mule/engine';
+import { POLITICS, type DealCard } from '@mule/engine';
 import type { IncidentView, MuleView } from '@mule/protocol';
 import { GOOD_NAME, type EventSabotageSeat, type ShowEventView } from '@mule/ui';
 
@@ -14,7 +14,23 @@ import { GOOD_NAME, type EventSabotageSeat, type ShowEventView } from '@mule/ui'
 export function sabotageSeat(view: MuleView): EventSabotageSeat | undefined {
   const me = view.me;
   if (!me) return undefined;
-  return { mine: (me.politics?.sabotage?.mine ?? []).map((o) => o.id), sheriff: view.politics?.sheriff === me.id };
+  const seat = { mine: (me.politics?.sabotage?.mine ?? []).map((o) => o.id), sheriff: view.politics?.sheriff === me.id };
+  const laws = view.politics?.laws;
+  const cards = me.deals?.cards;
+  // The loss only when the view can say it all: the ban in force and this player's own deal cards.
+  if (!laws || !cards) return seat;
+  return { ...seat, reputation: { ban: laws.sabotageBan?.setting ?? 1, pacts: pactsThisMonth(cards, me.id, view.month) } };
+}
+
+/**
+ * The players `me` held a pact with this month, as the engine's pactBetween reads it (running or kept, binding this
+ * month), and those this player broke this month: the reveal breaks the pact at production, before the show plays.
+ */
+function pactsThisMonth(cards: readonly DealCard[], me: string, month: number): string[] {
+  return cards
+    .filter((c) => c.terms.kind === 'pact' && (c.from === me || c.to === me))
+    .filter((c) => ((c.status === 'active' || c.status === 'kept') && c.offered <= month && month <= c.until) || (c.status === 'broken' && c.brokenBy === me && c.settled === month))
+    .map((c) => (c.from === me ? c.to : c.from));
 }
 
 const shift = `${Math.round(POLITICS.sabotage.orders.rumour.shift * 100)}%`;

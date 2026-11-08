@@ -20,7 +20,18 @@ export interface SabotageYou {
 }
 
 const MINUS = '−';
-const reputation = `${MINUS}${Math.abs(POLITICS.reputation.moves.caught)} reputation; the Sheriff can fine you.`;
+
+/**
+ * What being caught cost the orderer, as the engine's reveal() then pactBreach take it: caught × the ban's setting, and
+ * pactBroken more for a pact with the victim. A phone that cannot know says so, with no number: never understated.
+ */
+function lost(seat: EventSabotageSeat | undefined, victim: string | null, cast: ShowCast): string {
+  const r = seat?.reputation;
+  if (!r) return 'You lost reputation; the Sheriff can fine you.';
+  const base = `${MINUS}${Math.abs(POLITICS.reputation.moves.caught) * r.ban} reputation`;
+  const pact = victim !== null && r.pacts.includes(victim) ? `, and ${Math.abs(POLITICS.reputation.moves.pactBroken)} more: your pact with ${cast.name(victim)}` : '';
+  return `${base}${pact}; the Sheriff can fine you.`;
+}
 
 /** What a sabotage event says to `me`, or null when it is not theirs to hear. */
 export function sabotageYou(ev: ShowEventView, me: string, cast: ShowCast, seat?: EventSabotageSeat): SabotageYou | null {
@@ -33,6 +44,7 @@ export function sabotageYou(ev: ShowEventView, me: string, cast: ShowCast, seat?
     const good = cast.goodAt(ev.origin.x, ev.origin.y);
     const plot = good ? `${GOOD_NAME[good].toLowerCase()} plot` : 'plot';
     const whose = owner === me ? 'your' : owner === null ? 'a' : `${cast.name(owner)}’s`;
+    const reputation = lost(seat, owner, cast);
     if (mine) {
       if (culprit === null) return sab.worked ? { line: `Your crew cut the power to ${whose} ${plot}. Nobody saw. ${POLITICS.sabotage.orders.powerCut.cost} cr at the month end.`, short: 'nobody saw', tone: 'ok' } : null;
       if (sab.guarded) return { line: `Caught by a guard at ${whose} plot. ${reputation}`, short: 'caught', tone: 'alert' };
@@ -57,6 +69,7 @@ export function sabotageYou(ev: ShowEventView, me: string, cast: ShowCast, seat?
   // A rumour has no victim: only its orderer and the Sheriff hear of it.
   const good = ev.good ? GOOD_NAME[ev.good] : undefined;
   const on = good ? ` on ${good}` : '';
+  const reputation = lost(seat, null, cast);
   if (mine) {
     if (culprit === null) {
       if (!sab.worked) return null;

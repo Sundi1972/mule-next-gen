@@ -88,6 +88,31 @@ describe('S4-C17 · what a phone knows for its own line after the show', () => {
     expect(sabotageSeat(atMonthEnd([]))).toBeUndefined();
   });
 
+  /** Lena's phone at production with the laws in force and her own deal cards, as the server sends them. */
+  const known = (laws: object, cards: object[]) =>
+    sabotageSeat(aMuleView({ players: PLAYERS, month: MONTH, phase: 'production', me: { id: 'lena', politics: null, deals: { cards, offersLeft: 0, pactMonths: [] } } as unknown as MyView, politics: { sheriff: 'brix', laws, sabotage: { incidents: [] } } as unknown as PoliticsView }));
+  const pact = (other: string, over: object) => ({ id: `deal-${other}`, from: 'lena', to: other, terms: { kind: 'pact' }, offered: MONTH - 1, until: MONTH + 1, status: 'active', brokenBy: null, settled: null, ...over });
+
+  it('the caught loss it can know: no ban is ×1, a ban in force its setting', () => {
+    expect(known({}, [])?.reputation).toEqual({ ban: 1, pacts: [] });
+    expect(known({ sabotageBan: { setting: 2, since: 3 } }, [])?.reputation).toEqual({ ban: 2, pacts: [] });
+  });
+
+  it('the players it held a pact with this month: running, or broken by it this month (the reveal breaks it before the show)', () => {
+    const cards = [
+      pact('ossa', {}),
+      { ...pact('brix', { status: 'broken', brokenBy: 'lena', settled: MONTH }), from: 'brix', to: 'lena' },
+      pact('kai', { until: MONTH - 1, status: 'kept', settled: MONTH - 1 }),
+      pact('mia', { status: 'broken', brokenBy: 'mia', settled: MONTH - 1 }),
+      { ...pact('zed', {}), terms: { kind: 'vote', law: true, yes: true } },
+    ];
+    expect(known({}, cards)?.reputation?.pacts).toEqual(['ossa', 'brix']);
+  });
+
+  it('a view without its laws or its deal cards cannot know the loss: no reputation, so no number', () => {
+    expect(sabotageSeat(atMonthEnd([], mine('lena', [])))?.reputation).toBeUndefined();
+  });
+
   it('a phone with no politics: no orders, not the Sheriff', () => {
     expect(sabotageSeat(aMuleView({ players: PLAYERS, me: { id: 'lena', politics: null } as unknown as MyView, politics: null }))).toEqual({ mine: [], sheriff: false });
   });

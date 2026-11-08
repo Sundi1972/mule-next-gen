@@ -1,4 +1,5 @@
 import { EVENT_SHOW } from '@mule/engine';
+import type { EventSabotageSeat } from '../src/index';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -268,12 +269,12 @@ describe('S4-C17 · the stamp stays inside the map (the mock’s overflowed near
 
 describe('S4-C17 · each phone’s private line after the show (P10Page PHONE_LINES)', () => {
   /** The phone's rail once the event has settled, as `me` sees it; `seat` says which orders are theirs and whether they are Sheriff. */
-  const rail = (ev: ShowEventView, me: string, seat?: { mine: string[]; sheriff: boolean }, solo = false) => {
+  const rail = (ev: ShowEventView, me: string, seat?: EventSabotageSeat, solo = false) => {
     const t = clock(ev).at(1) + 0.1;
     const Rail = solo ? EventSoloRail : EventTvPhoneRail;
     return words(renderToStaticMarkup(h(EventShow, { events: [ev], introMs: INTRO, t, mode: solo ? 'solo' : 'tv', width: W, height: H, tiles, players, children: h(Rail, { me, ...(seat ? { sabotage: seat } : {}) }) })));
   };
-  const lena = { mine: ['sab-a', 'sab-b', 'sab-c', 'sab-d', 'sab-e'], sheriff: false };
+  const lena: EventSabotageSeat = { mine: ['sab-a', 'sab-b', 'sab-c', 'sab-d', 'sab-e'], sheriff: false, reputation: { ban: 1, pacts: [] } };
   const brix = { mine: [], sheriff: true };
   const ossa = { mine: [], sheriff: false };
 
@@ -316,6 +317,27 @@ describe('S4-C17 · each phone’s private line after the show (P10Page PHONE_LI
         expect(rail(ev, me, seat, true)).not.toContain('Lena');
       }
     }
+  });
+
+  it('the caught line counts the sabotage ban: ×2 doubles the loss', () => {
+    const banned = { ...lena, reputation: { ban: 2, pacts: [] } };
+    expect(rail(cut(GUARDED), 'lena', banned)).toContain('Caught by a guard at Ossa’s plot. −20 reputation; the Sheriff can fine you.');
+    expect(rail(rumour(RUMOUR_SEEN), 'lena', banned)).toContain('Your rumour was seen and did not take. −20 reputation; the Sheriff can fine you.');
+  });
+
+  it('a pact with the victim costs its own 20 more, named; a rumour has no victim, so no pact', () => {
+    const pact = { ...lena, reputation: { ban: 1, pacts: ['ossa'] } };
+    expect(rail(cut(GUARDED), 'lena', pact)).toContain('Caught by a guard at Ossa’s plot. −10 reputation, and 20 more: your pact with Ossa; the Sheriff can fine you.');
+    expect(rail(cut(SEEN), 'lena', { ...lena, reputation: { ban: 3, pacts: ['ossa'] } })).toContain('The cut worked, but you were seen. −30 reputation, and 20 more: your pact with Ossa; the Sheriff can fine you.');
+    expect(rail(rumour(RUMOUR_SEEN), 'lena', pact)).toContain('−10 reputation; the Sheriff can fine you.');
+    expect(rail(cut(GUARDED), 'lena', { ...lena, reputation: { ban: 1, pacts: ['brix'] } })).toContain('−10 reputation; the Sheriff');
+  });
+
+  it('a phone that cannot know the loss gives no number', () => {
+    const { reputation: _r, ...unknown } = lena;
+    const line = rail(cut(GUARDED), 'lena', unknown);
+    expect(line).toContain('Caught by a guard at Ossa’s plot. You lost reputation; the Sheriff can fine you.');
+    expect(line).not.toMatch(/−\d+ reputation/);
   });
 
   it('the phone alone says the same after the show', () => {

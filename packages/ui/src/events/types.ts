@@ -94,6 +94,12 @@ export interface ShowPlayer {
 export interface EventSabotageSeat {
   mine: readonly string[];
   sheriff: boolean;
+  /**
+   * What a caught order costs this player's reputation, as the engine's reveal takes it: the sabotage ban's setting in
+   * force (1 with no ban), and the players this player held a pact with this month (each pact breaks: pactBroken more).
+   * Absent when the phone's view cannot say: its line then gives no number, never a smaller one.
+   */
+  reputation?: { ban: number; pacts: readonly string[] };
 }
 
 /** 'tv' runs at the TV's pace; 'solo' is a phone with no TV in the room, its motion quicker inside the same length. */
