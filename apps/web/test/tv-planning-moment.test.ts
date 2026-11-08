@@ -162,8 +162,8 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
     tv.show([BROKE, O]);
     tv.at(TV_MOMENT_MS + 1000);
     const banner = element(tv.html(), 'tv-break-banner');
-    expect(banner.indexOf('data-testid="tv-break-deal-o"'), 'the newest break leads').toBeGreaterThanOrEqual(0);
-    expect(banner.indexOf('data-testid="tv-break-deal-o"')).toBeLessThan(banner.indexOf('data-testid="tv-break-deal-k"'));
+    expect(banner.indexOf('data-testid="tv-break-deal-o-words"'), 'the newest break leads').toBeGreaterThanOrEqual(0);
+    expect(banner.indexOf('data-testid="tv-break-deal-o-words"')).toBeLessThan(banner.indexOf('data-testid="tv-break-deal-k-words"'));
     tv.at(2 * TV_MOMENT_MS - 1000);
     expect(tv.html(), "the second break's time up").not.toContain('data-testid="tv-moment"');
   });
@@ -175,9 +175,9 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
     // Offered first, broken last: the view's order is not the order they broke in.
     tv.show([{ ...BROKE, id: 'deal-a', brokenBy: 's1', from: 's1', to: 's3' }, BROKE, O]);
     const banner = element(tv.html(), 'tv-break-banner');
-    expect(banner).toContain('data-testid="tv-break-deal-a"');
-    expect(banner).toContain('data-testid="tv-break-deal-o"');
-    expect(banner).not.toContain('data-testid="tv-break-deal-k"');
+    expect(banner).toContain('data-testid="tv-break-deal-a-words"');
+    expect(banner).toContain('data-testid="tv-break-deal-o-words"');
+    expect(banner).not.toContain('data-testid="tv-break-deal-k-words"');
   });
 
   it('a call withdrawn and called again by the same player that month is a moment once, on the whole TV (PM ruling 8 Nov)', () => {
