@@ -282,6 +282,9 @@ function Index() {
         </ul>
       </Section>
       <Section title="The Sheriff’s month (?path=sheriff)" id="sheriff-path">
+        <p className="text-sm font-semibold text-ok" data-testid="sheriff-path-approved">
+          APPROVED by Heiko 8 Nov (played through).
+        </p>
         <a href="?path=sheriff" className="text-sm font-semibold text-holo" data-testid="to-sheriff-path">
           → The Sheriff’s month: a guard, a cut, a fine
         </a>
@@ -298,6 +301,7 @@ function Index() {
             the victim’s share {POLITICS.sheriff.victimShare} (POLITICS.sheriff.victimShare).
           </li>
           <li>Holder-only (PM RULED, for the RC): on this path the Sheriff sub-tab is Kai’s alone; Lena’s and Brix’s phones have none. The planning month keeps the public stub on the other phones (“P7 · WS8 · the Sheriff, in public”), post-RC.</li>
+          <li>Production’s silos are empty on this path: the fixture’s tiles carry no ground, and the path is about the cut, not the yield.</li>
           <li>Found on trunk: HoloMap’s guard flag is built (MapFlag 'guard', WS4), so the planning month’s DS-GAP overlay on WS8’s GuardMap can give way to it in the build.</li>
         </ul>
       </Section>
