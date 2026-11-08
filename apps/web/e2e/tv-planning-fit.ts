@@ -91,7 +91,10 @@ async function aBreakMoment(server: Parameters<typeof held>[0], code: string, tv
     await banner.waitFor({ timeout: PRESS_MS });
     const [b, m] = await Promise.all([banner.boundingBox(), tv.locator('[data-phase=planning] [data-testid=tv-map-box]').boundingBox()]);
     check(b && m && b.y >= m.y - 1 && b.y + b.height <= m.y + m.height + 1, `TV-FIT (${table} people): the break banner overlays the map box, got the banner at y ${b?.y}–${b ? b.y + b.height : '?'} and the box at ${m?.y}–${m ? m.y + m.height : '?'}`);
-    return await planningReads(tv, table, 'a break moment over the map');
+    const read = await planningReads(tv, table, 'a break moment over the map');
+    // Read while the banner still shows: a moment folds after TV_MOMENT_MS.
+    check(await banner.isVisible(), `TV-FIT (${table} people): the break banner still lies over the map when its screen is read`);
+    return read;
   } finally {
     await held(server, code, async () => {
       state.politics!.deals.splice(state.politics!.deals.indexOf(card), 1);

@@ -244,6 +244,10 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   // An overrule call is a moment over the planning map (SB-5b, PM ruling 8 Nov), keyed by month so next month's is new.
   const overrule = game.politics?.overrule;
   const calling = useMoment(game.phase === 'planning' && overrule?.stage === 'called' ? `call:${game.month}:${overrule.target}:${overrule.caller}` : null, now);
+  // A card broken this month is a moment too (SB-5b, PM ruling 8 Nov): its banner folds after TV_MOMENT_MS; the news keeps its
+  // line. A new break while it shows is a new moment, the banner then naming every card broken this month.
+  const broken = game.phase === 'planning' ? brokenIn(game, game.month) : [];
+  const breaking = useMoment(broken.length > 0 ? `break:${game.month}:${broken.map((c) => c.id).sort().join(',')}` : null, now);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -462,12 +466,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                 <StrikeMap view={game} size="tv">
                   <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
                 </StrikeMap>
-                {/* SB-5a (WS6 ruling 8 Nov): a broken card is a moment over the map's top, out of flow like the event show's
-                    cards, so the body's scale never moves for it; the news column keeps the server's line for it. */}
-                {phase === 'planning' && (calling || brokenIn(game, game.month).length > 0) && (
+                {/* SB-5a (WS6 ruling 8 Nov): a broken card or an overrule call is a moment over the map's top, out of flow like
+                    the event show's cards, so the body's scale never moves for it; the news column keeps the server's line. */}
+                {phase === 'planning' && (calling || breaking) && (
                   <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-3 p-3 empty:hidden" data-testid="tv-moment">
                     {calling && <TvOverruleCall game={game} />}
-                    <TvDeals game={game} />
+                    {breaking && <TvDeals game={game} />}
                   </div>
                 )}
               </div>
