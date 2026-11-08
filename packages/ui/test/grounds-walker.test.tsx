@@ -25,7 +25,7 @@ const layer = (routes: Spot[][], occluders = [HOSPITAL]) =>
   renderToStaticMarkup(<svg><WalkingScene scene={SCENE} walkers={routes.length} rim={2.85} blocks={[]} occluders={occluders} routes={routes} sprite={sprite} /></svg>);
 /** Each drawn colonist's crop of its sheet: the viewBox's x and y, in sheet pixels. */
 const crops = (html: string, testid = 'walker') =>
-  [...html.matchAll(new RegExp(`<svg[^>]*viewBox="(\\d+) (\\d+) ${CW} ${CH}"[^>]*data-testid="${testid}"`, 'g'))].map((m) => [Number(m[1]), Number(m[2])]);
+  [...html.matchAll(new RegExp(`<svg[^>]*viewBox="(\\d+) (\\d+) ${CW} ${CH}"[^>]*data-testid="${testid}"`, 'g'))].map((m): [number, number] => [Number(m[1]), Number(m[2])]);
 
 describe('T-AC-14: the colonists are Astronaut A, from the walker sheets, in the player colours', () => {
   it('T-AC-14: a colonist is a crop of its sheet whose row is the heading of its route leg (+x, +y, -x, -y top to bottom)', () => {

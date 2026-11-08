@@ -251,6 +251,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
         occluders={occluders}
+        sprite={manifest?.walker && { entry: manifest.walker, light, href: (src) => hrefOf(src, manifest, size) }}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
       {chips &&
