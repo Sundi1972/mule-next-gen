@@ -194,7 +194,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('tab-body-colony');
   });
 
-  it('C66, E-1 (D5): "Throw your hat in the ring" leads This month, strong, a door into Elections that opens the promise', () => {
+  it('C66, E-1 (D5): "Throw your hat in the ring" leads This month, strong, a door into Elections that opens the promise', () => { // trace-allow: an existing test whose title changed with SB-3 (its door or stage moved into a sub-tab); its id was never an AC id
     mount(game());
     const rows = byTestid('agenda-box').findAll('button').map((b) => b.getAttribute('data-testid'));
     expect(rows[0]).toBe('agenda-run');
@@ -379,7 +379,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('now-go');
   });
 
-  it('C66 (frame): the election ceremony takes the whole stage, the tabs hidden; its ballot does not (SB-3)', () => {
+  it('C66 (frame): the election ceremony takes the whole stage, the tabs hidden; its ballot does not (SB-3)', () => { // trace-allow: an existing test whose title changed with SB-3 (its door or stage moved into a sub-tab); its id was never an AC id
     const ceremony: ElectionView = { stage: 'ceremony', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: [], result: {} };
     mount(game({ pol: politics({ election: ceremony, next: 5 }) }));
     byTestid('hub-situation');

@@ -839,7 +839,7 @@ describe("the new Governor's promise (C68, E-7)", () => {
 });
 
 describe('the hub door (E-1)', () => {
-  it('C66, E-1: "Throw your hat in the ring" is in This month in any month before an election, a door into Elections, and names your candidacy once you run (drawn: hub-tabs.test.ts)', () => {
+  it('C66, E-1: "Throw your hat in the ring" is in This month in any month before an election, a door into Elections, and names your candidacy once you run (drawn: hub-tabs.test.ts)', () => { // trace-allow: an existing test whose title changed with SB-3 (its door or stage moved into a sub-tab); its id was never an AC id
     const run = TAB_SLOTS.agenda.find((a) => a.key === 'run')!;
     const seat = (game: MuleView) => ({ view: game, me: game.me!, self: game.players[0]! });
     const words = (game: MuleView) => (run.show?.(seat(game)) ?? true ? `${run.title(seat(game))} · ${run.sub(seat(game))}` : null);
