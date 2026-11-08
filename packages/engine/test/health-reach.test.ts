@@ -63,12 +63,12 @@ const p0 = (state: GameState) => state.players.find((p) => p.id === 'p0')!;
  * Medicine and plenty of everything else once development has rolled its sickness. Returns p0's lines from the month
  * report and the Medicine p0 held before production and after it.
  */
-function produce(plots: { good: Outfit; out: number }[], sick: number, medicine: number, crewShort = { food: 0, water: 0 }) {
+function produce(plots: { good: Outfit; out: number }[], sick: number, medicine: number, crewShort = { food: 0, water: 0 }, energy = 200) {
   const state = newGame();
   const tiles = lay(state, plots);
   toPhase(state, 'development');
   state.colony!.sick = sick;
-  Object.assign(p0(state).stock, { food: 50, water: 200, energy: 200, medicine });
+  Object.assign(p0(state).stock, { food: 50, water: 200, energy, medicine });
   p0(state).crewShort = crewShort;
   toPhase(state, 'production');
   const report = state.history.at(-1)!;
@@ -178,6 +178,11 @@ describe('needs C18: a sick colony reaches its players\' crews (RULE-15)', () =>
       const { lines } = produce([{ good: 'food', out: 8 }], 0.3, 0, { food: 1, water: 0 });
       expect(lines[0]!.made).toBe(3);
       expect(lines[0]!.parts.map((p) => p.why)).toEqual(['ground', 'crewShort', 'crewSick']);
+
+      // A farm making 8 with no Energy: 0.85 gives 6.8 → 7, then the turn-off's 20% gives 1.4 → 1. Turned off first: 1.6 → 2, then 1.7 → 2.
+      const off = produce([{ good: 'food', out: 8 }], 0.3, 0, { food: 0, water: 0 }, 0).lines[0]!;
+      expect(off.made).toBe(1);
+      expect(off.parts.map((p) => p.why)).toEqual(['ground', 'crewSick', 'energyOff']);
     });
   });
 
