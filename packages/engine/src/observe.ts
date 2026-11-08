@@ -104,6 +104,8 @@ function hidePolitics(politics: Politics, me: string): void {
     return [{ ...o, by: o.culpritPublic ? o.by : null, cost: 0 }];
   });
   if (politics.sheriff !== me) politics.guards = [];
+  // The price a worked rumour moved from is the engine's, for endRumours: a seat sees the shifted price and no more (HC-4).
+  politics.rumoured = politics.rumoured.map(({ good }) => ({ good })) as Politics['rumoured'];
   const overrule = politics.overrule;
   if (overrule) {
     const own = overrule.ballots[me];
