@@ -266,6 +266,9 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
   (ruled 7 Nov; @800 is half the full-res frame, so the TV upscales nothing).
   Top-level `"plate": { "3" | "5": { "day", "dusk", "glow": "… | null", "frame": { "width", "height", "hall": [x, y] } } }`
   (AM-7): one base plate per RULE-4 extent — "3" covers ring 1, "5" the whole 5×5; the hall pixel anchors the layers.
+  Each stage entry may carry `"skyline": { "column": 40, "top": [...], "bottom": [...] }` · ADDED · non-breaking: the
+  picture's opaque pixels column by column (40 frame px each), top and bottom row as fractions of its height, written by
+  `design/art/colony/skyline.py`; the live layer hides a colonist only where it covers the figure (C4, T-AC-13).
   Top-level `"walker"` · ADDED · non-breaking (absent → today's SVG figure) (AM-8):
   `{ "cell": { "width": 192, "height": 224, "feet": [96, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
      "headings": ["+x", "+y", "-x", "-y"], "sheets": { "<suit>-<trim>": { "day": "walker/…@800.webp", "dusk": "…" } },
@@ -308,6 +311,7 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-7 (serves C5) | RULE-5: a stage change between two month ends leans in on that place; a first view leans in on none | C5 |
 | T-AC-10 (serves B-AC-4, AM-7) | the plate fit: on the shipped manifest every place of the plate's extent, and every kind's frame at its place, lies inside the plate's frame | C1 C2 |
 | T-AC-11 (serves G-2, AM-7) | the framing: a building's scale is 0.9–1.1× of 17.5 px/m; empty places fill ≤ 1/3 of the view; the view lies inside the plate; it is centred across on the hall, shifted only as much as keeps a building whole | C2 |
+| T-AC-13 (serves B-AC-3, G-2) | a colonist standing shallower than a building (col + row) is drawn before it, and where that building's picture covers its figure on screen (by the picture's silhouette, §3 `skyline`) its faint outline is drawn after every building; one in front draws over it with no outline; one behind a building but above its picture on screen has no outline; a site hides a colonist only where its picture's pixels cover the figure (Heiko, 8 Nov: a figure on the Hospital's upper floor) | C4 |
 | T-AC-14 (serves C4, AM-8) | a walker is drawn from the `walker` sheet: the row is its route leg's heading, the column advances with the cycle (frame 0 at reduced motion), the suit variant is its owner's colour; behind a building its ghost is the outline sheet faded on the image itself; with no `walker` entry, today's SVG figure | C4 |
 | T-AC-12 (serves C5, B-AC-6) | during the opener's lean-in, a building nearer the camera than a place the caption names and across it on screen fades to 1 − ⅔ × lean (a third at full lean); the named place, a level or off-to-the-side building, and a view that leans on nothing do not fade (PM, 8 Nov, from the visibility spike: a new site is up to ⅔ covered) | C5 |
 

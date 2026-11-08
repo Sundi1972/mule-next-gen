@@ -9,6 +9,15 @@ export interface ManifestEntry {
   day: string;
   dusk: string;
   glow: string | null;
+  /** The picture's silhouette (design/art/colony/skyline.py): which colonists it hides (spec C4). */
+  skyline?: Skyline;
+}
+
+/** A picture's opaque pixels by column: `column` frame px wide, each column's top and bottom row as fractions of the picture's height (empty: top 1, bottom 0). */
+export interface Skyline {
+  column: number;
+  top: number[];
+  bottom: number[];
 }
 
 /** A picture's camera frame: a place is `place` px wide, its centre at pixel `centre`. */

@@ -218,6 +218,15 @@ fec2bab9 by PM ruling. `TableApp.tsx` carries no change from this task. Steps be
 **Spec:** §1 C4. **Scaffold:** `design/mocks/colony-grounds/src/look/Living.tsx`. **Files:** `packages/ui/src/grounds/LiveLayer.tsx`, wired into `ColonyGrounds`.
 - [ ] Write `B-AC-2: lights dim to full by wealth; closed stays dark; none by day` and `B-AC-3: a strike empties the paths`, at the rendered SVG (glow `<image>` opacity; walker count). Run: FAIL. Implement. Respect `useEventReducedMotion` from `@mule/ui`. Run: PASS. Commit.
 
+### Task 2.2c: T-AC-13 — a colonist behind a building is hidden by it, with a faint outline (C4; Heiko, 8 Nov)
+
+**Altitude:** the live layer's rendered markup. **Files:** `packages/ui/test/grounds-occlusion.test.tsx`, `packages/ui/src/grounds/occlusion.ts` (hiddenBy, occluderOf), `LiveLayer.tsx` (occluders, the outline), `ColonyGrounds.tsx` (every picture's silhouette), `design/art/colony/skyline.py` (the manifest's `skyline`, run by publish.sh).
+- [x] `T-AC-13: behind the Hospital, the colonist is drawn before it … and its faint outline after it` red c1089146, then green.
+- [x] Review round 1 (CHANGES at 422b31e6): a ray test with REACH 3 outlined colonists in plain view (1386 of 2400 sampled
+  positions, 528 with no picture over the feet). Now the test is the picture's own silhouette, measured from its opaque
+  pixels: hidden only where a picture drawn after the colonist covers its shins, waist or head. Negative cases from the
+  review ((-2, -0.5), (-1, -0.5)) and a `ColonyGrounds`-level test; mutants (no wiring; the frame box for the silhouette) each fail one test.
+
 ### Task 2.2b: C4 — smoke over a damaged building, haze by air
 
 **Plan gap found at PR-2 build:** spec C4 lists smoke and haze; Tasks 2.1–2.2 built glow and walkers only.
