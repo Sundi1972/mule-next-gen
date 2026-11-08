@@ -26,7 +26,7 @@ import {
 import type { Act, AiAction } from '../src/actions.js';
 import { SabotageHand } from '../src/hands/sabotage.js';
 import { SheriffHand } from '../src/hands/sheriff.js';
-import { VoteHand } from '../src/hands/vote.js';
+import { ownVote, VoteHand } from '../src/hands/vote.js';
 import { captureCost, guardValue, investigateValue, sabotageGain } from '../src/politics-value.js';
 import { AiSeat } from '../src/seat.js';
 import { cashReserve, type Mind } from '../src/value.js';
@@ -147,6 +147,7 @@ describe('S4-T-AC-9: SabotageHand per S4-RULE-13 (order)', () => {
   it('S4-T-AC-9 row 1: the captureOdds term counts: the same gain, a dearer capture, no order', () => {
     const { state, plots } = table();
     gains((t) => (t.kind === 'powerCut' && t.tile === plots.A ? 240 : 0));
+    POLITICS.ai.sabotage.minEdge = 150; // net 1.5 x 240 - 120 - 0.3 x capture
     capture.mockReturnValue(300);
     expect(run(state, SABOTEUR())).toHaveLength(1);
     capture.mockReturnValue(301);
@@ -364,6 +365,34 @@ describe('S4-T-AC-9: SheriffHand per S4-RULE-13 (guard, investigate, fine)', () 
   }
 });
 
+describe('S4-T-AC-9: VoteHand votes on the sabotage ban by lawWorth (S4-RULE-13)', () => {
+  const BAN = { kind: 'enact', law: 'sabotageBan', setting: 2 } as const;
+  /** Month 3: ai2 stands revealed twice in the two months played, ai3 clean; ai0 governs. */
+  function banTable(): GameState {
+    const { state, plots } = table();
+    withOrders(state, [
+      caseOf({ id: 'sab-aaaaaa', by: 'ai2', target: cut(plots.A), outcome: 'caught', culpritPublic: true, month: 1 }),
+      caseOf({ id: 'sab-bbbbbb', by: 'ai2', target: cut(plots.B), outcome: 'caught', culpritPublic: true, month: 2 }),
+    ]);
+    return state;
+  }
+  const voteOf = (state: GameState, me: string, level: AiLevelId = 'trader') => ownVote(observe(state, me), mindOf(me, 'cautious', level), { proposal: BAN });
+
+  it('S4-T-AC-9: a seat the ban would fine votes no; a seat it costs nothing votes yes', () => {
+    const state = banTable();
+    expect(voteOf(state, 'ai2')).toBe(false);
+    expect(voteOf(state, 'ai3')).toBe(true);
+  });
+
+  it('S4-T-AC-9: the Governor votes yes whatever it costs, and a Rookie leaves the vote to the council coin', () => {
+    const state = banTable();
+    state.politics = { ...state.politics!, governor: 'ai2' };
+    expect(voteOf(state, 'ai2')).toBe(true);
+    state.politics = { ...state.politics!, governor: 'ai0' };
+    expect(voteOf(state, 'ai3', 'rookie')).toBeNull();
+  });
+});
+
 describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
   /** A rng counted at every draw. */
   function counted(seed: number): Rng & { draws: () => number } {
@@ -388,8 +417,8 @@ describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
     withOrders(state, [caseOf({ id: 'sab-aaaaaa', by: null, outcome: 'done' })]);
     const rngs = [counted(11), counted(12)];
     const hands = [new VoteHand(mindOf('ai0', 'saboteur'), rngs[0]!), new VoteHand(mindOf('ai1', 'cautious', 'rookie'), rngs[1]!)];
-    const sent: AiAction[] = [];
-    for (let i = 0; i < 3; i++) for (const h of hands) h.tick(state, WALK.tickMs, (a) => (sent.push({ ...a, by: h.mind.me } as AiAction), false));
+    const sent: (AiAction & { by: string })[] = [];
+    for (let i = 0; i < 3; i++) for (const h of hands) h.tick(state, WALK.tickMs, (a) => (sent.push({ ...a, by: h.mind.me }), false));
     return { sent, draws: rngs.map((r) => r.draws()) };
   }
 
@@ -397,7 +426,7 @@ describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
     eager();
     const off = planning(false);
     const on = planning(true);
-    const sabotageMoves = (m: AiAction) => ['sabotage', 'guard', 'investigate', 'fine'].includes(m.type);
+    const sabotageMoves = (m: { type: string }) => ['sabotage', 'guard', 'investigate', 'fine'].includes(m.type);
     expect(on.sent.some(sabotageMoves), 'the hands did act, so the comparison is not vacuous').toBe(true);
     expect(on.draws).toEqual(off.draws);
     expect(on.sent.filter((m) => !sabotageMoves(m))).toEqual(off.sent);
