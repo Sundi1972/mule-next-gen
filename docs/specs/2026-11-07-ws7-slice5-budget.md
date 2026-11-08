@@ -1368,10 +1368,12 @@ are **proposed; WS1 owns the final shape**.
 export function lineWorth(obs: GameState, me: string, line: BudgetLine, amount: number): number;
 ```
 It must account for:
-- **projects:** what `amount` more toward the open buildings is worth to `me`: the months it brings each
-  one forward × (its perk's value to `me`, i.e. the park, hospital and stadium event modifiers, + its
-  prestige's mood points × the value of a mood point to `me`). 0 when no building is commissioned, or when
-  every open one waits only for goods (§0's measurement: today it is mostly 0).
+- **projects:** what `amount` more toward the open buildings is worth to `me` (AM-15): for each commissioned
+  building in the fund's order, the share of its cost that `amount` pays × the months left in the game × (its
+  perk's value to `me`, i.e. the park, hospital and stadium event modifiers, + its prestige's mood points × the
+  value of a mood point to `me`). Its cost is its credits plus, while COLONY.fundBuysGoods is on, its missing
+  goods at the store's sell price as far as the store sells them. 0 when no building is commissioned, or when
+  every open one waits only for goods the fund can't buy (COLONY.fundBuysGoods off, or the store has none).
 - **welfare:** `amount` if `me` is `welfareRecipient(obs)` now, else 0. Plus the mood points it buys
   (S5-RULE-5) × the value of a mood point to `me`.
 - **security** [after RC]: the expected sabotage loss on `me`'s plots this month that the guards and
@@ -1719,6 +1721,25 @@ did       (salesTax − taxAtStart) × those sales: the overrule puts the tax ba
 because   overruleWorth is a gain to me (as the budget term's lineWorth(start) − lineWorth(now) already is); the old
           sign made every seat oppose undoing a raise
 goal      S5-1 — unchanged; S5-B-AC-6 reads the corrected sign
+
+AM-15 · 2026-11-08 · WS7, from #796's review (WS1, S5-PR-3) M1 and M2, via the PM · what a Projects credit is worth
+target    §3.2 lineWorth, the projects bullet
+said      "the months it brings each one forward × …; 0 when … every open one waits only for goods"
+did       M1: while COLONY.fundBuysGoods is on (the default), the fund's credits buy a building's missing goods from
+          the store (colony.ts::fund), so credits toward a building that waits only for goods are worth what they buy;
+          it is 0 only when the fund can't buy them (the switch off, or the store has none). The building's cost in
+          the share is its credits plus those goods at the store's sell price. M2: the share of the building's cost
+          the amount pays × the months left, as #796 builds it and the rulebook's Park example states (100/210 × 9 ×
+          4 × 5 ≈ 86), not the months it brings the building forward
+because   M1: the old words assumed the fund pays credits only, which colony.ts stopped being true of with
+          fundBuysGoods. M2: "months brought forward" needs a forecast of the fund's later income and of every other
+          seat's funding, which no hand sees; the share of the building × the months left is computable from public
+          facts, non-decreasing in amount (§3.2's contract) and an upper bound of the forward reading, so it leans
+          the AI Governor toward Projects at most as far as the building is worth. Judged in the 13 Nov play-test:
+          if AI Governors starve Welfare for Projects, the forward reading comes back with a named income estimate
+code      M1 changes politics-value.ts's projects body (need = credits only today): WS1, a follow-up to #796, in
+          the 12 Nov batch. M2 needs no code change
+goal      S5-1 — unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
