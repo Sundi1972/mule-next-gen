@@ -272,7 +272,7 @@ When each slice's W1 PR is pushed, WS7 tells the PM, who passes it to WS1 (the w
 | Decision | Built as | If Heiko picks otherwise |
 |---|---|---|
 | D-S3-1 campaign law promises | A: after RC (nothing built) | B: one more PR after S3-PR-1: the election picker's law promise and its break rule, about +1 day, mostly WS6's picker |
-| D-S4-1 does an investigation find the culprit | B: `POLITICS.sheriff.investigateOdds` 0.5 | A: the value 1.0 (config only); C: S4-RULE-7 gains a "latest month only" row in S4-PR-1 |
+| D-S4-1 does an investigation find the culprit | B: `POLITICS.sheriff.investigateOdds` 0.5 (0.3 since Heiko's 8 Nov ruling, slice 4 AM-10) | A: the value 1.0 (config only); C: S4-RULE-7 gains a "latest month only" row in S4-PR-1 |
 | D-S4-2 a separate sabotage switch | A: none; `POLITICS.sabotage.on` for the sim | B: one more PR (lobby, createGame and server options; the Sheriff leaves the ballot when off) |
 | D-S5-2 when the overrule vote is held | A: as planning ends | B: the overrule ballot moves beside the law ballot when the next planning opens; S5-PR-1's timing rows and S5-PR-4's flow change |
 | D-S5-3, D-S5-4 | after RC | decided before S5-PR-8 |

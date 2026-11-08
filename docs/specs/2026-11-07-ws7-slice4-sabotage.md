@@ -1127,7 +1127,7 @@ sabotage: {
 },
 sheriff: {
   guards: 2, guardsPerHundred: 1, securityDetect: 0.1,   // per 100 cr of Security (slice 5)
-  investigations: 1, investigateOdds: 0.5,               // D-S4-1
+  investigations: 1, investigateOdds: 0.3,               // D-S4-1, AM-10 (was 0.5)
   fine: { steps: [50, 100, 150, 200, 250, 300], standard: 150 },
   victimShare: 0.5,
 },
@@ -1358,6 +1358,23 @@ because   a promise no screen kept; and a computer seat must see what a human se
 goal      S4-1, S4-2 — unchanged
 ```
 
+```
+AM-10 · 2026-11-08 · Heiko (chat, 8 Nov, via PM) and WS7 (S4-PR-3's #770 review, via PM) · the investigation odds fall to 30%; sabotageGain carries the odds the order works
+target    D-S4-1 (B) and §3 Config's POLITICS.sheriff.investigateOdds; §10 sabotageGain's doc comment; S4-RULE-13's net
+said      (1) investigateOdds 0.5, "an investigation finds the culprit half the time" (AM-3's B). (2) sabotageGain is
+          the gain "before its cost, its odds and capture", yet S4-RULE-13's example nets 1.5 × 240 for a 400 plot
+did       (1) investigateOdds is 0.3: an investigation finds the culprit about one time in three. Heiko: "50% success
+          rate is too high, we should do only 30% or even 25%"; if his 13 Nov play-test still finds it too easy it
+          drops to 0.25, a config change only. (2) sabotageGain includes the order's odds of working (a power cut's
+          POLITICS.sabotage.orders.powerCut.success, 0.6; a rumour's 0.8): S4-RULE-13's net applies captureOdds only, and its
+          example's 240 is 400 × 0.6, as WS1 built it in #770 (d9c08a7b)
+because   (1) Heiko's ruling: with one investigation a month, half the time solved too much of what the guards missed.
+          (2) the doc comment contradicted the rule's own example; the code and the example agree
+goal      S4-1, S4-2 — unchanged
+folded    §3 Config and §10 read with AM-10; packages/engine/src/config.ts; docs/rulebook/colony-and-politics.html
+          (the Sheriff's line and the Why box) and numbers.html
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: sabotage state
@@ -1400,7 +1417,7 @@ including whether a `mind: Mind` parameter is passed** (slice 3's values take `m
 that needs persona weights reads them as WS1's existing values do.
 
 ```ts
-/** Proposed. Credits `me` expects to gain on the table if the order works, before its cost, its odds and capture: for a
+/** Proposed. Credits `me` expects to gain on the table, times the odds the order works (AM-10), before its cost and capture: for a
  *  power cut, the victim's lost output this month at the prices `me` expects, weighted by the victim's Worth
  *  lead over `me` (more against the leader, little against a trailing player); for a rumour, `me`'s own expected
  *  trades in that good at the shifted opening price minus the same for the leader. Never negative for a cut;
@@ -1498,7 +1515,7 @@ approved by 13 Nov.
 
 **D-S4-1 · Does an investigation always find the culprit?**
 
-**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** B, an investigation finds the culprit half the time (`POLITICS.sheriff.investigateOdds` 0.5).
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** B, an investigation finds the culprit half the time (`POLITICS.sheriff.investigateOdds` 0.5). **Amended 8 Nov (AM-10, Heiko): 0.3, about one time in three.**
 
 At the table: Brix, the Sheriff, taps Investigate on "Month 3: Kai's power line cut, culprit unknown".
 - **A · Always** (design 05: "The culprit is revealed to everyone"). *For:* the Sheriff's job is satisfying;

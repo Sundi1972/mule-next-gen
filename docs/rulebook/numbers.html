@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>bab4f14b7f19</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>d1ae9f5913d6</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1044,7 +1044,7 @@
 <tr><td><code>POLITICS.sheriff.guardsPerHundred</code></td><td class="n">1</td><td>Extra guards per 100 credits of Security spent that month (slice 5 supplies the figure).</td></tr>
 <tr><td><code>POLITICS.sheriff.securityDetect</code></td><td class="n">0.1</td><td>Added to an order&#39;s chance of being seen, 0..1, per 100 credits of Security spent that month.</td></tr>
 <tr><td><code>POLITICS.sheriff.investigations</code></td><td class="n">1</td><td>Investigations the Sheriff may open in a month.</td></tr>
-<tr><td><code>POLITICS.sheriff.investigateOdds</code></td><td class="n">0.5</td><td>Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3).</td></tr>
+<tr><td><code>POLITICS.sheriff.investigateOdds</code></td><td class="n">0.3</td><td>Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3; Heiko, 8 Nov: 0.3, was 0.5, AM-10).</td></tr>
 <tr><td><code>POLITICS.sheriff.fine.steps</code></td><td class="n">[50, 100, 150, 200, 250, 300]</td><td>The base fines the Sheriff may levy, in credits, before the ban&#39;s multiplier.</td></tr>
 <tr><td><code>POLITICS.sheriff.fine.standard</code></td><td class="n">150</td><td>The fine an unfined case pays when planning ends, in credits, before the multiplier.</td></tr>
 <tr><td><code>POLITICS.sheriff.victimShare</code></td><td class="n">0.5</td><td>Share, 0..1, of a paid fine the victim gets as restitution; the fund keeps the rest.</td></tr>
