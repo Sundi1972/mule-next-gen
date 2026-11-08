@@ -65,6 +65,37 @@ def shadow_catcher(places=1):
     return o
 
 
+# a building's warm pools: the plate lights a head-less pool at every inner crossing, but a building layer's opaque
+# ground covers it, so look.html's warm light round each building's base was lost (PM, 8 Nov). Each flush layer lights
+# the same pools at its own footprint's corners, and in the glow pass its catcher turns into lit paving so the light
+# lands on the walkway too; the glow layer is screened over the plate at wealth's opacity (RULE-2), as the plate's own.
+POOL = float(os.environ.get("COLONY_LAYER_POOL", "70"))  # W, the plate's inner-crossing pool; env for calibration only
+POOL_REACH = 2.5  # m beyond the footprint where the paving's pool fades out, so it never lights a neighbour's place
+
+
+def pools(places=1):
+    c = core.HALF * places
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            core.light("POINT", (sx * c, sy * c, 3.0 - 0.16), POOL, (1.0, 0.66, 0.36), 0.13)
+
+
+def paving(places=1):
+    """The glow pass's stand-in for the catcher: plain warm-grey paving, faded to black POOL_REACH m beyond the
+    footprint, so only the pools' light near the building is added over the plate."""
+    m, nt, b = core.new_mat("pool_paving")
+    sep = core.node(nt, "ShaderNodeSeparateXYZ")
+    core.link(nt, core.node(nt, "ShaderNodeTexCoord").outputs["Object"], sep.inputs[0])
+    d = core.math_(nt, "MAXIMUM", core.math_(nt, "ABSOLUTE", sep.outputs["X"]), core.math_(nt, "ABSOLUTE", sep.outputs["Y"]))
+    f = core.node(nt, "ShaderNodeMapRange")
+    f.inputs["From Min"].default_value = core.HALF * places + POOL_REACH
+    f.inputs["From Max"].default_value = core.HALF * places
+    core.link(nt, d, f.inputs["Value"])
+    core.link(nt, core.mix(nt, f.outputs[0], (0, 0, 0, 1), (0.42, 0.41, 0.39, 1)), b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.9
+    return m
+
+
 def setup(samples, pct=100, fr=None):
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
@@ -131,7 +162,10 @@ def run(kind, stages, build, glowless=("closed",), fr=None, dress=None):
         if dress and props.on():
             dress(stage)
         if core.FLUSH:
-            shadow_catcher((fr or DEFAULT).get("places", 1))
+            catcher = shadow_catcher((fr or DEFAULT).get("places", 1))
+            catch_m, pave_m = catcher.data.materials[0], paving((fr or DEFAULT).get("places", 1))
+            if stage not in glowless:  # a closed building is dark: no pools
+                pools((fr or DEFAULT).get("places", 1))
         light.rig()
         camera(fr)
         setup(samples, pct, fr)
@@ -140,6 +174,9 @@ def run(kind, stages, build, glowless=("closed",), fr=None, dress=None):
             if l == "glow" and stage in glowless:
                 continue  # dark is the point: the manifest gives this stage no glow layer
             light.apply(l)
+            if core.FLUSH:
+                catcher.is_shadow_catcher = l != "glow"
+                catcher.data.materials[0] = pave_m if l == "glow" else catch_m
             path = os.path.join(out, kind, f"{stage}-{l}.png")
             bpy.context.scene.render.filepath = path
             t1 = time.time()
