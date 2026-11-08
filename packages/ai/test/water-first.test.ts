@@ -1,5 +1,5 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, createGame, observe, STRATEGIST, UPKEEP, type GameState, type Tile } from '@mule/engine';
+import { afterEach, describe, expect, it } from 'vitest';
+import { AI_LEVELS, AI_PERSONAS, createGame, observe, STRATEGIST, type GameState, type Tile } from '@mule/engine';
 import { developDecision } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
 
@@ -8,15 +8,6 @@ import type { Mind } from '../src/value.js';
  * don't cover its drink and its plots' Water and it may install one, its next MULE is a well. Every other install and
  * "Keep the cash" are ruled out. STRATEGIST.waterFirst switches the rule.
  */
-
-/** AM-18 is off by default (farm Water 0, PM ruling 8 Nov); this file pins it on at Heiko's 2 and restores it after. */
-const farmWater = UPKEEP.waterUse.food;
-beforeAll(() => {
-  UPKEEP.waterUse.food = 2;
-});
-afterAll(() => {
-  UPKEEP.waterUse.food = farmWater;
-});
 
 const mind: Mind = { me: 'ai0', personaId: 'trader', persona: AI_PERSONAS.trader, levelId: 'trader', level: AI_LEVELS.trader };
 const saved = STRATEGIST.waterFirst;

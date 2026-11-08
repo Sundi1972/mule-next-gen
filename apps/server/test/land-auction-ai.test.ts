@@ -189,7 +189,8 @@ function shortMoney(seed: number): Record<string, number> {
 function flushMuleMin(seed: number): number {
   const { state, seats } = landAuction(seed, { money: flushMoney() });
   const mule = state.listings.find((l) => l.item.kind === 'mule')!;
-  return Math.min(...seats.map((s) => worthOf(state, s.mind, mule).value)) - 20;
+  // Within one board step of the lowest value, of the seats that bid at all (AM-18 leaves one at 0 on seed 19).
+  return Math.min(...seats.map((s) => worthOf(state, s.mind, mule).value).filter((v) => v > 0)) - 10;
 }
 
 describe('AI seats at the land auction', () => {

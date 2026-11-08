@@ -137,7 +137,8 @@ const POSTED = { smithore: 100, energy: 30, food: 30 };
 describe('RULE-5: one cash shadow price across the month’s auctions', () => {
   it('T-AC-2: with money for its Energy and not its Food too, Food’s budget is under one unit and the Energy auction buys every needed unit', () => {
     // Rookie: no look-ahead, so every belief is the posted price the row sets.
-    const base: Seat = { level: 'rookie', plots: MINES, posted: POSTED, money: 0 };
+    // Water in hand for the mines' own use (AM-18), so Energy and Food are the only calls on the cash.
+    const base: Seat = { level: 'rookie', plots: MINES, posted: POSTED, money: 0, stock: { water: 30 } };
     const probe = table(base);
     const energy = wholeNextMonth(observe(probe, ME), ME, 'energy');
     // The Energy it needs at the store's ask, and less than one Food unit more.
@@ -352,8 +353,8 @@ describe('G-2: a surplus when cheap', () => {
    * The PLANTS seat with 1,200 cr and none of `good`, at a 5% sales tax, `good` posted at `posted`; the store holds the
    * colonists' month and 30 more, so next month's posted price climbs. Plays the auction of `good` alone.
    */
-  function auctionOf(good: Good, posted: number) {
-    const seat: Seat = { plots: PLANTS, posted: { [good]: posted }, stock: { water: 20, energy: 20, [good]: 0 }, money: 1200 };
+  function auctionOf(good: Good, posted: number, plots: Plot[] = PLANTS) {
+    const seat: Seat = { plots, posted: { [good]: posted }, stock: { water: 20, energy: 20, [good]: 0 }, money: 1200 };
     const state = table(seat);
     state.treasury.salesTax = 0.05;
     state.store.stock[good] = shelf(state, 30);
@@ -408,9 +409,10 @@ describe('G-2: a surplus when cheap', () => {
   });
 
   it('B-AC-3 negative: a good that spoils fully gets no surplus, though its belief beats the ask before spoilage', () => {
-    // Water: a seat with no farm needs none, so every unit it would hold is surplus.
+    // Water: a seat whose plots drink none (green belts; every other plot drinks, AM-18) needs none, so every unit it
+    // would hold is surplus.
     GOOD_CONFIG.water.spoilage = 1;
-    const water = auctionOf('water', 6);
+    const water = auctionOf('water', 6, PLANTS.map((p) => ({ ...p, outfit: 'greenBelt' as const })));
     expect(water.need, 'the premise: it needs no Water').toBe(0);
     expect(storeBuyAt(water.view, 'water', water.belief, { exact: true }) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
 

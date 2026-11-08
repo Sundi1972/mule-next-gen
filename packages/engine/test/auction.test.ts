@@ -393,13 +393,15 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     return state;
   }
 
-  it("FM-skip-spoilage: a Medicine factory's Water is carried too: its seat, with no farm, holding only what it drinks, keeps Water from being skipped and its row asks for 2 more", () => {
+  it("FM-skip-spoilage: a Medicine factory's Water is carried too: its seat, with no farm, holding only what it drinks, keeps Water from being skipped and its row asks for the drink and the factory's 1 past spoilage", () => {
     const state = outfitTable(['medicine'], (eat) => eat);
     const eat = needsOf(state, 'p0').water;
     startAuction(state, ['water', 'food']);
     expect(a(state).skipped, 'Water comes up: the factory would run dry').toEqual([]);
-    // The factory uses 1 at production; 1 x 0.95 floors to 0, so 2 must be held past the month end.
-    expect(a(state).status.find((r) => r.id === 'p0')!.need).toBe(eat + 2);
+    // Production keeps the drink back, then the factory uses 1 (AM-18 W2): eat + 1 must survive the month end's 5%.
+    const held = Math.ceil((eat + 1) / (1 - GOOD_CONFIG.water.spoilage));
+    expect(Math.floor(held * (1 - GOOD_CONFIG.water.spoilage)), 'held survives to cover it').toBe(eat + 1);
+    expect(a(state).status.find((r) => r.id === 'p0')!.need).toBe(eat + held);
   });
 
   it('FM-skip-spoilage: Water is carried for a Food farm, and not for a seat with neither a farm nor a factory', () => {
@@ -416,28 +418,20 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     }
   });
 
-  it("AM-18 on (farm Water 2): a seat with plots carries its drink plus every plot's Water, as production keeps the drink back first; a Smithore mine needs Water too", () => {
+  it("AM-18: a seat with plots carries its drink plus every plot's Water, as production keeps the drink back first; a Smithore mine needs Water too", () => {
     // The least held so that floor(n x what survives the month end) still covers `want`.
     const survives = (want: number) => {
       let n = want;
       while (Math.floor(n * (1 - GOOD_CONFIG.water.spoilage)) < want) n++;
       return n;
     };
-    const farmWater = UPKEEP.waterUse.food;
-    UPKEEP.waterUse.food = 2;
-    try {
-      for (const outfits of [['smithore'], ['food'], ['food', 'smithore', 'medicine']]) {
-        const state = outfitTable(outfits, (eat) => eat);
-        const eat = needsOf(state, 'p0').water;
-        const next = Math.min(monthNeeds(state, 'p0').water, UPKEEP.depotCapacity);
-        expect(monthNeeds(state, 'p0').water, outfits.join(', ')).toBeGreaterThan(eat);
-        expect(auctionNeed(state, 'p0').water, outfits.join(', ')).toBe(eat + survives(next));
-      }
-    } finally {
-      UPKEEP.waterUse.food = farmWater;
+    for (const outfits of [['smithore'], ['food'], ['food', 'smithore', 'medicine']]) {
+      const state = outfitTable(outfits, (eat) => eat);
+      const eat = needsOf(state, 'p0').water;
+      const next = Math.min(monthNeeds(state, 'p0').water, UPKEEP.depotCapacity);
+      expect(monthNeeds(state, 'p0').water, outfits.join(', ')).toBeGreaterThan(eat);
+      expect(auctionNeed(state, 'p0').water, outfits.join(', ')).toBe(eat + survives(next));
     }
-    // Off (farm Water 0, the default): a mine carries no Water, as before AM-18.
-    expect(auctionNeed(outfitTable(['smithore'], (eat) => eat), 'p0').water).toBe(needsOf(outfitTable(['smithore'], (eat) => eat), 'p0').water);
   });
 
   it("FM-skip-spoilage: the row's spoils count the depot cap: 30 Water, after upkeep drinks, keeps at most the depot's 10", () => {

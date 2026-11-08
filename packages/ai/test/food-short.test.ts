@@ -91,9 +91,14 @@ function shortOf(good: Good, id: string, money: number, held: Held = HELD[good]!
  */
 const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
 const wholeEnergy = (state: GameState, id: string) => Math.ceil(monthNeeds(state, id).energy / (1 - GOOD_CONFIG.energy.spoilage));
-/** Water the same as Food, for a seat with a farm to water; without one, going short costs it nothing. */
+/**
+ * Water: the drink at upkeep, then next production's use (the drink kept back and every plot's Water, AM-18) after
+ * spoilage, for a seat with a plot that drinks; without one, going short costs it nothing.
+ */
 const wholeWater = (state: GameState, id: string) =>
-  state.tiles.some((t) => t.owner === id && t.outfit === 'food') ? needsOf(state, id).water + Math.ceil(needsOf(state, id).water / (1 - GOOD_CONFIG.water.spoilage)) : 0;
+  state.tiles.some((t) => t.owner === id && t.outfit && t.outfit !== 'water' && t.outfit !== 'greenBelt')
+    ? needsOf(state, id).water + Math.ceil(monthNeeds(state, id).water / (1 - GOOD_CONFIG.water.spoilage))
+    : 0;
 const wholeOf = (state: GameState, id: string, good: Good) => (good === 'food' ? wholeFood(state, id) : good === 'energy' ? wholeEnergy(state, id) : good === 'water' ? wholeWater(state, id) : 0);
 
 /** A rival seller the row drives by hand: it declares Sell and stands at `price` for the whole walk. */
@@ -130,7 +135,7 @@ function playOn(state: GameState, until: 'development' | 'production', through =
 }
 
 /** The seat's plots halved at next month's production for want of the good: none means it was whole. */
-function halvedFor(state: GameState, id: string, why: 'noEnergy' | 'noWater'): number {
+function halvedFor(state: GameState, id: string, why: 'noEnergy' | 'energyOff' | 'waterOff'): number {
   const report = state.history.at(-1)!;
   return (report.lines ?? []).filter((l) => state.tiles[l.tile]!.owner === id && l.parts.some((p) => p.why === why)).length;
 }
@@ -298,7 +303,11 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
       (s) => {
         shortOf('food', id, MONEY, (t) => monthNeeds(t, id).food + 2)(s);
         shortOf('food', RIVAL(id), MONEY)(s);
-        if (fedColony) farmsFor(s, RIVAL(id), 4);
+        if (fedColony) {
+          farmsFor(s, RIVAL(id), 4);
+          // Watered: each farm drinks 2 at production (AM-18).
+          s.players.find((p) => p.id === RIVAL(id))!.stock.water = 2 * (monthNeeds(s, RIVAL(id)).water + 2);
+        }
       },
       shelf,
     );
@@ -457,7 +466,7 @@ describe('B-AC-energy-short: a seat short of Energy buys from the store when it 
 });
 
 describe('B-AC-water-short: a seat short of Water buys from the store when it can pay', () => {
-  it.each(ROWS)('B-AC-water-short: %s (%s) with three farms, no Water and 3,000 cr buys at the store’s price and no farm goes half next month', (id) => {
+  it.each(ROWS)('B-AC-water-short: %s (%s) with three farms, no Water and 3,000 cr buys at the store’s price and no farm is turned off for Water next month', (id) => {
     const state = auctionOf('water', shortOf('water', id!, MONEY));
     const ask = state.auction!.storeSell;
 
@@ -465,22 +474,22 @@ describe('B-AC-water-short: a seat short of Water buys from the store when it ca
     boughtFairly(state, trades, id!, ask, 0, MONEY);
     playOn(state, 'production', true);
 
-    expect(halvedFor(state, id!, 'noWater'), `${id}'s farms halved for Water next month`).toBe(0);
+    expect(halvedFor(state, id!, 'waterOff'), `${id}'s farms turned off for Water next month`).toBe(0);
   });
 
   it.each(ROWS)('B-AC-water-short: %s (%s) with three farms, not short, keeps the screen need when the store buys at 3 times the reference price', (id) => {
-    keepsNeed('water', id!, 0, { held: 7, shelf: 0, rival: false, storeBuys: 3 });
+    // 10 covers the drink and the farms' 2 each (AM-18).
+    keepsNeed('water', id!, 0, { held: 10, shelf: 0, rival: false, storeBuys: 3 });
   });
 
-  it('B-AC-water-short: the trader with no farm to water stays free to sell its Water below the screen need when the store buys at 3 times the reference price', () => {
-    const { state, need } = sellsSurplus('water', 'ai0', 0, { plots: Array<Outfit>(7).fill('energy'), held: 10, shelf: 0, rival: false, storeBuys: 3 });
-    expect(state.players.find((p) => p.id === 'ai0')!.stock.water, `it sold below the screen's need of ${need}`).toBeLessThan(need);
+  it('B-AC-water-short (AM-18): a seat with no farm but seven Energy plots, which drink too, keeps the screen need when the store buys at 3 times the reference price', () => {
+    keepsNeed('water', 'ai0', 0, { plots: Array<Outfit>(7).fill('energy'), held: 15, shelf: 0, rival: false, storeBuys: 3 });
   });
 
-  it('B-AC-water-short: a seat with no farm to water is not made to buy Water: going without costs it nothing', () => {
-    // Seven Energy plots: its household drinks, but nothing of its goes half without Water.
+  it('B-AC-water-short: a seat with no plot that drinks is not made to buy Water: going without costs it nothing', () => {
+    // Seven green belts: its household drinks, but no plot of its uses Water (AM-18), so nothing turns off without it.
     const id = 'ai0';
-    const state = auctionOf('water', shortOf('water', id, MONEY, 0, Array<Outfit>(7).fill('energy')));
+    const state = auctionOf('water', shortOf('water', id, MONEY, 0, Array<Outfit>(7).fill('greenBelt')));
     expect(needsOf(state, id).water, 'the premise: it needs Water').toBeGreaterThan(0);
 
     const trades = play(state);
