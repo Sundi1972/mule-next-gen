@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>e18971f3538e</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>b0561fa4dbab</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -375,7 +375,7 @@
 </table></div>
 
 <h3 id="upkeep-water-use"><code>UPKEEP.waterUse</code></h3>
-<p>Water a raw plot uses a month at production, by what it makes (AM-18, Heiko 5 Nov: &quot;2, crops drink most&quot;). Factories use what their recipe says. The household&#39;s drink is kept back first; an owner short of the rest turns plots off after the Energy pass, biggest use first, until the rest fit, and a plot off makes offOutputShare. A well pays its use from its own output and is never turned off; a plant takes its Water last, from what the others leave. <code>food</code>, the farm&#39;s Water, is AM-18&#39;s switch (production.ts::plotWaterOn): 2 (Heiko&#39;s number), on in full (Heiko, 8 Nov: &quot;each plot should consume water&quot;). At 0 no plot or factory uses Water and the farm halving below is the rule, as before AM-18. Food may suffer if players don&#39;t adapt: that is the design (Heiko, 8 Nov).</p>
+<p>Water a raw plot uses a month at production, by what it makes (AM-18, Heiko 5 Nov: &quot;2, crops drink most&quot;). Factories use factoryWaterUse (below), not their recipe. The household&#39;s drink is kept back first; an owner short of the rest turns plots off after the Energy pass, biggest use first, until the rest fit, and a plot off makes offOutputShare. A well pays its use from its own output and is never turned off; a plant takes its Water last, from what the others leave. <code>food</code>, the farm&#39;s Water, is AM-18&#39;s switch (production.ts::plotWaterOn): 2 (Heiko&#39;s number), on in full (Heiko, 8 Nov: &quot;each plot should consume water&quot;). At 0 no plot or factory uses Water and the farm halving below is the rule, as before AM-18. Food may suffer if players don&#39;t adapt: that is the design (Heiko, 8 Nov).</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>

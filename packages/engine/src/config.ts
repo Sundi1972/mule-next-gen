@@ -274,7 +274,7 @@ export const UPKEEP = {
   offOutputShare: 0.2,
   /**
    * Water a raw plot uses a month at production, by what it makes (AM-18, Heiko 5 Nov: "2, crops drink most").
-   * Factories use what their recipe says. The household's drink is kept back first; an owner short of the rest turns
+   * Factories use factoryWaterUse (below), not their recipe. The household's drink is kept back first; an owner short of the rest turns
    * plots off after the Energy pass, biggest use first, until the rest fit, and a plot off makes offOutputShare. A well
    * pays its use from its own output and is never turned off; a plant takes its Water last, from what the others leave.
    * `food`, the farm's Water, is AM-18's switch (production.ts::plotWaterOn): 2 (Heiko's number), on in full (Heiko,

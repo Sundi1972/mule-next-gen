@@ -278,7 +278,7 @@
 <li>The Water is not taken at this point. You pay it at the month end, when your household and crew drink.</li>
 </ul>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko's ruling of 21 October 2026 (economy design): "Short of Water, your Food farms make half, because they can't irrigate." It makes Water a real need for a Food grower and gives wells a reason to exist beyond the colonists' demand.</p></div>
-<p class="code-ref">In the code on trunk: <code>packages/engine/src/production.ts::runProduction</code> (the <code>dry</code> set) · <code>config.ts::UPKEEP.irrigated</code>, <code>UPKEEP.shortOutputShare</code> (both gone on the colony-economy branch)</p>
+<p class="code-ref">In the code on trunk: <code>packages/engine/src/production.ts::runProduction</code> (the <code>dry</code> set) · <code>config.ts::UPKEEP.irrigated</code>, <code>UPKEEP.shortOutputShare</code> (on the colony-economy branch these are the AM-18-off path only, used when <code>UPKEEP.waterUse.food</code> is 0)</p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
 <h2 id="production-events">Events during production <span class="pill built">In the game</span></h2>
