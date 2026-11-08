@@ -29,7 +29,7 @@ type Frame = {
   wide: string | null;
   /** The emote layer's right edge, when an emote shows. */
   emotesRight: number | null;
-  /** Whether `now` is the rail body's first child; null when the screen gives no `now`. */
+  /** Whether `now` is, or is in, the rail body's first child; null when the screen gives no `now`. */
   nowFirst: boolean | null;
 };
 
@@ -263,7 +263,8 @@ async function read(phone: Page, box?: number | null): Promise<Frame> {
           wide: shell.getAttribute('data-wide'),
           // Anywhere on the page: wherever it is drawn, it must clear the rail.
           emotesRight: document.querySelector('[data-testid=emotes]')?.getBoundingClientRect().right ?? null,
-          nowFirst: now ? body?.firstElementChild === now : null,
+          // The rail's head may wrap `now` with what stays above it (the planning hub's phase line, D1): first, or in the first.
+          nowFirst: now ? !!body?.firstElementChild?.contains(now) : null,
         };
       },
       box,

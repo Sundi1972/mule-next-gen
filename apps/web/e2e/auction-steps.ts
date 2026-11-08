@@ -1195,7 +1195,7 @@ const TABLE_TALK = ['Anyone need Water? Cheap today.', 'Smithore is going to spi
 async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
   const planning = phone.locator('[data-phase=planning]');
   await planning.waitFor({ timeout: PRESS_MS * 5 });
-  await planning.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+  await planning.getByTestId('tab-talk').click({ timeout: PRESS_MS });
   for (const line of TABLE_TALK) {
     await planning.getByPlaceholder('Say something to everyone').fill(line);
     await planning.getByRole('button', { name: 'Send' }).click({ timeout: PRESS_MS });

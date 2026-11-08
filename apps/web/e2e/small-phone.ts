@@ -29,12 +29,12 @@ const RAIL: AuditScope = { roots: ['[data-testid=guide] > header', '[data-testid
 /** A WS4 screen: all of it, less the table chat. */
 const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-testid=table-chat]'] };
 /**
- * Planning proper, the hub: the rail header (where the standing sits), the desks' tabs and the footer. Not yet the
+ * Planning proper, the hub: the rail header (where the standing sits), the tab column and the footer. Not yet the
  * whole stage: at 667 its map tools are 28 px tall and the ballot's ELECTED tag is 9 px, owned by the hub and politics
  * work, so the stage joins this read once those meet B-AC-11.
  */
 const HUB: AuditScope = {
-  roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'],
+  roots: [...RAIL.roots, '[data-testid=tabs-a]', '[data-testid=actions]'],
   skip: RAIL.skip,
   // H-9: folded, the Now card keeps to one line, and that line is its whole title (WS4's sweep A16, 6 Nov: "Plan your
   // month, …" lost the step it names), so no truncation is allowed here.

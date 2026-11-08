@@ -85,9 +85,9 @@ async function main(): Promise<void> {
       check(game.state.colony!.projects.length === 0, `no project before Lena commissions, got ${JSON.stringify(game.state.colony!.projects)}`);
       room().broadcast();
     });
-    // B-AC-35-1, front to back: the Governor's phone commissions through the Colony desk.
+    // B-AC-35-1, front to back: the Governor's phone commissions through the Colony tab.
     const planning = phone.locator('[data-phase=planning]');
-    await planning.getByTestId('desk-colony').click({ timeout: PRESS_MS });
+    await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
     await planning.getByTestId('commission-open').click({ timeout: PRESS_MS });
     await planning.getByTestId(`cat-${PROJECT}`).click({ timeout: PRESS_MS });
     await planning.getByTestId('commission-go').click({ timeout: PRESS_MS });
