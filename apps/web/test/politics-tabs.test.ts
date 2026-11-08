@@ -8,6 +8,7 @@ import { document, type FakeElement } from './fake-dom';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
+import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { POLITICS_TABS } from '../src/phone/hub/politics/slots';
 import type { HubSeat } from '../src/phone/hub/slots';
 
@@ -104,6 +105,14 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(html).toContain('data-testid="laws-in-force"');
       expect(html).not.toContain('data-testid="council-pending"');
       expect(html).not.toContain('data-testid="council-tax"');
+    });
+
+    it('SB-3 (S5-PR-6): the Commission is in Budget and no longer on the Colony desk', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+      const colonyDesk = renderToStaticMarkup(
+        createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table: { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>, view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot }, children: createElement(ColonyWithFacts) }) }),
+      );
+      expect(colonyDesk).not.toContain('commission-open');
+      expect(draw('budget', game)).toContain('data-testid="commission-open"');
     });
 
     it('SB-3: Budget is shown and holds the Commission button', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock

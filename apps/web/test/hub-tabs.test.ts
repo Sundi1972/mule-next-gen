@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { CouncilView, ElectionView, OverruleView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -410,5 +410,53 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('tab-body-overview');
     expect(rail.textContent).toContain('Planning');
     expect(text('ready')).toBe('Not this one');
+  });
+});
+
+describe('SB-3: politics as sub-tabs, only the reveals take the stage', () => {
+  const election = (stage: ElectionView['stage']): ElectionView => ({ stage, ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], result: {} });
+  const council = (stage: CouncilView['stage']): CouncilView => ({ stage, proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 's2', impact: {}, voted: [], done: [], waitingFor: ['s1'], clockMs: 0, revealMs: 4000, result: stage === 'reveal' ? { passed: true, yes: 2, no: 1, tie: false } : null });
+  const overrule = (stage: OverruleView['stage']): OverruleView =>
+    ({ target: 'tax', caller: 's3', stage, restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: ['s1'], clockMs: 0, revealMs: 4000, total: 3, needed: 2, result: stage === 'reveal' ? { passed: true, yes: 2, no: 1 } : null }) as unknown as OverruleView;
+  const cases: [string, Partial<PoliticsView>][] = [
+    ['the election ceremony', { election: election('ceremony'), next: 5 }],
+    ['the law reveal', { council: council('reveal') }],
+    ['the overrule reveal', { overrule: overrule('reveal') }],
+  ];
+
+  it.each(cases)('SB-3 (S5-B-AC-3): %s takes the whole stage, the tabs hidden', (_, pol) => {
+    mount(game({ pol: politics(pol) }));
+    byTestid('hub-situation');
+    expect(findTestid('tabs-a')).toBeUndefined();
+  });
+
+  it.each<[string, Partial<PoliticsView>, string]>([
+    ['the election announce', { election: election('announce'), next: 5 }, 'elections'],
+    ['the election ballot', { election: election('ballot'), next: 5 }, 'elections'],
+    ['the law ballot', { council: council('ballot') }, 'laws'],
+    ['the overrule ballot', { overrule: overrule('ballot') }, 'laws'],
+  ])('SB-3 (S5-B-AC-3): %s does not take the stage; it is in its sub-tab', (_, pol, sub) => {
+    mount(game({ pol: politics(pol) }));
+    byTestid('tabs-a');
+    expect(findTestid('hub-situation')).toBeUndefined();
+    go((n) => n.open({ tab: 'politics', sub }));
+    expect(selected(`sub-${sub}`)).toBe(true);
+  });
+
+  it('S5-B-AC-3 (hub): an open overrule ballot shows its Now line and the ready bar, and the reveal takes the stage', () => {
+    mount(game({ pol: politics({ overrule: overrule('ballot') }) }));
+    expect(text('now')).toContain('Undo the Governor’s tax?');
+    expect(text('ready')).toBe('Cast my vote');
+    rerender(game({ pol: politics({ overrule: overrule('reveal') }) }));
+    byTestid('hub-situation');
+  });
+
+  it.each<[string, string, { sub: string; focus?: string }]>([
+    ['law', 's1', { sub: 'laws' }],
+    ['run', 's1', { sub: 'elections', focus: 'run' }],
+    ['governor', 's2', { sub: 'laws' }],
+  ])('SB-3: the This month row "%s" opens its sub-tab', (key, _self, to) => {
+    const row = TAB_SLOTS.agenda.find((a) => a.key === key)!;
+    expect('desk' in row.opens ? DESK_DOORS[row.opens.desk]?.(row.opens.focus) : undefined).toMatchObject({ tab: 'politics', ...to });
   });
 });
