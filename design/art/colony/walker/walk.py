@@ -62,7 +62,15 @@ for im in bpy.data.images:
                 im.reload()
                 break
 arm = next(o for o in new if o.type == "ARMATURE")
-meshes = [o for o in new if o.type == "MESH"]
+# Only the meshes the rig moves are the figure: a pack may carry helpers (Astronaut A has a 2-unit Icosphere round its
+# root) that would set the height, the scale and the feet wrong. The rest are hidden from the render too.
+def skinned(o):
+    return o.type == "MESH" and (o.find_armature() is not None or any(m.type == "ARMATURE" for m in o.modifiers))
+meshes = [o for o in new if skinned(o)]
+for o in new:
+    if o.type == "MESH" and not skinned(o):
+        o.hide_render = True
+        print(f"COLONY walk: {o.name} is not skinned: left out of the bounds and the render", flush=True)
 for o in new:  # glTF imports may carry their own cameras or lights
     if o.type in ("CAMERA", "LIGHT"):
         bpy.data.objects.remove(o)
