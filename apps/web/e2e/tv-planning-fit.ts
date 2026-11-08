@@ -125,7 +125,10 @@ async function aCallMoment(server: Parameters<typeof held>[0], code: string, tv:
     await tv.locator('[data-phase=planning] [data-testid=tv-promise-row] [data-testid=tv-overrule-called-line]').waitFor({ timeout: PRESS_MS });
     const [c, m] = await Promise.all([moment.boundingBox(), tv.locator('[data-phase=planning] [data-testid=tv-map-box]').boundingBox()]);
     check(c && m && c.y >= m.y - 1 && c.y + c.height <= m.y + m.height + 1, `TV-FIT (${table} people): the overrule call overlays the map box, got the call at y ${c?.y}–${c ? c.y + c.height : '?'} and the box at ${m?.y}–${m ? m.y + m.height : '?'}`);
-    return await planningReads(tv, table, 'an overrule call over the map');
+    const read = await planningReads(tv, table, 'an overrule call over the map');
+    // Read while the call still shows: a moment folds after TV_MOMENT_MS.
+    check(await moment.isVisible(), `TV-FIT (${table} people): the overrule call still lies over the map when its screen is read`);
+    return read;
   } finally {
     await held(server, code, async () => {
       game.viewFor = viewFor;
@@ -201,7 +204,9 @@ async function main(): Promise<void> {
       check(Math.abs(moment.scale - steady.scale) < 0.001, `TV-FIT (${seats} people): a break moment changes no scale, ${steady.scale.toFixed(3)} before, ${moment.scale.toFixed(3)} with its banner over the map`);
       reads.push(moment);
       // SB-5b: an overrule call is a moment over the map too; the promise row says "Overrule called: tax frozen".
-      reads.push(await aCallMoment(server, code, tv, seats));
+      const call = await aCallMoment(server, code, tv, seats);
+      check(Math.abs(call.scale - steady.scale) < 0.001, `TV-FIT (${seats} people): an overrule call changes no scale, ${steady.scale.toFixed(3)} before, ${call.scale.toFixed(3)} with the call over the map`);
+      reads.push(call);
       // SB-5b: the widest budget line (every share moved, welfare to the longest name) keeps the promise row one line.
       reads.push(await theWidestBudget(server, code, tv, seats));
       // The host ready: the table may go on without the others, and the TV must say so.

@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { BudgetView, MuleView, OverruleView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
+import type { BudgetView, CouncilView, MuleView, OverruleView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -104,12 +104,17 @@ describe('SB-5b: the budget and the overrule on the TV planning screen', () => {
     expect(onTv({ overrule: overrule('called') })).not.toContain('data-testid="tv-overrule-call"');
   });
 
-  it("the overrule's ballot and its reveal take the screen; the law ballot and the election come first", () => {
+  it("the overrule's ballot and its reveal take the screen; a law ballot still open comes first", () => {
     for (const stage of ['ballot', 'reveal'] as const) {
       const html = onTv({ overrule: overrule(stage, stage === 'reveal' ? { result: { passed: true, yes: 2, no: 1 } } : {}) });
       expect(html, stage).toContain(`data-testid="tv-overrule-${stage}"`);
       expect(html, stage).not.toContain('data-testid="tv-planning"');
     }
+    // A law ballot still open comes first; the overrule's ballot waits behind it.
+    const council: CouncilView = { stage: 'ballot', proposal: { kind: 'repeal', law: 'landTax' }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], clockMs: 0, revealMs: 0, result: null };
+    const both = onTv({ council, overrule: overrule('ballot') });
+    expect(both).toContain('data-testid="tv-council-voted"');
+    expect(both).not.toContain('data-testid="tv-overrule-ballot"');
   });
 });
 
