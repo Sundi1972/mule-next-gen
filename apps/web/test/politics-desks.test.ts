@@ -10,7 +10,7 @@ import { loadGroundsManifest } from '../src/components/Grounds';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { ColonyDesk } from '../src/phone/hub/desks';
-import { AgendaRow, Hub } from '../src/phone/hub/Hub';
+import { Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
 import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
@@ -19,9 +19,8 @@ import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
 import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
 import { howWords } from '../src/phone/hub/politics/words';
-import { HUB_SLOTS } from '../src/phone/hub/today';
+import { TAB_SLOTS } from '../src/phone/hub/today';
 import { TvElection } from '../src/table/TvElection';
-import { drawnSlots } from '../src/phone/hub/slots';
 
 const player = (id: string, name: string, slot: number, plots = 0): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3), player('s5', 'Pip', 4)];
@@ -138,7 +137,7 @@ function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1, co
 
 /** Lena's whole planning hub, as the game draws it. */
 function inHub(game: MuleView, boards = 1, code = 'MULE'): string {
-  const hub = () => createElement(Hub, { slots: HUB_SLOTS });
+  const hub = () => createElement(Hub, { slots: TAB_SLOTS });
   return onPhone(game, hub, boards, code);
 }
 
@@ -835,21 +834,16 @@ describe("the new Governor's promise (C68, E-7)", () => {
 });
 
 describe('the hub door (E-1)', () => {
-  it('C66, E-1: "Throw your hat in the ring" leads This month in any month before an election, and names your candidacy once you run', () => {
-    /** "This month" as the hub draws it for Lena from HUB_SLOTS. */
-    const agenda = (game: MuleView) => {
-      const seat = { view: game, me: game.me!, self: game.players[0]! };
-      return onPhone(game, () => createElement(AgendaRow, { items: drawnSlots(HUB_SLOTS, seat).agenda, seat, note: '', onOpen: () => {} }));
-    };
-    const game = view(politics({ election: null }), me(), { month: 2 });
-    expect(textOf(agenda(game), 'agenda-run')).toBe('Throw your hat in the ringRun for Governor · election in month 4');
-    expect(agenda(game).match(/data-testid="agenda-([^"]+)"/)?.[1], 'first, and drawn strong').toBe('run');
-    expect(tagOf(agenda(game), 'agenda-run')).toMatch(/border-2 border-holo/);
-    expect(HUB_SLOTS.agenda.find((a) => a.key === 'run')?.opens).toEqual({ desk: 'council', focus: 'run' });
+  it('C66, E-1: "Throw your hat in the ring" is in This month in any month before an election, a door into the Council desk, and names your candidacy once you run (drawn: hub-tabs.test.ts)', () => {
+    const run = TAB_SLOTS.agenda.find((a) => a.key === 'run')!;
+    const seat = (game: MuleView) => ({ view: game, me: game.me!, self: game.players[0]! });
+    const words = (game: MuleView) => (run.show?.(seat(game)) ?? true ? `${run.title(seat(game))} · ${run.sub(seat(game))}` : null);
+    expect(words(view(politics({ election: null }), me(), { month: 2 }))).toBe('Throw your hat in the ring · Run for Governor · election in month 4');
+    expect(run.lead?.(seat(view(politics({ election: null }), me(), { month: 2 }))), 'drawn strong').toBe(true);
+    expect(run.opens).toEqual({ desk: 'council', focus: 'run' });
     const running = view(politics({ election: null, candidates: { governor: ['s1'] }, promises: { s1: CAP_4 } }), me({ running: 'governor' }), { month: 2 });
-    expect(textOf(agenda(running), 'agenda-run')).toBe('Throw your hat in the ringYou run for Governor · up to 4%');
-    const last = view(politics({ election: null, next: null }), me(), { month: 11 });
-    expect(agenda(last), 'no election ahead').not.toContain('agenda-run');
+    expect(words(running)).toBe('Throw your hat in the ring · You run for Governor · up to 4%');
+    expect(words(view(politics({ election: null, next: null }), me(), { month: 11 })), 'no election ahead').toBeNull();
   });
 });
 

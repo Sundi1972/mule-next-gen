@@ -126,11 +126,8 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
 
     const planning = phone.locator('[data-phase=planning]');
     const hubMap = planning.getByTestId('hub-map');
-    // Now open, as a player who read it leaves it: the rail then holds more above the report than its box can show, so
-    // the report fits only by keeping itself in view (a strike alert above does the same). A Governor's strike card is
-    // drawn whole, with no fold, and is taller still.
-    const folded = planning.getByTestId('now');
-    if (!(await planning.getByTestId('now-fold').count()) && (await folded.count())) await folded.click({ timeout: STEP_MS });
+    // The rail holds the phase line and the Now line above the report (a strike alert or a Governor's strike card, drawn
+    // whole, is taller still), so the report fits only by keeping itself in view.
     await planning.getByTestId('tool-drone').click({ timeout: STEP_MS });
     for (const p of picks) await tapPlot(phone, hubMap, p, state.width, STEP_MS);
     const scan = planning.getByTestId('scan');

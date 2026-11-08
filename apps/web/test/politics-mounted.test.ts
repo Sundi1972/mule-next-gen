@@ -16,7 +16,7 @@ import type { TableClient } from '../src/net/client';
 let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Hub: typeof import('../src/phone/hub/Hub').Hub;
-let HUB_SLOTS: typeof import('../src/phone/hub/today').HUB_SLOTS;
+let TAB_SLOTS: typeof import('../src/phone/hub/today').TAB_SLOTS;
 let ElectionDay: typeof import('../src/phone/hub/politics/ElectionDay').ElectionDay;
 let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPicks;
 let GovernorDesk: typeof import('../src/phone/hub/politics/Governor').GovernorDesk;
@@ -28,7 +28,7 @@ beforeAll(async () => {
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Hub } = await import('../src/phone/hub/Hub'));
-  ({ HUB_SLOTS } = await import('../src/phone/hub/today'));
+  ({ TAB_SLOTS } = await import('../src/phone/hub/today'));
   ({ ElectionDay, forgetPicks } = await import('../src/phone/hub/politics/ElectionDay'));
   ({ GovernorDesk } = await import('../src/phone/hub/politics/Governor'));
   // The fake document makes no SVG namespace; a PlayerMark's svg is an element like any other here.
@@ -232,7 +232,7 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     pick('abstain');
     expect(checked('abstain')).toBe(true);
     unmount();
-    const html = renderToStaticMarkup(onPhone(ballot(), () => createElement(Hub, { slots: HUB_SLOTS }), 'ZORP'));
+    const html = renderToStaticMarkup(onPhone(ballot(), () => createElement(Hub, { slots: TAB_SLOTS }), 'ZORP'));
     for (const option of ['s1', 's2', 'abstain']) expect(html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0], option).not.toMatch(/checked/);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"[^>]*>Cast my vote</);
   });
