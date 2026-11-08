@@ -416,7 +416,11 @@ export interface MyPoliticsView {
      * NOT mean anyone knows it was them: others know only when `how` is not null (a guard, caught on the spot, or an
      * investigation). A worked cut nobody saw is `public: true` with `how: null`.
      */
-    mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];
+    /**
+     * outcome 'void': the order found nothing to do (the plot was sold, had no MULE, or was the orderer's own); it was not
+     * charged, and only the orderer's own list shows it. Its `public` is false and its `how` null.
+     */
+    mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] | 'void' })[];
   } | null;
   /** The Sheriff's desk (slice 4), only on the sitting Sheriff's view. Optional only for older fixtures. */
   sheriff?: {
