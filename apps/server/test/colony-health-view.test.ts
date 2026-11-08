@@ -6,15 +6,18 @@ import { fakeContext, seats } from './fake-context.js';
 
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
-/** Runs `body` with colony health switched on, and switches it back off whatever happens. */
-function withHealth<T>(body: () => T): T {
-  HEALTH.enabled = true;
+/** Runs `body` with colony health set to `on`, and puts back what it was whatever happens. */
+function withHealthAs<T>(on: boolean, body: () => T): T {
+  const was = HEALTH.enabled;
+  HEALTH.enabled = on;
   try {
     return body();
   } finally {
-    HEALTH.enabled = false;
+    HEALTH.enabled = was;
   }
 }
+const withHealth = <T>(body: () => T): T => withHealthAs(true, body);
+const withoutHealth = <T>(body: () => T): T => withHealthAs(false, body);
 
 /** A started game, politics on unless asked otherwise, with no election open. */
 function table(politics = true) {
@@ -77,10 +80,11 @@ describe('needs C19: the view carries colony health and the run of Medicine-shor
   });
 
   it('needs B-AC-18 (negative): with health off, or politics off, colonyHealth is null', () => {
-    const off = table();
-    upkeepWith(off.state, NONE);
-    expect(HEALTH.enabled, 'health ships off').toBe(false);
-    expect(sent(off.game), 'health off').toBeNull();
+    withoutHealth(() => {
+      const off = table();
+      upkeepWith(off.state, NONE);
+      expect(sent(off.game), 'health off').toBeNull();
+    });
 
     withHealth(() => {
       const plain = table(false);
@@ -98,7 +102,7 @@ describe("the month end's news line (WS3's named edit)", () => {
     return game.viewFor(null).news[0];
   };
 
-  it('a Medicine-only shortage with the colony fed says the store ran out of Medicine, never that colonists are leaving', () => {
+  it('FM-news-leaving: a Medicine-only shortage with the colony fed says the store ran out of Medicine, never that colonists are leaving', () => {
     withHealth(() => {
       const { game, state } = table();
       for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
@@ -111,12 +115,45 @@ describe("the month end's news line (WS3's named edit)", () => {
     });
   });
 
-  it('a Food shortage that leaves the colonists hungry still says they are leaving', () => {
+  it('FM-news-leaving: colonists leave in the news only when the upkeep shrank the colony: no Food says so, 5% short of it (the colony still grows) does not', () => {
+    /** The news after an upkeep with 400 colonists and `food` Food on the store's shelf, and the colony's size before and after it. */
+    const upkeepWithFood = (food: number) => {
+      const { game, state } = table();
+      for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
+      state.colonists = 400;
+      Object.assign(state.store.stock, { food, water: 500 });
+      advancePhase(state);
+      return { news: upkeepNews(game), after: state.colonists, hungry: state.history.at(-1)!.colonistsHungry };
+    };
+    const none = upkeepWithFood(0);
+    expect(none.after, 'the premise: the colony shrank').toBeLessThan(400);
+    expect(none.news).toBe('The store ran out of food! Colonists are leaving.');
+
+    const slightly = upkeepWithFood(19);
+    expect(slightly.hungry, 'the premise: 1 of their 20 Food went missing').toBe(true);
+    expect(slightly.after, 'the premise: within the tolerance the colony still grew').toBeGreaterThan(400);
+    expect(slightly.news).toBe('The store ran out of food.');
+  });
+
+  it('FM-news-leaving: a colony that shrank with nothing short, as Collapse air drives colonists out, says they are leaving, never that it is fed and growing', () => {
     const { game, state } = table();
     for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
-    Object.assign(state.store.stock, { food: 0, water: 500 });
+    state.colonists = 400;
+    Object.assign(state.store.stock, { food: 500, water: 500, energy: 500, medicine: 500 });
+    state.air = 85;
     advancePhase(state);
-    expect(state.history.at(-1)!.colonistsHungry).toBe(true);
-    expect(upkeepNews(game)).toBe('The store ran out of food! Colonists are leaving.');
+    expect(state.history.at(-1)!.shortages, 'the premise: nothing ran out').toEqual([]);
+    expect(state.colonists, 'the premise: Collapse air shrank the colony').toBeLessThan(400);
+    expect(upkeepNews(game)).toBe('Colonists are leaving.');
+  });
+
+  it('FM-news-leaving: a colony that held its size is not leaving, even short of Food', () => {
+    const { game, state } = table();
+    for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
+    state.colonists = 0;
+    Object.assign(state.store.stock, { food: 0, water: 500, energy: 500, medicine: 500 });
+    advancePhase(state);
+    expect(state.colonists, 'the premise: an empty colony stays empty').toBe(0);
+    expect(upkeepNews(game)).not.toMatch(/leaving/);
   });
 });

@@ -18,6 +18,7 @@ import {
   UPKEEP,
   type GameState,
 } from '../src/index.js';
+import { withoutHealth } from './health-switch.js';
 
 // The colony needs spec (docs/specs/2026-11-06-colony-needs.md), §1 C3-C5 and §2 RULE-2..RULE-6: how short the
 // colonists went moves their mood, their memory of it, the colony's size and the unrest-band events' odds.
@@ -54,7 +55,7 @@ function toAuction(state: GameState): GameState {
 
 /**
  * Runs the month's upkeep with 400 colonists (a need of 20 Food and 20 Water) at mood `mood`, the store holding `food`
- * Food and all the Water they need. Returns the state after it.
+ * Food and all the Water they need, colony health off. Returns the state after it.
  */
 function upkeepWith(state: GameState, food: number, mood = HAPPINESS.start, water = 200): GameState {
   toAuction(state);
@@ -62,7 +63,8 @@ function upkeepWith(state: GameState, food: number, mood = HAPPINESS.start, wate
   if (state.colony) state.colony.happiness = mood;
   Object.assign(state.store.stock, { food, water });
   expect(shipInPort(state), 'the premise: no export ship takes from the store this upkeep').toBe(false);
-  advancePhase(state);
+  // Health off: these promises are hardship's alone; hunger's sickness is colony-health.test.ts's.
+  withoutHealth(() => advancePhase(state));
   expect(state.phase).toBe('upkeep');
   return state;
 }

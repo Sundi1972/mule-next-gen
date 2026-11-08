@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, cloneForSim, colonistMedicineNeed, createGame, exportDemand, HEALTH, monthlyDemand, POLLUTION, RECIPES, UPKEEP, type GameState } from '../src/index.js';
 import { game, to, worked } from './fixtures/food-month.js';
+import { withHealth, withoutHealth } from './health-switch.js';
 
 /** Month 1's production with `colonists` in the colony and no Electronics works. */
 function colonyOf(colonists: number): GameState {
@@ -116,16 +117,13 @@ describe("needs C13: the colonists' Medicine demand reads colony health (RULE-11
   const SMOG = POLLUTION.bands.find((b) => b.name === 'smoggy')!.from;
 
   it("needs B-AC-12 (the Medicine case): health on, h at the cap gives the colonists' Medicine demand +40%; health off gives today's", () => {
-    expect(colonistsMedicine(HEALTH.cap, 0), 'health off: one per colonistsPerMedicine').toBeCloseTo(today, 9);
-    HEALTH.enabled = true;
-    try {
+    expect(withoutHealth(() => colonistsMedicine(HEALTH.cap, 0)), 'health off: one per colonistsPerMedicine').toBeCloseTo(today, 9);
+    withHealth(() => {
       expect(colonistsMedicine(HEALTH.cap, 0)).toBeCloseTo(today * 1.4, 9);
       expect(colonistsMedicine(HEALTH.cap, SMOG), 'dirty air still multiplies it').toBeCloseTo(today * 1.4 * POLLUTION.sickMedicineDemand, 9);
       expect(colonistsMedicine(0, 0), 'h 0: today\'s').toBeCloseTo(today, 9);
-    } finally {
-      HEALTH.enabled = false;
-    }
-    expect(colonistsMedicine(HEALTH.cap, SMOG), "health off in dirty air: today's dirty-air demand").toBeCloseTo(today * POLLUTION.sickMedicineDemand, 9);
+    });
+    expect(withoutHealth(() => colonistsMedicine(HEALTH.cap, SMOG)), "health off in dirty air: today's dirty-air demand").toBeCloseTo(today * POLLUTION.sickMedicineDemand, 9);
   });
 });
 
@@ -173,15 +171,12 @@ describe("needs C13: the store's demand is players + crews + colonists (RULE-11)
   }
 
   it("needs B-AC-12 (the Medicine case): health on, h 0.3, 4 seats holding no Medicine: the crews' cure adds 4; health off, today's", () => {
-    expect(playersMedicine(0.3), 'health off: no crew falls sick').toBeCloseTo(0, 9);
-    HEALTH.enabled = true;
-    try {
+    expect(withoutHealth(() => playersMedicine(0.3)), 'health off: no crew falls sick').toBeCloseTo(0, 9);
+    withHealth(() => {
       expect(0.3, 'the premise: h at or over crewSickFrom').toBeGreaterThanOrEqual(HEALTH.crewSickFrom);
       expect(playersMedicine(0.3)).toBeCloseTo(4, 9);
       expect(playersMedicine(0.3, DIRTY), 'in dirty air the cure is still 1 a seat: the air factor is the colonists\'').toBeCloseTo(4, 9);
       expect(playersMedicine(0), "h 0: no crew falls sick, today's").toBeCloseTo(0, 9);
-    } finally {
-      HEALTH.enabled = false;
-    }
+    });
   });
 });
