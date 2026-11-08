@@ -22,7 +22,7 @@ import {
   type DealRow,
 } from '../components/AuctionParts';
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, paidOutThisMonth, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
@@ -848,7 +848,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
               <LeagueTable view={game} density="tv" />
             </MonthScoreColumn>
             <div className="flex flex-col gap-4">
-              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
+              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} paidOut={paidOutThisMonth(game.colony, game.month)} />
               <ColonyPanel view={game} density="tv" besideGauges />
               {/* One line a project, so six seats fit TV-FIT's floor; the funding, pips and plaques are on the phones. */}
               <BuildSite colony={game.colony} players={game.players} size="tv" compact />
