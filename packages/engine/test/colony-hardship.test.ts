@@ -56,11 +56,11 @@ function toAuction(state: GameState): GameState {
  * Runs the month's upkeep with 400 colonists (a need of 20 Food and 20 Water) at mood `mood`, the store holding `food`
  * Food and all the Water they need. Returns the state after it.
  */
-function upkeepWith(state: GameState, food: number, mood = HAPPINESS.start): GameState {
+function upkeepWith(state: GameState, food: number, mood = HAPPINESS.start, water = 200): GameState {
   toAuction(state);
   state.colonists = 400;
   if (state.colony) state.colony.happiness = mood;
-  Object.assign(state.store.stock, { food, water: 200 });
+  Object.assign(state.store.stock, { food, water });
   expect(shipInPort(state), 'the premise: no export ship takes from the store this upkeep').toBe(false);
   advancePhase(state);
   expect(state.phase).toBe('upkeep');
@@ -99,6 +99,9 @@ describe('needs C3: the mood reads how short the colonists went (RULE-3, RULE-4)
     const state = upkeepWith(game(), 10);
     expect(state.colony!.happiness).toBe(56);
     expect(state.colonists).toBe(380);
+    const thirsty = upkeepWith(game(), 20, HAPPINESS.start, 10);
+    expect(thirsty.colony!.happiness, 'the same short of Water: the worse of the two counts').toBe(56);
+    expect(thirsty.colonists).toBe(380);
   });
 
   it('needs B-AC-3: that colony fed in full the next month ends at mood 59, not 60, and grows 3% (Restless)', () => {
@@ -133,6 +136,8 @@ describe('needs C4: the colony grows or shrinks by how short it went (RULE-5)', 
     expect(growthRate(at(HAPPINESS.bands.unhappy - 1), 1), 's 1 Unrest').toBeCloseTo(0.85, 9);
     expect(growthRate(at(content, false), 0.5), 'politics off: no offset').toBeCloseTo(0.95, 9);
     expect(growthRate(at(content, false), 0), 'politics off, fed').toBeCloseTo(1.04, 9);
+    expect(growthRate(at(content, false), 1), 'politics off, nothing to eat').toBeCloseTo(0.9, 9);
+    expect(growthRate(at(content, false), 0.2), 'politics off, a fifth short').toBeCloseTo(0.98, 9);
     expect(growthRate(at(HAPPINESS.bands.thriving), 0), 'Thriving draws settlers').toBeCloseTo(1.06, 9);
     expect(growthRate(at(HAPPINESS.bands.restless), 0), 'Restless loses some').toBeCloseTo(1.03, 9);
     expect(growthRate(at(HAPPINESS.bands.unhappy), 0.2), 'Unhappy, 20% short: 1 − 0.02 − 0.03').toBeCloseTo(0.95, 9);
@@ -157,6 +162,8 @@ describe('needs C4: the colony grows or shrinks by how short it went (RULE-5)', 
     const state = upkeepWith(game(false), 10);
     expect(state.colonists).toBe(380);
     expect(state.colony).toBeNull();
+    expect(upkeepWith(game(false), 0).colonists, 'nothing to eat: 10% fewer, not the old flat 5%').toBe(360);
+    expect(upkeepWith(game(false), 16).colonists, 'a fifth short: 2% fewer').toBe(392);
   });
 });
 
@@ -176,6 +183,7 @@ describe('needs C5: the memory of hardship raises the unrest-band events\' odds 
     expect(chance(unrest, 0), 'no memory: the band\'s points').toBeCloseTo(strike.mood.unrest, 9);
     expect(chance(unrest, 1)).toBeCloseTo(strike.mood.unrest * 1.25, 9);
     expect(chance(unrest, HARDSHIP.memoryCap), 'at the cap: ×1.5').toBeCloseTo(strike.mood.unrest * 1.5, 9);
+    expect(chance(HAPPINESS.bands.unhappy, HARDSHIP.memoryCap), 'an Unhappy row at the cap: ×1.5').toBeCloseTo(strike.mood.unhappy * 1.5, 9);
     expect(eventChance(planning(HAPPINESS.bands.restless, 2), EVENTS.colony.emigrationWave, 'planning')).toBeCloseTo(EVENTS.colony.emigrationWave.mood.restless * 1.5, 9);
 
     const wave = EVENTS.colony.immigrationWave;
