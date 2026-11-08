@@ -8,7 +8,7 @@ import { NewsWords } from '../components/SeatWords';
 import { player, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { usePhoneGame } from './game';
-import { DealComposerSheet, DealsInThread, type DraftKind } from './hub/politics/Deals';
+import { DealComposerSheet, DealsInThread, noNewCard, type DraftKind } from './hub/politics/Deals';
 import { PlayerCard, RepChip } from './hub/politics/parts';
 
 const ALL: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'];
@@ -133,7 +133,7 @@ export function Chat({ focus }: { focus?: ChatFocus }) {
   const target = player(view, to);
   // A card is offered in planning only (S3-RULE-2 row 2), and one unanswered card to a player at a time (row 5).
   const planning = view.phase === 'planning' && !!view.politics;
-  const waiting = !!to && (me.deals?.cards ?? []).some((c) => c.from === me.id && c.to === to && c.status === 'offered');
+  const waiting = to ? noNewCard(view, me, to) : null;
 
   const send = () => {
     client.chat(text, to ?? undefined);
@@ -204,8 +204,8 @@ export function Chat({ focus }: { focus?: ChatFocus }) {
             variant="outline"
             type="button"
             className="shrink-0 px-2.5"
-            disabled={waiting}
-            title={waiting ? `${target.name} has not answered your last card` : undefined}
+            disabled={!!waiting}
+            title={waiting ?? undefined}
             aria-label={`Offer ${target.name} a deal card`}
             onClick={() => setComposing({ to: target.id })}
             data-testid="add-deal"
