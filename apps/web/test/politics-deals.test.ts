@@ -252,6 +252,19 @@ describe('the reputation chip (S3-C19)', () => {
     expect(text('reason-caught-3-1'), 'moves.caught times the ban').toBe(`M3Caught sabotaging−${-POLITICS.reputation.moves.caught * 2}`);
   });
 
+  it('S3-B-AC-6: with refuseBelow over repLow, a fair name under it says AI players turn down cards under refuseBelow', () => {
+    const deals = POLITICS.ai.deals as { refuseBelow: number };
+    const was = deals.refuseBelow;
+    try {
+      deals.refuseBelow = repLow + 10;
+      mount(gameFor(myView(LENA, [])), (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
+      expect(byTestid(`who-${KAI}-rep`).getAttribute('aria-label'), 'Kai sits at repLow: a fair name').toContain(`Kai: reputation ${repLow}. Fair name, but AI players turn down cards under ${repLow + 10}. `);
+      expect(byTestid(`who-${OSSA}-rep`).getAttribute('aria-label'), 'over it: no warning').toContain(`Ossa: reputation ${repHigh - 1}. Fair name. `);
+    } finally {
+      deals.refuseBelow = was;
+    }
+  });
+
   it("S3-B-AC-6: the chip's words take the vote from POLITICS.weight.repVotes and the AI refusal from POLITICS.ai.deals.refuseBelow, its own threshold", () => {
     const weight = POLITICS.weight as { repVotes: number };
     const deals = POLITICS.ai.deals as { refuseBelow: number };
