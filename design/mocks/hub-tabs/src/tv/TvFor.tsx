@@ -5,24 +5,35 @@ import { TvCouncil } from '../../../../../apps/web/src/table/TvCouncil';
 import { TvElection } from '../../../../../apps/web/src/table/TvElection';
 import { TvOverrule } from './copied/TvOverrule';
 import { TvMonthEnd } from './TvMonthEnd';
-import { TvPlanning } from './TvPlanning';
+import { TV_EVENT_HOLD_S, TvPlanning, type EventKind } from './TvPlanning';
 import { tvClient, tvScreen, type MockWorld, type TvFocus, type TvScreen } from './world';
 
+export { TV_EVENT_HOLD_S };
+
 export type { TvFocus } from './world';
+
+/** The steps that are an event's moment: the TV opens on that kind of event unfolded. Every other step opens folded. */
+const MOMENT: Partial<Record<TvFocus, EventKind>> = { 'deal-broken': 'break', 'overrule-called': 'call' };
 
 /**
  * The table's TV at this step of the month, at its design size (1280 × 720); the caller scales it. It routes as
  * TableApp's TvGame does: the month end in upkeep; an open ballot (election, law, overrule) takes the screen; else
  * planning. The TV holds nothing a phone keeps private: a card offered between two players and the Sheriff's guard
  * leave it as it was (TV_NOTE says so on the index).
+ *
+ * `eventFolded`: whether the step's own event, which the world already holds, is old news (folded: a break in the news,
+ * a call on the promise row) or the moment it happens (TV_EVENT_HOLD_S over the map, then it folds). Default: the moment
+ * for 'deal-broken' (its break) and 'overrule-called' (its call); folded for every other focus, and any other event. An event that arrives while the step is open (a
+ * tap on a phone) is always a moment. A new focus starts the screen afresh.
  */
-export function TvFor({ world, focus }: { world: MockWorld; focus: TvFocus }): JSX.Element {
+export function TvFor({ world, focus, eventFolded }: { world: MockWorld; focus: TvFocus; eventFolded?: boolean }): JSX.Element {
   const screen = useMemo(() => tvScreen(world), [world]);
-  return <TvScreenView screen={screen} focus={focus} />;
+  const opensOn = eventFolded === true ? null : (MOMENT[focus] ?? null);
+  return <TvScreenView key={`${focus}:${opensOn}`} screen={screen} focus={focus} opensOn={opensOn} />;
 }
 
-/** The routed screen for a view already built (TvFor's body; the solo page feeds it a view with a full market). */
-export function TvScreenView({ screen, focus }: { screen: TvScreen; focus: TvFocus }): JSX.Element {
+/** The routed screen for a view already built (TvFor's body; the solo page feeds it views at other table sizes). */
+export function TvScreenView({ screen, focus, opensOn = null }: { screen: TvScreen; focus: TvFocus; opensOn?: EventKind | null }): JSX.Element {
   const client = useMemo(() => tvClient(screen), [screen]);
   const { table, game } = screen;
   const politics = game.politics;
@@ -32,10 +43,10 @@ export function TvScreenView({ screen, focus }: { screen: TvScreen; focus: TvFoc
   else if (politics?.election && politics.election.stage !== 'over') body = <TvElection table={table} game={game} />;
   else if (politics?.council && politics.council.stage !== 'over') body = <TvCouncil game={game} />;
   else if (overrule === 'ballot' || overrule === 'reveal') body = <TvOverrule game={game} />;
-  else body = <TvPlanning table={table} game={game} />;
+  else body = <TvPlanning table={table} game={game} opensOn={opensOn} />;
   return (
     <ClientProvider client={client}>
-      <div className="h-[720px] w-[1280px] overflow-hidden bg-table" data-testid="tv" data-focus={focus}>
+      <div className="h-[720px] w-[1280px] overflow-hidden bg-table" data-testid="tv" data-focus={focus} data-opens-on={opensOn ?? undefined}>
         {body}
       </div>
     </ClientProvider>
@@ -44,13 +55,13 @@ export function TvScreenView({ screen, focus }: { screen: TvScreen; focus: TvFoc
 
 /** One line per step for the index: what the TV shows, and where it shows nothing, that it does so on purpose. */
 export const TV_NOTE: Record<TvFocus, string> = {
-  planning: 'TV: planning as on trunk: the header and ready count, the Governor’s promise, the budget line, the map, who we wait for, prices, news, the ready list with reputation chips.',
+  planning: 'TV: planning as on trunk: the header and ready count, the Governor’s promise with the budget on its row, the map, who we wait for, prices, news, the ready list with reputation chips.',
   'deal-offered': 'TV: unchanged. The TV shows nothing of a private offer: a card is private to its two players.',
-  'deal-broken': 'TV: the break banner under the header, in the news’s words (“· AI” after a computer seat’s name), the drop beside the breaker’s chip.',
-  'budget-set': 'TV: the header’s budget line: Projects, Welfare → whom, kept; a share the Governor moved in holo, with what it was.',
-  'overrule-called': 'TV: while planning runs, the call at the head of the side (who called it, the tax start → now, what it needs); once the ballot opens, the ballot: who has voted, never how.',
+  'deal-broken': `TV: the broken-promise banner shows for ${TV_EVENT_HOLD_S} s and then lives in the news, a change from the deal-card mock Heiko approved.`,
+  'budget-set': 'TV: the budget on the Governor’s row: Projects, Welfare → whom, kept; a share the Governor moved in holo, with what it was.',
+  'overrule-called': `TV: the call shows over the map for ${TV_EVENT_HOLD_S} s, then folds to “Overrule called: tax frozen” on the Governor’s row; once planning ends, the ballot takes the screen: who has voted, never how.`,
   'overrule-reveal': 'TV: the overrule’s reveal: yes and no out of all the table’s votes, the needed mark, the stamp; the budget line at its foot.',
   guarding: 'TV: unchanged. Guards are secret: the TV shows nothing of the Sheriff’s guard.',
-  waiting: 'TV: the ready list and “Waiting for …”, each name with its reputation chip.',
+  waiting: 'TV: “Waiting for …” with each name, and the ready list under it with every reputation chip.',
   'month-end': 'TV: the month end: the league with chips and the breaker’s “✗ −N” (a stand-in for WS4’s mark), “fund … · paid out …” in the Wealth note; no broken-cards box (TV-FIT).',
 };

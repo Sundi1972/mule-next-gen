@@ -1,13 +1,13 @@
 import type { MuleView, TableView } from '@mule/protocol';
 import { cx, GoodTag, HoloMap, PlayerMark, SeatSpeciesProvider } from '@mule/ui';
-import { Fragment } from 'react';
+import { Fragment, useEffect, useReducer, useRef } from 'react';
 import { foldedClaudeWords, playsBuiltIn, STATUS_CHIP } from '../../../../../apps/web/src/components/ClaudeSeat';
 import { StrikeMap, StrikeWaiting } from '../../../../../apps/web/src/components/Strike';
 import { fmt, mapTiles, PHASE_NAME, seatSpecies, secondsUntil, toSlot } from '../../../../../apps/web/src/game/derive';
 import { ordinal } from '../../../../../apps/web/src/game/month-end';
 import { useServerNow } from '../../../../../apps/web/src/net/react';
 import { claudeIn, connectedIn, hostMayContinue, readyRows, stillPlanning } from '../../../../../apps/web/src/phone/hub/ready';
-import { ReadyCount } from '../../../../../apps/web/src/phone/hub/ReadyBar';
+import { ReadyCount, WaitingFor } from '../../../../../apps/web/src/phone/hub/ReadyBar';
 import { placesOf } from '../../../../../apps/web/src/phone/hub/standing';
 import { TvHeader } from '../../../../../apps/web/src/table/TableApp';
 import { TvBody } from '../../../../../apps/web/src/table/TvFit';
@@ -16,23 +16,56 @@ import { RepChip } from './copied/RepChip';
 import { NewsWords } from './copied/SeatWords';
 import { TvBudgetLine, TvOverruleCall } from './copied/TvBudgetLine';
 import { TvDeals } from './copied/TvDeals';
-import { WaitingFor } from './copied/WaitingFor';
-import { useTvVariant } from './variant';
+import { eventsOf } from './world';
+
+/** How long a break or an overrule call holds the TV as a moment before it folds (WS6 ruling, 8 Nov; WS4 accepted). */
+export const TV_EVENT_HOLD_S = 8;
 
 /*
  * GRAFT TARGET: apps/web/src/table/TableApp.tsx, TvGame's planning branch (WS4), which TableApp.tsx does not export:
  * copied from trunk (feat/strategist at 739fefb0, the same file as this mock's base) with the slices' changes, each
- * marked CHANGE and each taken from the approved mock that owns it, not redrawn here:
- *   1. the budget line under the Governor's promise (politics-budget P14, TvBudgetLine);
- *   2. the break banner under that (politics-deals P5; the real component, TvDeals on ws7-s3-phone-pr);
- *   3. an overrule call at the head of the side, above who the table waits for (politics-budget P14, TvOverruleCall);
- *   4. the reputation chip after each name in the waiting box and the ready list (politics-deals S3-C19, CHANGE 2;
- *      WaitingFor's `view` as on ws7-s3-phone-pr);
- *   5. the news through NewsWords, so a computer seat reads "Ossa · AI" by its id (ws7-s3-phone-pr's News).
- * Placement B (variant.tsx) moves CHANGE 1 onto the promise's row and CHANGE 2 to the side's head, for TV-FIT.
- * Left out, as the mock has no clock or events: TvEventLayer, and the grounds opener before the month end.
+ * marked CHANGE, the parts taken from the approved mocks that own them, not redrawn here. Placed for TV-FIT (WS6 ruling
+ * and WS4's three changes, PM-ruled 8 Nov), so that every steady state holds 0.7 with a full market:
+ *   1. the budget line on the Governor's-promise row, right-aligned (politics-budget P14, TvBudgetLine); while an
+ *      overrule call is held, that side says "Overrule called: tax frozen" instead;
+ *   2. a break and an overrule call are MOMENTS: for TV_EVENT_HOLD_S the real banner (TvDeals) or call panel
+ *      (TvOverruleCall) overlays the top of the map box, out of flow like the event show's cards, so the body's scale
+ *      never moves; then it folds: the break lives in the news (the server's line, newest kept whole), the call in 1;
+ *      a change from the politics-deals mock Heiko approved, whose banner stayed under the header all month;
+ *   3. the reputation chip after each name in the ready list (politics-deals S3-C19); the waiting box above it shows
+ *      none (trunk's WaitingFor, WS4 change c): the list already has them;
+ *   4. the news through NewsWords, so a computer seat reads "Ossa · AI" by its id (ws7-s3-phone-pr's News).
+ * Left out, as the mock has no clock or events: TvEventLayer, and the grounds opener before the month end. The moment's
+ * clock is the screen's own (performance.now); the build times it from the server's clock, as the event show does.
  */
-export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
+
+/** The kinds of event a TV moment announces (world.ts eventsOf: `break:<card>`, `call:<target>:<caller>`). */
+export type EventKind = 'break' | 'call';
+
+/**
+ * Which events are a moment now: an event is one when this screen first sees it, for TV_EVENT_HOLD_S. What the screen
+ * opens on is old news, but for the kind `opensOn` names (the step that is that event). One that arrives later, while
+ * the screen is up (a tap on a phone), is always a moment.
+ */
+function useMoments(events: string[], opensOn: EventKind | null): Set<string> {
+  const first = useRef<Map<string, number> | null>(null);
+  const now = performance.now();
+  if (first.current === null) first.current = new Map(events.map((e) => [e, opensOn && e.startsWith(`${opensOn}:`) ? now : -Infinity]));
+  for (const e of events) if (!first.current.has(e)) first.current.set(e, now);
+  const hold = TV_EVENT_HOLD_S * 1000;
+  const live = events.filter((e) => now - first.current!.get(e)! < hold);
+  // Draw again when the next moment folds.
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  const next = Math.min(...live.map((e) => first.current!.get(e)! + hold - now));
+  useEffect(() => {
+    if (!Number.isFinite(next)) return;
+    const t = setTimeout(tick, Math.max(0, next) + 20);
+    return () => clearTimeout(t);
+  });
+  return new Set(live);
+}
+
+export function TvPlanning({ table, game, opensOn = null }: { table: TableView<MuleView>; game: MuleView; opensOn?: EventKind | null }) {
   const now = useServerNow(200);
   const tiles = mapTiles(game);
   const connected = connectedIn(table.seats);
@@ -41,39 +74,39 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
   const host = game.players.find((p) => p.id === table.hostId);
   const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
   const places = placesOf(game);
-  const b = useTvVariant().variant === 'b';
+  const moments = useMoments(eventsOf(game), opensOn);
+  const called = game.politics?.overrule?.stage === 'called';
+  // The moment's banner draws only the breaks that are a moment now: TvDeals as it is, given those cards.
+  const breaking = game.politics ? { ...game, politics: { ...game.politics, brokenDeals: (game.politics.brokenDeals ?? []).filter((c) => moments.has(`break:${c.id}`)) } } : game;
+  const calling = [...moments].some((e) => e.startsWith('call:'));
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink" data-phase="planning" data-testid="tv-planning">
         <div className="flex flex-col gap-3">
           <TvHeader game={game} title={PHASE_NAME.planning} seconds={secondsUntil(game.phaseEndsAt, now)} ready={<ReadyCount players={game.players} tv />} />
-          {b ? (
-            // B: one row, the promise whole on the left (its own top margin is the row's), the budget wrapping in the rest.
-            <div className="mt-2 flex items-center gap-6" data-testid="tv-promise-row">
-              <div className="shrink-0 [&>p]:mt-0">
-                <TvGovernorPromise game={game} />
-              </div>
-              <div className="min-w-0 flex-1">
-                {/* CHANGE 1 */}
-                <TvBudgetLine game={game} />
-              </div>
-            </div>
-          ) : (
-            <>
+          {/* CHANGE 1: one row, the promise whole on the left (its own top margin is the row's), the budget in the rest. */}
+          <div className="mt-2 flex items-center gap-6" data-testid="tv-promise-row">
+            <div className="shrink-0 [&>p]:mt-0">
               <TvGovernorPromise game={game} />
-              {/* CHANGE 1 */}
-              <TvBudgetLine game={game} />
-              {/* CHANGE 2 */}
-              <TvDeals game={game} />
-            </>
-          )}
+            </div>
+            <div className="flex min-w-0 flex-1 justify-end">{called ? <OverruleCalledLine /> : <TvBudgetLine game={game} />}</div>
+          </div>
         </div>
         <TvBody>
           <div className="flex min-h-0 flex-1 gap-6">
             <div className="flex w-[700px] shrink-0 flex-col gap-3">
-              <StrikeMap view={game} size="tv">
-                <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
-              </StrikeMap>
+              <div className="relative" data-testid="tv-map-box">
+                <StrikeMap view={game} size="tv">
+                  <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+                </StrikeMap>
+                {/* CHANGE 2: the moment, over the map's top, out of flow. */}
+                {moments.size > 0 && (
+                  <div className="absolute inset-x-0 top-0 z-30 flex flex-col gap-3 p-3" data-testid="tv-moment" data-hold-s={TV_EVENT_HOLD_S}>
+                    {calling && <TvOverruleCall game={game} />}
+                    <TvDeals game={breaking} />
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between font-mono text-sm text-ink-3" data-testid="tv-map-foot">
                 <span>ROOM {table.code}</span>
                 <span>
@@ -83,14 +116,10 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
               <StrikeWaiting game={game} />
             </div>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4" data-testid="tv-side">
-              {/* CHANGE 3 */}
-              <TvOverruleCall game={game} />
-              {/* CHANGE 2, placement B */}
-              {b && <TvDeals game={game} />}
               {waiting.length > 0 ? (
                 <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
-                  {/* CHANGE 4 */}
-                  <WaitingFor view={game} seats={waiting} me={null} tv />
+                  {/* CHANGE 3: no chips here (WS4 c); the ready list below has them. */}
+                  <WaitingFor seats={waiting} me={null} tv />
                   {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
                 </div>
               ) : (
@@ -144,7 +173,7 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
                               <span data-num className="font-mono text-sm font-normal text-ink-3" data-testid={`tv-rank-${s.id}`}>
                                 {ordinal(places.get(s.id) ?? game.players.length)}
                               </span>
-                              {/* CHANGE 4 */}
+                              {/* CHANGE 3 */}
                               <RepChip view={game} id={s.id} tv testid={`tv-ready-rep-${s.id}`} />
                             </Fragment>
                           ))}
@@ -170,7 +199,7 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
                             {s.name}
                             {status && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
                           </span>
-                          {/* CHANGE 4 */}
+                          {/* CHANGE 3 */}
                           <RepChip view={game} id={s.id} tv testid={`tv-ready-rep-${s.id}`} />
                         </span>
                         {playsBuiltIn(status) && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
@@ -210,7 +239,7 @@ function MarketTiles({ game }: { game: MuleView }) {
   );
 }
 
-/** TableApp.tsx's News as on ws7-s3-phone-pr (CHANGE 5): each line through NewsWords. */
+/** TableApp.tsx's News as on ws7-s3-phone-pr (CHANGE 4): each line through NewsWords; a folded break is its line. */
 function News({ game }: { game: MuleView }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
@@ -220,5 +249,14 @@ function News({ game }: { game: MuleView }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** CHANGE 1, while an overrule call is held: the promise row's right side. The call's own words were its moment's. */
+function OverruleCalledLine() {
+  return (
+    <p className="flex items-center gap-2 whitespace-nowrap text-xl leading-tight text-warn" role="status" data-testid="tv-overrule-called-line">
+      <strong className="font-display font-semibold">Overrule called:</strong> tax frozen
+    </p>
   );
 }
