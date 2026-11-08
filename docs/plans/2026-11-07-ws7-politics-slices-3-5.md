@@ -1365,6 +1365,12 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
   - the ban shows in the law picker and on the TV council panel.
 
   Negative case: Brix's phone never shows Lena's order before production.
+- [ ] **Step 2b (PM ruling, 8 Nov, from WS8's #749 review): WS8's desk and show driven by the real views, never fixtures.** WS8's desk tests ran on hand-made fixtures and read `mine[].public` ("on the public record") as "the culprit is known", so an unseen saboteur was told "Everyone knows". At least one check renders WS8's desk and show from S4-PR-5's real `viewFor` views, from the saboteur's, the victim's and the Sheriff's phones, for each of three cases:
+  - an unseen cut that worked: the saboteur's desk does not say anyone knows; the victim's phone and the TV say "someone";
+  - a caught cut: every screen names the culprit;
+  - a solved investigation: every screen names the culprit from that month on, and the Sheriff's desk shows the case solved.
+
+  This may be the e2e step itself, or a component test that builds its views by playing the server (`MuleGame` + `viewFor`), never a literal fixture.
 - [ ] **Step 3: Run** `pnpm --filter @mule/web e2e` — expected PASS (core and regression, which include `politics.ts`). **Commit** `test(e2e): S4-UBER-AC-2, S4-B-AC-10 sabotage, guard, catch and fine at the table (S4-C19)`.
 
 #### Task S4-8.2 — the money rows to Heiko (S4-HC-10, D3)
