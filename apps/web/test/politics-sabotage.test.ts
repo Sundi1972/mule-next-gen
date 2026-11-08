@@ -3,7 +3,7 @@ import { GOODS, POLITICS } from '@mule/engine';
 import type { DealCard } from '@mule/engine';
 import type { IncidentView, MuleView, MyPoliticsView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
-import { act, createElement } from 'react';
+import { act, createElement, useState, type ComponentType, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
@@ -19,6 +19,7 @@ import { aMuleView, aPlayer } from './fixtures/views';
 let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Planning: typeof import('../src/phone/Planning').Planning;
+let Sheriff: typeof import('../src/phone/hub/politics/Sheriff');
 const scrolled = vi.fn();
 
 beforeAll(async () => {
@@ -26,6 +27,7 @@ beforeAll(async () => {
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Planning } = await import('../src/phone/Planning'));
+  Sheriff = await import('../src/phone/hub/politics/Sheriff');
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
@@ -146,20 +148,21 @@ const client = {
   intent: (intent: unknown) => void sent.push(intent),
 } as unknown as TableClient;
 
-const onPhone = (view: MuleView) => {
+/** The phone of `view.me`, drawing `screen`: today's planning hub unless another is named. */
+const onPhone = (view: MuleView, screen: ComponentType = Planning) => {
   const self = view.players.find((p) => p.id === view.me!.id)!;
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
-  return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) });
+  return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(screen) }) });
 };
 
 let root: Root | null = null;
 let host: FakeElement;
 
-function mount(view: MuleView): void {
+function mount(view: MuleView, screen?: ComponentType): void {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
-  act(() => root!.render(onPhone(view)));
+  act(() => root!.render(onPhone(view, screen)));
 }
 
 /** The server's next view, as a broadcast draws it. */
@@ -592,5 +595,95 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
     tap('desk-market');
     expect(text('my-order-sab-d4e5f6')).toBe('Month 5: power cut on Kai’s plotNobody knows it was you.Ordered');
     expect(byTestid('my-order-sab-d4e5f6').findAll('svg'), "no good's icon").toHaveLength(0);
+  });
+});
+
+/*
+ * SB-4, the tabbed hub's slots (frozen SB-1a, a7d2095c): the Sheriff sub-tab (SHERIFF_SUB) and the Guard pick
+ * (GUARD_PICK). The tabbed hub that draws them is SB-2's, not on trunk yet; its navigation for picks is WS6's to freeze.
+ * So these mount the slots' own components under a test PickNav that stands in for the hub: it records each call and
+ * draws the pick in place of the sub-tab while one is on, as the hub hands Overview's map to a pick.
+ */
+describe('SB-4: the Sheriff sub-tab and the Guard pick, for the tabbed hub', () => {
+  type PickNav = import('../src/phone/hub/politics/Sheriff').PickNav;
+  const calls: unknown[][] = [];
+
+  /** The stand-in hub: the Sheriff sub-tab, or while a pick is on that pick's map; every nav call recorded. */
+  function TestHub(): ReactNode {
+    const [pick, setPick] = useState<string | null>(null);
+    const [door, setDoor] = useState({ tab: 'politics' as PickNav['tab'], sub: 'sheriff' });
+    const nav: PickNav = {
+      tab: pick ? 'overview' : door.tab,
+      sub: door.sub,
+      pick,
+      open: (d) => (calls.push(['open', d]), setDoor({ tab: d.tab, sub: d.sub ?? door.sub })),
+      startPick: (id) => (calls.push(['startPick', id]), setPick(id)),
+      endPick: () => (calls.push(['endPick']), setPick(null)),
+    };
+    const slot = Sheriff.GUARD_PICK;
+    const Body = pick === slot.id ? slot.Map : Sheriff.SHERIFF_SUB.Body;
+    return createElement(Sheriff.PickNavProvider, { value: nav, children: createElement(Body) });
+  }
+
+  afterEach(() => void (calls.length = 0));
+
+  const seat = (view: MuleView) => ({ view, me: view.me!, self: view.players.find((p) => p.id === view.me!.id)! });
+
+  it('SB-4: the Sheriff sub-tab and the Guard pick are shown only to the seat that holds the office', () => {
+    expect(Sheriff.SHERIFF_SUB.show!(seat(brix()))).toBe(true);
+    expect(Sheriff.GUARD_PICK.show!(seat(brix()))).toBe(true);
+    for (const id of ['s1', 's2', 's3']) {
+      expect(Sheriff.SHERIFF_SUB.show!(seat(viewOf({ id }))), id).toBe(false);
+      expect(Sheriff.GUARD_PICK.show!(seat(viewOf({ id }))), id).toBe(false);
+    }
+  });
+
+  it("SB-4: the Guard pick's slot: its bar's verb, its hint, and the way back to the Sheriff sub-tab", () => {
+    expect(Sheriff.SHERIFF_SUB.id).toBe('sheriff');
+    expect(Sheriff.SHERIFF_SUB.label(seat(brix()))).toBe('Sheriff');
+    const { id, label, hint, back, ownBar } = Sheriff.GUARD_PICK;
+    expect({ id, label, hint: hint(seat(brix())), back, ownBar }).toEqual({ id: 'guard', label: 'Guarding', hint: 'Tap a plot to guard it', back: { tab: 'politics', sub: 'sheriff', label: 'Sheriff' }, ownBar: true });
+  });
+
+  it('SB-4: the sub-tab draws the folded case file; the waits and the case steps are as on the desk', () => {
+    mount(brix(), TestHub);
+    expect(has('sheriff-desk-b')).toBe(true);
+    expect(caseRows()).toEqual(['w3c8', 'k1m9', 'q7f2']);
+    tap('b-case-row-q7f2');
+    tap('investigate-q7f2');
+    expect(sent).toEqual([{ type: 'investigate', order: 'q7f2' }]);
+    act(() => root!.unmount());
+    mount(brix({ canAct: 'votesOpen' }), TestHub);
+    expect(has('sheriff-waits-votesOpen')).toBe(true);
+  });
+
+  it("SB-4: Guard a plot starts the pick; a tap posts or lifts; Done sends {type:'guard', tiles}, ends the pick and opens the way back", () => {
+    mount(brix(), TestHub);
+    tap('guard-open-map');
+    expect(calls).toEqual([['startPick', 'guard']]);
+    expect(has('guard-map')).toBe(true);
+    expect(has('sheriff-desk-b'), 'the pick has the map, not the sub-tab').toBe(false);
+    expect(text('guard-bar-words')).toBe('Guarding · 1 of 2');
+    expect(text('guard-back')).toBe('Done · back to Sheriff');
+
+    tap('map-plot-2-0');
+    expect(text('guard-bar-words')).toBe('Guarding · 2 of 2');
+    expect(plotLabel(2, 0)).toContain('guarded');
+    tap('map-plot-1-0');
+    expect(text('guard-bar-words')).toBe('Guarding · 1 of 2');
+    expect(plotLabel(1, 0)).not.toContain('guarded');
+    expect(sent, 'nothing is sent before Done').toEqual([]);
+
+    tap('guard-back');
+    expect(sent).toEqual([{ type: 'guard', tiles: [at(2, 0)] }]);
+    expect(calls.slice(1)).toEqual([['endPick'], ['open', { tab: 'politics', sub: 'sheriff' }]]);
+    expect(has('guard-map')).toBe(false);
+    expect(has('sheriff-desk-b'), 'back on the Sheriff sub-tab').toBe(true);
+  });
+
+  it('SB-4: off the Sheriff seat the sub-tab and the pick draw nothing', () => {
+    mount(viewOf(), TestHub);
+    expect(has('sheriff-desk-b')).toBe(false);
+    expect(has('sheriff-head')).toBe(false);
   });
 });
