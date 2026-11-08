@@ -106,8 +106,11 @@ export function paceWords(seat: ArcadeSeat): { pct: number; line: string; short:
   const andSick = hungry && sick ? ', and you are sick' : '';
   // What makes Food for you already: a Food MULE on a plot of yours.
   const foodMule = view.tiles.find((t) => t.owner === me.id && t.outfit === 'food');
-  // The advice feeds household and crews, not only the meal: a crew left short makes less.
-  const next = hungry ? (foodMule ? `Next month: your Food MULE on ${plotName(foodMule.x, foodMule.y)} should feed you` : `Next month: buy ${me.needs.food} Food at the auction, or put a Food MULE on a plot`) : null;
+  // The advice feeds household and crews, not only the meal: a crew left short makes less. It names the crews' part,
+  // so "ate 1 of the 2" beside "buy 4" does not read as a contradiction.
+  const crews = me.needs.food - need;
+  const split = crews > 0 ? ` (${need} for you, ${crews} for your crews)` : '';
+  const next = hungry ? (foodMule ? `Next month: your Food MULE on ${plotName(foodMule.x, foodMule.y)} should feed you` : `Next month: buy ${me.needs.food} Food at the auction${split}, or put a Food MULE on a plot`) : null;
   return { pct, line: `Your pace ${pct}%: ${why}${andSick}`, short: hungry ? `Pace ${pct}%: ate ${food} of ${need} Food` : sick ? `Pace ${pct}%: sick` : `Pace ${pct}%`, next, slow: pct < 100 };
 }
 
