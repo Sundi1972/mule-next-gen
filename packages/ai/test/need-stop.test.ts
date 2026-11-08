@@ -43,10 +43,13 @@ const seatsFor = () => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI 
 /** Upkeep eats the household's Food, half of the rest spoils, and next development is hungry under the household's Food. */
 const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
 
-/** The Food status screen: ai0 and ai1 on three Energy plots each, ai0 holding 3 over what keeps it whole, ai1 none. */
+/**
+ * The Food status screen: ai0 and ai1 on three Energy plots each, ai0 holding 3 over what keeps it whole, ai1 none. The
+ * store posts its prices on that colony, as it does entering the auction.
+ */
 function foodScreen(): GameState {
   const state = createGame({ seed: SEED, players: SEATS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
-  while (state.phase !== 'auction') advancePhase(state);
+  while (state.phase !== 'production') advancePhase(state);
   state.store.stock.food = Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) + 40;
   for (const p of state.players) p.stock.food = Math.max(monthNeeds(state, p.id).food, wholeFood(state, p.id));
   for (const id of [ME, RIVAL]) {
@@ -57,6 +60,7 @@ function foodScreen(): GameState {
     p.stock.food = id === ME ? wholeFood(state, id) + 3 : 0;
     p.money = 3_000;
   }
+  advancePhase(state);
   startAuction(state, ['food']);
   return state;
 }

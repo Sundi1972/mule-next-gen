@@ -415,14 +415,16 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(sold(bluffSeller, 'ai0')).toEqual([]);
     expect(bluffSeller.path.at(-1)!.price).toBe(screen.auction!.hi);
     // Under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk. ai1, with no Food and 2,000 cr, buys its
-    // share at the store's line, then bids on past that line and stops one step under the bluffing seller resting at the
-    // top: walking up never trades with a resting seller, and a bluff never walks down onto a bid, so it sells nothing.
+    // share at the store's line and stands there, at its own ceiling, under the bluffing seller resting at the top: a
+    // bluff never walks down onto a bid, so it sells nothing.
     const soldOut = runGood(screen, 5, 0, () => ({ ...seller, bluff: true }));
     const { sellersBottom } = screen.auction!.zones;
     expect(soldOut.trades.some((t) => t.seller === STORE_ID && t.buyer === 'ai1'), 'ai1 buys at the store first').toBe(true);
     expect(storeForSale(soldOut.state, 'food'), 'the store sells out').toBe(0);
     expect(soldOut.path.at(-1)!.price, 'the bluff rests at the top').toBe(hi);
-    expect(Math.round(soldOut.state.auction!.walkers.find((w) => w.id === 'ai1')!.price), 'ai1 bids past the old line, a step under the bluff').toBe(hi - 1);
+    // ai1's Food is worth its month of walking, a finite ceiling under the bluff, so it never bids up to the top.
+    expect(Math.round(soldOut.state.auction!.walkers.find((w) => w.id === 'ai1')!.price), 'ai1 stops at its ceiling').toBe(buyer.walkAway);
+    expect(buyer.walkAway, 'its ceiling is under the bluff').toBeLessThan(hi);
     expect(hi - 1).toBeGreaterThan(sellersBottom);
     expect(sold(soldOut, 'ai0'), 'the bluff sells nothing').toEqual([]);
     expect(stockOf(soldOut, 'ai0', 'food')).toBe(had);
@@ -439,27 +441,32 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     // is read off the hand's debug view: past the rival, an overtake and the walk on look alike in the acts. The board
     // sits inside the edges, where the walk keeps every walker and the hand its targets.
     const W = lo + 10;
+    // The probe needs a buyer whose Food is worth more than W; a month-1 seat's walking makes it worth less, so this one
+    // leads ten times the MULEs, walks ten times as far, and going hungry costs it that much more.
+    const walker = (s: AiSeat): Mind => ({ ...s.mind, level: { ...s.mind.level, mulesPerMonth: 10 * s.mind.level.mulesPerMonth } });
     const base: GoodPlay = { ...buyer, hold: buyer.hold + 5, walkAway: W, start: W };
     const board = { mine: lo, rival: lo + 6, ask: 40 };
-    const undercut = probe(screen, { ...base, vsRival: 'undercut1' }, board);
+    const undercut = probe(screen, { ...base, vsRival: 'undercut1' }, board, 150, walker);
     expect(undercut.limit, 'the probe buyer values Food over its walkAway').toBe(W);
     expect(undercut.targets).toContain(board.rival + 1);
     expect(undercut.top).toBeGreaterThan(board.rival);
-    const alone = probe(screen, { ...base, vsRival: 'undercut1' }, { ...board, rival: null });
+    const alone = probe(screen, { ...base, vsRival: 'undercut1' }, { ...board, rival: null }, 150, walker);
     expect(alone.targets).not.toContain(board.rival + 1);
-    const hold = probe(screen, { ...base, vsRival: 'hold' }, board);
+    const hold = probe(screen, { ...base, vsRival: 'hold' }, board, 150, walker);
     expect(hold.targets).toEqual(alone.targets);
     expect(hold.acts).toEqual(alone.acts);
-    const yieldTop = probe(screen, { ...base, vsRival: 'yield' }, board).top;
+    const yieldTop = probe(screen, { ...base, vsRival: 'yield' }, board, 150, walker).top;
     expect(yieldTop).toBe(board.rival - 1);
-    expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board).top).toBe(board.rival - 1);
-    expect(probe(screen, { ...base, vsRival: 'yield', per: { ai2: 'undercut1' } }, board).targets).toEqual(undercut.targets);
-    // The seller's mirror, against a rival seller ahead at lo + 8 and a bid at the buyers' edge (a seller walks no lower
-    // than just over it, #291): yield stands one behind the rival, over it; undercut1 goes under it.
+    expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board, 150, walker).top).toBe(board.rival - 1);
+    expect(probe(screen, { ...base, vsRival: 'yield', per: { ai2: 'undercut1' } }, board, 150, walker).targets).toEqual(undercut.targets);
+    // The seller's mirror, against a rival seller ahead and a bid at the buyers' edge (a seller walks no lower than just
+    // over it, #291, nor into the buyers' zone under B, RULE-6): yield stands one behind the rival, over it; undercut1
+    // goes under it. The rival stands above B, so there is room under it whatever the store's spread puts B at.
+    const rival = Math.max(lo + 8, screen.auction!.zones.buyersTop + 3);
     const sellBase: GoodPlay = { ...seller, hold: 0, walkAway: lo + 3, start: lo + 3 };
-    const sellBoard = { mine: screen.auction!.hi, rival: lo + 8, bid: lo };
-    expect(sellerProbe(screen, { ...sellBase, vsRival: 'yield' }, sellBoard).bottom).toBe(lo + 9);
-    expect(sellerProbe(screen, { ...sellBase, vsRival: 'undercut1' }, sellBoard).bottom).toBeLessThan(lo + 8);
+    const sellBoard = { mine: screen.auction!.hi, rival, bid: lo };
+    expect(sellerProbe(screen, { ...sellBase, vsRival: 'yield' }, sellBoard).bottom).toBe(rival + 1);
+    expect(sellerProbe(screen, { ...sellBase, vsRival: 'undercut1' }, sellBoard).bottom).toBeLessThan(rival);
     // RULE-10's unit values come from the plan mind the source hands the hand (RULE-14), not the persona's. Holding 6
     // Food, its next unit is one to resell, so the cautious seat's speculate weight sets its ceiling; a monopolist's
     // plan multiplies that weight.

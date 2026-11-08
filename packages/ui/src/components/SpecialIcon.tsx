@@ -64,10 +64,12 @@ export interface SpecialBadgeProps {
   box?: number;
   className?: string;
   style?: CSSProperties;
+  /** The 1 px edge glow around it; off where the badge must stay within its box (the small phone plot's strip). */
+  halo?: boolean;
 }
 
 /** A special field's mark: a hexagonal chip (no other map chip has this shape) holding the kind's symbol. Decorative. */
-export function SpecialBadge({ special, density, box, className, style }: SpecialBadgeProps) {
+export function SpecialBadge({ special, density, box, className, style, halo = true }: SpecialBadgeProps) {
   const s = SPECIAL_BADGE[density];
   const size = box ?? s.box;
   const color = SPECIAL_COLOR[special.kind];
@@ -75,7 +77,7 @@ export function SpecialBadge({ special, density, box, className, style }: Specia
     <span
       aria-hidden
       className={cx('inline-flex shrink-0 items-center justify-center', className ?? 'relative')}
-      style={{ ...style, width: size, height: size, filter: 'drop-shadow(0 0 1px var(--color-mark-edge))' }}
+      style={{ ...style, width: size, height: size, ...(halo ? { filter: 'drop-shadow(0 0 1px var(--color-mark-edge))' } : {}) }}
     >
       <svg aria-hidden viewBox="0 0 24 24" className="absolute inset-0 h-full w-full">
         <path d="M12 1.2 21.4 6.6v10.8L12 22.8 2.6 17.4V6.6z" fill="var(--color-map-chip)" stroke={color} strokeWidth={s.ring * (24 / s.box)} strokeLinejoin="round" />

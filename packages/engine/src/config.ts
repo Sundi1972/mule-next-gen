@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { BudgetLine, Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 import type { Strategy } from './playbook.js';
 
 /**
@@ -10,46 +10,85 @@ import type { Strategy } from './playbook.js';
 export interface GoodConfig {
   /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
-  /** How strongly price reacts to low cover (k in the price formula). */
-  sensitivity: number;
   /** Share lost each month without suitable storage. */
   spoilage: number;
 }
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
-  food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.5 },
-  water: { refPrice: 25, sensitivity: 1.5, spoilage: 0.05 },
-  energy: { refPrice: 25, sensitivity: 1.2, spoilage: 0.25 },
-  smithore: { refPrice: 50, sensitivity: 1.2, spoilage: 0 },
-  crystite: { refPrice: 100, sensitivity: 0.5, spoilage: 0 },
-  rareEarth: { refPrice: 60, sensitivity: 0.8, spoilage: 0 },
-  alloy: { refPrice: 90, sensitivity: 0.8, spoilage: 0 },
-  electronics: { refPrice: 220, sensitivity: 0.5, spoilage: 0 },
-  medicine: { refPrice: 120, sensitivity: 1.0, spoilage: 0.2 },
+  food: { refPrice: 30, spoilage: 0.5 },
+  water: { refPrice: 25, spoilage: 0.05 },
+  energy: { refPrice: 25, spoilage: 0.25 },
+  smithore: { refPrice: 50, spoilage: 0 },
+  crystite: { refPrice: 100, spoilage: 0 },
+  rareEarth: { refPrice: 60, spoilage: 0 },
+  alloy: { refPrice: 90, spoilage: 0 },
+  electronics: { refPrice: 220, spoilage: 0 },
+  medicine: { refPrice: 120, spoilage: 0.2 },
 };
 
 export const PRICE = {
   /** Months of demand the store aims to hold. */
   targetCover: 2,
-  /** Cover below this counts as this, so an empty shelf still gives a finite target. */
-  minCover: 0.25,
-  /** Momentum: the posted price moves toward its target by at most this share up or down a month. */
-  maxRise: 0.5,
-  maxFall: 0.4,
-  /** The store sells this much above and buys this much below its posted price. */
-  storeSpread: 0.1,
+  /** Months of cover from which a good is posted at its normal price, whatever the colony makes. */
+  normalCover: 2,
+  /** Months of cover from which a good is only tight; under it, a shortage. */
+  tightCover: 1,
+  /** Months of cover from which a good is in a shortage; under it, a severe one. */
+  shortCover: 0.5,
+  /** Each band's target as a multiple of the normal price. */
+  band: { tight: 1.25, short: 2, severe: 4 },
+  /** Each band's spread: the store buys `under` below its mid and sells `over` above it. */
+  bandSpread: {
+    offWorld: { under: 0.15, over: 0.15 },
+    normal: { under: 0.15, over: 0.15 },
+    tight: { under: 0.15, over: 0.2 },
+    short: { under: 0.1, over: 0.25 },
+    severe: { under: 0.1, over: 0.25 },
+  },
+  /** The most the mid falls in a month towards a lower target, as a share of last month's mid. */
+  fallStep: 0.25,
+  /** After players paid each other more than the store sold at, the mid moves this share of the way to that price. */
+  tradePull: 0.5,
+  /** No mid is posted above this many times the good's configured reference price. */
+  ceiling: 12,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
-  /** Food and Water count as short when the store's shelf holds under this many months of the colonists' need, so the price climbs before they go hungry. */
-  shelfCover: 1,
-  /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
-  restockPremium: 1.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
   /** How fast the reference price follows what players pay each other (0..1). */
   refDrift: 0.25,
   /** How fast the reference price drifts back toward the off-world price (0..1). */
   worldPull: 0.1,
+};
+
+/**
+ * As each month opens, the export goods' off-world prices walk (pricing RULE-3): the log of the price keeps `phi` of
+ * its distance from the centre's, plus a seeded swing, then is clamped. Food, Water and Energy are not exported; their
+ * off-world price stays put.
+ */
+export const OFF_WORLD = {
+  /** Crystite: normally about 90, rarely 40, very rarely 300. */
+  crystite: {
+    /** The price Crystite's walk returns to, and opens the game at. */
+    centre: 90,
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into: the bigger, the wilder the swings. */
+    sigma: 0.35,
+    /** The lowest off-world price. */
+    min: 40,
+    /** The highest off-world price. */
+    max: 300,
+  },
+  /** Every other export good, centred on its GOOD_CONFIG refPrice. */
+  others: {
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into. */
+    sigma: 0.18,
+    /** The price stays within this share of its centre, above or below. */
+    band: 0.5,
+  },
 };
 
 /**
@@ -245,13 +284,10 @@ export const UPKEEP = {
   colonistEnergyShare: 0.5,
   /** Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick). */
   colonistsPerMedicine: 50,
+  /** Colonists want 1 Electronics a month per this many, and with it the Rare earth and Alloy its recipe takes. */
+  colonistsPerElectronics: 50,
   /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
   colonistGrowth: { fed: 1.04, hungry: 0.95 },
-  /**
-   * The most colonists pay per unit, from their off-world wages. Above it they
-   * buy less, so their demand falls as the price rises: this is the demand curve.
-   */
-  colonistBudget: { food: 150, water: 120, energy: 100, medicine: 400 } as Partial<Record<Good, number>>,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
@@ -272,13 +308,19 @@ export const START = {
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
    * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
-   * storeStockFor adds them.
+   * storeStockFor adds them. Medicine 40, up from 4: spike S2's lever B with STRATEGIST.medicineDespiteInputs (PM
+   * ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.
    */
-  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
-  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
-  storeEnergyPerPlayer: 5,
+  /**
+   * The store's Energy at the start, for each seat: 12, so 48 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
+   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov), first to 10, then to 12 once C49 (a waiting
+   * building's missing goods count in the store's demand) put seed 1 at 16.4% (PM ruling, 8 Nov): farms then turn off
+   * for Energy in under 15% of farm-months on seeds 1, 101 and 201.
+   */
+  storeEnergyPerPlayer: 12,
 };
 
 /** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
@@ -301,11 +343,13 @@ export const MULE = {
   /** The store builds MULEs for every seat's corralPerPlayer, plus this many. */
   spareInCorral: 2,
   /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
-  scarcityUp: 0.15,
+  scarcityUp: 0.25,
   surplusDown: 0.1,
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Nor rises above this, so a MULE costs at most four times its labour and Smithore at the store's price (pricing C4). */
+  maxFactor: 4.0,
   /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
@@ -899,9 +943,25 @@ export const POLITICS = {
     /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
     taxPerVote: 300,
     taxCap: 2,
+    /** The fewest votes a player can have, whatever their reputation (slice 3, placeholder until WS1's sim row). */
+    minVotes: 1,
   },
   /** A player's reputation stays within these bounds, in whole points (START.reputation is where it starts). */
-  reputation: { min: 0, max: 100 },
+  reputation: {
+    min: 0,
+    max: 100,
+    /** Points a deal card moves a player's reputation, signed (slice 3, placeholders until WS1's sim row). */
+    moves: { kept: 3, voteBroken: -10, pactBroken: -20 },
+    /** Kept gains a player can earn from cards with one other party in one term. */
+    keptPerPartnerPerTerm: 1,
+  },
+  /** Deal cards between players (slice 3, placeholders until WS1's sim row). */
+  deals: {
+    /** A player's offers waiting for an answer at once. */
+    maxOpenOffers: 3,
+    /** The lengths a pact may run, in months. */
+    pactMonths: [1, 3, 6],
+  },
   /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
@@ -922,6 +982,29 @@ export const POLITICS = {
     /** Months a failed proposal waits before it may be put again. */
     retryMonths: 2,
   },
+  /**
+   * The Governor's standing budget: whole-percent shares of the fund above COLONY.reserve (slice 5, S5-RULE-1). Every
+   * number is a placeholder until the sim tunes it and Heiko OKs it.
+   */
+  budget: {
+    /** Shares are whole multiples of this, in percent. */
+    step: 5,
+    /** The shares in force while the Governor has set none: exactly the colony's funding before the budget existed. */
+    default: { projects: 100, welfare: 0, security: 0 } satisfies Record<BudgetLine, number>,
+    /** Buildings take whatever their open projects still need, so only the share is bounded. */
+    projects: { maxShare: 100 },
+    /** Welfare: cash to the player in last place. Most percent of the spare fund, and most credits a month. */
+    welfare: { maxShare: 20, maxCredits: 200 },
+    /** Security (after the first release): the same two bounds. */
+    security: { maxShare: 30, maxCredits: 300 },
+  },
+  /** The overrule vote on the Governor's tax (slice 5, S5-RULE-7). Placeholders. */
+  overrule: {
+    /** Ms the result is shown before it takes effect: a presentation clock only. */
+    revealMs: 4_000,
+    /** Passed overrules in one term that call a snap election (after the first release). */
+    snapAfter: 2,
+  },
   /** The colony's book of laws, each with its settings. */
   laws: {
     /** Per cent of each unit a player sells to the export ship. */
@@ -934,6 +1017,21 @@ export const POLITICS = {
     emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
   } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
+    /** The AI's deal cards (slice 3, placeholders until WS1's sim row). */
+    deals: {
+      /** Cards from a proposer below this reputation are declined. */
+      refuseBelow: 30,
+      /** Offers a seat makes in a month, at most. */
+      offersPerMonth: 2,
+      /** The card's worth to the seat, in credits, at or above which it accepts. */
+      acceptMin: { trader: 0, cautious: 20, aggressive: 10, saboteur: 0 } satisfies Record<AiPersonaId, number>,
+      /** How much a seat weighs its reputation against a gain before breaking a promise: higher keeps more. */
+      honesty: { trader: 1, cautious: 2, aggressive: 0.8, saboteur: 0.5 } satisfies Record<AiPersonaId, number>,
+      /** A Rookie's chance of accepting a card. */
+      rookieAccept: 0.5,
+      /** The length of the pacts a seat offers, in months: one of POLITICS.deals.pactMonths. */
+      pactMonths: 3,
+    },
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
     /** A seat decides whether to run in the first planning phase at most this many months before an election month; in month 1, at the last call. */
@@ -958,6 +1056,34 @@ export const POLITICS = {
       capPlotCost: 40,
       /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
       rookieYes: 0.5,
+    },
+    /** The AI Governor's budget split (slice 5, S5-RULE-11). Placeholders until the sim tunes them. */
+    budget: {
+      /** Where each persona's Welfare and Security shares start, in percent, before any fill. */
+      base: {
+        trader: { welfare: 5, security: 0 },
+        cautious: { welfare: 10, security: 0 },
+        aggressive: { welfare: 0, security: 0 },
+        saboteur: { welfare: 0, security: 0 },
+      } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+      /** What a persona makes of the worth a line adds when it weighs a step against Projects: 1 is neutral. */
+      tilt: {
+        trader: { welfare: 1, security: 1 },
+        cautious: { welfare: 1.5, security: 1.5 },
+        aggressive: { welfare: 0.5, security: 1 },
+        saboteur: { welfare: 0.5, security: 0.5 },
+      } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+    },
+    /** How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them. */
+    overrule: {
+      /** Credits a month a change must cost the seat before it calls an overrule. */
+      minGain: 20,
+      /** Chance a persona calls an overrule that cannot win, as a protest. */
+      longShot: { trader: 0.1, cautious: 0.05, aggressive: 0.3, saboteur: 0.2 } satisfies Record<AiPersonaId, number>,
+      /** A Rookie's chance of a yes: a coin from the overrule's own stream. */
+      rookieYes: 0.5,
+      /** Credits a month an unhappy colony makes a seat more willing to vote yes. */
+      unhappyTilt: 30,
     },
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
@@ -1034,6 +1160,10 @@ export const HAPPINESS = {
     gap: 2,
     gapUnit: 1_000,
     gapCap: 10,
+    /** Onto the target for each `welfareUnit` credits of Welfare paid this upkeep, up to `welfareCap` units (slice 5, S5-RULE-5). Placeholders. */
+    welfare: 1,
+    welfareUnit: 50,
+    welfareCap: 4,
   },
 };
 
@@ -1073,10 +1203,11 @@ export const COLONY_SCORE = {
   /**
    * The score's verdict at game over, in credits like the total: from `proud` "A colony to be proud of", from `held` "A
    * colony that held together", below it "A colony in ruins". Set from 100 politics-on 4-seat trader games (seeds
-   * 1–100): a quarter score under 60,650 and a quarter over 99,193, so held sits near the bottom quartile and proud
-   * near the top one.
+   * 1–100) on milestone A's final config (store bands, the free meal, pace set C with grant 200, the colony's own
+   * grounds, MULE scarcityUp 0.25 and maxFactor 4): a quarter score under 49,925 and a quarter over 63,105, so held
+   * sits at the bottom quartile and proud at the top one (PM ruling, 7 Nov; was 60,000 and 100,000 before A).
    */
-  verdict: { proud: 100_000, held: 60_000 },
+  verdict: { proud: 63_000, held: 50_000 },
 };
 
 /**
@@ -1733,7 +1864,26 @@ export const STRATEGIST = {
     canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
     /** "Hurts the leader": what the plan that fences in the leader scores. */
     hurtsLeader: 0.7,
+    /**
+     * A plan worth under this share of the best plan's worth is not offered to the decider (T-AC-14). The shortlist's
+     * utility tolerance alone let a plan at 43% of the best through once lever B valued Medicine works (PR-5).
+     */
+    offerShare: 0.5,
   },
+  /**
+   * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
+   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 12 (PM rulings,
+   * 7 and 8 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
+   */
+  energyFirst: true as boolean,
+  /**
+   * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
+   * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
+   * START.storeStock.medicine 40 (PM ruling, 8 Nov). OFF until health is on: without sick colonists it only diverts
+   * seats from their Energy plant (seed 1's Energy gate 9.6% -> 15.8%); PR-13 switches it on with health (PM ruling,
+   * 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=true`.
+   */
+  medicineDespiteInputs: false as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
     /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */

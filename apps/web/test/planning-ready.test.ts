@@ -87,7 +87,7 @@ describe('planning without a clock: who is still planning, and the host', () => 
   });
 
   it("T-AC-13: the TV's ready list keeps a row for every person, Ready, planning or away, in seat order; from five seats the AIs fold into one row", () => {
-    const line = (r: ReadyRow) => (r.kind === 'ais' ? `AIs: ${r.seats.map((s) => s.name).join(', ')}` : `${r.seat.name}${r.seat.ready ? ' ready' : ''}${r.seat.away ? ' away' : ''}`);
+    const line = (r: ReadyRow) => (r.kind !== 'seat' ? `AIs: ${r.seats.map((s) => s.name).join(', ')}` : `${r.seat.name}${r.seat.ready ? ' ready' : ''}${r.seat.away ? ' away' : ''}`);
     const six = [person(BRIX, 'Brix', 0, true), ai('a1', 'The Accountant', 1), person(LENA, 'Lena', 2), ai('a2', 'The Baron', 3), person(OSSA, 'Ossa', 4), ai('a3', 'The Grudge', 5)];
     expect(readyRows(six, connectedIn(table(six).seats)).map(line)).toEqual(['Brix ready', 'Lena', 'Ossa away', 'AIs: The Accountant, The Baron, The Grudge']);
     expect(readyRows(players({ brix: true }), connectedIn(table(players()).seats)).map(line), 'four seats: every seat keeps its own row').toEqual(['Brix ready', 'Lena', 'Kai', 'Ossa away']);

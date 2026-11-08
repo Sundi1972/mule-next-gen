@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { createGame, DEVELOPMENT, list, LOTS, orderGeoDrone, RuleError, tileIndex, unlist, type GameState, type Outfit, type Tile } from '@mule/engine';
+import { answerDeal, callOverrule, createGame, DEVELOPMENT, list, LOTS, offerDeal, openOverrule, orderGeoDrone, RuleError, setBudget, setSalesTax, tileIndex, unlist, voteOverrule, withdrawDeal, type GameState, type Outfit, type Tile } from '@mule/engine';
 import { MOVES, type AiAction, type MoveCost, type MoveDescriptor } from '../src/actions.js';
 import { applyAction } from '../src/play.js';
 import type { MuleIntent } from '@mule/protocol';
@@ -238,9 +238,143 @@ describe('the AI move list (C9)', () => {
     expect(applyAction(s, 'p0', { type: 'drone', plots: [{ x: free.x, y: free.y }] })).toBe(false);
     expect(s.players[0]!.money).toBe(before - DEVELOPMENT.droneFee);
   });
+
+  it("T-AC-11: the AI's setBudget, callOverrule and voteOverrule moves reach politics.ts through applyAction, and a refused one returns false, writes nothing and carries S5-RULE-2, -6 and -7's words in MOVES' legalWhen", () => {
+    // Month 2's planning with p0 governing and no election open.
+    const governed = (politics = true): GameState => {
+      const g = createGame({ seed: 7, players: IDS.map((id) => ({ id, name: id, isAi: true })), politics });
+      g.month = 2;
+      if (g.politics) g.politics = { ...g.politics, governor: 'p0', election: null };
+      return g;
+    };
+    const s = governed();
+
+    // The Governor's shares are stored as given.
+    expect(applyAction(s, 'p0', { type: 'setBudget', shares: { projects: 80, welfare: 10, security: 0 } })).toBe(true);
+    expect(s.politics!.budget).toMatchObject({ month: 2, setBy: 'p0', shares: { projects: 80, welfare: 10, security: 0 } });
+
+    // A tax change, a call, the ballot, a vote and Done: each lands where the engine puts it.
+    expect(applyAction(s, 'p0', { type: 'setTax', percent: 10 })).toBe(true);
+    expect(applyAction(s, 'p1', { type: 'callOverrule', target: 'tax' })).toBe(true);
+    expect(s.politics!.overrule).toMatchObject({ caller: 'p1', target: 'tax', stage: 'called' });
+    expect(openOverrule(s)).toBe(true);
+    expect(applyAction(s, 'p2', { type: 'voteOverrule', yes: true })).toBe(true);
+    expect(s.politics!.overrule!.ballots).toMatchObject({ p1: true, p0: false, p2: true });
+    expect(applyAction(s, 'p3', { type: 'done', done: true })).toBe(true);
+    expect(s.politics!.overrule!.done).toContain('p3');
+
+    // A call can be withdrawn by its caller.
+    const t = governed();
+    setSalesTax(t, 'p0', 10);
+    expect(applyAction(t, 'p1', { type: 'callOverrule', target: 'tax' })).toBe(true);
+    expect(applyAction(t, 'p1', { type: 'callOverrule', target: null })).toBe(true);
+    expect(t.politics!.overrule).toBeNull();
+
+    // A refused move returns false and writes nothing.
+    const raised = governed();
+    setSalesTax(raised, 'p0', 10);
+    const called = structuredClone(raised);
+    callOverrule(called, 'p1', 'tax');
+    const engine = (g: GameState, who: string, action: AiAction): unknown => {
+      switch (action.type) {
+        case 'setBudget':
+          return setBudget(g, who, action.shares);
+        case 'callOverrule':
+          return callOverrule(g, who, action.target);
+        case 'voteOverrule':
+          return voteOverrule(g, who, action.yes);
+        default:
+          throw new Error(`not a budget or overrule move: ${action.type}`);
+      }
+    };
+    const refuse = (base: GameState, who: string, action: AiAction, mutate: (g: GameState) => void = () => {}): string => {
+      const g = structuredClone(base);
+      mutate(g);
+      const before = JSON.stringify(g.politics);
+      expect(applyAction(g, who, action), JSON.stringify(action)).toBe(false);
+      expect(JSON.stringify(g.politics)).toBe(before);
+      const h = structuredClone(base);
+      mutate(h);
+      return refusal(() => engine(h, who, action));
+    };
+    const budget = (projects: number, welfare: number, security = 0): AiAction => ({ type: 'setBudget', shares: { projects, welfare, security } });
+    const thrown = [
+      refuse(governed(false), 'p0', budget(80, 10)),
+      refuse(governed(), 'p0', budget(80, 10), (g) => void (g.phase = 'development')),
+      refuse(governed(), 'p1', budget(80, 10)),
+      refuse(governed(), 'p0', budget(80, 10, 10)),
+      refuse(governed(), 'p0', budget(80, 25)),
+      refuse(governed(), 'p0', budget(95, 10)),
+      refuse(governed(), 'p0', { type: 'callOverrule', target: 'tax' }),
+      refuse(governed(), 'p1', { type: 'callOverrule', target: 'tax' }, (g) => void (g.politics = { ...g.politics!, governor: null })),
+      refuse(raised, 'p1', { type: 'callOverrule', target: 'budget' }),
+      refuse(raised, 'p1', { type: 'callOverrule', target: 'confidence' }),
+      refuse(governed(), 'p1', { type: 'callOverrule', target: 'tax' }),
+      refuse(called, 'p2', { type: 'callOverrule', target: 'tax' }),
+      refuse(raised, 'p1', { type: 'callOverrule', target: null }),
+      refuse(raised, 'p1', { type: 'callOverrule', target: 'tax' }, (g) => void (g.phase = 'development')),
+      refuse(governed(), 'p1', { type: 'voteOverrule', yes: true }),
+    ];
+    const lines = [...described('setBudget').legalWhen(), ...described('callOverrule').legalWhen(), ...described('voteOverrule').legalWhen()];
+    // The texts that carry a name or a number are matched on their fixed words; the rest verbatim.
+    const matches = (line: string, words: string) =>
+      line === words || new RegExp(`^${line.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[a-z]+\}/g, '.+')}$`).test(words);
+    for (const words of thrown) expect(lines.some((line) => matches(line, words)), `legalWhen has no line for "${words}"`).toBe(true);
+    // And the other way: every legalWhen line is a refusal the engine really sends.
+    for (const line of lines) expect(thrown.some((words) => matches(line, words)), `nothing throws legalWhen's "${line}"`).toBe(true);
+  });
+
+  it("S3-T-AC-1: the AI's offerDeal, answerDeal and withdrawDeal moves reach diplomacy.ts through applyAction, and a refused one returns false with S3-RULE-2's words in MOVES' legalWhen", () => {
+    const s = planning();
+    const deals = () => s.politics!.deals;
+    const pact = (to: string, months = 3) => ({ type: 'offerDeal', offer: { to, terms: { kind: 'pact' }, months } }) as const;
+
+    // Offer, then answer: the card's status is what the engine wrote.
+    expect(applyAction(s, 'p0', pact('p1'))).toBe(true);
+    const [card] = deals();
+    expect(card).toMatchObject({ from: 'p0', to: 'p1', status: 'offered', terms: { kind: 'pact' } });
+    expect(applyAction(s, 'p1', { type: 'answerDeal', id: card!.id, accept: true })).toBe(true);
+    expect(deals()[0]!.status).toBe('active');
+
+    // Withdraw takes back an unanswered card, once.
+    expect(applyAction(s, 'p0', pact('p2'))).toBe(true);
+    const second = deals()[1]!.id;
+    expect(applyAction(s, 'p0', { type: 'withdrawDeal', id: second })).toBe(true);
+    expect(deals()[1]!.status).toBe('withdrawn');
+
+    // A refused move returns false and writes nothing.
+    const refuse = (who: string, action: AiAction, mutate: (g: GameState) => void = () => {}): string => {
+      const g = structuredClone(s);
+      mutate(g);
+      const before = JSON.stringify(g.politics!.deals);
+      expect(applyAction(g, who, action), JSON.stringify(action)).toBe(false);
+      expect(JSON.stringify(g.politics!.deals)).toBe(before);
+      return refusal(() => {
+        const h = structuredClone(s);
+        mutate(h);
+        return action.type === 'offerDeal' ? offerDeal(h, who, action.offer) : action.type === 'answerDeal' ? answerDeal(h, who, action.id, action.accept) : action.type === 'withdrawDeal' ? withdrawDeal(h, who, action.id) : undefined;
+      });
+    };
+    const thrown = [
+      refuse('p0', pact('p3'), (g) => void (g.phase = 'development')),
+      refuse('p0', pact('p0')),
+      refuse('p0', pact('p1')),
+      refuse('p0', pact('p3', 2)),
+      refuse('p0', { type: 'withdrawDeal', id: second }),
+      refuse('p2', { type: 'answerDeal', id: second, accept: true }),
+    ];
+    const lines = [...described('offerDeal').legalWhen(), ...described('answerDeal').legalWhen(), ...described('withdrawDeal').legalWhen()];
+    // The texts that carry a name or a count are matched on their fixed words; the rest verbatim.
+    for (const words of thrown) {
+      const fixed = lines.some((line) => line === words || new RegExp(`^${line.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[a-z]+\}/g, '.+')}$`).test(words));
+      expect(fixed, `legalWhen has no line for "${words}"`).toBe(true);
+    }
+  });
 });
 
 const FLOOR_INPUT = 'the AI plays them through FloorInput (AiSeat.developSteer)';
+/** A politics intent whose AiAction WS1 has not added yet: the server refuses it until its slice is built. */
+const NOT_YET_AN_AI_MOVE = 'politics contract only; the AI move comes with its slice';
 
 /** Every phone command, and the AI move that plays it or why none does (AM-2, AM-4). */
 const COVERAGE = {
@@ -271,6 +405,18 @@ const COVERAGE = {
   steer: { excluded: FLOOR_INPUT },
   act: { excluded: FLOOR_INPUT },
   hurry: { excluded: 'a person asks to speed production up; an AI seat counts as yes (ws6-ux AM-19)' },
+  // Politics slices 3-5: the contract commit adds the intents; WS1 adds each AiAction and turns its row into a move.
+  offerDeal: { move: 'offerDeal' },
+  withdrawDeal: { move: 'withdrawDeal' },
+  answerDeal: { move: 'answerDeal' },
+  sabotage: { excluded: NOT_YET_AN_AI_MOVE },
+  guard: { excluded: NOT_YET_AN_AI_MOVE },
+  investigate: { excluded: NOT_YET_AN_AI_MOVE },
+  fine: { excluded: NOT_YET_AN_AI_MOVE },
+  setBudget: { move: 'setBudget' },
+  callOverrule: { move: 'callOverrule' },
+  voteOverrule: { move: 'voteOverrule' },
+  openInquiry: { excluded: NOT_YET_AN_AI_MOVE },
 } satisfies Record<MuleIntent['type'], { move: AiAction['type'] } | { excluded: string }>;
 
 /** MuleIntent's command names, read from the protocol's source: the compiler's view is gone by the time a test runs. */

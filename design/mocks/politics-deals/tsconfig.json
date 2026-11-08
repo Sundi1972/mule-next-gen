@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext", "moduleResolution": "bundler", "jsx": "react-jsx",
+    "strict": true, "noEmit": true, "skipLibCheck": true,
+    "types": ["vite/client"]
+  },
+  "//": "src/ only: review-loop/ is Node tooling that would need @types/node, which the borrowed node_modules may lack.",
+  "include": ["src"]
+}

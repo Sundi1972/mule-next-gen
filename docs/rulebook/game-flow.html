@@ -76,7 +76,7 @@
 </tbody>
 </table></div>
 <p>The store's first prices are set where supply and demand put them at the start, not at the goods' reference prices. Month 1 opens in planning.</p>
-<div class="box example"><h4>Example</h4><p>A four-seat game starts with a 15 × 9 map, four players holding 1,000 cr, 2 Food, 6 Water and 2 Energy each, and a store holding 4 × 4 = 16 Food and 4 × 5 = 20 Energy beside its fixed 20 Water and 20 Smithore.</p></div>
+<div class="box example"><h4>Example</h4><p>A four-seat game starts with a 15 × 9 map, four players holding 1,000 cr, 2 Food, 6 Water and 2 Energy each, and a store holding 4 × 4 = 16 Food and 4 × 12 = 48 Energy beside its fixed 20 Water, 20 Smithore and 40 Medicine.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko set the start on 5 Nov after playing the walking build: players start with only 2 Energy and 2 Food, and the store holds 5 Energy and 4 Food for each seat. Asked whether to tune the food shortage this causes, he chose to "judge it at the table" rather than run a balance sweep first.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/config.ts::START, storeStockFor, mapSize, TAX, HAPPINESS</code> · <code>packages/engine/src/game.ts::createGame</code></p>
 <p class="owner">Kept current by: the PM, with the Balance team (WS1) for the numbers.</p>
@@ -174,7 +174,7 @@
 <ol>
 <li>Any month-end events strike.</li>
 <li><strong>Players eat and drink</strong>: each player needs <span class="num">2</span> Food and <span class="num">1</span> Water for themselves, plus 1 Food for every <span class="num">4</span> crew or part of 4, and 1 Water for every <span class="num">6</span> crew or part of 6. A plot with a MULE making a raw good has a crew of 1, a factory 2, a green belt none. Energy for the plots was already paid in production.</li>
-<li><strong>Colonists buy</strong> 1 Food and 1 Water for every <span class="num">20</span> colonists from the store, at its selling price, as far as their wages reach. Fed, the colony grows by <span class="num">4</span> %; short, it shrinks by <span class="num">5</span> %.</li>
+<li><strong>Colonists eat</strong> 1 Food and 1 Water for every <span class="num">20</span> colonists, taken from the store's shelf, free, as far as it holds them. Fed, the colony grows by <span class="num">4</span> %; short, it shrinks by <span class="num">5</span> %.</li>
 <li><strong>Goods spoil</strong>, and anything above <span class="num">10</span> units of a good in a player's home depot is lost. The store's goods spoil at a quarter of the normal rate.</li>
 <li><strong>The export ship</strong>, in its month, takes the store's surplus and leaves.</li>
 <li><strong>The store builds MULEs</strong> from Smithore, until its corral holds <span class="num">2</span> for each seat plus <span class="num">2</span> spare.</li>
