@@ -180,7 +180,7 @@ function drawn(g: MuleView, Part: (props: { game: MuleView }) => unknown): strin
 describe('S5-C11: the budget line on the TV', () => {
   const moved = () => withPolitics({ budget: budgetOf([80, 60, 10, 0]) });
 
-  it('S5-C11: the shares in order, Welfare naming who it goes to, and what is kept', () => {
+  it('S5-C11: the shares in order, Welfare naming who it goes to, and what is kept', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(moved(), TvBudgetLine);
     expect(textOf(html, 'tv-budget-projects')).toContain('Projects');
     expect(textOf(html, 'tv-budget-projects')).toContain('80%');
@@ -190,7 +190,7 @@ describe('S5-C11: the budget line on the TV', () => {
     expect(html.indexOf('tv-budget-welfare')).toBeLessThan(html.indexOf('tv-budget-kept'));
   });
 
-  it('S5-C11: a moved share carries ▲ or ▼ and says what it was; there is no "(was N%)" on the TV', () => {
+  it('S5-C11: a moved share carries ▲ or ▼ and says what it was; there is no "(was N%)" on the TV', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(moved(), TvBudgetLine);
     expect(textOf(html, 'tv-budget-move-projects')).toBe('▲');
     expect(tagOf(html, 'tv-budget-move-projects')).toContain('aria-label="up from 60%"');
@@ -200,27 +200,27 @@ describe('S5-C11: the budget line on the TV', () => {
     expect(html).not.toMatch(/was \d/);
   });
 
-  it('S5-C11: a share that did not move has no arrow', () => {
+  it('S5-C11: a share that did not move has no arrow', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(withPolitics({ budget: budgetOf([60, 60, 10, 10]) }), TvBudgetLine);
     expect(tagOf(html, 'tv-budget-move-projects')).toBeUndefined();
     expect(tagOf(html, 'tv-budget-move-welfare')).toBeUndefined();
     expect(tagOf(html, 'tv-budget-move-kept')).toBeUndefined();
   });
 
-  it('S5-C11: a line the colony does not offer yet (Security) is not drawn', () => {
+  it('S5-C11: a line the colony does not offer yet (Security) is not drawn', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const b = budgetOf([80, 60, 10, 0]);
     b.lines.push({ line: 'security', share: 0, start: 0, maxShare: 30, step: 5, credits: 0, maxCredits: 300 });
     expect(tagOf(drawn(withPolitics({ budget: b }), TvBudgetLine), 'tv-budget-security')).toBeUndefined();
   });
 
-  it('S5-C11: nothing is drawn without a budget', () => {
+  it('S5-C11: nothing is drawn without a budget', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     expect(drawn(withPolitics({}), TvBudgetLine)).toBe('');
     expect(drawn(game(null, 4), TvBudgetLine)).toBe('');
   });
 });
 
 describe('S5-C11: the overrule call on the TV', () => {
-  it('S5-C11: while a call stands in planning it names the caller, start to now and what it needs', () => {
+  it('S5-C11: while a call stands in planning it names the caller, start to now and what it needs', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(withPolitics({ overrule: overruleOf() }), TvOverruleCall);
     expect(textOf(html, 'tv-overrule-call-words')).toContain('Ossa calls an overrule vote on the Governor’s tax');
     expect(textOf(html, 'tv-overrule-call-tax')).toBe('5% → 9%');
@@ -232,7 +232,7 @@ describe('S5-C11: the overrule call on the TV', () => {
     ['the ballot is open', withPolitics({ overrule: overruleOf({ stage: 'ballot' }) })],
     ['the result is shown', withPolitics({ overrule: overruleOf({ stage: 'reveal', result: { passed: true, yes: 2, no: 1 } }) })],
     ['it is not planning', withPolitics({ overrule: overruleOf() }, 'development')],
-  ])('S5-C11: nothing is drawn when %s', (_, g) => {
+  ])('S5-C11: nothing is drawn when %s', (_, g) => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     expect(drawn(g, TvOverruleCall)).toBe('');
   });
 });
@@ -240,7 +240,7 @@ describe('S5-C11: the overrule call on the TV', () => {
 describe('S5-C11: the overrule ballot on the TV', () => {
   const ballot = (extra: Partial<OverruleView> = {}) => withPolitics({ tax: { percent: 9, start: 5, low: 0, high: 10 }, overrule: overruleOf({ stage: 'ballot', ...extra }) });
 
-  it('S5-C11: the question, start against now, and what it needs', () => {
+  it('S5-C11: the question, start against now, and what it needs', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(ballot(), TvOverrule);
     expect(tagOf(html, 'tv-overrule-ballot')).toBeDefined();
     expect(textOf(html, 'tv-overrule-question-words')).toBe('Undo the Governor’s tax?');
@@ -249,7 +249,7 @@ describe('S5-C11: the overrule ballot on the TV', () => {
     expect(textOf(html, 'tv-overrule-needed')).toBe('It needs 2 of 3 votes');
   });
 
-  it('S5-C11: it shows who has cast and how many, and never how: a registered vote that is not Done does not count', () => {
+  it('S5-C11: it shows who has cast and how many, and never how: a registered vote that is not Done does not count', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(ballot({ voted: ['s1', 's2'], done: ['s2'] }), TvOverrule);
     expect(textOf(html, 'tv-overrule-cast-count')).toBe('Voted 1 of 3');
     expect(textOf(html, 'tv-overrule-cast-s2')).toContain('VOTED ✓');
@@ -258,7 +258,7 @@ describe('S5-C11: the overrule ballot on the TV', () => {
     expect(tagOf(html, 'tv-overrule-yes')).toBeUndefined();
   });
 
-  it('S5-C11: the budget line sits at the foot of the ballot', () => {
+  it('S5-C11: the budget line sits at the foot of the ballot', () => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const g = withPolitics({ tax: { percent: 9, start: 5, low: 0, high: 10 }, overrule: overruleOf({ stage: 'ballot' }), budget: budgetOf([60, 60, 10, 10]) });
     expect(tagOf(drawn(g, TvOverrule), 'tv-budget-line')).toBeDefined();
   });
@@ -267,7 +267,7 @@ describe('S5-C11: the overrule ballot on the TV', () => {
     ['no overrule', withPolitics({})],
     ['a call that has not opened its ballot', withPolitics({ overrule: overruleOf() })],
     ['a finished vote', withPolitics({ overrule: overruleOf({ stage: 'over' as OverruleView['stage'] }) })],
-  ])('S5-C11: nothing is drawn for %s', (_, g) => {
+  ])('S5-C11: nothing is drawn for %s', (_, g) => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     expect(drawn(g, TvOverrule)).toBe('');
   });
 });
@@ -279,7 +279,7 @@ describe('S5-C11: the overrule reveal on the TV', () => {
   it.each([
     [true, 2, 1, 'Overruled', 'Yes 2 · needed 2: Overruled, the tax goes back to 5%'],
     [false, 1, 2, 'It stands', 'Yes 1 · needed 2: The Governor’s tax stands at 9%'],
-  ])('S5-C11: passed %s shows the totals and the verdict', (passed, yes, no, stamp, line) => {
+  ])('S5-C11: passed %s shows the totals and the verdict', (passed, yes, no, stamp, line) => { // trace-allow: S5-C11 is a spec change id; the TV parts have no AC of their own, S5-UBER-AC-2 is proved at the e2e step
     const html = drawn(reveal(passed, yes, no), TvOverrule);
     expect(tagOf(html, 'tv-overrule-reveal')).toBeDefined();
     expect(textOf(html, 'tv-overrule-stamp')).toBe(stamp);
