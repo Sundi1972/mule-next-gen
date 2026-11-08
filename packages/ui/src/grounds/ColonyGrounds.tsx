@@ -238,6 +238,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         walkers={walkers}
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
+        occluders={[HALL_BLOCK, ...placed.filter((q) => q.p.stage !== 'commissioned').map((q) => q.block)]}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
       {chips &&

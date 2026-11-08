@@ -218,6 +218,11 @@ fec2bab9 by PM ruling. `TableApp.tsx` carries no change from this task. Steps be
 **Spec:** §1 C4. **Scaffold:** `design/mocks/colony-grounds/src/look/Living.tsx`. **Files:** `packages/ui/src/grounds/LiveLayer.tsx`, wired into `ColonyGrounds`.
 - [ ] Write `B-AC-2: lights dim to full by wealth; closed stays dark; none by day` and `B-AC-3: a strike empties the paths`, at the rendered SVG (glow `<image>` opacity; walker count). Run: FAIL. Implement. Respect `useEventReducedMotion` from `@mule/ui`. Run: PASS. Commit.
 
+### Task 2.2c: T-AC-13 — a colonist behind a building is hidden by it, with a faint outline (C4; Heiko, 8 Nov)
+
+**Altitude:** the live layer's rendered markup. **Files:** `packages/ui/test/grounds-occlusion.test.tsx`, `packages/ui/src/grounds/occlusion.ts` (behindAny), `LiveLayer.tsx` (occluders, the outline), `ColonyGrounds.tsx` (the hall and every building but a site occlude).
+- [x] `T-AC-13: behind the Hospital, the colonist is drawn before it … and its faint outline after it` red c1089146, then green.
+
 ### Task 2.2b: C4 — smoke over a damaged building, haze by air
 
 **Plan gap found at PR-2 build:** spec C4 lists smoke and haze; Tasks 2.1–2.2 built glow and walkers only.
