@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { withHealth, withoutHealth } from './health-switch.js';
 import {
   advancePhase,
   createGame,
@@ -18,16 +19,6 @@ import {
   type ProductionLine,
   type Tile,
 } from '../src/index.js';
-
-/** Runs `body` with colony health switched on, and switches it back off whatever happens. */
-function withHealth<T>(body: () => T): T {
-  HEALTH.enabled = true;
-  try {
-    return body();
-  } finally {
-    HEALTH.enabled = false;
-  }
-}
 
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
 
@@ -89,7 +80,7 @@ describe('needs C18: a sick colony reaches its players (RULE-14)', () => {
   };
 
   it("needs B-AC-16: health on and h 0.4, a player's development sickness chance is today's + 0.10, within the row's cap; h 0 leaves it unchanged", () => {
-    const today = chance(0.4);
+    const today = withoutHealth(() => chance(0.4));
     expect(today, 'the premise: health off, the clean-air chance').toBeCloseTo(EVENTS.player.sickness.phases.development, 9);
     withHealth(() => {
       expect(chance(0.4)).toBeCloseTo(Math.min(EVENTS.player.sickness.cap, today + 0.1), 9);
@@ -153,7 +144,7 @@ describe('needs C18: a sick colony reaches its players\' crews (RULE-15)', () =>
       expect(plant.lines[0]!.made, 'an Energy plant makes its 4').toBe(4);
       expect(sickPart(plant.lines[0]!)).toBeUndefined();
     });
-    const off = produce(FARM, 0.3, 0);
+    const off = withoutHealth(() => produce(FARM, 0.3, 0));
     expect(off.lines[0]!.made, 'health off: the farm makes its 4').toBe(4);
   });
 
@@ -163,7 +154,7 @@ describe('needs C18: a sick colony reaches its players\' crews (RULE-15)', () =>
       if (state.colony) state.colony.sick = sick;
       return crewSickness(state, { stock: { ...p0(state).stock, medicine } });
     };
-    expect(at(0.3, 0), 'row 1: health off').toEqual({ cure: false, share: 0 });
+    expect(withoutHealth(() => at(0.3, 0)), 'row 1: health off').toEqual({ cure: false, share: 0 });
     withHealth(() => {
       expect(at(0.19, 0), 'row 1: h below crewSickFrom').toEqual({ cure: false, share: 0 });
       expect(at(0.3, 0, false), 'row 1: no colony, no h').toEqual({ cure: false, share: 0 });
@@ -202,7 +193,7 @@ describe('needs C18: a sick colony reaches its players\' crews (RULE-15)', () =>
       const row3 = crewSickness(state, { stock: { ...p0(state).stock, medicine: 0 } }).share > 0;
       return { medicine: needsOf(state, 'p0').medicine, row3, month: monthNeeds(state, 'p0').medicine };
     };
-    expect(need(0.3), 'health off').toEqual({ medicine: 0, row3: false, month: 0 });
+    expect(withoutHealth(() => need(0.3)), 'health off').toEqual({ medicine: 0, row3: false, month: 0 });
     withHealth(() => {
       for (const sick of [0, 0.1, 0.19, 0.2, 0.3, 0.4]) {
         const n = need(sick);
