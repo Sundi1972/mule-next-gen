@@ -39,7 +39,7 @@ const DECISIONS: [string, string][] = [
   ['D10', 'Colony: standings with reputation chips and “+ Deal” first, then the fund, the colony card (gauges, buildings, projects), the build site, what you need, the news, the ship and the facts; two columns at 844.'],
   ['D11', 'Talk: Chat and My cards; the thread has the whole stage. The composer (A) and an incoming offer open as the same sheet over the Talk stage. “+ Deal” on a whisper, a standings row or a player’s card all land here.'],
   ['D12', 'The month end stays outside the tabs, as every other phase does (land grant, development, the auctions, production): only the planning hub becomes tabs. The phone’s month end carries the full broken list under the league and the full paid-out line; the TV marks the breaker’s league row instead (PM ruling, 8 Nov).'],
-  ['D13', 'The overrule call moves from the Colony desk’s fund card (PM ruling, 7 Nov) to the tax line in Council › Laws, beside its ballot, as WS6 decided for the tabs. It is still “at the tax line”; the line under Now opens Laws.'],
+  ['D13', 'The overrule call sits on the tax line under Laws (PM ruling 8 Nov; it matches Heiko’s 7 Nov pick, overrule via the law ballot). Colony is read-only.'],
   ['D14', 'The table chat (C20) keeps its place in the rail on every tab: the seat row and the ticker under the rail’s content, the bubble in the head. Talk is where the threads and whispers are.'],
   ['D15', 'The cast: Brix is the human Governor (runs again in month 8), Kai the Sheriff and the caller, Ossa the AI seat and Land Baron, Lena the phone with no office. One table gives every state.'],
 ];
@@ -69,7 +69,7 @@ const TOUCHES: [string, string, string][] = [
   ['WS7', 'hub/politics/Offices.tsx, LawBallot.tsx, ElectionDay.tsx', 'Bodies unchanged; Offices’ openDesk calls land through DESK_DOORS. CouncilRail and ElectionDayRail are used for the reveals only; during a ballot the rail keeps Now.'],
   ['WS8', 'the Sheriff sub-tab', 'WS8’s case file, variant B (politics-p2 at 73e797fd), unchanged, as the Sheriff sub-tab’s body; its “Post a guard on the map” calls startPick(\'guard\'); its GuardMap is the Guard pick’s Map (ownBar), and Done sends guard {tiles} and opens the Sheriff sub-tab again.'],
   ['unruled', 'phone/Planning.tsx', '<Hub slots={TAB_SLOTS} />. Not in the ownership ruling; one line.'],
-  ['open', 'not designed here', 'The laptop (from 1100 px): its rail is 400 px and has room for the desks as today. Tabs there, or desks? A decision before the build.'],
+  ['—', 'the laptop (from 1100 px)', 'The laptop gets the same tabs, wider (PM ruling 8 Nov; not drawn).'],
 ];
 
 /** Where the design system has no answer; each is marked DS-GAP: in the code. */
