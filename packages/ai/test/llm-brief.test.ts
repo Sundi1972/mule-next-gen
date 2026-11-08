@@ -5,7 +5,9 @@ import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
 import { landBrief, phaseBrief } from '../src/llm/brief.js';
 import { replySchema, type Feedback } from '../src/llm/writer.js';
-import type { LandDraft } from '../src/playbook/index.js';
+import type { LandDraft, PhaseFact } from '../src/playbook/index.js';
+import type { TableTalk } from '../src/decider.js';
+import { relationMemory, type SocialInput } from '../src/social/index.js';
 
 /** Stock counts no game reaches, one per seat, so a leak into another seat's brief is unmistakable. */
 const OWN = { p0: 75_319, p1: 97_531, p2: 86_420 } as const;
@@ -48,8 +50,16 @@ const draftOf = (plot: number): LandDraft => {
   return { strategy: STRATEGY, landGrant };
 };
 const TALK = [{ from: 'Ada', text: 'I want the river <b>now</b>' }];
+/** Public notices between the seats: p1 sold p0 Food, p2 bought a plot from p0. */
+const NOTICES: PhaseFact[] = [
+  { month: 1, phase: 'auction', kind: 'trade', good: 'food', buyer: 'p0', seller: 'p1', price: 31, qty: 2 },
+  { month: 2, phase: 'landAuction', kind: 'sale', item: 'plot', plot: 7, seller: 'p0', buyer: 'p2', price: 160 },
+];
 
 const briefFor = (state: GameState, me: string) => landBrief(state, mindOf(me), PERSONAS.trader, draftOf(12), TALK).text;
+/** The same land brief with the social section, built from the seat's memory of NOTICES and no reads of its own yet. */
+const socialBriefFor = (state: GameState, me: string, talk: readonly TableTalk[] = TALK, reads: SocialInput['reads'] = {}) =>
+  landBrief(state, mindOf(me), PERSONAS.trader, draftOf(12), talk, {}, null, null, false, { memory: relationMemory(state, me, NOTICES, new Map()), reads }).text;
 
 describe("T-AC-A2: the brief holds only public facts in a deterministic order; two seats' briefs never contain another seat's goods", () => {
   it("T-AC-A2: each seat's brief carries its own goods and never another seat's", () => {
@@ -84,6 +94,14 @@ describe("T-AC-A2: the brief holds only public facts in a deterministic order; t
     const at = order.map((h) => text.indexOf(h));
     expect(at.every((i) => i >= 0), JSON.stringify(at)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // With the social section, its parts follow the character in a fixed order, and the talk is quoted once, inside it.
+    const social = socialBriefFor(state, 'p0');
+    expect(socialBriefFor(state, 'p0')).toBe(social);
+    const socialOrder = [...order, 'Social.', 'The other players:', 'Politics:', 'The last lines you heard', '<table_talk>', 'Decide where you stand with each player'];
+    const socialAt = socialOrder.map((h) => social.indexOf(h));
+    expect(socialAt.every((i) => i >= 0), JSON.stringify(socialAt)).toBe(true);
+    expect([...socialAt].sort((a, b) => a - b)).toEqual(socialAt);
+    expect(social.split('<table_talk>')).toHaveLength(2);
   });
 
   it("T-AC-A2: the public facts are there: every seat's plots and outfits, every price, the engine's plans with their numbers, the draft, the persona and quoted talk", () => {
@@ -291,3 +309,70 @@ describe('B fix 5: Claude is offered and shown only the settings play reads (WS9
   });
 });
 
+
+describe('T-AC-B5 (prompt): the social section (spec B C1)', () => {
+  it('T-AC-B5 (prompt): the social section carries each other player\'s public position, relationship facts, the AI\'s last recorded standing and aims, the politics and the heard lines addressed to it or the table, in a fixed order, capped; never a rival\'s goods or a whisper between two others', () => {
+    const state = createGame({ seed: 7, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `Seat ${i}`, isAi: true })), politics: true });
+    Object.assign(state, { tiles: table().tiles, players: table().players.map((p, i) => ({ ...p, reputation: state.players[i]!.reputation })) });
+    state.politics!.candidates.governor = ['p1', 'p2'];
+    state.politics!.promises.p1 = { kind: 'cap', percent: 9 };
+    const talk: TableTalk[] = [
+      { from: 'Seat 1', text: 'Food for votes?', to: 'me' },
+      { from: 'Seat 2', text: 'The Governor has done nothing.' },
+    ];
+    const reads: SocialInput['reads'] = { p1: { month: 2, stance: 'ally', notes: ['sells me Food', 'wants my vote'] } };
+    const text = socialBriefFor(state, 'p0', talk, reads);
+
+    // Each other player, by name and id, in seat order: position, what the seat knows, and its own last read.
+    const players = text.slice(text.indexOf('The other players:'), text.indexOf('Politics:'));
+    expect(players.indexOf('Seat 1 (id p1)')).toBeLessThan(players.indexOf('Seat 2 (id p2)'));
+    expect(players.indexOf('Seat 2 (id p2)')).toBeLessThan(players.indexOf('Seat 3 (id p3)'));
+    expect(players).not.toContain('Seat 0 (id p0)');
+    expect(players).toMatch(/Seat 1 \(id p1\): 2 plots, worth \d+\. Reputation \d+\./);
+    expect(players).toContain(`What you know of Seat 1: sold you 2 ${GOOD_NAME.food} at 31 in month 1; runs for Governor and promises to cap the sales tax at 9%.`);
+    expect(players).toContain('What you know of Seat 2: bought plot 7 for 160 from you in month 2; runs for Governor and no tax promise.');
+    expect(players).toContain('What you know of Seat 3: nothing between you yet.');
+    expect(players).toContain('Your read of Seat 1 (month 2): stance ally; "sells me Food"; "wants my vote".');
+    expect(players).toContain('Your read of Seat 2: none recorded yet.');
+    // The politics, and the heard lines: a whisper to the seat marked as one, a table line as it was said.
+    expect(text).toContain('Candidates for Governor: Seat 1 (promises to cap the sales tax at 9%), Seat 2 (no tax promise).');
+    expect(text).toContain('<table_talk>\nSeat 1 (whispered to you): "Food for votes?"\nSeat 2: "The Governor has done nothing."\n</table_talk>');
+    // No rival's goods, nothing p0 has not analysed.
+    for (const [other, count] of Object.entries(OWN)) if (other !== 'p0') expect(text).not.toContain(String(count));
+    const hidden = structuredClone(state);
+    hidden.tiles.forEach((t, i) => {
+      if (t.terrain === 'store' || hidden.players[0]!.analysed.includes(i)) return;
+      for (const g of Object.keys(t.ground) as (keyof typeof t.ground)[]) t.ground[g] = 4;
+    });
+    expect(socialBriefFor(hidden, 'p0', talk, reads)).toBe(text);
+    // The heard lines are only what the seat was handed: what it heard, to it or the table (a whisper between two
+    // others is never handed to it, B-AC-B5); the section adds no line of its own.
+    expect(text.match(/^Seat \d.*: ".*"$/gm)).toHaveLength(talk.length);
+  });
+
+  it('T-AC-B5 (prompt): each part stays within its BRAIN.social cap', () => {
+    const state = table();
+    const many: PhaseFact[] = Array.from({ length: BRAIN.social.factsPerPlayer + 2 }, (_, i) => ({ month: 1, phase: 'auction', kind: 'trade', good: 'food', buyer: 'p0', seller: 'p1', price: 20 + i, qty: 1 }));
+    const talk = Array.from({ length: BRAIN.social.heardLines + 3 }, (_, i) => ({ from: 'Seat 1', text: `line ${i}` }));
+    const reads = { p1: { month: 1, stance: 'rival' as const, notes: Array.from({ length: BRAIN.social.readsPerPlayer + 2 }, (_, i) => `note ${i}`) } };
+    const { text } = landBrief(state, mindOf('p0'), PERSONAS.trader, draftOf(12), talk, {}, null, null, false, { memory: relationMemory(state, 'p0', many, new Map()), reads });
+    const known = text.split('\n').find((l) => l.includes('What you know of Seat 1'))!;
+    expect(known.match(/ at \d+/g)).toHaveLength(BRAIN.social.factsPerPlayer);
+    expect(known).toContain('and 2 more');
+    const read = text.split('\n').find((l) => l.includes('Your read of Seat 1'))!;
+    expect(read.match(/"note \d+"/g)).toHaveLength(BRAIN.social.readsPerPlayer);
+    expect(text.match(/"line \d+"/g)).toHaveLength(BRAIN.social.heardLines);
+    expect(text).toContain(`"line ${BRAIN.social.heardLines + 2}"`);
+  });
+
+  it('T-AC-B5 (prompt): the social brief offers a stance and notes for every other player and lets the reply carry messages to them; the brief without it offers neither', () => {
+    const state = table();
+    const brief = landBrief(state, mindOf('p0'), PERSONAS.trader, draftOf(12), TALK, {}, null, null, false, { memory: relationMemory(state, 'p0', [], new Map()), reads: {} });
+    const others = ['p1', 'p2', 'p3'];
+    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', ...others.map((p) => `/strategy/stances/${p}`), ...others.map((p) => `/rivalReads/${p}`)]);
+    expect(brief.messageTo).toEqual(others);
+    const plain = landBrief(state, mindOf('p0'), PERSONAS.trader, draftOf(12), TALK);
+    expect(plain.offers.map((o) => o.path)).toEqual(['/landGrant/ranked']);
+    expect(plain.messageTo).toBeUndefined();
+  });
+});
