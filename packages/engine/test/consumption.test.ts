@@ -83,6 +83,19 @@ describe('needs C10: each kind of plot eats its own Food (RULE-10, AM-3)', () =>
 
   it("needs T-AC-20: HC-10's guard: one row per Outfit, Food and Energy only, each a whole number of quarters and never below 0", () => {
     expect(Object.keys(table()).sort()).toEqual([...OUTFITS].sort());
+    // The approved table (production.html#plot-consumption, Heiko 6 Nov); a works' Energy is its draw on top of its recipe.
+    expect(table(), 'the approved numbers').toEqual({
+      food: { food: 0.25, energy: 1 },
+      water: { food: 0.25, energy: 1 },
+      energy: { food: 0.25, energy: 1 },
+      smithore: { food: 0.5, energy: 2 },
+      crystite: { food: 0.75, energy: 2 },
+      rareEarth: { food: 0.5, energy: 2 },
+      alloy: { food: 0.5, energy: 1 },
+      electronics: { food: 0.5, energy: 2 },
+      medicine: { food: 0.5, energy: 1 },
+      greenBelt: { food: 0, energy: 0 },
+    });
     for (const outfit of OUTFITS) {
       const row = table()[outfit]!;
       expect(Object.keys(row).sort(), `${outfit}: no Water column (AM-3)`).toEqual(['energy', 'food']);
