@@ -931,7 +931,7 @@ SabotageHand.order (every seat)
       chance(POLITICS.ai.sabotage.orderChance[persona])                      order the best
   2   otherwise                                                              nothing
 SheriffHand (only the sitting Sheriff)
-  guard        the guardsMax plots with the highest guardValue(obs, me, plot) (a tie: a draw); Rookie: a
+  guard        the guardsMax plots with the highest guardValue(obs, me, plot) > 0 (AM-8) (a tie: a draw); Rookie: a
                seeded pick among players' working plots
   investigate  if one is left: the public order with culprit unknown and never investigated with the
                highest investigateValue(obs, me, suspect), if > 0; Rookie: the newest
@@ -1305,6 +1305,19 @@ did       an enact passes on lawWorth ≥ 0, a repeal only on lawWorth > 0: a se
 because   a repeal's worth is ≥ 0 for every seat the ban never fines, so "≥ 0" passed both the ban and its repeal:
           measured at month 3 with one seat caught twice, the enact went 2 to 1 and the repeal 3 to 0, so a caught
           Governor could repeal the ban the month after it passed
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-8 · 2026-11-08 · WS7 (build: S4-PR-4's boundary review, finding I2) · a guard worth nothing is not posted
+
+target    S4-RULE-13, SheriffHand's guard row
+said      "the guardsMax plots with the highest guardValue" (no floor; only investigate had "> 0")
+did       a plot is guarded only if its guardValue is above 0, as an investigation is: a computer Sheriff posts fewer
+          guards, or none, when no plot is worth guarding. The Rookie's seeded pick is unchanged.
+because   a guard that protects nothing tells the table nothing and costs nothing to skip, and WS1 tunes against this
+          row, so the build's floor is written down. Until WS1's values (S4-PR-3) every guardValue is 0, so a
+          non-Rookie Sheriff posts no guards yet.
 goal      S4-1, S4-2 — unchanged
 ```
 
