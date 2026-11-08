@@ -144,9 +144,9 @@
 <div class="box example"><h4>Example: how a computer player values one unit of Food</h4>
 <p>The Gambler (trader persona, Trader level) in month 3 owns a Food plot and an Energy plot and holds no Food. It has idle land and the money for a MULE, so a second of development is worth 10 cr to it. Its month's walking takes about 20 seconds (WS1 measured about this).</p>
 <ul>
-<li>It eats 2 + 1 for its crew of 2 = <strong>3</strong> Food a month. The needed block is 3 now plus 3 / 0.5 = 6 for next month (Food spoils by half) = <strong>9</strong> units.</li>
+<li>It eats 2 + 1 for its crew of 2 = <strong>3</strong> Food a month. The needed block is 3 now plus 3 / 0.75 = 4 for next month (Food loses a quarter) = <strong>7</strong> units.</li>
 <li>Going hungry: 20 s × (1 / 0.6 − 1) = 13.3 s lost, × 10 cr = 133 cr, over 9 units = <strong>about 15 cr a unit</strong>.</li>
-<li>Resale: the outlook says Food posts 45 next month. After the 5% tax 42.75, half spoils: 21.4, the risk cut (1 − 0.05) leaves <strong>about 20 cr</strong> (its keep value). For buying it is cut again (× 1 for speculate, × 0.9 for risk): <strong>about 18 cr</strong>.</li>
+<li>Resale: the outlook says Food posts 45 next month. After the 5% tax 42.75, a quarter spoils: 32.1, the risk cut (1 − 0.05) leaves <strong>about 30 cr</strong> (its keep value). For buying it is cut again (× 1 for speculate, × 0.9 for risk): <strong>about 27 cr</strong>.</li>
 <li>Its buy value for each of the 9 needed units is the higher of the two: <strong>18 cr</strong>.</li>
 </ul>
 <p>The store sells Food above its posted price, 15% to 25% above depending on how short Food is: at 45 posted, 52 to 57. The seat's limit is 18, so it does not buy, and goes hungry with money in the bank (WS9 measured hungry seats holding about 1,200 cr). This is exactly what Heiko saw at the table on 5 November. See <a href="#shortfall-stopgap">Buying what it is short of</a> for the fix being built.</p></div>
@@ -177,7 +177,7 @@
 <p>It re-aims only after its reaction time, starts after a delay of <span class="num">300–1,500</span> ms times its patience, and wanders its stopping point by up to <span class="num">3%</span> of the board inside its limit, so its stops are hard to read. At the store's or the ship's line, units trade by themselves; it stays while it still wants units there and steps off after the last.</p>
 <h3 id="auction-corner-spite">Cornering and spite</h3>
 <p>At Trader and Tycoon level, a seat with a corner weight may try to <strong>corner</strong> a good: when the store holds no more than the other players are short of, and the good spoils less than half a month, it adds <span class="num">0.5</span> of next month's price times its corner weight to the value of up to <span class="num">6</span> units the others lack. A seat with spite, while the leader is short of the good, adds <span class="num">0.1</span> of next month's price times its spite to the next <span class="num">2</span> units, to keep them from the leader.</p>
-<p>Food is never cornered: it spoils half a month (<code>GOOD_CONFIG.food.spoilage</code> 0.5), which is not less than half, and the monopoly plan's list of goods to corner (<code>AI_PLANS.monopoly.goods</code>) is Energy and Smithore.</p>
+<p>Food spoils a quarter a month (<code>GOOD_CONFIG.food.spoilage</code> 0.25), less than half, so a seat may now corner it when it is scarce, as it may Energy or Smithore. The monopoly plan's list of goods to corner (<code>AI_PLANS.monopoly.goods</code>) is still Energy and Smithore only. Until 8 Nov Food spoiled half a month and was never cornered.</p>
 <div class="box next"><h4>What is changing</h4><p>The buyer's limit uses the value model above, which values needed Food far below the store's price. The stopgap in the next section is being built. Heiko's 5 November table notes on the auction itself (slower selling, auto-stop at equilibrium, rest zones) are WS3's; the store's pricing rule is being redesigned by WS5. Both will need the hands checked again. Owner: WS1 for the hands.</p></div>
 <p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::goodPlan, tradeDecision, expectedPrices</code> · <code>packages/ai/src/hands/auction.ts::AuctionHand</code> · <code>packages/engine/src/config.ts::AI_HANDS.auction, STRATEGIST.budgetShare, trade, cornerPremium, spiteShare</code></p>
 <p class="owner">Kept current by: WS1.</p>
@@ -201,7 +201,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Good</th><th>Enough for next month</th><th>Example</th></tr></thead>
 <tbody>
-<tr><td>Food</td><td>What upkeep eats now, plus next month's eating again once half of what is left has spoiled (Food spoils <span class="num">50%</span>)</td><td>Eats 3: 3 + 3 / 0.5 = <strong>9</strong></td></tr>
+<tr><td>Food</td><td>What upkeep eats now, plus next month's eating again once a quarter of what is left has spoiled (Food spoils <span class="num">25%</span>)</td><td>Eats 3: 3 + 3 / 0.75 = <strong>7</strong></td></tr>
 <tr><td>Energy</td><td>Next month's need for its plots, once a quarter of what it holds has spoiled (Energy spoils <span class="num">25%</span>)</td><td>Needs 4: 4 / 0.75, rounded up = <strong>6</strong></td></tr>
 <tr><td>Water</td><td>As Food, with Water spoiling <span class="num">5%</span>, and only for a player with a plot that drinks (AM-18, PR-5: its drink, then next month's drink and plot use after spoilage; on trunk, only with a Food farm). Without one, going short of Water costs it nothing, and it values Water as before</td><td>Drinks 2: 2 + 2 / 0.95, rounded up = <strong>5</strong></td></tr>
 </tbody>
@@ -435,13 +435,13 @@
 <p>Every unit it could hold after the auction gets one value:</p>
 <p><strong>value = chance it is needed &#215; what going without it costs + chance it is not needed &#215; what it fetches later</strong></p>
 <ul>
-<li><strong>Needed</strong> means the stock that keeps it whole until next month: what it eats and drinks at the month's end, what spoils after that (half its Food, a quarter of its Energy), and what its plots will burn. What its own farms and plants will make counts too, but as less than certain, since an event or a shortage can cut it.</li>
+<li><strong>Needed</strong> means the stock that keeps it whole until next month: what it eats and drinks at the month's end, what spoils after that (a quarter of its Food and of its Energy), and what its plots will burn. What its own farms and plants will make counts too, but as less than certain, since an event or a shortage can cut it.</li>
 <li><strong>Going without</strong> is never cheaper than buying the unit back next month. For Energy and Water it is exact: one unit short switches off the next plot in the order the game uses (the biggest user first), and that plot makes only a fifth of its output.</li>
 <li><strong>What it fetches later</strong> is next month's price after the store's cut, the tax and spoilage, and nothing past what its depot keeps.</li>
 <li><strong>Its cash</strong> goes to the most valuable units across the whole month first, so a player with little money buys Energy before a second sack of Food, even though Food is auctioned first.</li>
 <li><strong>Building</strong> uses the same values: a power plant or a well is worth what its output saves. A player short of Energy builds a plant when that beats buying.</li>
 </ul>
-<p>Example: a player eats 3 Food a month and has none. Upkeep eats 3, then half the rest spoils, so it needs 9 to stay fed. With Food at 72 and 1,200 cr in hand, each of those 9 units is worth at least 72 to it, so it buys them. Today it values each at about 20 and buys none.</p>
+<p>Example: a player eats 3 Food a month and has none. Upkeep eats 3, then a quarter of the rest spoils, so it needs 7 to stay fed. With Food at 72 and 1,200 cr in hand, each of those 7 units is worth at least 72 to it, so it buys them. Today it values each at about 20 (worked out when Food spoiled half a month) and buys none.</p>
 
 <h3 id="resource-utility-why">Why it is like this</h3>
 <p>Measured on today's game (40 games on each of 3 seeds, 5 November): a computer player went into the Food auction short in 86&#8211;87% of months, and refused to buy in most of them because it valued a needed unit at about 19 cr against an asking price near 50. It was hungry at 88&#8211;89% of developments with about 1,200 cr in hand. Energy shortages cut some production in 40&#8211;43% of months. Today a needed Food unit is worth only the walking time hunger costs, which takes no account of the price level. A short buying fix from the Balance team (WS1) covers Food, Water and Energy until this design ships.</p>
@@ -482,7 +482,7 @@
 <tr><td>Twice the reference or more</td><td>0.44&#8211;0.47</td><td>No more than 1: met</td></tr>
 </tbody>
 </table></div>
-<p>Why the cheap band misses: Food spoils by half each month, so a spare unit is worth only about 0.41 times the price the player expects next month, and it stocks Food only when the asking price is under about 40% of that price. This is a balance question for Heiko; nothing has been tuned to meet it.</p>
+<p>Why the cheap band missed (measured when Food spoiled half a month): Food spoiled by half each month, so a spare unit was worth only about 0.41 times the price the player expected next month, and it stocked Food only when the asking price was under about 40% of that price. Food now spoils a quarter, which raises that share; the band has not been measured again. This is a balance question for Heiko; nothing has been tuned to meet it.</p>
 <p class="code-ref">In the code: <code>packages/ai/src/sim.ts::foodBandLine, supplyHooks</code> (the Resource utility (UBER-AC-2) line) · next month's need from <code>packages/ai/src/value.ts::wholeNextMonth</code> · the reference price from the store's <code>refPrice</code> · the spare unit's value, spec RULE-4 and AM-7, in <code>value.ts::unitValues</code> · spec C6</p>
 <p class="owner">Responsible: AI Strategy team (WS9). Status: Being built, branch <code>ws9-util-pr2</code>, 6 November.</p>
 
