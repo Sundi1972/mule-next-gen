@@ -29,7 +29,7 @@ const MONTH_END_MS = 10_000;
 /** B-AC-6: Lena's promise, stepped up from today's tax. */
 const LENA_CAP = 8;
 
-type Phone = { page: Page; name: string; runs: MuleIntent[] };
+type Phone = { page: Page; name: string; runs: MuleIntent[]; offers: MuleIntent[] };
 
 const within = (ms: number) => ms * SCALE + 3_000;
 
@@ -45,17 +45,19 @@ async function main(): Promise<void> {
       await page.goto(base);
       return page;
     };
-    /** A phone, and every run intent it sends, read off its socket. */
+    /** A phone, and every run and offerDeal intent it sends, read off its socket. */
     const phone = async (name: string): Promise<Phone> => {
       const page = await open(name);
       const runs: MuleIntent[] = [];
+      const offers: MuleIntent[] = [];
       page.on('websocket', (ws) =>
         ws.on('framesent', ({ payload }) => {
           const msg = typeof payload === 'string' ? (JSON.parse(payload) as { t?: string; intent?: MuleIntent }) : null;
           if (msg?.t === 'intent' && msg.intent?.type === 'run') runs.push(msg.intent);
+          if (msg?.t === 'intent' && msg.intent?.type === 'offerDeal') offers.push(msg.intent);
         }),
       );
-      return { page, name, runs };
+      return { page, name, runs, offers };
     };
     const lena = await phone('Lena');
     await lena.page.getByPlaceholder('Heiko').fill(lena.name);
@@ -392,9 +394,16 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
     await from.page.getByTestId('chat-input').fill(`A pact, ${PACT_MONTHS} months?`);
     await from.page.getByTestId('chat-send').click({ timeout: PRESS_MS });
     await from.page.getByTestId('add-deal').click({ timeout: PRESS_MS });
+    // The lengths offered are the config's, and the pact sent runs the length tapped: maxMonths cuts `until`, not this.
+    const lengths = await from.page.locator('[data-testid^=composer-a-months-]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-testid')!.split('-').pop())));
+    check(JSON.stringify(lengths) === JSON.stringify(POLITICS.deals.pactMonths), `S3-B-AC-1: the composer offers pacts of ${POLITICS.deals.pactMonths.join(', ')} months, got ${lengths.join(', ')}`);
     await from.page.getByTestId(`composer-a-months-${PACT_MONTHS}`).click({ timeout: PRESS_MS });
+    const sent = from.offers.length;
     await from.page.getByTestId('composer-a-send').click({ timeout: PRESS_MS });
-    return untilServer(from.page, () => (pacts().length > before ? pacts().at(-1)! : null), `S3-B-AC-1: the server holds ${from.name}'s offered pact`);
+    const card = await untilServer(from.page, () => (pacts().length > before ? pacts().at(-1)! : null), `S3-B-AC-1: the server holds ${from.name}'s offered pact`);
+    const intent = JSON.stringify(from.offers.slice(sent));
+    check(intent === JSON.stringify([{ type: 'offerDeal', offer: { to: toId, terms: { kind: 'pact' }, months: PACT_MONTHS } }]), `S3-B-AC-1: ${from.name}'s phone sent one ${PACT_MONTHS}-month pact to ${to.name}, got ${intent}`);
+    return card;
   };
   /** The card's id, on the two phones' views only: never another seat's, never the TV's. */
   const onlyThePair = (c: DealCard, what: string) => {
