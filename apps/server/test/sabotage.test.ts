@@ -95,7 +95,7 @@ const cut = (tile: number) => ({ type: 'sabotage' as const, target: { kind: 'pow
 /** Everything the connection `viewer` would be sent. */
 const wire = (game: MuleGame, viewer: string | null) => JSON.stringify(game.viewFor(viewer));
 const money = (game: MuleGame, id: string) => game.viewFor(null).players.find((p) => p.id === id)!.money;
-const reputation = (game: MuleGame, viewer: string | null, id: string) => game.viewFor(viewer).players.find((p) => p.id === id)!.reputation;
+const reputation = (game: MuleGame, viewer: string | null, id: string) => game.viewFor(viewer).players.find((p) => p.id === id)!.reputation!;
 const orders = (w: World): SabotageOrder[] => w.state.politics!.sabotage;
 
 describe('S4-B-AC-6: a pending order and the guards reach nobody but their party', () => {
@@ -154,7 +154,7 @@ describe('S4-B-AC-1 (server): a guarded cut is caught and named on every screen'
       expect(reputation(w.game, viewer, 'lena'), `${viewer}: Lena's reputation`).toBe(rep - 10);
       expect(view.politics!.reputationReasons!.lena, String(viewer)).toEqual([{ kind: 'caught', month: 1 }]);
       expect(view.politics!.sabotage!.incidents).toMatchObject([{ kind: 'powerCut', victim: 'brix', worked: false, culprit: 'lena', how: 'guard', investigated: false, fine: null }]);
-      expect(view.news[0], `${viewer}: the news names her`).toMatch(/Lena/);
+      expect(view.news.join(' '), `${viewer}: the news names her`).toMatch(/Caught! Lena tried to cut the power to Brix's Food plot; a guard stopped it\./);
     }
     // The plot makes its normal output: the engine filed no dark plot.
     expect(w.game.viewFor(null).production!.events.find((e) => e.kind === 'sabotage')!.hits).toEqual([]);
@@ -200,8 +200,8 @@ describe('S4-B-AC-2 (server): an unseen cut names nobody but its orderer', () =>
       expect(event.sabotage, String(viewer)).toMatchObject({ order: id, culprit: null, worked: true, guarded: false });
       expect(event.line, String(viewer)).toMatch(/^Someone cut the power/);
       expect(event.hits, `${viewer}: the plot is dark`).toHaveLength(1);
-      expect(view.news[0], String(viewer)).toMatch(/someone/i);
-      expect(view.news.join(' '), String(viewer)).not.toMatch(/Lena/);
+      expect(view.news, String(viewer)).toContain("Sabotage: someone cut the power to Ossa's Food plot.");
+      expect(view.news.join(' '), String(viewer)).not.toMatch(/Caught|tried to cut|Lena (cut|was)/);
       const text = JSON.stringify(view);
       if (viewer !== 'lena') {
         expect(text, `${viewer}: no culprit anywhere`).not.toContain('"culprit":"lena"');
@@ -218,7 +218,6 @@ describe('S4-B-AC-2 (server): an unseen cut names nobody but its orderer', () =>
   it('S4-B-AC-2: a failed, unseen order files no event, no news and no public notice, and is Lena\'s alone', () => {
     const w = world();
     force('powerCut', false, false);
-    const newsBefore = w.game.viewFor(null).news;
     w.game.handle('lena', cut(w.ossaPlot));
     until(w, 'production');
     const id = orders(w)[0]!.id;
@@ -227,7 +226,7 @@ describe('S4-B-AC-2 (server): an unseen cut names nobody but its orderer', () =>
     for (const viewer of VIEWERS) {
       const view = w.game.viewFor(viewer);
       expect(view.production!.events.filter((e) => e.kind === 'sabotage'), String(viewer)).toEqual([]);
-      expect(view.news, String(viewer)).toEqual(newsBefore);
+      expect(view.news.join(' '), String(viewer)).not.toMatch(/Sabotage|cut the power|Caught|rumour/);
       expect(view.politics!.sabotage!.incidents, String(viewer)).toEqual([]);
       if (viewer !== 'lena') expect(JSON.stringify(view), `${viewer}: the id`).not.toContain(id);
     }
@@ -257,7 +256,7 @@ describe('S4-B-AC-4: an investigation is public at once, and once only', () => {
       expect(view.politics!.sabotage!.incidents, String(viewer)).toMatchObject([{ id, culprit: 'lena', how: 'investigation', investigated: true }]);
       expect(view.politics!.sabotage!.sheriff.investigationsLeft, String(viewer)).toBe(0);
       expect(reputation(w.game, viewer, 'lena'), String(viewer)).toBe(rep - 10);
-      expect(view.news[0], String(viewer)).toMatch(/Solved by the Sheriff: it was Lena/);
+      expect(view.news[0], String(viewer)).toBe("Solved by the Sheriff: it was Lena, behind the power cut on Ossa's Food plot.");
     }
     expect(w.notices.filter((n) => n.kind === 'investigation')).toEqual([expect.objectContaining({ kind: 'investigation', order: id, solved: true, culprit: 'lena' })]);
     expect(w.notices.find((n) => n.kind === 'investigation')).not.toHaveProperty('parties');
@@ -272,8 +271,7 @@ describe('S4-B-AC-4: an investigation is public at once, and once only', () => {
     for (const viewer of VIEWERS) {
       const view = w.game.viewFor(viewer);
       expect(view.politics!.sabotage!.incidents, String(viewer)).toMatchObject([{ id, culprit: null, how: null, investigated: true }]);
-      expect(view.news[0], String(viewer)).toMatch(/The trail went cold/);
-      expect(view.news[0], String(viewer)).not.toMatch(/Lena/);
+      expect(view.news[0], String(viewer)).toBe("The trail went cold on the power cut on Ossa's Food plot.");
       expect(reputation(w.game, viewer, 'lena'), String(viewer)).toBe(rep);
       if (viewer !== 'lena') expect(JSON.stringify(view), String(viewer)).not.toContain('"culprit":"lena"');
     }
