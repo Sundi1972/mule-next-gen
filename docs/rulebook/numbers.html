@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1392 settings in 55 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1395 settings in 55 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>fce798ce066e</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>752b0c6da3c9</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1380,7 +1380,10 @@
 <tr><td><code>HEALTH.moodPerSick</code></td><td class="n">10</td><td>Mood points off the month&#39;s target per unit of sick share (all sick: this many).</td></tr>
 <tr><td><code>HEALTH.growthPerSick</code></td><td class="n">0.05</td><td>Off the colony&#39;s monthly growth factor per unit of sick share.</td></tr>
 <tr><td><code>HEALTH.electronicsBonus</code></td><td class="n">4</td><td>Mood points onto the month&#39;s target with the colonists&#39; whole Electronics want met; in proportion when part.</td></tr>
-<tr><td><code>HEALTH.crewSickFrom</code></td><td class="n">0.2</td><td>The sick share from which players&#39; crews fall sick too (read by the crews&#39; rule).</td></tr>
+<tr><td><code>HEALTH.crewSickFrom</code></td><td class="n">0.2</td><td>The sick share from which players&#39; crews fall sick too, unless their player takes a Medicine (needs RULE-15).</td></tr>
+<tr><td><code>HEALTH.playerSpill</code></td><td class="n">0.1</td><td>Added to a player&#39;s development sickness chance with the colony at the cap; in proportion below it (needs RULE-14).</td></tr>
+<tr><td><code>HEALTH.crewSpill</code></td><td class="n">1</td><td>A player&#39;s sick crews per unit of the colony&#39;s sick share, at most all of them (needs RULE-15).</td></tr>
+<tr><td><code>HEALTH.crewSickDrop</code></td><td class="n">0.5</td><td>Share of its output a plot loses with all its crews sick, in proportion when part (needs RULE-15).</td></tr>
 <tr><td><code>HEALTH.gaugeWellFrom</code></td><td class="n">90</td><td>The health gauge reads &quot;well&quot; from this health (0..100) up; below it, a sick spell, down to the limit at the cap.</td></tr>
 </tbody>
 </table></div>
@@ -2256,7 +2259,7 @@
 <tr><td><code>AI_PLANS.moneyMaker.otherScore</code></td><td class="n">0.8</td><td>That consideration&#39;s score, 0 to 1, for an outfit that makes another good (the money-maker scores 1).</td></tr>
 <tr><td><code>AI_PLANS.chain</code></td><td class="n"></td><td>A factory good the seat can&#39;t feed yet, scored with the plots that would make its inputs. See AM-33.</td></tr>
 <tr><td><code>AI_PLANS.chain.months</code></td><td class="n">0</td><td>A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-33. Above 0, the chain&#39;s MULEs, at the level&#39;s MULEs a month, must all be bought within this many months, from cash on hand. Switching on (at 3, as tested) is Heiko&#39;s decision, once the economy lets a chain pay.</td></tr>
-<tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage).</td></tr>
+<tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a monopoly plan may aim to corner. Food may still be cornered in the auction when scarce (STRATEGIST.cornerMaxSpoilage), but no plan aims at it.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.maxRivalPlots</code></td><td class="n">1</td><td>A good is cornered only while at most this many rival plots make it.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.minPlots</code></td><td class="n">2</td><td>And only with at least this many of its own idle or free plots whose best outfit is the good.</td></tr>
 <tr><td><code>AI_PLANS.landBaron.minFreeShare</code></td><td class="n">0.3</td><td>The land baron is a plan while at least this share of all plots is free.</td></tr>
