@@ -50,8 +50,8 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.energy = own.energy + colonistUnits * UPKEEP.colonistEnergyShare;
   // The MULEs players are about to install will each need Energy before any plot draws it (C6).
   demand.energy += mulesWanted(state) * energyPerNewMule();
-  // Sick colonists in dirty air need more Medicine.
-  demand.medicine = colonistMedicineNeed(state) * (sick ? POLLUTION.sickMedicineDemand : 1);
+  // Sick colonists in dirty air need more Medicine; players' crews take theirs against the colony's sickness (RULE-15).
+  demand.medicine = colonistMedicineNeed(state) * (sick ? POLLUTION.sickMedicineDemand : 1) + own.medicine;
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // The store builds a MULE from Smithore for every plot that will want one; smelters need Smithore too.
   demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;
@@ -90,15 +90,16 @@ export function exportDemand(state: GameState): Stock {
 }
 
 /**
- * What the players themselves use a month: Food and Water for their
- * households and crews, and the Energy and Water their plots and factories use (AM-17, AM-18).
+ * What the players themselves use a month: Food and Water for their households and crews, the Medicine their crews
+ * take when the colony is sick (needs RULE-15), and the Energy and Water their plots and factories use (AM-17, AM-18).
  */
-export function playersUse(state: GameState): { food: number; water: number; energy: number } {
-  const use = { food: 0, water: 0, energy: 0 };
+export function playersUse(state: GameState): { food: number; water: number; energy: number; medicine: number } {
+  const use = { food: 0, water: 0, energy: 0, medicine: 0 };
   for (const p of state.players) {
     const needs = needsOf(state, p.id);
     use.food += needs.food;
     use.water += needs.water;
+    use.medicine += needs.medicine;
   }
   // A plant or a well pays its own use from its own output (AM-17 R2, PM ruling A; AM-18 W5): it asks the store for nothing.
   for (const t of state.tiles) {
