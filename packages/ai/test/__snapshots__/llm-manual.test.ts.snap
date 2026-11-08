@@ -117,7 +117,7 @@ Cost: free.
 ### setTax
 In: planning. Args: percent (number).
 Does: The Governor sets the sales tax on every sale, paid into the colony fund, in whole percent; it starts at 5%, stays within 0% to 15%, and moves at most 5 points from the month's starting rate.
-Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); no overrule vote on the tax is open (else: "An overrule vote on the tax is called: it holds until it is settled"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
 Cost: free.
 
 ### done
@@ -160,6 +160,42 @@ Cost: free.
 In: planning. Args: yes (boolean).
 Does: Votes yes or no on the open law ballot; a later vote replaces it until the ballot closes.
 Legal when: the law ballot is open (else: "The law ballot is not open").
+Cost: free.
+
+### setBudget
+In: planning. Args: shares ({ projects, welfare, security }).
+Does: Shares the colony fund's spare credits between the budget's lines, in whole percent; the buildings, Welfare and the rest are paid from those shares at month end.
+Legal when: the game plays with a council (else: "This game plays without the colony's council"); the votes are over (else: "Set the budget once the votes are over"); you are the Governor (else: "Only the Governor sets the budget"); every line you share is one the colony has (else: "The colony has no <line> line yet"); a share is a whole number of percent, in steps of 5, up to its line's limit (else: "<Line> is 0% to <max>%, in steps of 5"); the shares add up to at most 100% (else: "The shares add up to <total>%: at most 100%").
+Cost: free.
+
+### callOverrule
+In: planning. Args: target (tax | null).
+Does: Calls this month's overrule vote on a setting the Governor changed; null takes your own call back.
+Legal when: the game plays with a council (else: "This game plays without the colony's council"); the votes are over (else: "Call an overrule once the votes are over"); the colony has a Governor (else: "There is no Governor to overrule"); you are not the Governor (else: "The Governor can't overrule themself"); no vote is called this month (else: "<name> already called this month's vote"); the target is the tax (else: "Only the tax can be overruled in this version"); the target is not the no-confidence vote (else: "Only the Sheriff's inquiry opens a no-confidence vote"); the setting changed since the month began (else: "The <target> is as it was when the month began"); you have a call to withdraw (else: "There is no call of yours to withdraw").
+Cost: free.
+
+### voteOverrule
+In: planning. Args: yes (boolean).
+Does: Votes yes (restore the setting the month began with) or no (keep the Governor's) on the open overrule ballot; a later vote replaces it until the ballot closes.
+Legal when: the overrule ballot is open (else: "The overrule vote is not open").
+Cost: free.
+
+### offerDeal
+In: planning. Args: to (player), terms ({ kind: 'pact' } | { kind: 'vote', office, candidate } | { kind: 'vote', law: true, yes }), months (1 | 3 | 6).
+Does: Offers another player a deal card: a pact for a few months, or a promise to vote for a candidate or on the next law; nothing binds until they accept.
+Legal when: the game plays with deals (else: "This game plays without deals"); it is planning (else: "Cards are offered in planning"); it names another player (else: "Pick another player"); you have fewer than 3 cards waiting for an answer (else: "You have <count> cards waiting for an answer"); they have answered your last card (else: "<name> has not answered your last card"); a pact runs 1, 3, 6 months (else: "A pact runs 1, 3 or 6 months"); you have no pact with them yet (else: "You already have a pact with <name>"); a vote for an office names an elected office (else: "The <office> is not elected yet"); an election is left this game (else: "No election is left this game"); you promise your vote to someone other than yourself (else: "Promise your vote to someone else"); the candidate is running for that office (else: "<name> is not running for <office>"); a vote on a law has a law up for a vote (else: "No law is up for a vote"); you have not promised your vote on this ballot (else: "You already promised your vote on this ballot").
+Cost: free.
+
+### withdrawDeal
+In: planning. Args: id (the card's id, 'deal-…').
+Does: Takes back a card this seat offered and the other player has not answered.
+Legal when: the game plays with deals (else: "This game plays without deals"); the card is yours and still waiting for an answer (else: "That card is no longer open").
+Cost: free.
+
+### answerDeal
+In: planning. Args: id (the card's id, 'deal-…'), accept (boolean).
+Does: Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.
+Legal when: it is planning (else: "Cards are answered in planning"); the card was offered to you and is still waiting for an answer (else: "That card is no longer open"); a pact accepted is your only pact with them (else: "You already have a pact with <name>").
 Cost: free.
 
 ## When a move is smart

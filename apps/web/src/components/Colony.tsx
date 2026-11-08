@@ -144,16 +144,17 @@ function useFrameClock(on: boolean, end: number): number {
 
 /**
  * The month end's mood drift, for the TV's gauges: it plays when this screen sees the month end come, once, and never
- * for a screen that joins (or rejoins) at the month end, which shows the end state. Reduced motion lands it at once.
- * Call it where the TV stays mounted across phases.
+ * for a screen that joins (or rejoins) at the month end, which shows the end state. Its count starts once `shown`, when
+ * TvMonthEnd mounts (after the grounds opener). Reduced motion lands it at once. Call it where the TV stays mounted
+ * across phases.
  */
-export function useMonthEndDrift(game: MuleView): GaugeLanding | undefined {
+export function useMonthEndDrift(game: MuleView, shown = true): GaugeLanding | undefined {
   const reduced = useEventReducedMotion();
   const seen = useRef<string | null>(null);
   const [drift, setDrift] = useState<GaugeChange | null>(null);
   const end = DRIFT_AT + LANDING.count + LANDING.pulse;
   // Reduced motion shows the end state, which needs no frames.
-  const t = useFrameClock(drift !== null && !reduced, end);
+  const t = useFrameClock(drift !== null && !reduced && shown, end);
   // Before paint, so the month end never shows the new number before it counts to it.
   useLayoutEffect(() => {
     const before = seen.current;

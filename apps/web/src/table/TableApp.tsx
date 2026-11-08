@@ -1,7 +1,7 @@
 import { GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
-import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, GroundsOpener, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, useGroundsOpener, WalkBoard, type CreatureWrap } from '@mule/ui';
+import { AiMark, Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import {
   boardWalkers,
   dealLine,
@@ -39,6 +39,8 @@ import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
 import { placesOf } from '../phone/hub/standing';
 import { TvEventLayer } from '../events/TvEventLayer';
+import { overlayShowAt } from '../events/clock';
+import { Grounds } from '../components/Grounds';
 import { TvElection } from './TvElection';
 import { FitHeight, TvBody } from './TvFit';
 import { TvGovernorPromise } from './TvGovernorPromise';
@@ -228,8 +230,10 @@ export function tvChatLines(_game: Pick<MuleView, 'phase' | 'finished'>): number
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
+  // The month-end opener, after the month end's event show and before TvMonthEnd (spec C7, RULE-6).
+  const opener = useGroundsOpener(game, overlayShowAt(game, now) !== null);
   // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
-  const drift = useMonthEndDrift(game);
+  const drift = useMonthEndDrift(game, opener === null);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -246,7 +250,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        <TvMonthEnd game={game} drift={drift} />
+        {opener && game.colony ? <GroundsOpener opener={opener} colony={game.colony} month={game.month} Scene={Grounds} /> : <TvMonthEnd game={game} drift={drift} />}
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
@@ -302,7 +306,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <News news={game.news} />
         </div>
         {phase !== 'planning' ? (
-          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? (p.isAi ? 'AI · READY' : 'READY') : p.isAi ? 'AI' : '…'}</span>} />
+          <Players game={game} className="mt-auto" right={(p) => <span className="font-mono text-sm text-ink-3">{p.ready ? 'READY' : p.isAi ? '' : '…'}</span>} />
         ) : (
           <ul className="mt-auto flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
             {readyRows(game.players, connected, claude).map((row) => {
@@ -442,11 +446,21 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
   return (
     <ul className={cx('flex flex-col gap-2', className)}>
       {game.players.map((p) => (
-        <li key={p.id} className="flex items-center gap-3">
+        <li key={p.id} className="flex items-center gap-3" data-testid={`tv-player-${p.id}`}>
           <Speaker id={p.id} size="tv">
             <PlayerMark slot={toSlot(p.slot)} size={22} />
           </Speaker>
-          <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
+          {/* A computer seat's mark (Heiko, 7 Nov) sits outside the name's truncation, so a long name never cuts it off. */}
+          <span className="flex min-w-0 flex-1 items-baseline font-display text-xl font-semibold">
+            <span className="truncate" data-testid="tv-player-name">
+              {p.name}
+            </span>
+            {p.isAi && (
+              <span className="shrink-0 whitespace-pre font-normal">
+                <AiMark />
+              </span>
+            )}
+          </span>
           {right(p)}
         </li>
       ))}
