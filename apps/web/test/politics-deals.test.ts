@@ -204,7 +204,7 @@ describe('the reputation chip (S3-C19)', () => {
     const kept = card({ id: 'deal-k1', from: LENA, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
     const p = politics({
       brokenDeals: [brixBroke, ossaBroke],
-      // Ossa was caught twice in month 3, under a sabotage ban of ×2: two rows, each the drop the engine took.
+      // Ossa was caught twice in month 3, under a sabotage ban of ×2: two rows, in words, with no figure.
       reputationReasons: { [BRIX]: [{ kind: 'broken', id: 'deal-b1' }, { kind: 'unrest', month: 1 }], [OSSA]: [{ kind: 'caught', month: 3 }, { kind: 'caught', month: 3 }, { kind: 'broken', id: 'deal-o1' }] },
       laws: { sabotageBan: { setting: 2, since: 1 } },
     });
@@ -249,7 +249,7 @@ describe('the reputation chip (S3-C19)', () => {
     tap(`who-${OSSA}-rep`);
     expect(text('reason-deal-o1'), "Ossa's own reason, in the breaker-less words").toBe(`M2Broke a pact with Lena−${-POLITICS.reputation.moves.pactBroken}`);
     expect(allTestids('reason-caught'), 'one row per incident, even in one month').toEqual(['reason-caught-3-1', 'reason-caught-3-2']);
-    expect(text('reason-caught-3-1'), 'moves.caught times the ban').toBe(`M3Caught sabotaging−${-POLITICS.reputation.moves.caught * 2}`);
+    expect(text('reason-caught-3-1'), 'the words alone: the view cannot tell the drop the engine took').toBe('M3Caught sabotaging');
   });
 
   it('S3-B-AC-6: with refuseBelow over repLow, a fair name under it says AI players turn down cards under refuseBelow', () => {
