@@ -2,7 +2,7 @@ import { EVENT_SHOW, productionShowMs } from '@mule/engine';
 import type { EventView, MuleView, NewsLine, PlayerView, TableView } from '@mule/protocol';
 import type { TableClient } from '../../../../../apps/web/src/net/client';
 import { aPlayer } from '../../../../../apps/web/test/fixtures/views';
-import { boardViewFor, type MockWorld } from '../fixture';
+import { boardViewFor, showEventsOf, type MockWorld } from '../fixture';
 import { brokenIn, brokenWho, brokenWords } from './copied/deals-words';
 
 /*
@@ -38,18 +38,26 @@ export type Seats = 2 | 4 | 6;
  */
 export function tvScreen(world: MockWorld, { seats = 4 }: { seats?: Seats } = {}): TvScreen {
   const { view, table } = boardViewFor(world);
-  const game: MuleView = { ...view, players: seatsOf(view.players, seats), newsLines: newsLinesOf(view) };
-  // TODO(fixture): world.investigation lands with mock-hub-tabs' Sheriff fixture; read through the type until then.
-  const investigation = (world as { investigation?: Investigation }).investigation ?? null;
+  const named = [...brokenIn(view, view.month).map((c) => c.brokenBy ?? c.from), ...(view.politics?.sabotage?.incidents ?? []).flatMap((i) => (i.culprit ? [i.culprit] : []))];
+  const keep = [view.politics?.governor, ...named].filter((id): id is string => !!id);
+  const seated: MuleView = { ...view, players: seatsOf(view.players, seats, keep), newsLines: newsLinesOf(view) };
+  // Production (the Sheriff path): the month's public sabotage events, as the server files them (showEventsOf, #p10's
+  // shape: ShowEventView + `sabotage`). WS7's 'powerCut' key is not in trunk's EventKey yet: hence the cast, as WS8's.
+  const game = world.stage === 'production' ? productionOf(seated, showEventsOf(world) as unknown as EventView[]) : seated;
+  const investigation = world.investigation ?? null;
   return { table: { ...table, game }, game, chat: world.chat.filter((m) => !m.to), investigation };
 }
 
 /**
- * MEASURING ONLY. Two seats: Ossa · AI and Brix, so the Governor's row and the month's breaker stay (who a line names
- * but the table lacks reads as the news wrote it, or "someone"). Six: the four, then a person and a computer seat, so the TV folds its AIs into one row (FOLD_AIS_FROM).
+ * MEASURING ONLY. Two seats: the Governor and the one the screen is about (this month's breaker, else a named
+ * saboteur), so the Governor's row and the moment's or the stamp's name stay (Ossa · AI and Brix on the planning path,
+ * Lena and Brix on the Sheriff's). Who a line names but the table lacks reads as the news wrote it, or "someone". Six: the four, then a person and a computer seat, so the TV folds its AIs into one row (FOLD_AIS_FROM).
  */
-function seatsOf(players: PlayerView[], seats: Seats): PlayerView[] {
-  if (seats === 2) return players.filter((p) => p.id === 'ossa' || p.id === 'brix');
+function seatsOf(players: PlayerView[], seats: Seats, keep: string[]): PlayerView[] {
+  if (seats === 2) {
+    const two = [...new Set([...keep, ...players.map((p) => p.id)])].slice(0, 2);
+    return players.filter((p) => two.includes(p.id));
+  }
   if (seats === 4) return players;
   const at = (i: number) => players[i % players.length]!;
   return [

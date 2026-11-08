@@ -73,3 +73,20 @@ export const TV_MONTH_END_NEWS_CONSIDERED = {
   /** B: the news line in the Worth footnote's row (free, but it changes WS4's TvMonthEnd). */
   inFootnoteRow: { 2: 0.78, 4: 0.708, 6: 0.768 },
 } as const;
+
+/**
+ * The Sheriff month (?path=sheriff, mock-hub-tabs' 24d31ebd), each beat sampled every 0.5 s on solo.html?beat=: the
+ * lowest scale it showed (production's rail changes through the show), at 2 / 4 / 6 seats (2 = Lena and Brix here).
+ * WS8's layer sits out of flow over the map: the guard's shield and the dark plot measured 0.0 px off Brix's Food plot's
+ * centre, every size. The investigation's moment showed for its 8 s at the same scale as after it.
+ */
+export const TV_FIT_SHERIFF: Record<string, { beat: string; fit: BySeats }> = {
+  productionCaught: { beat: 's2-caught', fit: { 2: 0.973, 4: 0.923, 6: 0.788 } },
+  fineSet: { beat: 's3-fined', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  monthEndFine: { beat: 's3-month-end', fit: { 2: 0.826, 4: 0.708, 6: 0.768 } },
+  productionDark: { beat: 's4-dark', fit: { 2: 0.93, 4: 0.882, 6: 0.758 } },
+  /** Solved and cold alike; the moment's scale equals its folded state's. */
+  investigation: { beat: 's4-solved', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  guarding: { beat: 's1-guarded', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  monthEnd5: { beat: 's2-month-end', fit: { 2: 0.826, 4: 0.708, 6: 0.768 } },
+};
