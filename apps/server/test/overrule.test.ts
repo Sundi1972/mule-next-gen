@@ -126,7 +126,7 @@ describe('S5-C7: the three intents on the rules', () => {
     expect(refusal(() => game.handle('s1', { type: 'setTax', percent: 7 }))).toBe('accepted');
   });
 
-  it('refusals come in words: the Governor can\'t call, a vote needs an open ballot, only the Governor sets the budget', () => {
+  it('S5-B-AC-4: refusals come in words: the Governor can\'t call, a vote needs an open ballot, only the Governor sets the budget', () => {
     const { game } = planningProper();
     expect(refusal(() => game.handle('s1', { type: 'callOverrule', target: 'tax' }))).toBe("The Governor can't overrule themself");
     expect(refusal(() => game.handle('s2', { type: 'voteOverrule', yes: true }))).toBe('The overrule vote is not open');
