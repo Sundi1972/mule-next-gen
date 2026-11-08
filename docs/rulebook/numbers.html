@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1357 settings in 53 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1358 settings in 53 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>d1ae9f5913d6</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>c5c6e70c916f</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1082,6 +1082,7 @@
 <tr><td><code>POLITICS.ai.sabotage.orderChance.saboteur</code></td><td class="n">0.6</td><td>See the note on <code>POLITICS.ai.sabotage.orderChance</code>.</td></tr>
 <tr><td><code>POLITICS.ai.sabotage.minEdge</code></td><td class="n">0</td><td>Credits an order must be worth, after spite, cost and expected capture, before a seat places it.</td></tr>
 <tr><td><code>POLITICS.ai.sabotage.grudge</code></td><td class="n">2</td><td>Weight on a victim who was caught sabotaging this seat, when picking a target.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.behindWeight</code></td><td class="n">0.25</td><td>Share, 0..1, of a power cut&#39;s damage a seat counts against a victim behind it on Worth (slice 4 §10: &quot;little against a trailing player&quot;); a victim ahead of it counts in full. WS1, S4-PR-3.</td></tr>
 <tr><td><code>POLITICS.ai.sheriff</code></td><td class="n"></td><td>How an AI Sheriff fines (slice 4, S4-RULE-13); every other case pays the standard fine.</td></tr>
 <tr><td><code>POLITICS.ai.sheriff.fine</code></td><td class="n"></td><td>Base fines in credits (before the ban): on the Worth leader, and on a pact partner.</td></tr>
 <tr><td><code>POLITICS.ai.sheriff.fine.leader</code></td><td class="n">300</td><td>See the note on <code>POLITICS.ai.sheriff.fine</code>.</td></tr>
@@ -1108,11 +1109,6 @@
 <tr><td><code>POLITICS.ai.runGovernor.cautious</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runGovernor</code>.</td></tr>
 <tr><td><code>POLITICS.ai.runGovernor.aggressive</code></td><td class="n">0.8</td><td>See the note on <code>POLITICS.ai.runGovernor</code>.</td></tr>
 <tr><td><code>POLITICS.ai.runGovernor.saboteur</code></td><td class="n">0.6</td><td>See the note on <code>POLITICS.ai.runGovernor</code>.</td></tr>
-<tr><td><code>POLITICS.ai.runSheriff</code></td><td class="n"></td><td>Chance it runs for Sheriff when it does not run for Governor.</td></tr>
-<tr><td><code>POLITICS.ai.runSheriff.trader</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
-<tr><td><code>POLITICS.ai.runSheriff.cautious</code></td><td class="n">0.4</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
-<tr><td><code>POLITICS.ai.runSheriff.aggressive</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
-<tr><td><code>POLITICS.ai.runSheriff.saboteur</code></td><td class="n">0.7</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1120,6 +1116,11 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
+<tr><td><code>POLITICS.ai.runSheriff</code></td><td class="n"></td><td>Chance it runs for Sheriff when it does not run for Governor.</td></tr>
+<tr><td><code>POLITICS.ai.runSheriff.trader</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
+<tr><td><code>POLITICS.ai.runSheriff.cautious</code></td><td class="n">0.4</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
+<tr><td><code>POLITICS.ai.runSheriff.aggressive</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
+<tr><td><code>POLITICS.ai.runSheriff.saboteur</code></td><td class="n">0.7</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
 <tr><td><code>POLITICS.ai.taxTarget</code></td><td class="n"></td><td>The sales tax in whole percent a persona steers toward as Governor: 10 for every persona (pace set C, Heiko, 6 Nov).</td></tr>
 <tr><td><code>POLITICS.ai.taxTarget.trader</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
 <tr><td><code>POLITICS.ai.taxTarget.cautious</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
@@ -1155,8 +1156,6 @@
 <tr><td><code>POLITICS.ai.budget.tilt.aggressive.security</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.budget.tilt</code>.</td></tr>
 <tr><td><code>POLITICS.ai.budget.tilt.saboteur.welfare</code></td><td class="n">0.5</td><td>See the note on <code>POLITICS.ai.budget.tilt</code>.</td></tr>
 <tr><td><code>POLITICS.ai.budget.tilt.saboteur.security</code></td><td class="n">0.5</td><td>See the note on <code>POLITICS.ai.budget.tilt</code>.</td></tr>
-<tr><td><code>POLITICS.ai.overrule</code></td><td class="n"></td><td>How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them.</td></tr>
-<tr><td><code>POLITICS.ai.overrule.minGain</code></td><td class="n">20</td><td>Credits a month a change must cost the seat before it calls an overrule.</td></tr>
 </tbody>
 </table></div>
 
@@ -1164,6 +1163,8 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
+<tr><td><code>POLITICS.ai.overrule</code></td><td class="n"></td><td>How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them.</td></tr>
+<tr><td><code>POLITICS.ai.overrule.minGain</code></td><td class="n">20</td><td>Credits a month a change must cost the seat before it calls an overrule.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.longShot</code></td><td class="n"></td><td>Chance a persona calls an overrule that cannot win, as a protest.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.longShot.trader</code></td><td class="n">0.1</td><td>See the note on <code>POLITICS.ai.overrule.longShot</code>.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.longShot.cautious</code></td><td class="n">0.05</td><td>See the note on <code>POLITICS.ai.overrule.longShot</code>.</td></tr>
@@ -1195,6 +1196,13 @@
 <tr><td><code>POLITICS.ai.colony.donate.share.cautious</code></td><td class="n">0.15</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate.share.aggressive</code></td><td class="n">0.05</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate.share.saboteur</code></td><td class="n">0</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="politics-ai-part-4"><code>POLITICS.ai</code>, continued</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
 <tr><td><code>POLITICS.ai.colony.donate.standing</code></td><td class="n"></td><td>The share&#39;s multiplier when the seat leads the table on Worth, or trails it.</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate.standing.leading</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.colony.donate.standing</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.donate.standing.trailing</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.colony.donate.standing</code>.</td></tr>

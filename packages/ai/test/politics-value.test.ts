@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, lawImpact, observe, POLITICS, type GameState, type LawId, type SabotageOrder } from '@mule/engine';
-import { captureCost, investigateValue, lawWorth, lineWorth, overruleWorth } from '../src/politics-value.js';
+import { createGame, lawImpact, observe, POLITICS, type GameState, type LawId } from '@mule/engine';
+import { lawWorth, lineWorth, overruleWorth } from '../src/politics-value.js';
 
 const SEATS = ['ai0', 'ai1', 'ai2'];
 
@@ -29,11 +29,8 @@ describe('politics valuation (WS7 slices 3-5, WS1 values)', () => {
     expect(lawWorth(inForce, 'ai0', { kind: 'repeal', law })).toBe(lawImpact(inForce, { kind: 'enact', law, setting })['ai0']?.cost ?? 0);
   });
 
-  it("the stubs take WS7's final contracts: a public order whose culprit is hidden, a line's credits, an overrule's target", () => {
+  it("slice 5's stubs take WS7's final contracts: a line's credits, an overrule's target (slice 4's values are real: sabotage-values.test.ts)", () => {
     const obs = observe(planning(), 'ai0');
-    const suspect: SabotageOrder = { id: 'sab-1', by: null, month: 2, target: { kind: 'powerCut', tile: 7 }, cost: 0, outcome: 'done', culpritPublic: false };
-    expect(investigateValue(obs, 'ai0', suspect)).toBe(0);
-    expect(captureCost(obs, 'ai0', suspect)).toBe(0);
     expect(lineWorth(obs, 'ai0', 'welfare', 100)).toBe(0);
     expect(overruleWorth(obs, 'ai1', 'budget')).toBe(0);
     expect(overruleWorth(obs, 'ai0')).toBe(0);
