@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, cloneForSim, createGame, exportDemand, HEALTH, monthlyDemand, POLLUTION, RECIPES, UPKEEP, type GameState } from '../src/index.js';
 import { game, to, worked } from './fixtures/food-month.js';
+import { withHealth, withoutHealth } from './health-switch.js';
 
 /** Month 1's production with `colonists` in the colony and no Electronics works. */
 function colonyOf(colonists: number): GameState {
@@ -116,15 +117,12 @@ describe("needs C13: the colonists' Medicine demand reads colony health (RULE-11
   const SMOG = POLLUTION.bands.find((b) => b.name === 'smoggy')!.from;
 
   it("needs B-AC-12 (the Medicine case): health on, h at the cap gives the colonists' Medicine demand +40%; health off gives today's", () => {
-    expect(colonistsMedicine(HEALTH.cap, 0), 'health off: one per colonistsPerMedicine').toBeCloseTo(today, 9);
-    HEALTH.enabled = true;
-    try {
+    expect(withoutHealth(() => colonistsMedicine(HEALTH.cap, 0)), 'health off: one per colonistsPerMedicine').toBeCloseTo(today, 9);
+    withHealth(() => {
       expect(colonistsMedicine(HEALTH.cap, 0)).toBeCloseTo(today * 1.4, 9);
       expect(colonistsMedicine(HEALTH.cap, SMOG), 'dirty air still multiplies it').toBeCloseTo(today * 1.4 * POLLUTION.sickMedicineDemand, 9);
       expect(colonistsMedicine(0, 0), 'h 0: today\'s').toBeCloseTo(today, 9);
-    } finally {
-      HEALTH.enabled = false;
-    }
-    expect(colonistsMedicine(HEALTH.cap, SMOG), "health off in dirty air: today's dirty-air demand").toBeCloseTo(today * POLLUTION.sickMedicineDemand, 9);
+    });
+    expect(withoutHealth(() => colonistsMedicine(HEALTH.cap, SMOG)), "health off in dirty air: today's dirty-air demand").toBeCloseTo(today * POLLUTION.sickMedicineDemand, 9);
   });
 });
