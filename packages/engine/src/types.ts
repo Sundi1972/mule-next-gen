@@ -128,7 +128,7 @@ export interface Player {
   hungry: boolean;
   /**
    * The share of their need the player's crews went without at the last month end, Food and Water, each 0 to 1 (needs
-   * C14): next production works slower by it. Absent before the first month end: nothing short.
+   * C14): next production makes less by it. Absent before the first month end: nothing short.
    */
   crewShort?: { food: number; water: number };
   /**
@@ -395,7 +395,7 @@ export interface ProductionLine {
    * Energy and made UPKEEP.offOutputShare of its output (AM-17); `waterOff` the same for want of Water (AM-18).
    * `noEnergy` and `noWater` are the halvings they replaced, kept for screens and fixtures that still name them; the
    * engine no longer files `noEnergy`, and `noWater` only with AM-18 off. `crewShort`: its crews went short at the last
-   * month end and worked slower (needs C14, RULE-12), before any turn-off. `crewSick`: the colony was sick enough to
+   * month end, so the plot made less (needs C14, RULE-12), before any turn-off. `crewSick`: the colony was sick enough to
    * make its crews sick and its owner held no Medicine (needs RULE-15), after `crewShort`.
    */
   parts: {
