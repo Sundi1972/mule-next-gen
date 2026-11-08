@@ -309,7 +309,7 @@ describe('the deal composer (S3-C17)', () => {
   it("S3-B-AC-1: the composer also opens from a name's player card and from a standings row, in planning", () => {
     mount(gameFor(myView(LENA)), hub);
     tap('standing');
-    tap(`standing-${OSSA}-deal`);
+    tap(`deal-standing-${OSSA}`);
     expect(findTestid('standings-sheet'), 'the standings give way to the composer').toBeUndefined();
     expect(text('composer-a')).toContain('Ossa');
     tap('composer-a-close');
