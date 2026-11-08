@@ -211,6 +211,20 @@ flags it the day WS9 reports the chain build ready.
 
 ---
 
+## Amendments recorded 8 Nov (rulings since the plan was written; each task below carries its own line)
+
+- **Heiko, 8 Nov: fewer tests.** Each PR has only its own red-first tests, with no multi-seed sweeps or sim acceptance runs. Health is tuned in real games from Heiko's 13 Nov play-test. Dropped as a result:
+  - Task 6.5's `needs T-AC-23` sim run;
+  - Task 10.4 Step 1's `needs T-AC-27` ten-game comparison (health off stays inert through RULE-14's h 0 and RULE-15's row 1, which T-AC-26 pins);
+  - Task 13.1's `needs T-AC-28` gate (the S1 15% gate, too, is now a measurement only).
+- **PM ruling (a), 8 Nov.** `UPKEEP.irrigated` and `shortOutputShare` stay, as WS1's fallback when AM-18 is off (`production.ts::plotWaterOn`), so T-AC-24 drops its "no farm halving remains" scan.
+- **PR-9 also exports the curve** `colony.ts::hardship`, which PR-7 and PR-8 import, and adds the C19 band helpers `healthOf` and `healthGauge`.
+- **#802 (PR-8) folds in:**
+  - auctionNeed's Food carry becomes the factory's inputs only (PM ruling (a), 8 Nov; WS3 named edit);
+  - Food stays cornerable at 0.25 spoilage (PM ruling (a)).
+  WS1 follows with its own value.ts PR into this lane by 12 Nov 18:00Z.
+- **Task 6.2 is split (PM ruling (a), 8 Nov).** PR-6 adds `needsWith` in the engine only and touches no packages/ai file. WS1's value.ts PR makes the AI switch.
+
 ## Milestone A · the store reads the colony (PR-1 … PR-4, one batch to trunk)
 
 ## PR-1 · the store's prices answer the colony, with one selling price everywhere (pricing G-1, G-2)
@@ -531,11 +545,19 @@ Tests: `packages/engine/test/consumption.test.ts` (new), `production.test.ts`.
   prototype finding). Plan-drift: engine tests that pin the old crew sums change; name each in the PR body. Run → PASS.
 - [ ] **Step 3: Commit** `feat(engine): each kind of plot eats, drinks and burns its own amount (verifies needs B-AC-10, B-AC-11, T-AC-20, T-AC-22)`.
 
-### Task 6.2 — needs C12: the AI asks the engine (needsWith)
-- [ ] **Step 1: Write the failing test `needs T-AC-21: no crewPerFood, crewPerWater, UPKEEP.crew or energyUse outside config history; value.ts asks needsWith`**
-  (source scan) → FAIL.
-- [ ] **Step 2: Implement needs C12** (extract `needsWith` beside `needsOf`; `value.ts` and `manual.ts`'s sentence
-  use it) → PASS; `pnpm --filter @mule/ai test` green. **Step 3: Commit** `refactor(ai): the AI plans crews' upkeep through needsWith (verifies needs T-AC-21)`.
+### Task 6.2 — needs C12: the AI asks the engine (needsWith) — split, PM ruling (a) 8 Nov
+- [ ] **PR-6 (WS5), engine only: needs C12's `needsWith`.**
+  - Extract `production.ts::needsWith` beside `needsOf`, with engine unit tests (red first) showing it gives what
+    needsOf gives for the same plots.
+  - Touch no packages/ai file.
+  - **Land on `ws5-colony-economy` by 11 Nov 18:00Z** and send the PM the SHA, so WS1 can merge it in.
+  - Commit `feat(engine): needsWith gives a player's and their crews' needs for any set of plots (needs C12)`.
+- [ ] **WS1's value.ts PR (into this lane, by 12 Nov 18:00Z), not PR-6: needs C12's AI switch, verified by `needs T-AC-21`.**
+  - `value.ts` switches to `needsWith`.
+  - `llm/manual.ts`'s sentence switches too: WS2's file, a named edit WS2 OKs by SHA.
+  - The `needs T-AC-21` source scan: no crewPerFood, crewPerWater, UPKEEP.crew or energyUse outside config history;
+    value.ts asks needsWith.
+  - WS5 merges it on green CI and one review.
 
 ### Task 6.3 — needs C13: the store's demand is players + crews + colonists (RULE-11)
 - [ ] **Step 1: Write the failing test `needs B-AC-12: 4 seats of "3 farms + well" and 100 colonists, Food posted at 300 → the store's Food demand is 17; a festival adds on top`**
@@ -547,14 +569,14 @@ Tests: `packages/engine/test/consumption.test.ts` (new), `production.test.ts`.
 - [ ] **Step 1:** `production.html#plot-consumption` → "In the game" with the settled Water column; build-index.
   **Step 2: Commit** `docs(rulebook): consumption per kind of plot as built`.
 
-### Task 6.5 — `needs T-AC-23` by sim
-- [ ] **Step 1: Run `needs T-AC-23`**: `pnpm sim -- --games 10 --seed 1`, politics off and on, and the report:
+### Task 6.5 — `needs T-AC-23` by sim — **dropped** (Heiko, 8 Nov: no sim acceptance runs)
+- [ ] ~~ **Step 1: Run `needs T-AC-23`**: `pnpm sim -- --games 10 --seed 1`, politics off and on, and the report:
   Water demand's 12-month mean rises from about 13 to 16–17 (or as Task 6.0 settled); hungry seat-months rise no more
-  than 3%. Paste into the body. **Step 2: Commit** any report rows.
+  than 3%. Paste into the body. **Step 2: Commit** any report rows.~~
 
 ### PR-6 merge gate
 - [ ] needs B-AC-10..12, T-AC-20..23 green and named; tests first; typecheck + test exit 0.
-- [ ] OKs: WS1 (production, config, economy, value.ts), WS2 (manual.ts). One independent review. Rulebook.
+- [ ] OKs: WS1 (production, config, economy). value.ts and manual.ts are in WS1's own PR (Task 6.2 split). One independent review. Rulebook.
 
 ## PR-7 · the colonists' hardship: curve, memory and an immediate blow (needs C3–C5) — WS7 builds
 
@@ -648,9 +670,9 @@ removed). Tests: `production.test.ts`.
   exported factor (needs AM-1) → PASS. **Step 3: Commit**.
 
 ### Task 10.4 — `needs T-AC-27`: health off is inert
-- [ ] **Step 1: Run `needs T-AC-27`**: the report's 10 seed-1 games with `HEALTH.enabled` false on PR-10's head and
+- [ ] **Step 1, dropped (Heiko, 8 Nov: no sim runs); T-AC-26 pins health off as inert.** ~~Run `needs T-AC-27`: the report's 10 seed-1 games with `HEALTH.enabled` false on PR-10's head and
   on PR-8's head → every number equal. Then the same games with health on (a local override, not committed), for the
-  body: mean sick share, months at the cap, Medicine-short months, player-sick months, crews sick.
+  body: mean sick share, months at the cap, Medicine-short months, player-sick months, crews sick.~~
 - [ ] **Step 2:** Rulebook (players' and crews' sickness, "built, switched off"); build-index. **Step 3: Commit**.
 
 ### PR-10 merge gate
@@ -693,9 +715,9 @@ limit 60, WS5's ruling 6 Nov)
 
 ### Task 13.1 — switch health on only if Medicine can be had
 **Depends on:** milestone B on trunk; S2 confirmed yes.
-- [ ] **Step 1: Run `needs T-AC-28`** on trunk with `HEALTH.enabled` true (a local override) and WS9's chain build
+- [ ] **Step 1, the gate dropped (Heiko, 8 Nov): health goes on on 13 Nov and is tuned in his play-test.** ~~Run `needs T-AC-28` on trunk with `HEALTH.enabled` true (a local override) and WS9's chain build
   in (risk R1: measured together, never apart): Medicine-short months < 40 of 120 in the 10 seed-1 games; report the mean sick share, months at the cap, colonists at the end and
-  player-sick months. Not below 40 → stop: health stays off; the PM takes the numbers to Heiko.
+  player-sick months. Not below 40 → stop: health stays off; the PM takes the numbers to Heiko.~~
 - [ ] **Step 2:** Set `HEALTH.enabled: true`; rulebook pills for colony health, players' and crews' sickness →
   "In the game"; build-index. **Step 3: Commit** `feat(config): colony health on (verifies needs T-AC-28)`; T-AC-28's
   table in the body. OKs WS1, WS7; one independent review; the PM batches it.
