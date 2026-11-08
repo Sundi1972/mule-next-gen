@@ -288,10 +288,14 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
     const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
     const places = placesOf(game);
+    // From four seats the ready list alone says who the table waits for: the box above it put a table of people under
+    // TV-FIT's floor (0.636 with four, 0.568 with six; PM ruling 8 Nov). The host's row then says the table may go on.
+    const boxed = game.players.length <= TV_WAITING_BOX_SEATS;
+    const hostGoesOn = (id: string) => !boxed && hostCanContinue && waiting.length > 0 && id === host.id;
     side = (
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
-        {phase !== 'planning' ? null : waiting.length > 0 ? (
+        {phase !== 'planning' || !boxed ? null : waiting.length > 0 ? (
           <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
             <WaitingFor seats={waiting} me={null} tv />
             {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
@@ -361,7 +365,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               const s = row.seat;
               const status = claude(s.id);
               const isAway = !s.isAi && s.away;
-              const state = status ? STATUS_CHIP[status] : s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
+              const state = status ? STATUS_CHIP[status] : s.isAi ? 'AI · READY' : s.ready ? (hostGoesOn(s.id) ? 'READY · CAN CONTINUE' : 'READY') : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               // HC-3: a Claude seat is never waited for here; its status is a label, and only READY dims it.
               const dim = status ? status === 'ready' : s.isAi || s.ready;
               const tone = status === 'thinking' ? 'text-holo' : playsBuiltIn(status) || isAway ? 'text-warn' : status || s.ready || s.isAi ? 'text-ink-3' : 'text-holo';
@@ -442,6 +446,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     </SeatSpeciesProvider>
   );
 }
+
+/** The most seats at which TV planning keeps the box of who the table waits for (TV-FIT, PM ruling 8 Nov). */
+const TV_WAITING_BOX_SEATS = 3;
 
 function Players({ game, right, className }: { game: MuleView; right: (p: MuleView['players'][number]) => ReactNode; className?: string }) {
   return (
