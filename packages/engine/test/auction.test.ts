@@ -378,11 +378,20 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody buys' }]);
   });
 
-  it("FM-skip-spoilage: Food is what upkeep eats now plus what survives to next month's development: a seat with no crew eats 2 and must hold 5", () => {
+  it("FM-skip-spoilage: Food is what upkeep eats now, plus only a factory's Food carried past spoilage: no ration for next month (PM ruling (a), 8 Nov)", () => {
+    // Development reads the household's last meal (needs C15) and the next auction comes before the next upkeep, so
+    // next month's ration is bought then: a seat with no crew and no factory holds what this month end eats.
     const state = energyTable(0, 0);
     expect(needsOf(state, 'p0').food, 'the household alone').toBe(2);
-    // 2 eaten at the month end; 3 lose a quarter to the 2 next month's development checks for (needs C16).
-    expect(auctionNeed(state, 'p0').food).toBe(5);
+    expect(auctionNeed(state, 'p0').food, '2 eaten at the month end, nothing carried').toBe(2);
+
+    // A Medicine works takes 1 Food at next production: that 1 must survive a quarter's spoilage, so 2 are carried.
+    const works = outfitTable(['medicine'], (eat) => eat);
+    const eat = needsOf(works, 'p0').food;
+    const factoryFood = monthNeeds(works, 'p0').food - eat;
+    expect(factoryFood, "the premise: the works' recipe takes 1 Food").toBe(1);
+    expect(Math.floor(2 * (1 - GOOD_CONFIG.food.spoilage)), '2 held survive to the 1 it takes').toBe(1);
+    expect(auctionNeed(works, 'p0').food, "what upkeep eats now, plus the works' 1 past spoilage").toBe(eat + 2);
   });
 
   /** p0 works the given outfits; every seat holds `water` Water (or its own drink, if less), and the store wants no Water. */
