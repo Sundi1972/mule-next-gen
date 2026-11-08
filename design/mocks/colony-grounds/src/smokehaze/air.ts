@@ -9,8 +9,8 @@ export const SMOGGY = 30;
 export const TOXIC = 60;
 export const COLLAPSE = 80;
 /** The haze at its thinnest (the air just Smoggy) and thickest (100): opacity at the far edge of the grounds. */
-export const HAZE_MIN = 0.14;
-export const HAZE_MAX = 0.55;
+export const HAZE_MIN = 0.18;
+export const HAZE_MAX = 0.65;
 
 /** RULE-7: how thick the haze is for the air gauge; none on a clean colony, then rising evenly with the gauge. */
 export function hazeOpacity(environment: number): number {
@@ -21,7 +21,7 @@ export function hazeOpacity(environment: number): number {
 
 /** The haze's colour by band and light: a dusty grey when Smoggy, ochre when Toxic, a brown murk at Collapse. */
 export function hazeColour(environment: number, light: Light): string {
-  const day = environment >= COLLAPSE ? '#7d6a3c' : environment >= TOXIC ? '#a8925a' : '#a69a86';
+  const day = environment >= COLLAPSE ? '#7a6430' : environment >= TOXIC ? '#b39a52' : '#aaa292';
   const dusk = environment >= COLLAPSE ? '#3e3424' : environment >= TOXIC ? '#4a4030' : '#4a4642';
   return light === 'day' ? day : dusk;
 }
@@ -52,8 +52,8 @@ export interface PlumeStyle {
 
 /** Variant A: light grey puffs that rise, widen and fade. Variant B: a darker, denser column bent by the wind. */
 export const PLUMES: Record<'A' | 'B', PlumeStyle> = {
-  A: { puffs: 7, period: 4.2, rise: 95, drift: 34, r0: 6, r1: 24, opacity: 0.5 },
-  B: { puffs: 11, period: 3.4, rise: 120, drift: 58, r0: 7, r1: 30, opacity: 0.72 },
+  A: { puffs: 10, period: 4.6, rise: 140, drift: 44, r0: 11, r1: 36, opacity: 0.8 },
+  B: { puffs: 14, period: 3.8, rise: 175, drift: 74, r0: 13, r1: 44, opacity: 0.92 },
 };
 
 /** The plume `seconds` in: each puff at its own phase. With reduced motion the caller passes 0, a still plume. */

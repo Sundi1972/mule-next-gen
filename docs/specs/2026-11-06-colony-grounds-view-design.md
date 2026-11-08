@@ -252,10 +252,10 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
 RULE-7 · How thick the haze over the grounds is (C4; Task 2.2b)        shape: formula
 input    environment · 0–100, higher is dirtier (config.ts ENVIRONMENT.bands: Clean 0, Smoggy 30, Toxic 60, Collapse 80)
 unknown  no environment gauge → 0, as a clean colony: a missing reading never paints murk
-haze     environment < 30 → 0 (no haze drawn); else 0.14 + (environment − 30) / 70 × (0.55 − 0.14), the opacity at the far
-         (top) edge, thinning to 0.45 × that toward the camera
+haze     environment < 30 → 0 (no haze drawn); else 0.18 + (environment − 30) / 70 × (0.65 − 0.18), the opacity at the far
+         (top) edge, thinning to 0.55 × that toward the camera
 colour   Smoggy a dusty grey, Toxic ochre, Collapse a brown murk; darker at dusk (design/mocks/colony-grounds/src/smokehaze/air.ts)
-examples 12 → 0 · 29 → 0 · 30 → 0.14 · 65 → 0.345 · 100 → 0.55
+examples 12 → 0 · 29 → 0 · 30 → 0.18 · 65 → 0.415 · 100 → 0.65
 RULE-8 · What smokes (C4; Task 2.2b)                                     shape: decision table
   #  stage              then
   1  damaged            a plume rises from the top of its picture (0.7 of its height); embers warm its base at dusk

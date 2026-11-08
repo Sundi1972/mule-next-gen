@@ -20,6 +20,8 @@ const COLONY: GroundsColony = {
     { id: 'observatory', name: 'Observatory', stage: 'damaged', monthsLeft: null, buildMonths: 2, place: { x: 1, y: 1, w: 1, h: 1 } },
   ],
 };
+/** The smoke's colour: A a light grey, lit by the colony at dusk; B a dark soot. */
+const PUFF: Record<'A' | 'B', Record<Light, string>> = { A: { day: '#c4c0b9', dusk: '#8c8781' }, B: { day: '#4b4744', dusk: '#3d3936' } };
 const STILL: OpenerState = { kind: 'still', ms: 3_000, baseline: true, playing: false, changes: [] };
 type Air = 'clean' | 'smoggy' | 'toxic' | 'collapse';
 const AIR: Record<Air, [number, string]> = { clean: [12, 'Clean 12'], smoggy: [42, 'Smoggy 42'], toxic: [68, 'Toxic 68'], collapse: [90, 'Collapse 90'] };
@@ -41,17 +43,19 @@ function AirLayer({ svg, environment, light, variant, seconds }: { svg: SVGSVGEl
     <g pointerEvents="none" data-testid="air-layer">
       <defs>
         <radialGradient id={`puff-${variant}`}>
-          <stop offset="0" stopColor={variant === 'A' ? (dusk ? '#57534f' : '#8d8a86') : dusk ? '#2c2a29' : '#45423f'} stopOpacity="1" />
-          <stop offset="1" stopColor={variant === 'A' ? (dusk ? '#57534f' : '#8d8a86') : dusk ? '#2c2a29' : '#45423f'} stopOpacity="0" />
+          {/* a soft-edged ball with a solid core, so overlapping puffs read as one body of smoke */}
+          <stop offset="0" stopColor={PUFF[variant][light]} stopOpacity="1" />
+          <stop offset="0.45" stopColor={PUFF[variant][light]} stopOpacity="0.8" />
+          <stop offset="1" stopColor={PUFF[variant][light]} stopOpacity="0" />
         </radialGradient>
         <radialGradient id="ember">
-          <stop offset="0" stopColor="#ff8a3d" stopOpacity="0.9" />
+          <stop offset="0" stopColor="#ff9a4a" stopOpacity="1" />
           <stop offset="1" stopColor="#ff8a3d" stopOpacity="0" />
         </radialGradient>
         <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
           {/* thickest at the far edge, thinning toward the camera, as air does over distance */}
           <stop offset="0" stopColor={colour} stopOpacity={haze} />
-          <stop offset="1" stopColor={colour} stopOpacity={haze * 0.45} />
+          <stop offset="1" stopColor={colour} stopOpacity={haze * 0.55} />
         </linearGradient>
       </defs>
       {sources.map((s) => (
@@ -59,7 +63,7 @@ function AirLayer({ svg, environment, light, variant, seconds }: { svg: SVGSVGEl
           {plume(seconds, style).map((q, k) => (
             <g key={k}>
               <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r} fill={`url(#puff-${variant})`} opacity={q.opacity} />
-              {dusk && q.warm > 0 && <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r * 0.8} fill="url(#ember)" opacity={q.warm * q.opacity} style={{ mixBlendMode: 'screen' }} />}
+              {dusk && q.warm > 0 && <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r * 0.9} fill="url(#ember)" opacity={q.warm * q.opacity} style={{ mixBlendMode: 'screen' }} />}
             </g>
           ))}
         </g>
@@ -128,7 +132,7 @@ export function SmokeHaze() {
   const Scene = useMemo(() => (props: Omit<ColonyGroundsProps, 'manifest'>) => <ColonyGrounds {...props} light={light} manifest={manifest} />, [light, manifest]);
   const layer = { environment, light, variant, still };
   return (
-    <main className="livewalk" data-testid="smoke-haze">
+    <main className="livewalk" data-testid="air-page">
       <div className="controls">
         <Seg testid="variant" label="Smoke" value={variant} set={setVariant} options={[['A', 'Smoke A: light puffs'], ['B', 'Smoke B: dark column']]} />
         <Seg testid="air" label="Air" value={air} set={setAir} options={(Object.keys(AIR) as Air[]).map((a) => [a, AIR[a][1]])} />
