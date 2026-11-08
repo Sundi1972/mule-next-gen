@@ -329,12 +329,13 @@ describe('the deal composer (S3-C17)', () => {
     // for Governor; Kai and Brix are not.
     const lengths = [2, 5];
     const game = gameFor(myView(LENA, [], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } }));
+    listenForKeys();
     mount(game, hub);
     // An older refusal, from some other tap, is not this card's.
     act(() => setState({ toasts: [{ id: 1, message: 'You can run for office in planning' }] }));
     tap('tab-talk');
     tap(`chat-to-${BRIX}`);
-    tap('add-deal');
+    tapFocused('add-deal');
 
     expect(text('composer-a')).toContain('Card for');
     expect(text('composer-a')).toContain('Brix');
@@ -369,6 +370,9 @@ describe('the deal composer (S3-C17)', () => {
     rerender(gameFor(myView(LENA, [listed], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } })));
     expect(findTestid('composer-a')).toBeUndefined();
     expect(byTestid('add-deal').getAttribute('disabled'), 'one unanswered card to Brix at a time').not.toBeNull();
+    // + Deal, its opener, is off now (SA-1384): the focus goes to the open tab, not to a control that cannot take it.
+    expect(focusInPage(), 'the focus is on an element still in the page').toBe(true);
+    expect(focused(), '+ Deal is off, so the open tab').toBe('tab-talk');
   });
 
   it('S3-B-AC-1: the composer says before the send what the engine would refuse: no offers left, a vote already promised on that ballot, a pact already held; and warns an AI seat turns down a low name', () => {
@@ -437,6 +441,8 @@ function listenForKeys(): void {
       [document, 'removeEventListener'],
       [FakeElement.prototype, 'focus'],
       [FakeElement.prototype, 'querySelector'],
+      [FakeElement.prototype, 'isConnected'],
+      [document, 'querySelector'],
     ] as [object, string][]
   ).map(([on, key]) => [on, key, Object.getOwnPropertyDescriptor(on, key)] as const);
   unlistenForKeys = () => {
@@ -454,6 +460,20 @@ function listenForKeys(): void {
   doc.removeEventListener = (t, l) => (t === 'keydown' ? void keydown.delete(l as never) : remove(t, l));
   (FakeElement.prototype as unknown as { focus(): void }).focus = function (this: FakeElement) {
     (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
+  };
+  // An element is connected while its parents reach the document: what a closed dialog's opener may no longer be.
+  Object.defineProperty(FakeElement.prototype, 'isConnected', {
+    configurable: true,
+    get(this: FakeElement) {
+      let n: unknown = this;
+      while (n instanceof FakeElement) n = n.parentNode;
+      return n === document;
+    },
+  });
+  // The document's one selector: the open tab, where the focus goes when the opener is gone.
+  (document as unknown as { querySelector(s: string): FakeElement | null }).querySelector = (s: string) => {
+    if (s !== '[role=tab][aria-selected=true]') throw new Error(`fake document.querySelector: ${s}`);
+    return document.body.findAll('button').find((b) => b.getAttribute('role') === 'tab' && b.getAttribute('aria-selected') === 'true') ?? null;
   };
   // The two selectors the dialogs ask: a button marked to take the focus on open, or the first control that can.
   (FakeElement.prototype as unknown as { querySelector(s: string): FakeElement | null }).querySelector = function (this: FakeElement, s: string) {
@@ -473,6 +493,8 @@ function listenForKeys(): void {
 }
 /** The focused element's testid: a failing comparison of the elements themselves would print the whole fake tree. */
 const focused = () => (document.activeElement as unknown as FakeElement | null)?.getAttribute('data-testid') ?? null;
+/** Whether the focused element is still in the document: focus on a removed one is focus lost. */
+const focusInPage = () => (document.activeElement as unknown as { isConnected?: boolean } | null)?.isConnected === true;
 const press = (key: string) => act(() => [...keydown].forEach((l) => l({ key })));
 /** A tap as a browser gives it: the button takes the focus, then its handler runs. */
 const tapFocused = (testid: string) => {
@@ -499,7 +521,9 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     expect(focused(), 'the incoming sheet takes the focus, on its first control').toBe('sheet-card-deal-in9-from-open');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
-    expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
+    // The agenda door is Overview's, gone with the tab switch: the focus goes to the open tab (the ARIA tabs pattern).
+    expect(focusInPage(), 'the focus is on an element still in the page').toBe(true);
+    expect(focused(), 'the agenda door is gone, so the open tab').toBe('tab-talk');
   });
 
   it('S3-B-AC-1: + Deal from the standings closes them, so only the composer is up; Escape gives the focus to the standings door, still on the screen', () => {
@@ -527,7 +551,8 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     expect(focused()).toBe('sheet-card-deal-in9-from-rep');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'the next Escape closes the sheet').toBeUndefined();
-    expect(focused()).toBe('agenda-deals');
+    expect(focusInPage(), 'the focus is on an element still in the page').toBe(true);
+    expect(focused(), 'the agenda door is gone, so the open tab').toBe('tab-talk');
   });
 
   it("S3-B-AC-6: a name's player card takes the focus on open, closes on Escape and gives the focus back to the chip", () => {
