@@ -4,7 +4,7 @@ import { MarketDesk } from './desks';
 import { needRows } from './needs';
 import { LookSabotage, MarketSabotage } from './politics/Sabotage';
 import { GuardMap, SHERIFF_DESK, useGuarding } from './politics/Sheriff';
-import { COUNCIL_DESK, COUNCIL_STAGE, councilNow, councilReadyWords, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, GOVERNOR_DESK, LAW_AGENDA, OFFICES_BANNER } from './politics/slots';
+import { COUNCIL_STAGE, councilNow, councilReadyWords, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, LAW_AGENDA, OFFICES_BANNER, OVERRULE_STAGE, overruleNow, overruleReadyWords, POLITICS_TABS } from './politics/slots';
 import type { AgendaSlot, HubSeat, TabHubSlots } from './slots';
 import { ColonyTab } from './tabs/Colony';
 import { OverviewTab, TAB_WORD } from './tabs/Overview';
@@ -63,8 +63,8 @@ export const TAB_SLOTS: TabHubSlots = {
     { id: 'colony', label: TAB_WORD.colony, icon: ICON.colony, Body: ColonyTab },
     { id: 'talk', label: TAB_WORD.talk, icon: ICON.talk, Body: TalkTab, Badge: TalkBadge },
   ],
-  // Today's politics desks, as they are; the Sheriff's for its holder alone.
-  politicsTabs: [COUNCIL_DESK, GOVERNOR_DESK, SHERIFF_DESK].map(asDeskSub),
+  // Laws · Budget · Elections (SB-3); the Sheriff's, WS8's, for its holder alone.
+  politicsTabs: [...POLITICS_TABS, asDeskSub(SHERIFF_DESK)],
   tools: [
     { id: 'look', label: 'Look', hint: () => 'Tap a plot to see what it can make and who owns it.', Map: LookOrGuardMap, Panel: LookOrGuardPanel },
     { id: 'plots', label: 'My plots', locked: true, hint: () => 'Every plot you own and what it can make. Tap one to find it on the map.', Map: MyPlotsMap, Panel: MyPlotsPanel },
@@ -86,8 +86,8 @@ export const TAB_SLOTS: TabHubSlots = {
   banners: [],
   lines: [OFFICES_BANNER],
   picks: [],
-  nows: [councilNow, strikeNow, electionNow],
+  nows: [overruleNow, councilNow, strikeNow, electionNow],
   underNow: [STRIKE_ALERT, STRIKE_PAY_LINE],
-  stage: [ELECTION_DAY_STAGE, COUNCIL_STAGE],
-  readyWords: [electionReadyWords, councilReadyWords],
+  stage: [ELECTION_DAY_STAGE, COUNCIL_STAGE, OVERRULE_STAGE],
+  readyWords: [electionReadyWords, councilReadyWords, overruleReadyWords],
 };
