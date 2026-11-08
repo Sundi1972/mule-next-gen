@@ -239,8 +239,6 @@ describe('the tabbed planning hub (SB-2)', () => {
     ["openDesk('laws') on the Governor's phone", (n) => n.openDesk('laws'), 's2', { tab: 'politics', sub: 'laws' }],
     ["openDesk('budget') on the Governor's phone", (n) => n.openDesk('budget'), 's2', { tab: 'politics', sub: 'budget' }],
     ["openDesk('market')", (n) => n.openDesk('market'), 's1', { tab: 'overview', tool: 'list' }],
-    // The old desk ids have no sub-tab of that name any more: their doors land on the first one shown.
-    ["openDesk('council'), a desk id with no sub-tab", (n) => n.openDesk('council'), 's2', { tab: 'politics', sub: 'laws' }],
     ["pickTool('drone')", (n) => n.pickTool('drone'), 's1', { tab: 'overview', tool: 'drone' }],
   ])("C17 (DESK_DOORS): today's %s lands on its tab, sub-tab or tool", (_door, move, self, to) => {
     mount(game({ self }));

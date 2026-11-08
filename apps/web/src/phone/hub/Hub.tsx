@@ -43,9 +43,6 @@ export const DESK_DOORS: Record<string, (focus?: string) => Door> = {
   laws: (focus) => ({ tab: 'politics', sub: 'laws', ...withFocus(focus) }),
   elections: (focus) => ({ tab: 'politics', sub: 'elections', ...withFocus(focus) }),
   budget: (focus) => ({ tab: 'politics', sub: 'budget', ...withFocus(focus) }),
-  // These three serve today's desk ids.
-  council: (focus) => ({ tab: 'politics', sub: 'council', ...withFocus(focus) }),
-  governor: (focus) => ({ tab: 'politics', sub: 'governor', ...withFocus(focus) }),
   // The Sheriff desk's guard door turns Overview's Look map to Guard (useGuarding).
   sheriff: (focus) => (focus === GUARD_FOCUS ? { tab: 'overview', tool: 'look', focus } : { tab: 'politics', sub: 'sheriff', ...withFocus(focus) }),
 };
