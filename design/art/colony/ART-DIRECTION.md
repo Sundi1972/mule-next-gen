@@ -107,12 +107,14 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 
 The layer never redraws a building. If something needs a new shape, it is a new picture.
 
-**Colonists are sprite sheets** (Heiko's pick, 8 Nov: Astronaut A, CC0, poly.pizza 3hC2i0CTuO). `spike-colonists/walk.py`
+**Colonists are sprite sheets** (Heiko's pick, 8 Nov: Astronaut A, CC0, poly.pizza 3hC2i0CTuO). `walker/walk.py`
 renders a rigged walk in the shared camera and light (§2, §3) on a shadow catcher: 4 headings (+x, +y, −x, −y) × 12
 frames, a 192 × 224 cell with the feet at (96, 197), 1.75 m tall. `COLONY_WALK_TINT="<suit>,<trim>"` renders those two
 materials neutral grey and adds a mask sheet (suit red, trim green, once with the day light); the player colours (the
-suit) and a palette of three (the helmet and trims, in place of hair) are laid through the mask offline, with an outline
-sheet (alpha dilated minus alpha) for the ghost behind a building. They walk at 1.3 m/s.
+suit) and a palette of three (the helmet and trims, in place of hair) are laid through the mask offline by `walker/tint.py`
+(in linear light, so the render's shading stays its own), with an outline sheet (the figure's alpha grown 4 px, less
+itself) for the ghost behind a building; `walker/publish.py` writes the WebP and the manifest's `walker` entry. Trims:
+warm white, graphite, sand (a charcoal speckled the suit's accent panels and vanished at dusk). They walk at 1.3 m/s.
 
 ## 8. Stages — one model, derived variants
 
