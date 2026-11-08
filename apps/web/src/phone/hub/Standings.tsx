@@ -1,10 +1,12 @@
 import { GAME, POLITICS } from '@mule/engine';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
+import { useState } from 'react';
 import { fmt } from '../../game/derive';
 import { collapseCutWords, inCollapse, league, yourLines } from '../../game/month-end';
 import { useEscape } from '../dialog';
 import { usePhoneGame } from '../game';
 import { OnlyYou } from './OnlyYou';
+import { noNewCard } from './politics/Deals';
 import { useHubIfAny } from './politics/parts';
 import { standingOf } from './standing';
 
@@ -20,9 +22,11 @@ export function useStanding(onOpen: () => void): { label: string; aria: string; 
  * total each, the one number everyone sees; your lines come from your own view's parts, which no one else receives.
  */
 export function StandingsSheet({ onClose }: { onClose: () => void }) {
-  const { view, self } = usePhoneGame();
+  const { view, me, self } = usePhoneGame();
   const hub = useHubIfAny();
   useEscape(onClose);
+  // The door that opened the standings: + Deal closes them, and the composer it opens gives the focus back here.
+  const [opener] = useState(() => (typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null)));
   const { rows } = league(view);
   const mine = rows.find((r) => r.player.id === self.id);
   const p = view.me ? yourLines(view) : null;
@@ -75,10 +79,13 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                       <td className="pl-1.5 text-right">
                         {!you && (
                           <Button
+                            disabled={!!noNewCard(view, me, r.player.id)}
+                            title={noNewCard(view, me, r.player.id) ?? undefined}
                             size="md"
                             variant="ghost"
                             className="h-8 whitespace-nowrap px-1.5 text-xs text-holo"
                             onClick={() => {
+                              opener?.focus?.();
                               onClose();
                               hub!.openDesk('talk', `compose:${r.player.id}`);
                             }}

@@ -9,7 +9,7 @@ Run it: `npx vite --port <free-port> --strictPort` in this folder, then open `/`
 planning month. `?path=sheriff` plays the Sheriff month (guard, catch, fine, an unseen cut and an investigation);
 `?notes=1` is the design notes; `?screen=<id>&state=<id>` opens one state.
 
-## The build plan: SB-0 … SB-5b, one batch on 12 Nov 12:00Z
+## The build plan: SB-0 … SB-5c, one batch on 12 Nov 12:00Z
 
 | # | PR | Owner | Contents | Ready (CI green + review) |
 |---|---|---|---|---|
@@ -20,9 +20,12 @@ planning month. `?path=sheriff` plays the Sheriff month (guard, catch, fine, an 
 | SB-2 | The tabbed hub | WS6 | See [SB-2 contents](#sb-2-contents-ws6). | 11 Nov 12:00Z |
 | SB-3 | Politics as sub-tabs | **WS7** | `politics/slots.ts`: `COUNCIL_DESK` and `GOVERNOR_DESK` become `SubTabSlot`s (Laws · Budget · Elections), with `first()` on an open ballot. The three reveals become stages. The Council splits: `LawsInForce` and `PendingLaw` (both exported) go to Laws, `CouncilBody` to Elections. The overrule call moves onto the tax line on Laws (D13). `FrozenTax` and `Commission` move to Budget. | 11 Nov 12:00Z |
 | SB-4 | Guard pick and Sheriff sub-tab | **WS8** | `today.tsx`'s #749 `LookOrGuard` becomes a `picks` `PlotPickSlot` with the "Guarding · back to Sheriff" bar, plus the Sheriff sub-tab. HoloMap's `'guard'` flag is WS4's `d7a25e3a`. | 11 Nov 12:00Z |
-| SB-5 | TV planning | **WS4** | `TvGame`'s planning branch: the budget goes on the promise row, a changed share in bold with AM-9's ▲/▼ and no "(was N%)" (the phone keeps "(was N%)"). An 8 s moment overlays the map box, out of flow. A break folds into the NEWS column. The waiting box has no chips and caps at 3 seats. Plus `e2e/tv-planning-fit.ts`. Its numbers are this mock's measured TV table ("The TV, measured" in the notes): every beat ≥ 0.7 at 2, 4 and 6 seats. | 11 Nov 12:00Z |
-| SB-5b | TvDeals' 8 s lifetime | WS6 | A named edit in WS7's `table/TvDeals.tsx`, as ruled. Lands after #734. | 10 Nov 18:00Z |
-| — | Batch | PM | SB-1b → SB-2 → SB-3, SB-4 and SB-5 together, after #734 and #751. | 12 Nov 12:00Z |
+| SB-5a | TV planning: the break | **WS4** | **#800**: a broken card is a moment over the TV planning map, out of flow; fitSettled holds 300 ms; `e2e/tv-planning-fit.ts`. | 11 Nov 12:00Z |
+| SB-5b | TV planning: budget and overrule | **WS4** | **#805**: the budget line on the promise row with AM-9's ▲/▼ and no "(was N%)", and the overrule on the TV planning screen. | 11 Nov 12:00Z |
+| SB-5c | TvDeals' 8 s lifetime | WS6 | The break banner's 8 s fold; owner and PR per the PM's ruling (WS4 in #800, or WS6 after the batch). | 10 Nov 18:00Z |
+| — | Batch | PM | SB-1b → SB-2 → SB-3, SB-4, SB-5a and SB-5b together, after #734 and #751. | 12 Nov 12:00Z |
+
+- Named deviation (WS7, 8 Nov): ElectionDayRail stays in ElectionsSub. T-AC-66 and AM-21's month-1 run block need it (docs/specs/2026-10-28-ws7-untimed-election.md:221, :298), and the scaffold has no run block.
 
 ### SB-2 contents (WS6)
 

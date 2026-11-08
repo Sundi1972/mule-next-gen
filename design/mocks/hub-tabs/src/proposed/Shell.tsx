@@ -49,7 +49,8 @@ function Tabs({ variant, tabs }: { variant: ShellVariant; tabs: TabButton[] }) {
           ? 'w-14 flex-col gap-1 border-r border-holo-faint px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-[max(0.375rem,env(safe-area-inset-top))]'
           : 'h-11 flex-row border-t border-holo-faint pb-[env(safe-area-inset-bottom)]',
       )}
-      data-testid={`tabs-${variant}`}
+      // `tabs` as WS4's built Shell names the column (the render gate's key); the bottom bar keeps `tabs-b`.
+      data-testid={variant === 'a' ? 'tabs' : 'tabs-b'}
     >
       {tabs.map((t) => (
         <button

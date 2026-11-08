@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import { POLITICS } from '@mule/engine';
+import { POLITICS, type DealCard } from '@mule/engine';
 import type { CouncilView, ElectionView, MuleView, MyPoliticsView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
@@ -19,6 +19,7 @@ let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Planning: typeof import('../src/phone/Planning').Planning;
 let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPicks;
+let forgetLawPick: typeof import('../src/phone/hub/politics/LawBallot').forgetLawPick;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,6 +27,7 @@ beforeAll(async () => {
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Planning } = await import('../src/phone/Planning'));
   ({ forgetPicks } = await import('../src/phone/hub/politics/ElectionDay'));
+  ({ forgetLawPick } = await import('../src/phone/hub/politics/LawBallot'));
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
@@ -35,6 +37,14 @@ beforeAll(async () => {
     disconnect() {}
   };
   (FakeElement.prototype as unknown as { getBoundingClientRect?: () => object }).getBoundingClientRect ??= () => ({ x: 0, y: 0, top: 0, left: 0, width: 844, height: 390, right: 844, bottom: 390 });
+  // The whisper thread and the composer's sheet, for the AI mark's test: the thread scrolls, the sheet finds its shell.
+  const proto = FakeElement.prototype as unknown as Record<string, unknown>;
+  proto.scrollIntoView ??= () => undefined;
+  proto.closest ??= function (this: FakeElement, selector: string) {
+    const id = /^\[data-testid="(.+)"\]$/.exec(selector)?.[1];
+    for (let n: FakeElement | null = this; n; n = n.parentNode instanceof FakeElement ? n.parentNode : null) if (id && n.getAttribute('data-testid') === id) return n;
+    return null;
+  };
 });
 
 const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
@@ -168,6 +178,7 @@ afterEach(() => {
   if (r) act(() => r.unmount());
   root = null;
   forgetPicks();
+  forgetLawPick();
   sent.length = 0;
 });
 
@@ -205,7 +216,7 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     mount(electionFor({ promised: BRIX_VOTE }));
 
     expect(text('ballot-governor-promised')).toContain('You promised Brix your vote');
-    expect(text('ballot-governor-promised'), 'what keeping and breaking it does, from POLITICS').toContain('Keep it: +3. Break it: −10, and the table sees it.');
+    expect(text('ballot-governor-promised'), 'what keeping and breaking it does: no figure for keeping, the cost from POLITICS').toContain(`Keeping it builds your name. Breaking it costs −${-POLITICS.reputation.moves.voteBroken}, and the table sees it. Your vote stays secret either way.`);
     expect(text('ballot-governor-s2-promised')).toBe('PROMISED');
     expect(findTestid('ballot-governor-s3-promised'), 'only the promised candidate is tagged').toBeUndefined();
     expect(checked('s2'), 'Brix starts picked').toBe(true);
@@ -251,6 +262,8 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     // The server's answer to the last pick, as its broadcast brings it: it can't tell an abstention from no pick.
     const last = taps.at(-1);
     if (last && answered) rerender(electionFor({ ...seat, ballot: last === 'abstain' ? {} : { governor: last } }));
+    // The ballot shows the last pick, and only it: an Abstain over a promise is not the promised name.
+    if (last) for (const option of ['s2', 's3', 'abstain']) expect(checked(option), option).toBe(option === last);
     expect(isDisabled('ready'), 'Cast my vote is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);
@@ -268,7 +281,7 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     mount(lawFor({ promised: LAW_YES }));
 
     expect(text('ballot-promised')).toContain('You promised Brix a yes');
-    expect(text('ballot-promised')).toContain('Keep it: +3. Break it: −10, and the table sees it.');
+    expect(text('ballot-promised'), 'the law ballot draws the same line').toContain(`Keeping it builds your name. Breaking it costs −${-POLITICS.reputation.moves.voteBroken}, and the table sees it. Your vote stays secret either way.`);
     expect(text('ballot-yes')).toContain('PROMISED');
     expect(text('ballot-no')).not.toContain('PROMISED');
     expect(pressed('ballot-yes'), 'Yes starts picked').toBe(true);
@@ -305,6 +318,17 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(sent).toEqual(expected);
   });
 
+  it('S3-T-AC-16: row 2 · an own No outlives the ballot unmounting and mounting again (another sub-tab), before the server answers: Done sends no promised Yes', () => {
+    mount(lawFor({ promised: LAW_YES }));
+    tap('ballot-no');
+    // The ballot leaves the screen and comes back, the vote still open; the server has not answered the No yet.
+    act(() => root!.unmount());
+    mount(lawFor({ promised: LAW_YES }));
+    expect(pressed('ballot-no'), 'the own No is still the pick').toBe(true);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(false), READY]);
+  });
+
   it("S3-T-AC-16: an own No shows over the promise at once, and after the server's answer", () => {
     mount(lawFor({ promised: LAW_YES }));
     tap('ballot-no');
@@ -322,3 +346,36 @@ it("S3-T-AC-16: row 1 · outside a ballot, a promise or not, the ready press sen
   tap('ready');
   expect(sent).toEqual([READY]);
 });
+
+describe('the AI mark on the deal words (S3-C17, S3-C21, F-11)', () => {
+  // Kai is a computer seat: every place a deal names him carries the one mark, " · AI", drawn by SeatWords.
+  const withAi = (view: MuleView, cards: DealCard[]): MuleView => ({
+    ...view,
+    players: view.players.map((p) => (p.id === 's3' ? { ...p, isAi: true } : p)),
+    me: { ...view.me!, deals: { cards, offersLeft: 2, pactMonths: POLITICS.deals.pactMonths } },
+  });
+  const fromKai: DealCard = { id: 'deal-k1', from: 's3', to: 's1', terms: { kind: 'pact' }, offered: MONTH, until: MONTH + 2, status: 'offered', brokenBy: null, settled: null };
+
+  it('S3-B-AC-2: a deal from an AI seat shows " · AI" after his name in the agenda, on the ballot lines and on the composer button', () => {
+    const pol = politics({});
+    mount(withAi(aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, {}), politics: pol }), [fromKai]));
+    expect(text('agenda-deals'), 'the agenda').toContain('From Kai · AI · answer before Ready');
+    tap('desk-talk');
+    tap('talk-chat');
+    tap('chat-to-s3');
+    tap('add-deal');
+    expect(text('composer-a-send'), 'the composer button').toBe('Offer to Kai · AI');
+    expect(text('composer-a-note')).toBe('Kai · AI answers before planning ends, or it expires.');
+    act(() => root!.unmount());
+    root = null;
+
+    mount(withAi(electionFor({ promised: { election: { governor: { candidate: 's2', to: ['s3'] } }, law: null } }), []));
+    expect(text('ballot-governor-promised'), 'the election ballot').toContain('You promised Kai · AI your vote for Brix');
+    act(() => root!.unmount());
+    root = null;
+
+    mount(withAi(lawFor({ promised: { election: {}, law: { yes: true, to: ['s3'] } } }), []));
+    expect(text('ballot-promised'), 'the law ballot').toContain('You promised Kai · AI a yes');
+  });
+});
+

@@ -3,11 +3,13 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useId, useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
-import { leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
-import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
-import { glowOpacity, walkersOut } from './live';
+import { frontOpacity, leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
+import { Glow, Haze, WalkingScene, type PictureBox } from './LiveLayer';
+import { occluderOf } from './occlusion';
+import type { Spot } from './walks';
+import { glowOpacity, SMOKE, smokes, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
-import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
+import { pick, type Frame, type GroundsManifest, type LampEntry, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
 import { iso, poly, square, W } from './projection';
 
 export type { Frame, GroundsManifest, Light, PictureStage, PlateEntry, PlateExtent, PlateFrame } from './pick';
@@ -23,7 +25,8 @@ export interface GroundsProject extends PlaceState {
 
 /** The part of `@mule/protocol`'s ColonyView the grounds read (HC-1: read only). */
 export interface GroundsColony {
-  gauges: { happiness: number | null; wealth: number };
+  /** `environment` is the air gauge, 0 clean; with no reading the grounds show clean air (RULE-7). */
+  gauges: { happiness: number | null; wealth: number; environment?: number };
   projects: GroundsProject[];
   /** This month's general strike; once the fund has paid it, the strikers are back at work (G-5 RULE-26). */
   strike?: { paid: boolean } | null;
@@ -40,6 +43,10 @@ export interface ColonyGroundsProps {
   framing?: Framing;
   /** The place numbers and stage chips over each place; off on the TV opener (AM-7 v). */
   chips?: boolean;
+  /** The players seated: the colonists wear their colours, the rest the colony's white or grey. Unknown: all four colours. */
+  players?: number;
+  /** Each colonist's route, in place of the walk round the hall (a mock places a colonist exactly). */
+  routes?: Spot[][];
   className?: string;
 }
 
@@ -64,16 +71,21 @@ interface Lit {
  * glow pass straight over it so nearer buildings still cover a farther one's light. A failed picture takes its glow
  * with it: the fallback shape is never lit.
  */
-function Picture({ c, r, href, frame, testid, fallback, lit }: { c: number; r: number; href: string; frame: Frame; testid: string; fallback: ReactNode; lit: Lit | null }) {
+/**
+ * One building's picture and its glow. `fade` (below 1 while the opener leans in on a place behind it) goes on each image,
+ * never on a group around them: a group's opacity isolates it, and the glow's screen blend would then paint its black
+ * as a dark box over the place the fade is there to show.
+ */
+function Picture({ c, r, href, frame, testid, fallback, lit, fade }: { c: number; r: number; href: string; frame: Frame; testid: string; fallback: ReactNode; lit: Lit | null; fade?: number }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <>{fallback}</>;
+  if (failed) return <>{fade === undefined ? fallback : <g opacity={fade}>{fallback}</g>}</>;
   const [x, y] = iso(c, r);
   const k = W / frame.place;
   const box = { x: x - frame.centre[0] * k, y: y - frame.centre[1] * k, width: frame.width * k, height: frame.height * k };
   return (
     <>
-      <image href={href} {...box} data-testid={testid} onError={() => setFailed(true)} />
-      {lit && <Glow key={lit.href} href={lit.href} opacity={lit.opacity} box={box} testid={lit.testid} />}
+      <image href={href} {...box} opacity={fade} data-testid={testid} onError={() => setFailed(true)} />
+      {lit && <Glow key={lit.href} href={lit.href} opacity={fade === undefined ? lit.opacity : lit.opacity * fade} box={box} testid={lit.testid} />}
     </>
   );
 }
@@ -132,16 +144,44 @@ function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
 }
 
 /**
+ * The inner crossings of a plate `extent` places out from the hall (1 for the 3 × 3, 2 for the 5 × 5), in place units:
+ * every corner shared by four places, where the plate lights a head-less pool. A crossing inside a building bigger than one place is under it, so not one.
+ */
+export function crossingsOf(extent: number, blocks: GridPlace[]): [number, number][] {
+  const lines = Array.from({ length: 2 * extent }, (_, k) => k - extent + 0.5);
+  const under = (c: number, r: number) =>
+    blocks.some((b) => c > b.x - 2.5 && c < b.x - 2.5 + b.w && r > b.y - 2.5 && r < b.y - 2.5 + b.h);
+  return lines.flatMap((c) => lines.map((r): [number, number] => [c, r])).filter(([c, r]) => !under(c, r));
+}
+
+/** A walkway lamp standing on the crossing (c, r), its foot pixel on the crossing, at the buildings' scale; lit at dusk. */
+function CrossingLamp({ c, r, lamp, href, light, glow }: { c: number; r: number; lamp: LampEntry; href: (src: string) => string; light: Light; glow: number }) {
+  const k = W / (12 * Math.SQRT2 * lamp.px_per_m);
+  const [x, y] = iso(c, r);
+  const box = { x: x - lamp.cell.feet[0] * k, y: y - lamp.cell.feet[1] * k, width: lamp.cell.width * k, height: lamp.cell.height * k };
+  const id = `${c}_${r}`;
+  return (
+    <g pointerEvents="none">
+      <image href={href(lamp[light])} {...box} data-testid={`lamp-${id}`} />
+      {/* none by day: the glow's opacity is 0 there (RULE-2) */}
+      {glow > 0 && <Glow href={href(lamp.glow)} opacity={glow} box={box} testid={`lamp-glow-${id}`} />}
+    </g>
+  );
+}
+
+/**
  * The grounds as one SVG, back to front (painter's order): the base plate for the rings in use (AM-7), or without one
  * the SVG land and plaza and the far edge's trees; the hall and the places by col + row so nearer buildings cover
  * farther ones (each with its glow at dusk), with the colonists on the paths sorted in among them; without a plate the
  * near edge; then the callouts.
  */
-export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, className }: ColonyGroundsProps) {
+export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, players, routes, className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
   const [failedPlates, setFailedPlates] = useState<ReadonlySet<string>>(() => new Set());
-  const entry = manifest?.plate?.[R <= 1 ? '3' : '5'];
+  // The plate's own extent: the 3 × 3 serves the hall alone too (R = 0), so its pools stand round the hall.
+  const plateR = R <= 1 ? 1 : 2;
+  const entry = manifest?.plate?.[plateR === 1 ? '3' : '5'];
   const named = manifest && entry ? { href: hrefOf(entry[light], manifest, size), glow: entry.glow && hrefOf(entry.glow, manifest, size), box: plateBox(entry, manifest.frame) } : null;
   // A plate that fails to load leaves the grounds as they are without one, never blank (HC-3).
   const plate = named && !failedPlates.has(named.href) ? named : null;
@@ -166,18 +206,49 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   // The plate's lamps light as a standing building's do (RULE-2).
   const plateGlow = glowOpacity({ light, stage: 'standing', wealth: colony.gauges.wealth });
 
+  // During the lean-in, a building standing in front of a place the caption names fades, so the place shows through.
+  const fade = (block: GridPlace) => {
+    const o = frontOpacity(block, framing);
+    return o < 1 ? Number(o.toFixed(3)) : undefined;
+  };
+
+  // Each picture with its silhouette: a colonist it covers is hidden by it, with an outline over it (T-AC-13). The SVG
+  // shapes (no manifest) need none: drawn in the same order, they hide the colonists behind them as they are.
+  const occluders = manifest
+    ? scene.flatMap(({ p, col: c, row: r }) => {
+        const kind: PictureKind = p?.id ?? 'hall';
+        const picked = pick(kind, p ?? HALL_PLACE, light, manifest);
+        const skyline = picked.shows === 'picture' ? manifest.pictures[kind]?.[picked.stage]?.skyline : undefined;
+        return skyline ? [occluderOf(manifest.pictures[kind]?.frame ?? manifest.frame, skyline, c, r, c + r)] : [];
+      })
+    : [];
+
+  // The plate lights a head-less pool at each inner crossing; the lamp stands there, in depth order with the buildings.
+  const lampEntry = plate && manifest?.lamp;
+  const lamps = lampEntry
+    ? crossingsOf(plateR, placed.map((q) => q.block)).map(([c, r]) => ({
+        depth: c + r,
+        node: <CrossingLamp key={`lamp-${c}_${r}`} c={c} r={r} lamp={lampEntry} href={(src) => hrefOf(src, manifest!, size)} light={light} glow={plateGlow} />,
+      }))
+    : [];
+  // A damaged building's smoke leaves the top of its picture (RULE-8).
+  const smoke = placed.filter((q) => smokes(q.p.stage)).map(({ n, p, block, col, row }) => {
+    const [x, y] = iso(col, row, MASSING[p.id].height * SMOKE.height);
+    return { n, x, y, depth: col + row, fade: fade(block) };
+  });
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
-  const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode) => {
+  const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode, fade?: number) => {
     const picked = pick(kind, place, light, manifest);
-    if (picked.shows === 'shape' || !manifest) return fallback;
+    // The SVG shapes hold no blended layer, so their group can take the fade whole.
+    if (picked.shows === 'shape' || !manifest) return fade === undefined ? fallback : <g opacity={fade}>{fallback}</g>;
     const frame = manifest.pictures[kind]?.frame ?? manifest.frame;
     const href = hrefOf(picked.src, manifest, size);
     const glow = manifest.pictures[kind]?.[picked.stage]?.glow;
     const opacity = glowOpacity({ light, stage: place.stage, wealth: colony.gauges.wealth });
     const lit = glow && opacity > 0 ? { href: hrefOf(glow, manifest, size), opacity, testid: `glow-${id}` } : null;
     // Keyed by its picture, so a load that failed for one stage never keeps the next stage's picture on the fallback.
-    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={`picture-${id}`} fallback={fallback} lit={lit} />;
+    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={`picture-${id}`} fallback={fallback} lit={lit} fade={fade} />;
   };
 
   return (
@@ -188,6 +259,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
       aria-label={`The colony grounds: the town hall and ${placed.length} buildings`}
       data-testid="colony-grounds"
       data-extent={R}
+      data-players={players}
     >
       {plate ? (
         <>
@@ -212,22 +284,30 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         </>
       )}
       <WalkingScene
-        scene={scene.map(({ n, p, block, col: c, row: r }) => ({
+        scene={[...scene.map(({ n, p, block, col: c, row: r }) => ({
           depth: c + r,
           node:
             !p || !block ? (
-              <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>
+              <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />, fade(HALL_BLOCK))}</g>
             ) : (
               <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
-                {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
+                {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />, fade(block))}
               </g>
             ),
-        }))}
-        walkers={walkers}
+        })), ...lamps]}
+        walkers={routes ? routes.length : walkers}
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
+        occluders={occluders}
+        players={players}
+        routes={routes}
+        sprite={manifest?.walker && { entry: manifest.walker, light, href: (src) => hrefOf(src, manifest, size), oneTrim: size === 'phone' }}
+        smoke={smoke}
+        light={light}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
+      {/* Over the buildings, colonists and smoke, under the chips, so a plot's number reads through any haze. */}
+      <Haze view={vb} environment={colony.gauges.environment ?? 0} light={light} />
       {chips &&
         placed.sort(inBack).map(({ n, p, col, row }) => (
           <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />

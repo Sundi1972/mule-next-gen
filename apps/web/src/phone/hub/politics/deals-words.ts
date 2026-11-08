@@ -1,5 +1,5 @@
 import { POLITICS, type DealCard } from '@mule/engine';
-import type { MuleView } from '@mule/protocol';
+import type { MuleView, MyView } from '@mule/protocol';
 import { proposalWords } from './LawPicker';
 import { OFFICE_NAME } from './words';
 
@@ -73,8 +73,8 @@ export function bindsWords(view: V, c: DealCard, me: string | null): Said {
 
 /** What keeping and breaking it cost, for the one who holds the promise. */
 export function stakesWords(view: V, c: Pick<DealCard, 'from' | 'to' | 'terms'>, me: string | null): Said {
-  if (c.terms.kind === 'pact') return [`Kept: +${MOVES.kept} each. Broken: −${-MOVES.pactBroken} to whoever breaks it, and the table sees it.`];
-  if (c.from === me) return [`Kept: +${MOVES.kept} to your name. Broken: −${-MOVES.voteBroken}, and the table sees it.`];
+  if (c.terms.kind === 'pact') return [`Keeping it builds your name. Breaking it costs −${-MOVES.pactBroken}, and the table sees.`];
+  if (c.from === me) return [`Kept: it builds your name. Broken: −${-MOVES.voteBroken}, and the table sees it.`];
   const from = who(view, c.from, me);
   return ['You promise nothing. If ', from, ` breaks it: −${-MOVES.voteBroken} to `, from, ', in public.'];
 }
@@ -120,7 +120,7 @@ export function statusWords(view: V, c: DealCard, me: string | null): Said {
     case 'active':
       return [c.terms.kind === 'pact' ? `Binds until the end of month ${c.until}` : `Binds at the ballot, month ${c.until}`];
     case 'kept':
-      return c.terms.kind === 'pact' ? [`Pact kept · +${MOVES.kept} each`] : [`Kept · +${MOVES.kept} to `, who(view, c.from, me)];
+      return [c.terms.kind === 'pact' ? 'Pact kept' : 'Kept'];
     case 'broken':
       return ['Broken by ', who(view, c.brokenBy ?? c.from, me), ` · −${-brokenMove(c)}, in public`];
     case 'declined':
@@ -130,4 +130,13 @@ export function statusWords(view: V, c: DealCard, me: string | null): Said {
     case 'expired':
       return [c.terms.kind === 'vote' && c.settled !== c.offered ? 'Expired: no ballot settled it' : 'Expired: planning ended unanswered'];
   }
+}
+
+/**
+ * Why `me` may not offer `to` a card now, in the engine's words, or null: one unanswered card to a player at a time
+ * (S3-RULE-2 row 5). The composer asks it whichever door opened it, and every "+ Deal" door asks it too.
+ */
+export function noNewCard(view: Pick<MuleView, 'players'>, me: Pick<MyView, 'id' | 'deals'>, to: string): string | null {
+  const waiting = (me.deals?.cards ?? []).some((c) => c.from === me.id && c.to === to && c.status === 'offered');
+  return waiting ? `${nameOf(view, to, me.id)} has not answered your last card` : null;
 }

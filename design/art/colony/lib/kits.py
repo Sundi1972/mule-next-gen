@@ -26,12 +26,13 @@ def slab(cx=0.0, cy=0.0, top="pavers", n=1):
         bx(cx - h + RIM, cx + h - RIM, cy - h + RIM, cy + h - RIM, -0.02, ZT, mat(top), 0.004, "forecourt")
 
 
-def modern(cx, cy, w, d, floors, fh, wall, name, sp=1.2, inset=0.28, bay=1.4, top_extra=0.9, upto=None, gl=None):
+def modern(cx, cy, w, d, floors, fh, wall, name, sp=1.2, inset=0.28, bay=1.4, top_extra=0.9, upto=None, gl=None, frame=None):
     """A frontier-modern block: per floor a solid spandrel band, then a recessed glass band with real mullions.
-    upto (floors) leaves the floors above it as a bare concrete frame, for the build stage."""
+    upto (floors) leaves the floors above it as a bare concrete frame, for the build stage. frame: the mullions' and
+    transoms' material, dark window frame by default."""
     x0, x1, y0, y1 = cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2
     gl = gl or mat("glass")
-    fr, concrete = mat("frame"), mat("concrete")
+    fr, concrete = frame or mat("frame"), mat("concrete")
     parts = []
     built = floors if upto is None else upto
     for i in range(floors):

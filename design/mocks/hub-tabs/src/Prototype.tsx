@@ -139,7 +139,7 @@ export function Prototype() {
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="controls">
           <Choice label="Playing as" param="as" value={seat} options={[['brix', 'Brix · Governor'], ['lena', 'Lena'], ['kai', 'Kai · Sheriff']]} testid="as" />
-          <Choice label="Tabs" param="tabs" value={variant === 'b' ? 'bottom' : 'left'} options={[['left', 'A · left column'], ['bottom', 'B · bottom bar']]} testid="tabs" />
+          <Choice label="Tabs" param="tabs" value={variant === 'b' ? 'bottom' : 'left'} options={[['left', 'A · left column'], ['bottom', 'B · bottom bar']]} testid="tab-position" />
           <Choice label="Phone" param="w" value={size} options={[['667', '667'], ['844', '844']]} testid="size" />
           <Choice label="Show" param="show" value={show} options={[['both', 'Phone + TV'], ['phone', 'Phone'], ['tv', 'TV']]} testid="show" />
         </div>

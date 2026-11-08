@@ -16,7 +16,7 @@ import { RepChip } from './copied/RepChip';
 import { NewsWords } from './copied/SeatWords';
 import { TvBudgetLine, TvOverruleCall } from './copied/TvBudgetLine';
 import { TvDeals } from './copied/TvDeals';
-import { eventsOf } from './world';
+import { culpritOf, eventsOf, type Investigation } from './world';
 
 /** How long a break or an overrule call holds the TV as a moment before it folds (WS6 ruling, 8 Nov; WS4 accepted). */
 export const TV_EVENT_HOLD_S = 8;
@@ -49,8 +49,8 @@ export const TV_WAITING_BOX_MAX_SEATS = 3;
  * clock is the screen's own (performance.now); the build times it from the server's clock, as the event show does.
  */
 
-/** The kinds of event a TV moment announces (world.ts eventsOf: `break:<card>`, `call:<target>:<caller>`). */
-export type EventKind = 'break' | 'call';
+/** The kinds of event a TV moment announces (world.ts eventsOf: `break:<card>`, `call:<target>:<caller>`, `investigation:<order>`). */
+export type EventKind = 'break' | 'call' | 'investigation';
 
 /**
  * Which events are a moment now: an event is one when this screen first sees it, for TV_EVENT_HOLD_S. What the screen
@@ -75,7 +75,7 @@ function useMoments(events: string[], opensOn: EventKind | null): Set<string> {
   return new Set(live);
 }
 
-export function TvPlanning({ table, game, opensOn = null }: { table: TableView<MuleView>; game: MuleView; opensOn?: EventKind | null }) {
+export function TvPlanning({ table, game, investigation = null, opensOn = null }: { table: TableView<MuleView>; game: MuleView; investigation?: Investigation; opensOn?: EventKind | null }) {
   const now = useServerNow(200);
   const tiles = mapTiles(game);
   const connected = connectedIn(table.seats);
@@ -86,11 +86,12 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
   const places = placesOf(game);
   const box = game.players.length <= TV_WAITING_BOX_MAX_SEATS;
   const hostLine = hostCanContinue && waiting.length > 0 ? `${host.name}, the host, can continue without them.` : null;
-  const moments = useMoments(eventsOf(game), opensOn);
+  const moments = useMoments(eventsOf(game, investigation), opensOn);
   const called = game.politics?.overrule?.stage === 'called';
   // The moment's banner draws only the breaks that are a moment now: TvDeals as it is, given those cards.
   const breaking = game.politics ? { ...game, politics: { ...game.politics, brokenDeals: (game.politics.brokenDeals ?? []).filter((c) => moments.has(`break:${c.id}`)) } } : game;
   const calling = [...moments].some((e) => e.startsWith('call:'));
+  const found = investigation && moments.has(`investigation:${investigation.order}`) ? investigation : null;
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink" data-phase="planning" data-testid="tv-planning">
@@ -114,6 +115,7 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
                 {/* CHANGE 2: the moment, over the map's top, out of flow. */}
                 {moments.size > 0 && (
                   <div className="absolute inset-x-0 top-0 z-30 flex flex-col gap-3 p-3" data-testid="tv-moment" data-hold-s={TV_EVENT_HOLD_S}>
+                    {found && <InvestigationMoment game={game} investigation={found} />}
                     {calling && <TvOverruleCall game={game} />}
                     <TvDeals game={breaking} />
                   </div>
@@ -275,5 +277,30 @@ function OverruleCalledLine() {
     <p className="flex items-center gap-2 whitespace-nowrap text-xl leading-tight text-warn" role="status" data-testid="tv-overrule-called-line">
       <strong className="font-display font-semibold">Overrule called:</strong> tax frozen
     </p>
+  );
+}
+
+/**
+ * An investigation's result as a moment, in the break's frame (the lead's ruling, 8 Nov): the spec's words (slice 4,
+ * "What the table sees"), "Solved by the Sheriff: it was Lena" or "The trail went cold". PROPOSED; WS8 may restyle:
+ * TvDeals' banner's shape and tokens, alert when it names someone, quiet when the trail went cold.
+ */
+function InvestigationMoment({ game, investigation }: { game: MuleView; investigation: NonNullable<Investigation> }) {
+  const who = investigation.solved ? culpritOf(game, investigation.order) : null;
+  return (
+    <div
+      className={cx('flex items-center gap-5 rounded-panel border-2 px-6 py-3 animate-[show-card-in_0.5s_ease-out]', who ? 'border-alert bg-alert-bg shadow-glow-alert' : 'border-holo-line bg-panel')}
+      role="status"
+      data-testid="tv-investigation"
+      data-solved={investigation.solved}
+    >
+      {who && <PlayerMark slot={toSlot(who.slot)} species={who.species} size={48} label={who.name} />}
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className={cx('label-caps text-base!', who ? 'text-alert-ink' : 'text-ink-3')}>The Sheriff’s investigation</span>
+        <span className={cx('font-display text-3xl font-semibold leading-tight', who ? 'text-alert-ink' : 'text-ink')} data-testid="tv-investigation-words">
+          {who ? `Solved by the Sheriff: it was ${who.name}` : 'The trail went cold'}
+        </span>
+      </span>
+    </div>
   );
 }

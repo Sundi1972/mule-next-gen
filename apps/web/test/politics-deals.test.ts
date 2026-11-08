@@ -162,6 +162,7 @@ afterEach(() => {
   root = null;
   sent.length = 0;
   listeners.clear();
+  unlistenForKeys();
 });
 
 function findTestid(testid: string, node: FakeElement = host): FakeElement | undefined {
@@ -203,7 +204,9 @@ describe('the reputation chip (S3-C19)', () => {
     const kept = card({ id: 'deal-k1', from: LENA, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
     const p = politics({
       brokenDeals: [brixBroke, ossaBroke],
-      reputationReasons: { [BRIX]: [{ kind: 'broken', id: 'deal-b1' }, { kind: 'unrest', month: 1 }], [OSSA]: [{ kind: 'broken', id: 'deal-o1' }] },
+      // Ossa was caught twice in month 3, under a sabotage ban of ×2: two rows, in words, with no figure.
+      reputationReasons: { [BRIX]: [{ kind: 'broken', id: 'deal-b1' }, { kind: 'unrest', month: 1 }], [OSSA]: [{ kind: 'caught', month: 3 }, { kind: 'caught', month: 3 }, { kind: 'broken', id: 'deal-o1' }] },
+      laws: { sabotageBan: { setting: 2, since: 1 } },
     });
     mount(gameFor(myView(LENA, [kept]), p), (game) =>
       createElement(
@@ -241,6 +244,46 @@ describe('the reputation chip (S3-C19)', () => {
     tap(`player-card-${BRIX}-close`);
     tap(`who-${LENA}-rep`);
     expect(text(`player-card-${LENA}-reasons`), 'Lena kept her pact: nothing public').toBe('What moved it, in publicNothing public. A kept card never shows here, only the number rising.');
+
+    tap(`player-card-${LENA}-close`);
+    tap(`who-${OSSA}-rep`);
+    expect(text('reason-deal-o1'), "Ossa's own reason, in the breaker-less words").toBe(`M2Broke a pact with Lena−${-POLITICS.reputation.moves.pactBroken}`);
+    expect(allTestids('reason-caught'), 'one row per incident, even in one month').toEqual(['reason-caught-3-1', 'reason-caught-3-2']);
+    expect(text('reason-caught-3-1'), 'the words alone: the view cannot tell the drop the engine took').toBe('M3Caught sabotaging');
+  });
+
+  it('S3-B-AC-6: with refuseBelow over repLow, a fair name under it says AI players turn down cards under refuseBelow', () => {
+    const deals = POLITICS.ai.deals as { refuseBelow: number };
+    const was = deals.refuseBelow;
+    try {
+      deals.refuseBelow = repLow + 10;
+      mount(gameFor(myView(LENA, [])), (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
+      expect(byTestid(`who-${KAI}-rep`).getAttribute('aria-label'), 'Kai sits at repLow: a fair name').toContain(`Kai: reputation ${repLow}. Fair name, but AI players turn down cards under ${repLow + 10}. `);
+      expect(byTestid(`who-${OSSA}-rep`).getAttribute('aria-label'), 'over it: no warning').toContain(`Ossa: reputation ${repHigh - 1}. Fair name. `);
+    } finally {
+      deals.refuseBelow = was;
+    }
+  });
+
+  it("S3-B-AC-6: the chip's words take the vote from POLITICS.weight.repVotes and the AI refusal from POLITICS.ai.deals.refuseBelow, its own threshold", () => {
+    const weight = POLITICS.weight as { repVotes: number };
+    const deals = POLITICS.ai.deals as { refuseBelow: number };
+    const was = [weight.repVotes, deals.refuseBelow] as const;
+    try {
+      weight.repVotes = 2;
+      deals.refuseBelow = 20;
+      // Brix is under repLow but not under 20; Kai, at 19, is under both.
+      const players = PLAYERS.map((p) => (p.id === KAI ? { ...p, reputation: 19 } : p));
+      const game = { ...gameFor(myView(LENA, [])), players };
+      mount(game, (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
+      expect(byTestid(`who-${LENA}-rep`).getAttribute('aria-label')).toContain(`Lena: reputation ${repHigh}. Good name: +2 votes. `);
+      expect(byTestid(`who-${BRIX}-rep`).getAttribute('aria-label'), 'a low name AI seats still deal with').toContain(`Brix: reputation ${repLow - 1}. Low name: −2 votes. `);
+      expect(byTestid(`who-${KAI}-rep`).getAttribute('aria-label')).toContain('Kai: reputation 19. Low name: −2 votes, and AI players turn down their cards. ');
+      tap(`who-${BRIX}-rep`);
+      expect(text(`player-card-${BRIX}-legend`)).toBe(`${repHigh} and up: +2 votes. Under ${repLow}: −2 votes. Under 20, AI players turn down their cards.`);
+    } finally {
+      [weight.repVotes, deals.refuseBelow] = was;
+    }
   });
 });
 
@@ -262,6 +305,25 @@ const hub = () => createElement(Planning);
 const offers = () => sent.filter((i) => (i as { type: string }).type === 'offerDeal');
 
 describe('the deal composer (S3-C17)', () => {
+  it("S3-B-AC-1: a pact's months in the composer stop at the game's last month, as S3-RULE-1's until does: month 11 of 12, month 2 of 2", () => {
+    const longest = Math.max(...POLITICS.deals.pactMonths);
+    mount(gameFor(myView(LENA, []), politics(), { month: 11, maxMonths: 12 }), hub);
+    tap('desk-talk');
+    tap(`chat-to-${OSSA}`);
+    tap('add-deal');
+    tap(`composer-a-months-${longest}`);
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, months 11 to 12.');
+    tap('composer-a-months-1');
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, in month 11.');
+    tap('composer-a-close');
+
+    // The last month of a two-month game: every length binds that month alone.
+    rerender(gameFor(myView(LENA, []), politics(), { month: 2, maxMonths: 2 }));
+    tap('add-deal');
+    tap(`composer-a-months-${longest}`);
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, in month 2.');
+  });
+
   it("S3-B-AC-1: the composer opened from Lena's whisper to Brix offers a pact of POLITICS.deals pactMonths lengths or her own vote, sends offerDeal, and shows the engine's refusal words", () => {
     // The lengths are the view's, not the phone's: a table playing other lengths gets those. Ossa and Lena are running
     // for Governor; Kai and Brix are not.
@@ -287,6 +349,9 @@ describe('the deal composer (S3-C17)', () => {
     const refusal: Toast = { id: 2, message: 'Brix has not answered your last card' };
     act(() => setState({ toasts: [...state.toasts, refusal] }));
     expect(text('composer-a-refusal')).toContain(refusal.message);
+    // A toast after it is not this send's answer: the composer keeps the first one that came after the send.
+    act(() => setState({ toasts: [...state.toasts, { id: 3, message: 'Not connected. Trying again…' }] }));
+    expect(text('composer-a-refusal'), "a later toast is not this card's refusal").toContain(refusal.message);
 
     // Her own vote: only a declared candidate who is not herself, and no law is up.
     tap('composer-a-kind-vote');
@@ -306,6 +371,45 @@ describe('the deal composer (S3-C17)', () => {
     expect(byTestid('add-deal').getAttribute('disabled'), 'one unanswered card to Brix at a time').not.toBeNull();
   });
 
+  it('S3-B-AC-1: the composer says before the send what the engine would refuse: no offers left, a vote already promised on that ballot, a pact already held; and warns an AI seat turns down a low name', () => {
+    const { refuseBelow } = POLITICS.ai.deals;
+    const lowLena = PLAYERS.map((p) => (p.id === LENA ? { ...p, reputation: refuseBelow - 1 } : p));
+    const promisedOssa = card({ id: 'deal-pv1', from: LENA, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, status: 'active' });
+    const pactKai = card({ id: 'deal-pk1', from: KAI, to: LENA, status: 'active' });
+    const waiting = [card({ id: 'deal-x1', from: LENA, to: OSSA }), card({ id: 'deal-x2', from: LENA, to: BRIX })];
+    const game = (cards: DealCard[], offersLeft: number) => ({ ...gameFor(myView(LENA, cards, { offersLeft }), politics({ candidates: { governor: [OSSA, BRIX] } })), players: lowLena });
+
+    // A pact already held with Kai, and Lena's vote promised to Ossa: the composer says both in the engine's words.
+    mount(game([promisedOssa, pactKai], 2), hub);
+    tap('desk-talk');
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    expect(text('composer-a-pact-no')).toBe('You already have a pact with Kai');
+    expect(text('composer-a-ai-warning'), 'the warning names the threshold from POLITICS.ai.deals').toBe(`Kai · AI turns down cards from a name under ${refuseBelow}. Yours is ${refuseBelow - 1}.`);
+    tap('composer-a-kind-vote');
+    expect(text(`composer-a-choice-gov:${BRIX}-no`)).toBe('You already promised your vote on this ballot');
+    expect(findTestid(`composer-a-choice-gov:${OSSA}`), 'the promised choice is still offered').toBeDefined();
+    tap('composer-a-close');
+
+    // No offers left: Send is off, with the count of cards waiting.
+    rerender(game(waiting, 0));
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    expect(text('composer-a-refusal')).toBe('You have 2 cards waiting for an answer');
+    expect(byTestid('composer-a-send').getAttribute('disabled')).not.toBeNull();
+    tap('composer-a-close');
+    tap('talk-cards');
+    expect(text('my-deals-waiting')).toContain('· 0 more you can offer');
+
+    // A view whose seat carries no reputation yet reads the starting one, START.reputation, which AI seats deal with.
+    const noRep = PLAYERS.map((p) => (p.id === LENA ? { ...p, reputation: undefined } : p));
+    rerender({ ...game([], 2), players: noRep });
+    tap('talk-chat');
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    expect(findTestid('composer-a-ai-warning'), `no warning at START.reputation ${START.reputation}`).toBeUndefined();
+  });
+
   it("S3-B-AC-1: the composer also opens from a name's player card and from a standings row, in planning", () => {
     mount(gameFor(myView(LENA)), hub);
     tap('standing');
@@ -322,6 +426,162 @@ describe('the deal composer (S3-C17)', () => {
   });
 });
 
+/** The document's keydown listeners: the fake DOM keeps none, so a key press is delivered here. */
+const keydown = new Set<(e: { key: string }) => void>();
+/** Puts back what listenForKeys patched, after each test: a later test meets the fake DOM as it was. */
+let unlistenForKeys = (): void => undefined;
+function listenForKeys(): void {
+  const saved = (
+    [
+      [document, 'addEventListener'],
+      [document, 'removeEventListener'],
+      [FakeElement.prototype, 'focus'],
+      [FakeElement.prototype, 'querySelector'],
+    ] as [object, string][]
+  ).map(([on, key]) => [on, key, Object.getOwnPropertyDescriptor(on, key)] as const);
+  unlistenForKeys = () => {
+    for (const [on, key, was] of saved) {
+      if (was) Object.defineProperty(on, key, was);
+      else delete (on as Record<string, unknown>)[key];
+    }
+    keydown.clear();
+    (document as unknown as { activeElement: FakeElement | null }).activeElement = null;
+    unlistenForKeys = () => undefined;
+  };
+  const doc = document as unknown as { addEventListener(t: string, l: unknown): void; removeEventListener(t: string, l: unknown): void };
+  const [add, remove] = [doc.addEventListener.bind(doc), doc.removeEventListener.bind(doc)];
+  doc.addEventListener = (t, l) => (t === 'keydown' ? void keydown.add(l as never) : add(t, l));
+  doc.removeEventListener = (t, l) => (t === 'keydown' ? void keydown.delete(l as never) : remove(t, l));
+  (FakeElement.prototype as unknown as { focus(): void }).focus = function (this: FakeElement) {
+    (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
+  };
+  // The two selectors the dialogs ask: a button marked to take the focus on open, or the first control that can.
+  (FakeElement.prototype as unknown as { querySelector(s: string): FakeElement | null }).querySelector = function (this: FakeElement, s: string) {
+    if (s === '[data-autofocus]') return this.findAll('button').find((b) => b.getAttribute('data-autofocus') !== null) ?? null;
+    if (!s.startsWith('button:not([disabled])')) throw new Error(`fake querySelector: ${s}`);
+    const first = (n: FakeElement): FakeElement | null => {
+      for (const c of n.childNodes) {
+        if (!(c instanceof FakeElement)) continue;
+        if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(c.tagName) && c.getAttribute('disabled') === null) return c;
+        const hit = first(c);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    return first(this);
+  };
+}
+/** The focused element's testid: a failing comparison of the elements themselves would print the whole fake tree. */
+const focused = () => (document.activeElement as unknown as FakeElement | null)?.getAttribute('data-testid') ?? null;
+const press = (key: string) => act(() => [...keydown].forEach((l) => l({ key })));
+/** A tap as a browser gives it: the button takes the focus, then its handler runs. */
+const tapFocused = (testid: string) => {
+  (byTestid(testid) as unknown as { focus(): void }).focus();
+  tap(testid);
+};
+
+describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
+  it('S3-B-AC-1: Escape closes the composer and the incoming sheet, and the focus goes back to the door that opened each', () => {
+    listenForKeys();
+    mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
+    tap('desk-talk');
+    tap(`chat-to-${OSSA}`);
+    tapFocused('add-deal');
+    expect(findTestid('composer-a')).toBeDefined();
+    expect(focused(), 'the composer takes the focus, on its first control').toBe('composer-a-kind-pact');
+    press('Escape');
+    expect(findTestid('composer-a'), 'Escape closes the composer').toBeUndefined();
+    expect(focused(), 'the focus is back on + Deal').toBe('add-deal');
+
+    tapFocused('agenda-deals');
+    expect(findTestid('incoming-sheet')).toBeDefined();
+    expect(focused(), 'the incoming sheet takes the focus, on its first control').toBe('sheet-card-deal-in9-from-open');
+    press('Escape');
+    expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
+    expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
+  });
+
+  it('S3-B-AC-1: + Deal from the standings closes them, so only the composer is up; Escape gives the focus to the standings door, still on the screen', () => {
+    listenForKeys();
+    mount(gameFor(myView(LENA, [])), hub);
+    tapFocused('standing');
+    tapFocused(`deal-standing-${BRIX}`);
+    expect(findTestid('standings-sheet'), 'one sheet at a time').toBeUndefined();
+    expect(findTestid('composer-a')).toBeDefined();
+    press('Escape');
+    expect(findTestid('composer-a')).toBeUndefined();
+    expect(focused(), 'the door that opened the standings').toBe('standing');
+    expect(findTestid('standing'), 'and it is mounted').toBeDefined();
+  });
+
+  it("S3-B-AC-6: a player card opened over the incoming sheet closes alone on Escape, and the sheet's chip has the focus back", () => {
+    listenForKeys();
+    mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
+    tap('desk-talk');
+    tapFocused('agenda-deals');
+    tapFocused('sheet-card-deal-in9-from-rep');
+    expect(findTestid(`player-card-${BRIX}`)).toBeDefined();
+    press('Escape');
+    expect(findTestid(`player-card-${BRIX}`), 'Escape closes the card on top').toBeUndefined();
+    expect(findTestid('incoming-sheet'), 'and only it').toBeDefined();
+    expect(focused()).toBe('sheet-card-deal-in9-from-rep');
+    press('Escape');
+    expect(findTestid('incoming-sheet'), 'the next Escape closes the sheet').toBeUndefined();
+    expect(focused()).toBe('agenda-deals');
+  });
+
+  it("S3-B-AC-6: a name's player card takes the focus on open, closes on Escape and gives the focus back to the chip", () => {
+    listenForKeys();
+    const game = gameFor(myView(LENA, []));
+    mount(game, (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
+    tapFocused(`who-${OSSA}-rep`);
+    expect(focused(), "the card's Close takes the focus").toBe(`player-card-${OSSA}-close`);
+    press('Escape');
+    expect(findTestid(`player-card-${OSSA}`), 'Escape closes the card').toBeUndefined();
+    expect(focused(), 'the focus is back on the chip').toBe(`who-${OSSA}-rep`);
+  });
+});
+
+describe("the player card's door (S3-C17, S3-C19)", () => {
+  it("S3-B-AC-1: with one card to Ossa unanswered, his player card's + Deal is off and says why; the composer it opens holds Send in the same words", () => {
+    const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
+    mount(gameFor(myView(LENA, [waiting])), hub);
+    tap('desk-talk');
+    tap(`chat-to-${OSSA}`);
+    tap('whisper-rep');
+    const door = byTestid(`player-card-${OSSA}-deal`);
+    expect(door.getAttribute('disabled'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').not.toBeNull();
+    expect(text(`player-card-${OSSA}-deal-no`)).toBe('Ossa has not answered your last card');
+    // The composer refuses on its own, whichever door opened it: here the card's, tapped past its disabled state.
+    tap(`player-card-${OSSA}-deal`);
+    expect(text('composer-a-refusal')).toBe('Ossa has not answered your last card');
+    expect(byTestid('composer-a-send').getAttribute('disabled')).not.toBeNull();
+  });
+});
+
+describe('the standings door (S3-C17)', () => {
+  it('S3-B-AC-1: with one card to Ossa unanswered, his standings row is off and says why, and the composer holds Send in those words, not "a pact"; Brix still gets one', () => {
+    const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
+    mount(gameFor(myView(LENA, [waiting])), hub);
+    tap('standing');
+    expect(byTestid(`deal-standing-${OSSA}`).getAttribute('disabled'), "Ossa's row offers no second card").not.toBeNull();
+    expect(byTestid(`deal-standing-${OSSA}`).getAttribute('title')).toBe('Ossa has not answered your last card');
+    // The composer refuses on its own too: the door tapped past its disabled state.
+    tap(`deal-standing-${OSSA}`);
+    expect(text('composer-a-refusal'), 'S3-RULE-2 row 5: one unanswered card to a player at a time').toBe('Ossa has not answered your last card');
+    expect(findTestid('composer-a-pact-no'), 'an unanswered offer is not a pact').toBeUndefined();
+    expect(byTestid('composer-a-send').getAttribute('disabled')).not.toBeNull();
+    tap('composer-a-kind-vote');
+    expect(text('composer-a-refusal'), 'whatever the card').toBe('Ossa has not answered your last card');
+    tap('composer-a-close');
+
+    tap('standing');
+    tap(`deal-standing-${BRIX}`);
+    expect(findTestid('composer-a-refusal')).toBeUndefined();
+    expect(byTestid('composer-a-send').getAttribute('disabled')).toBeNull();
+  });
+});
+
 // ---- S3-C18 · the incoming card and My cards ----------------------------------------------------------------------
 
 /** Brix's cards in month 2: Lena's pact offered to him, his vote offered to Ossa, a pact with Kai, two settled. */
@@ -331,11 +591,39 @@ const BRIX_CARDS: DealCard[] = [
   card({ id: 'deal-out1', from: BRIX, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 2, until: 4 }),
   card({ id: 'deal-act1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 3, status: 'active' }),
   card({ id: 'deal-wd1', from: BRIX, to: KAI, terms: { kind: 'vote', law: true, yes: true }, offered: 1, until: 2, status: 'withdrawn', settled: 1 }),
+  // Broken cards are public: Brix's view carries this one between Ossa and Lena, but it is not Brix's card.
+  card({ id: 'deal-ob1', from: OSSA, to: LENA, terms: { kind: 'vote', office: 'governor', candidate: LENA }, offered: 1, until: 1, status: 'broken', brokenBy: OSSA, settled: 1 }),
 ];
 const brixGame = (cards: DealCard[] = BRIX_CARDS) => gameFor(myView(BRIX, cards), politics({ candidates: { governor: [OSSA] } }));
 const lenasAnswer = (status: DealCard['status']) => ({ ...LENAS, status, settled: status === 'active' ? null : 2 });
 
 describe('the incoming card and My cards (S3-C18)', () => {
+  it('S3-B-AC-1: a pact offered says keeping it builds your name, with no figure, and what breaking it costs; its settled line says "Pact kept"', () => {
+    const keptPact = card({ id: 'deal-kp1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
+    mount(brixGame([...BRIX_CARDS, keptPact]), hub);
+    tap('desk-talk');
+    tap(`chat-to-${LENA}`);
+    expect(text(`incoming-${LENAS.id}-stakes`)).toMatch(new RegExp(`^Keeping it builds your name\\. Breaking it costs −${-POLITICS.reputation.moves.pactBroken}, and the table sees\\.`));
+    tap('talk-cards');
+    expect(text('my-deal-deal-kp1-line')).toContain('Pact kept');
+    expect(text('my-deal-deal-kp1-line'), 'no figure').not.toMatch(/\+\d/);
+  });
+
+  it('S3-B-AC-1: no kept card shows a figure (the gain is capped per partner and term): my vote card says keeping it builds my name, and a kept vote reads "Kept"', () => {
+    const keptVote = card({ id: 'deal-kv1', from: BRIX, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 1, until: 1, status: 'kept', settled: 1 });
+    mount(brixGame([...BRIX_CARDS, keptVote]), hub);
+    tap('desk-talk');
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    tap('composer-a-kind-vote');
+    tap(`composer-a-choice-gov:${OSSA}`);
+    expect(text('composer-a-stakes')).toBe(`Kept: it builds your name. Broken: −${-POLITICS.reputation.moves.voteBroken}, and the table sees it.`);
+    tap('composer-a-close');
+    tap('talk-cards');
+    expect(text('my-deal-deal-kv1-line')).toContain('Kept');
+    expect(text('my-deal-deal-kv1-line'), 'no figure').not.toMatch(/\+\d/);
+  });
+
   it("S3-B-AC-1: Brix's whisper thread and agenda show Lena's card with both reputations and Accept / Decline; My cards lists offered (Withdraw), incoming, active (what it binds, until when) and settled cards", () => {
     mount(brixGame(), hub);
     expect(text('agenda-deals')).toContain('1 deal offer');
@@ -358,6 +646,7 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(findTestid(thread), "the card sits at the foot of Brix's whisper with Lena").toBeDefined();
     expect(text('incoming-deal-in1-from-rep')).toBe(String(repHigh));
     expect(text('incoming-deal-in1-to-rep')).toBe(String(repLow - 1));
+    expect(findTestid('outgoing-deal-out1'), "Brix's card to Ossa is not in his whisper with Lena").toBeUndefined();
     tap('incoming-deal-in1-accept');
     expect(sent).toEqual([{ type: 'answerDeal', id: 'deal-in1', accept: true }]);
 
@@ -365,6 +654,10 @@ describe('the incoming card and My cards (S3-C18)', () => {
     rerender(brixGame([lenasAnswer('active'), ...BRIX_CARDS.slice(1)]));
     expect(findTestid('incoming-deal-in1')).toBeUndefined();
     expect(text('thread-line-deal-in1')).toContain('Binds until the end of month 4');
+
+    tap(`chat-to-${OSSA}`);
+    expect(text(`thread-deals-${OSSA}`), "Brix's own offer to Ossa sits in their thread, as his, waiting").toContain('Waiting for Ossa');
+    expect(findTestid('outgoing-deal-out1')).toBeDefined();
 
     tap('talk-cards');
     expect(allTestids('my-deals-').filter((id) => /^my-deals-[a-z]+$/.test(id))).toEqual(['my-deals-waiting', 'my-deals-active', 'my-deals-settled']);
@@ -376,6 +669,8 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(text('my-deal-deal-act1-line')).toContain('Binds until the end of month 3');
     expect(text('my-deal-deal-wd1-line')).toContain('Withdrawn by you');
     expect(byTestid('my-deal-deal-wd1').getAttribute('data-status')).toBe('withdrawn');
+    expect(findTestid('my-deal-deal-ob1'), "Ossa's broken card to Lena is public, but not one of Brix's cards").toBeUndefined();
+    expect(text('my-deals-settled'), 'Settled counts only Brix’s own').toContain('Settled 1');
   });
 
   it('S3-B-AC-1: My cards lists a card offered to me under For you to answer, and a second offer makes the agenda open My cards', () => {
