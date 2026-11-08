@@ -20,6 +20,7 @@ let TAB_SLOTS: typeof import('../src/phone/hub/today').TAB_SLOTS;
 let ELECTION_DAY_STAGE: typeof import('../src/phone/hub/politics/slots').ELECTION_DAY_STAGE;
 let ElectionDay: typeof import('../src/phone/hub/politics/ElectionDay').ElectionDay;
 let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPicks;
+let electionReadyWords: typeof import('../src/phone/hub/politics/slots').electionReadyWords;
 let GovernorDesk: typeof import('../src/phone/hub/politics/Governor').GovernorDesk;
 
 beforeAll(async () => {
@@ -30,7 +31,7 @@ beforeAll(async () => {
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Hub } = await import('../src/phone/hub/Hub'));
   ({ TAB_SLOTS } = await import('../src/phone/hub/today'));
-  ({ ELECTION_DAY_STAGE } = await import('../src/phone/hub/politics/slots'));
+  ({ ELECTION_DAY_STAGE, electionReadyWords } = await import('../src/phone/hub/politics/slots'));
   ({ ElectionDay, forgetPicks } = await import('../src/phone/hub/politics/ElectionDay'));
   ({ GovernorDesk } = await import('../src/phone/hub/politics/Governor'));
   // The fake document makes no SVG namespace; a PlayerMark's svg is an element like any other here.
@@ -247,6 +248,15 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     unmount();
     mount(ballot(), ElectionDay, 'ZORP');
     for (const option of ['s1', 's2', 'abstain']) expect(checked(option), option).toBe(false);
+  });
+
+  it("S3-RULE-12 (O-2): another room's Cast my vote is not live on a stale Abstain, before Elections is opened", () => { // trace-allow: S3-RULE-12 row 2 is a rule id, not an AC id; found in the #734 re-review
+    mount(ballot(), ElectionDay);
+    pick('abstain');
+    unmount();
+    const other = ballot();
+    const seat = { table: tableOf(other, 'ZORP'), view: other, me: other.me!, self: other.players[0]! };
+    expect(electionReadyWords(seat)?.canReady).toBe(false);
   });
 
   it.each(['s2', 'abstain'])("C66, AM-21: changing a vote the server holds shows the new pick at once, before the server's view comes back (to %s)", (option) => {
