@@ -68,13 +68,18 @@ describe('T-AC-15: smoke over a damaged building, a haze by the air (RULE-7, RUL
     expect(at(7, true)).toBe(at(0, false));
   });
 
-  it('T-AC-13, T-AC-15: a plume is drawn just after its own building, so a building nearer the camera covers it and one behind does not', () => {
-    // The Hospital (place 2, col + row 1) is damaged; the Stadium (place 3, col + row 2) stands nearer the camera.
-    const html = grounds(colony(40, 'damaged'));
+  it('T-AC-15: a plume is drawn just after its own building, so a building or colonist nearer the camera covers it and one behind does not', () => {
+    // The Hospital (place 2, col + row 1) is damaged; the Stadium (place 3, col + row 2) stands nearer the camera. One
+    // colonist stands behind the Hospital (col + row 0.5), one in front of it (1.5).
+    const html = renderToStaticMarkup(<ColonyGrounds colony={colony(40, 'damaged')} size="tv" manifest={null} light="day" routes={[[[-0.5, 1], [-0.5, 1]], [[0.5, 1], [0.5, 1]]]} />);
     const at = (testid: string) => html.indexOf(`data-testid="${testid}"`);
+    const walkers = [...html.matchAll(/data-testid="walker"/g)].map((m) => m.index!);
+    expect(walkers).toHaveLength(2);
     expect(at('smoke-2')).toBeGreaterThan(at('place-2'));
-    expect(at('smoke-2')).toBeLessThan(at('place-3'));
     expect(at('smoke-2')).toBeGreaterThan(at('place-1'));
+    expect(at('smoke-2')).toBeLessThan(at('place-3'));
+    expect(walkers[0]).toBeLessThan(at('smoke-2'));
+    expect(walkers[1]).toBeGreaterThan(at('smoke-2'));
   });
 
   it('T-AC-12, T-AC-15: during the lean-in a damaged building in front of the named place fades its smoke with it; one level with the place keeps its smoke whole', () => {
@@ -98,6 +103,7 @@ describe('T-AC-15: smoke over a damaged building, a haze by the air (RULE-7, RUL
     expect(still.length).toBeGreaterThan(0);
     expect(leant.length).toBe(still.length);
     leant.forEach((o, k) => expect(o).toBeCloseTo(still[k]! / 3, 3));
+    expect(plumeOf(0, 2).length).toBeGreaterThan(0);
     expect(plumeOf(1, 2)).toEqual(plumeOf(0, 2));
   });
 });
