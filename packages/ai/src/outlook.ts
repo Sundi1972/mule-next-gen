@@ -129,17 +129,22 @@ interface Future {
  * drains as it does in play; plots produce, everyone eats, the store builds
  * MULEs and posts prices. Returns the prices posted `months` on, raised
  * where the rollout shows a shortage by then that the price hasn't caught up
- * with yet: a good colonists went short of in those months counts at what the
- * store posts after such a month, and Smithore, when the corral can't build its
- * monthly target before the horizon, at its price there.
+ * with yet: a good colonists went short of in an upkeep before the forecast's
+ * month counts at what the store posts after such a month, and Smithore, when
+ * the corral can't build its monthly target before the horizon, at the higher of
+ * its price then and at the horizon.
  *
- * Energy counts short too when its plots turned off would empty the store's shelf by then: nobody trades in the status
- * quo, but a seat short of Energy would buy what its plots lack, so that comes off the shelf month by month, and a shelf
- * too short for it is a colony short of Energy (Heiko, 8 Nov, Energy A: the seats value a plant from the forecast).
+ * Energy counts short too when its plots turned off would empty the store's shelf in a month before the forecast's:
+ * nobody trades in the status quo, but a seat short of Energy would buy what its plots lack, so that comes off the shelf
+ * month by month, and a shelf too short for it is a colony short of Energy (Heiko, 8 Nov, Energy A: the seats value a
+ * plant from the forecast).
  *
- * A shortage the rollout shows only after `months` doesn't count: nobody builds in the status quo, so it runs dry
- * where play doesn't, and counted, it priced Water at 100 against a real 25-31 (forecast calibration, WS1 C, 8 Nov).
- * Last month's real shortages don't count either: the store's posting already carries them (pricing RULE-6 row 2).
+ * A shortage in the forecast month's own upkeep or later doesn't count: that upkeep runs after the auction the forecast
+ * reads, and nobody builds in the status quo, so it runs dry where play doesn't. Counted to the horizon, it priced
+ * Water at 100 against a real 25-31 (forecast calibration, WS1 C, 8 Nov). The reports read are the rollout's own from
+ * `from` on: made before production, as the seats' valuation reads it, last month's real report is not among them,
+ * and the store's posting already carries its shortages (pricing RULE-6 row 2). Made at production or later, the
+ * current month's report sits just before `from`, so its upkeep's shortages are not counted either.
  */
 function rollForward(stage: GameState, months: number): Future {
   const sim = cloneForSim(stage);
@@ -166,7 +171,7 @@ function rollForward(stage: GameState, months: number): Future {
         const lacking = (report.lines ?? []).filter((l) => l.parts.some((p) => p.why === 'energyOff')).reduce((n, l) => n + energyUseOf(sim, sim.tiles[l.tile]!), 0);
         const shelf = storeForSale(sim, 'energy');
         sim.store.stock.energy -= Math.min(lacking, shelf);
-        if (lacking > shelf && sim.month <= asked) energyShort = true;
+        if (lacking > shelf && sim.month < asked) energyShort = true;
       }
       last = { ...sim.store.posted };
       if (sim.month <= asked) prices = last;
@@ -174,7 +179,7 @@ function rollForward(stage: GameState, months: number): Future {
     }
   }
   prices = { ...prices };
-  const byThen = sim.history.slice(from).filter((h) => h.month <= asked);
+  const byThen = sim.history.slice(from).filter((h) => h.month < asked);
   for (const good of new Set(byThen.flatMap((h) => h.shortages))) {
     // The store's own price for the month after its colonists went short of the good (pricing RULE-6 row 2).
     prices[good] = Math.max(prices[good], nextPostedPrice(sim, good, undefined, [good]));
