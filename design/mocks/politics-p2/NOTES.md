@@ -140,3 +140,19 @@ Build needs (for WS7/WS3): ShowEventView gains `sabotage`; EVENT_ENTRY gains pow
   stays after its event; the stamp and the whisper show only while their event plays. Shots: p10-caught-guard.png,
   p10-dark-plot.png. The stamp is anchored at the plot's left edge; the build clamps it inside the map for the right
   edge's plots.
+
+## P9 and P11 (8 Nov, built: #p9)
+
+- P9: the real ElectionDay already draws one column per office in POLITICS.offices; with 'sheriff' added
+  (src/slice4-config.ts, mock plumbing loaded first) announce reads "Election day: Governor and Sheriff" and the ballot
+  has a Sheriff column. The build flips POLITICS.offices. Proposed: the Offices card becomes "What the offices do" with
+  the Sheriff's line (2 secret guards, one investigation, fines; 30 cr a month).
+- P11: the real LawPicker's settingWords/chipWords have no case for sabotageBan (they would print "undefined"), so the
+  ban's row and ballot line are drawn as a proposal: "Sabotage ban ×2 / ×3", meaning "A caught saboteur's fine and
+  reputation loss are multiplied". Build edits (WS7's files): settingWords and chipWords → `×${s}`, LAW_MEANING, LAW_NAME.
+- Fixture fix: WS6's frame fixture had vote-weight parts `[]`, so the votes card read NaN; now real parts summing to 3.
+
+## The whole mock: pages
+
+index (decisions, links) · #b Sheriff's desk B folded (approved) · #a variant A (record) · #p6 the secret order ·
+#p10 Caught! on the TV, phone lines, month end · #p9 election day with the Sheriff, the sabotage ban.

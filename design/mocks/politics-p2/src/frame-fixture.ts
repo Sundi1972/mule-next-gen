@@ -52,7 +52,7 @@ function politics(governor: string, sheriff: string | null): PoliticsView {
   return {
     governor, sheriff, term: [4, 7], next: 8, baron: 'ossa',
     tax: { percent: 8, start: 8, low: 0, high: 20 }, fund: 640, pay: { governor: 40, sheriff: 30 },
-    weights: PLAYERS.map((p) => ({ id: p.id, votes: 3, parts: [] as never })),
+    weights: PLAYERS.map((p) => ({ id: p.id, votes: 3, parts: { base: 1, land: 1, reputation: 0, baron: p.id === 'ossa' ? 1 : 0, taxes: p.id === 'ossa' ? 0 : 1 } })), // WS8: real parts (WS6's copy had [] and the votes card read NaN)
     candidates: {}, promises: {}, promise: null, promiseFrom: 8, election: null, proposal: null, council: null, laws: {}, retry: {},
   };
 }
