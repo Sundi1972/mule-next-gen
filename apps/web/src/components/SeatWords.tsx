@@ -5,15 +5,23 @@ import { AiMark } from '../chat/Chat';
 type NewsView = Pick<MuleView, 'news' | 'newsLines' | 'players'>;
 
 /**
- * News line `i` as a list shows it, with " · AI" after each computer seat's name (Heiko, 7 Nov: a quiet mark wherever a
- * computer seat is named). The seats come from newsLines, and only when that line's text is the one shown, so an older
- * server's view, or one whose lists drift, shows the words as they are. Every news list draws its lines through this:
- * the TV's news column, the phone's colony desk and its results screen.
+ * Words that name seats, with " · AI" after each computer seat's name (Heiko, 7 Nov: a quiet mark wherever a computer
+ * seat is named). `who` holds one seat id per name in the words, in their order, repeats kept (as NewsLine.who): the
+ * news lists and the deal cards' break words both draw through this, so the mark follows one rule everywhere.
+ */
+export function SeatWords({ text, who, players }: { text: string; who: readonly string[]; players: NewsView['players'] }) {
+  return <>{marked(text, who, players)}</>;
+}
+
+/**
+ * News line `i` as a list shows it, through SeatWords. The seats come from newsLines, and only when that line's text is
+ * the one shown, so an older server's view, or one whose lists drift, shows the words as they are. Every news list
+ * draws its lines through this: the TV's news column, the phone's colony desk and its results screen.
  */
 export function NewsWords({ view, i }: { view: NewsView; i: number }) {
   const text = view.news[i] ?? '';
   const line = view.newsLines?.[i];
-  return <>{marked(text, line?.text === text ? line.who : [], view.players)}</>;
+  return <SeatWords text={text} who={line?.text === text ? line.who : []} players={view.players} />;
 }
 
 /**

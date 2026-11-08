@@ -4,7 +4,7 @@ import { EMOTES } from '@mule/protocol';
 import { Button, cx, GoodTag, hungerRule, Panel, PlayerMark, sickRule, type Good } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
 import { AiMark } from '../chat/Chat';
-import { NewsWords } from '../components/NewsWords';
+import { NewsWords } from '../components/SeatWords';
 import { player, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { usePhoneGame } from './game';

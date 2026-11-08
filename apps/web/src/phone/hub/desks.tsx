@@ -1,6 +1,6 @@
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
 import { useEffect, type ReactNode } from 'react';
-import { NewsWords } from '../../components/NewsWords';
+import { NewsWords } from '../../components/SeatWords';
 import { useClientState } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { Chat, ShipLine } from '../parts';

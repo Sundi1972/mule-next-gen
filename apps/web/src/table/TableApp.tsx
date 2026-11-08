@@ -25,7 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, paidOutThisMonth, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
-import { NewsWords } from '../components/NewsWords';
+import { NewsWords } from '../components/SeatWords';
 import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
