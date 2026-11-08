@@ -167,9 +167,10 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
     },
     {
       name: 'same month: a furnace holding no Smithore runs in full on what the mine beside it made, on the Energy left over',
-      // The mine (use 2) is the only listed plot; 3 Energy leaves 1, which runs the fed furnace (use 1) after the mine.
+      // The mine (use 2) is the only listed plot; 4 Energy leaves 2, which runs the fed furnace after the mine (use 2: its
+      // recipe's 2, less 1 for the mine beside it, and its running 1, needs C11).
       plots: [{ good: 'smithore', out: 4 }, { good: 'alloy', beside: true }],
-      energy: 3,
+      energy: 4,
       stock: { smithore: 0 },
       made: [4, 2],
       off: [false, false],
@@ -199,11 +200,11 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
     },
     {
       name: 'two furnaces share Smithore for one: only the first is listed, so the mine is not turned off to make room',
-      // Mine 2, furnaces 2 each; 4 Energy, 2 Smithore. The first furnace reserves the 2 Smithore; the second waits for
+      // Mine 2, furnaces 3 each (the recipe's 2 and the running 1, needs C11); 5 Energy, 2 Smithore. The first furnace reserves the 2 Smithore; the second waits for
       // the second pass: by then the mine's Smithore is there but no Energy is, so it is turned off, and as 20% of its 2
       // rounds to 0 it takes nothing (R4). Listing both would turn the mine off for a furnace that never runs.
       plots: [{ good: 'smithore', out: 4 }, { good: 'alloy' }, { good: 'alloy' }],
-      energy: 4,
+      energy: 5,
       posted: { smithore: 10 },
       stock: { smithore: 2 },
       made: [4, 2, 0],
@@ -336,7 +337,8 @@ describe('AM-17: a turned-off factory', () => {
 
   it('B-AC-energy-off: a factory and a mine in one list: the factory (use 2) and the mine (use 2) tie, the one worth less goes off', () => {
     const state = colony();
-    const [mine, tile] = lay(state, [{ good: 'smithore', out: 2 }, { good: 'alloy', terrain: 'hills', runMonths: 3 }]);
+    // The furnace beside the mine: its recipe's 2, less 1 for the feeder, and its running 1 (needs C11) make a use of 2.
+    const [mine, tile] = lay(state, [{ good: 'smithore', out: 2 }, { good: 'alloy', beside: true, terrain: 'hills', runMonths: 3 }]);
     Object.assign(state.store.posted, { smithore: 50, alloy: 100 });
     p(state).stock.energy = 2;
     p(state).stock.smithore = 2;

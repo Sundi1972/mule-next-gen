@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, needsOf, needsWith, type GameState, type Outfit } from '../src/index.js';
+import { createGame, HEALTH, needsOf, needsWith, type GameState, type Outfit } from '../src/index.js';
 
 /**
  * needs C12: the AI asks the engine for a player's needs with one more plot (needsWith) instead of copying needsOf's
  * formula (HC-11). needsWith(s, p, o) is needsOf of the same state with one more plot of `o` worked by p.
  */
 
-function newGame(): GameState {
-  const state = createGame({ seed: 42, players: ['p0', 'p1', 'p2', 'p3'].map((id) => ({ id, name: id, isAi: false, species: 'gearling' as const })) });
+function newGame(politics = false): GameState {
+  const state = createGame({ seed: 42, politics, players: ['p0', 'p1', 'p2', 'p3'].map((id) => ({ id, name: id, isAi: false, species: 'gearling' as const })) });
   for (const t of state.tiles) delete t.special;
   return state;
 }
@@ -49,5 +49,24 @@ describe('needs C12: needsWith gives a player needs with one more plot', () => {
     needsWith(state, 'p0', 'alloy');
     expect(needsOf(state, 'p0')).toEqual(before);
     expect(state.tiles).toEqual(tiles);
+  });
+
+  it('needs C12: from three farms one more farm leaves Food at 3, a factory raises it to 4', () => {
+    const state = work(newGame(), ['food', 'food', 'food']);
+    expect(needsOf(state, 'p0').food, 'the premise').toBe(3);
+    expect(needsWith(state, 'p0', 'food').food).toBe(3);
+    expect(needsWith(state, 'p0', 'alloy').food).toBe(4);
+  });
+
+  it("needs C12: needsWith keeps RULE-15's Medicine: with the crews sick it asks 1, as needsOf does", () => {
+    const state = work(newGame(true), ESTATE);
+    state.colony!.sick = HEALTH.crewSickFrom;
+    HEALTH.enabled = true;
+    try {
+      expect(needsOf(state, 'p0').medicine, 'the premise: the crews fall sick').toBe(1);
+      expect(needsWith(state, 'p0', 'alloy').medicine).toBe(1);
+    } finally {
+      HEALTH.enabled = false;
+    }
   });
 });

@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1395 settings in 55 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1415 settings in 56 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>752b0c6da3c9</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a1f12b4f8ec7</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -331,15 +331,43 @@
 </tbody>
 </table></div>
 
+<h2 id="consumption"><code>CONSUMPTION</code> <span class="pill built">In the game</span></h2>
+<p>Food a plot&#39;s crew eats and Energy it burns a month, in whole quarters; a factory burns this on top of its recipe (needs RULE-10).</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>CONSUMPTION.food.food</code></td><td class="n">0.25</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.food.energy</code></td><td class="n">1</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.water.food</code></td><td class="n">0.25</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.water.energy</code></td><td class="n">1</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.energy.food</code></td><td class="n">0.25</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.energy.energy</code></td><td class="n">1</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.smithore.food</code></td><td class="n">0.5</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.smithore.energy</code></td><td class="n">2</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.crystite.food</code></td><td class="n">0.75</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.crystite.energy</code></td><td class="n">2</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.rareEarth.food</code></td><td class="n">0.5</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.rareEarth.energy</code></td><td class="n">2</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.alloy.food</code></td><td class="n">0.5</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.alloy.energy</code></td><td class="n">1</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.electronics.food</code></td><td class="n">0.5</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.electronics.energy</code></td><td class="n">2</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.medicine.food</code></td><td class="n">0.5</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.medicine.energy</code></td><td class="n">1</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.greenBelt.food</code></td><td class="n">0</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+<tr><td><code>CONSUMPTION.greenBelt.energy</code></td><td class="n">0</td><td>See the note on <code>CONSUMPTION</code>.</td></tr>
+</tbody>
+</table></div>
+
 <h2 id="upkeep"><code>UPKEEP</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>UPKEEP.baseFood</code></td><td class="n">2</td><td>A player&#39;s crew eats and drinks: the player alone needs baseFood and baseWater, and every few crew add one more. A raw plot has a crew of 1, a factory a crew of 2, so a bigger estate costs more to feed.</td></tr>
+<tr><td><code>UPKEEP.baseFood</code></td><td class="n">2</td><td>A player&#39;s household alone eats baseFood and drinks baseWater a month; its crews eat CONSUMPTION&#39;s Food on top.</td></tr>
 <tr><td><code>UPKEEP.baseWater</code></td><td class="n">1</td><td>Explained in the note on <code>UPKEEP.baseFood</code>.</td></tr>
-<tr><td><code>UPKEEP.crewPerFood</code></td><td class="n">4</td><td>No note of its own; the note on <code>UPKEEP.baseFood</code>, just before it in the file, may cover it.</td></tr>
-<tr><td><code>UPKEEP.crewPerWater</code></td><td class="n">6</td><td>No note of its own; the note on <code>UPKEEP.baseFood</code>, just before it in the file, may cover it.</td></tr>
-<tr><td><code>UPKEEP.crew</code></td><td class="n"></td><td>Crew a plot adds to its owner&#39;s, by kind: a raw plot, a factory, a green belt.</td></tr>
+<tr><td><code>UPKEEP.crewPerFood</code></td><td class="n">4</td><td>Read by the AI until WS1&#39;s needsWith switch; nothing in the engine reads it.</td></tr>
+<tr><td><code>UPKEEP.crewPerWater</code></td><td class="n">6</td><td>Read by the AI until WS1&#39;s needsWith switch; nothing in the engine reads it.</td></tr>
+<tr><td><code>UPKEEP.crew</code></td><td class="n"></td><td>Read by the AI until WS1&#39;s needsWith switch; nothing in the engine reads it.</td></tr>
 <tr><td><code>UPKEEP.crew.raw</code></td><td class="n">1</td><td>See the note on <code>UPKEEP.crew</code>.</td></tr>
 <tr><td><code>UPKEEP.crew.factory</code></td><td class="n">2</td><td>See the note on <code>UPKEEP.crew</code>.</td></tr>
 <tr><td><code>UPKEEP.crew.greenBelt</code></td><td class="n">0</td><td>See the note on <code>UPKEEP.crew</code>.</td></tr>
@@ -363,7 +391,7 @@
 </table></div>
 
 <h3 id="upkeep-energy-use"><code>UPKEEP.energyUse</code></h3>
-<p>Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its use from its own output and is never turned off; an owner short of Energy turns its other plots off, biggest use first, until the rest fit (AM-17). Energy plots 1: Heiko, 5 Nov.</p>
+<p>Read by the AI&#39;s manual until WS1&#39;s needsWith switch; nothing in the engine or web reads it. CONSUMPTION holds the numbers.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
