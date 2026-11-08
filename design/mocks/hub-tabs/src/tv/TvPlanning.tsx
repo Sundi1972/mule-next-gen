@@ -23,7 +23,7 @@ export const TV_EVENT_HOLD_S = 8;
 
 /**
  * The most seats at which planning keeps its waiting box (PM ruling 8 Nov, option 2): from one more, the ready list
- * alone says who is still planning, with their chips, and the host's "can continue" line moves to the list's foot.
+ * alone says who is still planning, with their chips. The host's "can continue" line is the list's foot at any size.
  */
 export const TV_WAITING_BOX_MAX_SEATS = 4;
 
@@ -40,7 +40,8 @@ export const TV_WAITING_BOX_MAX_SEATS = 4;
  *      a change from the politics-deals mock Heiko approved, whose banner stayed under the header all month;
  *   3. the reputation chip after each name in the ready list (politics-deals S3-C19); the waiting box above it shows
  *      none (trunk's WaitingFor, WS4 change c): the list already has them. Above TV_WAITING_BOX_MAX_SEATS there is no
- *      waiting box at all (PM ruling, option 2): the list says who is planning, and the host's line is its foot;
+ *      waiting box at all (PM ruling, option 2): the list says who is planning. The host's "can continue" line is the
+ *      list's foot at every size, out of the waiting box (PM ruling, 8 Nov);
  *   4. the news through NewsWords, so a computer seat reads "Ossa · AI" by its id (ws7-s3-phone-pr's News).
  * Left out, as the mock has no clock or events: TvEventLayer, and the grounds opener before the month end. The moment's
  * clock is the screen's own (performance.now); the build times it from the server's clock, as the event show does.
@@ -129,7 +130,6 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
                 <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
                   {/* CHANGE 3: no chips here (WS4 c); the ready list below has them. */}
                   <WaitingFor seats={waiting} me={null} tv />
-                  {hostLine && <span className="text-lg text-ink-2">{hostLine}</span>}
                 </div>
               ) : (
                 <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow" data-testid="tv-all-ready">
@@ -220,8 +220,8 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
                   );
                 })}
               </ul>
-              {/* CHANGE 3: with no waiting box, the host's line is the ready list's foot. */}
-              {!box && hostLine && (
+              {/* CHANGE 3: the host's line is the ready list's foot, at every table size (PM ruling, 8 Nov). */}
+              {hostLine && (
                 <p className="shrink-0 text-lg text-ink-2" data-testid="tv-ready-host">
                   {hostLine}
                 </p>

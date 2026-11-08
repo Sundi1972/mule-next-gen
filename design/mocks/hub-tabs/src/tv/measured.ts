@@ -4,14 +4,14 @@
  * break this month from beat 1.3 on), at 2, 4 and 6 seats (world.ts `seats`; 2 = Ossa · AI and Brix). The floor is 0.7
  * (rulebook #tv-fit). The TV as ruled: the budget on the promise row with no "(was N%)" and a moved share marked ▲/▼
  * (slice 5 AM-9), a break or a call an 8 s moment over the map box, the break folded into the news, the call on the
- * promise row, the waiting box without chips and none above TV_WAITING_BOX_MAX_SEATS (the host's line then the ready
- * list's foot).
+ * promise row, the waiting box without chips and none above TV_WAITING_BOX_MAX_SEATS, the host's "can continue" line
+ * at the ready list's foot at every size.
  */
 export const TV_FLOOR = 0.7;
 
 type BySeats = { 2: number; 4: number; 6: number };
 
-/** Steady states, by the beat measured. Under the floor: waiting at 4 seats (box + host line), 0.662. */
+/** Steady states, by the beat measured. Under the floor: waiting at 4 seats (the box and the host's line), 0.658. */
 export const TV_FIT: Record<string, { beat: string; fit: BySeats }> = {
   planningBeforeBreak: { beat: '1-head', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
   /** Every planning beat from 2.1 on: the break folded into the news. */
@@ -20,8 +20,8 @@ export const TV_FIT: Record<string, { beat: string; fit: BySeats }> = {
   /** 4.4: Brix's budget set this month, the moved shares marked ▲/▼. */
   budgetSet: { beat: '4-commission', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
   guarding: { beat: '6-guard', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
-  /** 2 and 4 seats: the box with the host's line; 6: no box, the host's line at the ready list's foot. */
-  waiting: { beat: '8-waiting', fit: { 2: 0.835, 4: 0.662, 6: 0.727 } },
+  /** The host's line at the ready list's foot at every size; the waiting box up to 4 seats. In the box it read 0.662 at 4. */
+  waiting: { beat: '8-waiting', fit: { 2: 0.835, 4: 0.658, 6: 0.727 } },
   /** 5.2 after the Call tap (solo &call=1): "Overrule called: tax frozen", where the budget was. */
   callFolded: { beat: '5-call', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
   overruleBallot: { beat: '5-ballot', fit: { 2: 0.908, 4: 0.894, 6: 0.88 } },
@@ -45,9 +45,10 @@ export const TV_MOMENT_VS_STEADY: Record<'break' | 'call', Record<keyof BySeats,
 };
 
 /**
- * What binds where it is still under the floor: waiting at 4 seats keeps its box (TV_WAITING_BOX_MAX_SEATS) and the
- * host's line inside it, over a side column the market already fills; the same line as the list's foot at 6 seats
- * costs 0.793 → 0.727 and holds.
+ * What binds where it is still under the floor: waiting at 4 seats has both the waiting box (TV_WAITING_BOX_MAX_SEATS)
+ * and the host's line, over a side column the market already fills. The line costs the same wherever it sits: in the
+ * box 0.711 → 0.662, at the list's foot 0.711 → 0.658 (its own gap). Without the box (6 seats) it costs 0.793 → 0.727 and
+ * holds. Planning at 4 seats, with the box and no host line (nobody ready yet), is 0.711.
  *
  * Before the PM's 8 Nov rulings (options 1 and 2; the chips in planning stay), the same beats measured, 2 / 4 / 6:
  * planning and the folded break 0.796 / 0.678 / 0.631, budget unset and the folded call 0.835 / 0.711 / 0.662, waiting

@@ -63,6 +63,6 @@ export const TV_NOTE: Record<TvFocus, string> = {
   'overrule-called': `TV: the call shows over the map for ${TV_EVENT_HOLD_S} s, then folds to “Overrule called: tax frozen” on the Governor’s row; once planning ends, the ballot takes the screen: who has voted, never how.`,
   'overrule-reveal': 'TV: the overrule’s reveal: yes and no out of all the table’s votes, the needed mark, the stamp; the budget line at its foot.',
   guarding: 'TV: unchanged. Guards are secret: the TV shows nothing of the Sheriff’s guard.',
-  waiting: `TV: up to ${TV_WAITING_BOX_MAX_SEATS} seats, “Waiting for …” with each name and the host’s “can continue” line, the ready list under it with every reputation chip; from ${TV_WAITING_BOX_MAX_SEATS + 1} seats, the ready list alone, the host’s line at its foot. Under the floor at 4 seats: waiting (${TV_FIT.waiting.fit[4]}).`,
+  waiting: `TV: up to ${TV_WAITING_BOX_MAX_SEATS} seats, “Waiting for …” with each name, the ready list under it with every reputation chip; from ${TV_WAITING_BOX_MAX_SEATS + 1} seats, the ready list alone. The host’s “can continue” line is the list’s foot. Under the floor at 4 seats: waiting (${TV_FIT.waiting.fit[4]}).`,
   'month-end': 'TV: the month end: the league with chips and the breaker’s “✗ −N” (a stand-in for WS4’s mark), “fund … · paid out …” in the Wealth note; no broken-cards box (TV-FIT).',
 };
