@@ -246,6 +246,27 @@ describe('the reputation chip (S3-C19)', () => {
     tap(`who-${OSSA}-rep`);
     expect(text('reason-deal-o1'), "Ossa's own reason, in the breaker-less words").toBe(`M2Broke a pact with Lena−${-POLITICS.reputation.moves.pactBroken}`);
   });
+
+  it("S3-B-AC-6: the chip's words take the vote from POLITICS.weight.repVotes and the AI refusal from POLITICS.ai.deals.refuseBelow, its own threshold", () => {
+    const weight = POLITICS.weight as { repVotes: number };
+    const deals = POLITICS.ai.deals as { refuseBelow: number };
+    const was = [weight.repVotes, deals.refuseBelow] as const;
+    try {
+      weight.repVotes = 2;
+      deals.refuseBelow = 20;
+      // Brix is under repLow but not under 20; Kai, at 19, is under both.
+      const players = PLAYERS.map((p) => (p.id === KAI ? { ...p, reputation: 19 } : p));
+      const game = { ...gameFor(myView(LENA, [])), players };
+      mount(game, (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
+      expect(byTestid(`who-${LENA}-rep`).getAttribute('aria-label')).toBe(`Lena: reputation ${repHigh}. Good name: +2 votes.`);
+      expect(byTestid(`who-${BRIX}-rep`).getAttribute('aria-label'), 'a low name AI seats still deal with').toBe(`Brix: reputation ${repLow - 1}. Low name: −2 votes.`);
+      expect(byTestid(`who-${KAI}-rep`).getAttribute('aria-label')).toBe('Kai: reputation 19. Low name: −2 votes, and AI players turn down their cards.');
+      tap(`who-${BRIX}-rep`);
+      expect(text(`player-card-${BRIX}-legend`)).toBe(`${repHigh} and up: +2 votes. Under ${repLow}: −2 votes. Under 20, AI players turn down their cards.`);
+    } finally {
+      [weight.repVotes, deals.refuseBelow] = was;
+    }
+  });
 });
 
 describe('the reputation chip in the ready bar (S3-C19)', () => {
@@ -339,6 +360,14 @@ describe('the deal composer (S3-C17)', () => {
     tap('composer-a-close');
     tap('talk-cards');
     expect(text('my-deals-waiting')).toContain('· 0 more you can offer');
+
+    // A view whose seat carries no reputation yet reads the starting one, START.reputation, which AI seats deal with.
+    const noRep = PLAYERS.map((p) => (p.id === LENA ? { ...p, reputation: undefined } : p));
+    rerender({ ...game([], 2), players: noRep });
+    tap('talk-chat');
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    expect(findTestid('composer-a-ai-warning'), `no warning at START.reputation ${START.reputation}`).toBeUndefined();
   });
 
   it("S3-B-AC-1: the composer also opens from a name's player card and from a standings row, in planning", () => {
