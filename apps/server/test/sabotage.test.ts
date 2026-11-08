@@ -1,8 +1,13 @@
 import { plotEvent, POLITICS, RuleError, guardsMax, type GameState, type Office, type SabotageOrder } from '@mule/engine';
+import type { MuleIntent } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BrainService } from '../src/brain/index.js';
+import { chatter } from '../src/brain/chat.js';
 import { MuleGame, type Notice } from '../src/mule-game.js';
-import { fakeContext, throughSidePicks } from './fake-context.js';
+import { Recorder } from '../src/record.js';
+import { replay } from '../src/replay.js';
+import { fakeContext, seats, throughSidePicks } from './fake-context.js';
 
 /**
  * Slice 4's server (S4-C13): what each screen is told of sabotage and the Sheriff (S4-RULE-12). Every test arranges the
@@ -421,5 +426,104 @@ describe('S4-C13: an AI seat\'s moves reach the same handle as a phone\'s', () =
     expect(aiAct(w.game, 'ai1', cut(w.ossaPlot))).toBe(true);
     expect(orders(w).map((o) => [o.by, o.outcome])).toEqual([['ai1', 'pending']]);
     expect(wire(w.game, 'lena')).not.toContain(orders(w)[0]!.id);
+  });
+});
+
+/** Every seat plays Classic: no Claude call to record. */
+const classic: BrainService = { deciderFor: () => null, writerFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
+const KEY_VAR = 'ANTHROPIC_API_KEY';
+const SEED = 21;
+
+describe('S4-RULE-12 (the record): orders and guards are in the record and replay', () => {
+  it('S4-RULE-12: a recorded game with an order, a guard and a fine replays to the same state hash with the key unset', { timeout: 120_000 }, async () => {
+    const savedKey = process.env[KEY_VAR];
+    delete process.env[KEY_VAR];
+    try {
+      // Month 1 has its election, and the order is caught for sure: the case can be fined.
+      POLITICS.electionMonths = [1];
+      force('rumour', true, true);
+      // As createRecordedGame builds it, keeping the game itself so the test can read the state at game over.
+      const fake = fakeContext({});
+      const options = { maxMonths: 3, politics: true };
+      const recorder = new Recorder(fake.ctx, SEED, options, classic, null);
+      let final: GameState | null = null;
+      const inner = new MuleGame(recorder.ctx, SEED, {
+        ...options,
+        brain: recorder.brain,
+        recordPlaybook: (entry) => recorder.playbook(entry),
+        onGameOver: (state) => {
+          final = structuredClone(state);
+          recorder.gameOver(state);
+        },
+      });
+      const game = recorder.wrap(inner);
+      const state = () => (inner as unknown as { state: GameState }).state;
+      const send = (seat: string, intent: MuleIntent) => {
+        try {
+          game.handle(seat, intent);
+        } catch (err) {
+          if (!(err instanceof RuleError)) throw err;
+        }
+      };
+      const sent = new Set<string>();
+      const once = (key: string, seat: string, intent: MuleIntent) => {
+        if (sent.has(key)) return;
+        sent.add(key);
+        send(seat, intent);
+      };
+
+      game.start(seats);
+      for (let i = 0; i < 200_000 && !final; i++) {
+        const view = game.viewFor(null);
+        const election = view.politics?.election ?? null;
+        if (view.phase === 'planning' && election?.stage === 'announce') {
+          once('run-gov', 's1', { type: 'run', office: 'governor', promise: { kind: 'hold' } });
+          once('run-sheriff', 's2', { type: 'run', office: 'sheriff' });
+        }
+        if (view.phase === 'planning' && election?.stage === 'ballot') {
+          for (const seat of ['s1', 's2']) {
+            once(`gov-${seat}`, seat, { type: 'vote', office: 'governor', candidate: 's1' });
+            once(`sheriff-${seat}`, seat, { type: 'vote', office: 'sheriff', candidate: 's2' });
+          }
+        }
+        const votesOver = !election || election.stage === 'over';
+        // Month 1, the votes over: Heiko orders a rumour. Land grant: he claims a plot.
+        if (view.phase === 'planning' && view.month === 1 && votesOver) once('order', 's1', { type: 'sabotage', target: { kind: 'rumour', good: 'food', dir: 'up' } });
+        if (view.phase === 'landGrant') {
+          const lit = game.viewFor('s1').lit;
+          if (lit) once('claim', 's1', { type: 'claim', ...lit });
+        }
+        // Month 2's planning: if Mia is the Sheriff she guards that plot and fines the caught order.
+        if (view.phase === 'planning' && view.month === 2 && votesOver && view.politics?.sheriff === 's2') {
+          const plot = state().tiles.findIndex((t) => t.owner === 's1');
+          if (plot >= 0) once('guard', 's2', { type: 'guard', tiles: [plot] });
+          const caught = state().politics!.sabotage.find((o) => o.culpritPublic && !o.fine);
+          if (caught) once('fine', 's2', { type: 'fine', order: caught.id, amount: 100 });
+        }
+        const phase = game.viewFor(null).phase;
+        if (phase === 'planning' || phase === 'upkeep') for (const s of seats) if (!s.isAi && game.viewFor(null).phase === phase) game.handle(s.id, { type: 'ready' });
+        const now = game.viewFor(null);
+        const pick = now.phase === 'auction' && now.auction?.stage === 'status' ? now.auction : null;
+        if (pick && !(now.eventShow?.held && fake.ctx.now() < now.eventShow.endsAt))
+          for (const s of seats) if (!s.isAi && !pick.walkers.find((w) => w.id === s.id)?.done) game.handle(s.id, { type: 'ready' });
+        fake.advance(100);
+      }
+      expect(final, 'the game reached game over').not.toBeNull();
+      await new Promise((resolve) => setImmediate(resolve));
+      const record = JSON.parse(JSON.stringify(recorder.finished)) as NonNullable<typeof recorder.finished>;
+
+      const accepted = (type: string) => record.events.filter((e) => e.type === 'intent' && e.intent.type === type && e.refused === undefined);
+      expect(accepted('sabotage'), 'the order is in the record').toHaveLength(1);
+      expect(accepted('guard'), 'the guard is in the record').toHaveLength(1);
+      expect(accepted('fine'), 'the fine is in the record').toHaveLength(1);
+      const order = (final! as GameState).politics!.sabotage[0]!;
+      expect(order).toMatchObject({ by: 's1', outcome: 'caught', culpritPublic: true, fine: { by: 'sheriff', base: 100 } });
+
+      const result = await replay(record);
+      expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);
+      expect(result.identical).toBe(true);
+    } finally {
+      if (savedKey !== undefined) process.env[KEY_VAR] = savedKey;
+    }
   });
 });
