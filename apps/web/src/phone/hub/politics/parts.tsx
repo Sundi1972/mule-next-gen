@@ -41,8 +41,9 @@ export function repWords(rep: number): string {
   const { repVotes } = POLITICS.weight;
   const band = bandOf(rep);
   const words = band === 'good' ? `Good name: +${votes(repVotes)}` : band === 'low' ? `Low name: −${votes(repVotes)}` : 'Fair name';
-  if (rep >= POLITICS.ai.deals.refuseBelow) return words;
-  return `${words}, ${band === 'low' ? 'and' : 'but'} AI players turn down their cards`;
+  const { refuseBelow } = POLITICS.ai.deals;
+  if (rep >= refuseBelow) return words;
+  return band === 'low' ? `${words}, and AI players turn down their cards` : `${words}, but AI players turn down cards under ${refuseBelow}`;
 }
 
 /** The player card's key to the chip: both thresholds, and the AI seats' own when it is not repLow. */
