@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { PhoneMonthScoreHead, PhoneMonthScoreNote } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, YourWorth } from '../components/MonthEnd';
 import { fmt, secondsUntil, standings } from '../game/derive';
+import { SabotageNews } from '../events/SabotageNews';
 import { inCollapse, league, leaderWords, ordinal } from '../game/month-end';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
@@ -41,6 +42,8 @@ function MonthEnd() {
         {inCollapse(view) && <CollapseBanner density={density} donations={!!view.colony} />}
         <LeagueTable view={view} density={density} selfId={self.id} />
         <BrokenCards view={view} month={view.month} density={density} />
+        {/* WS8's named edit (S4-C17; PM ruling 8 Nov): beside a TV, which only counts them, the month's sabotage lines. */}
+        {tv && <SabotageNews view={view} className="px-1" />}
         {tv ? (
           <PhoneMonthScoreNote view={view}>
             <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">
