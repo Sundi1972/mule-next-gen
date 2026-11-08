@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { DealCard, ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -42,6 +42,12 @@ beforeAll(async () => {
     observe() {}
     disconnect() {}
   };
+  // A sheet portals into the shell it sits in: the fake DOM finds it by its test id, the one selector the code asks.
+  (FakeElement.prototype as unknown as { closest?: (selector: string) => FakeElement | null }).closest ??= function (this: FakeElement, selector: string) {
+    const id = /^\[data-testid="(.+)"\]$/.exec(selector)?.[1];
+    for (let n: FakeElement | null = this; n; n = n.parentNode instanceof FakeElement ? n.parentNode : null) if (id && n.getAttribute('data-testid') === id) return n;
+    return null;
+  };
   (FakeElement.prototype as unknown as { getBoundingClientRect?: () => object }).getBoundingClientRect ??= () => ({ x: 0, y: 0, top: 0, left: 0, width: 844, height: 390, right: 844, bottom: 390 });
 });
 
@@ -72,7 +78,7 @@ const politics = (extra: Partial<PoliticsView> = {}): PoliticsView => ({
 });
 
 /** Lena's phone (or `self`'s): 2 Food against a need of 5, so This month carries what she is short of. */
-function game({ self = 's1', pol = politics(), sheriff = false }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean } = {}): MuleView {
+function game({ self = 's1', pol = politics(), sheriff = false, deals }: { self?: string; pol?: PoliticsView | null; sheriff?: boolean; deals?: DealCard[] } = {}): MuleView {
   const me: MyView = {
     id: self,
     species: 'zipwing',
@@ -91,6 +97,7 @@ function game({ self = 's1', pol = politics(), sheriff = false }: { self?: strin
     mulePrice: 150,
     outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
     droneOrder: [],
+    ...(deals ? { deals: { cards: deals, offersLeft: 2, pactMonths: [2, 4] } } : {}),
     politics: pol && {
       running: null,
       ballot: {},
@@ -155,7 +162,7 @@ function props(el: FakeElement): Record<string, unknown> {
   expect(key, 'a React element').toBeDefined();
   return (el as unknown as Record<string, Record<string, unknown>>)[key!]!;
 }
-const tap = (testid: string) => act(() => (props(byTestid(testid)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(testid) }));
+const tap = (testid: string) => act(() => (props(byTestid(testid)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(testid), stopPropagation() {}, preventDefault() {} }));
 const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' ').trim();
 const selected = (testid: string) => byTestid(testid).getAttribute('aria-selected') === 'true';
 const pressed = (testid: string) => byTestid(testid).getAttribute('aria-pressed') === 'true';
@@ -240,7 +247,8 @@ describe('the tabbed planning hub (SB-2)', () => {
   // [the door today's code opens, on whose phone, where it must land]
   it.each<[string, (n: HubNav) => void, string, { tab: string; sub?: string; tool?: string; focus?: string | null; shows?: string }]>([
     ["openDesk('colony')", (n) => n.openDesk('colony'), 's1', { tab: 'colony' }],
-    ["openDesk('talk', 'whisper:s2')", (n) => n.openDesk('talk', 'whisper:s2'), 's1', { tab: 'talk', focus: 'whisper:s2' }],
+    // Talk takes the focus as it opens; what the door promised is the whisper to Brix, open.
+    ["openDesk('talk', 'whisper:s2')", (n) => n.openDesk('talk', 'whisper:s2'), 's1', { tab: 'talk', shows: 'whisper-line' }],
     // On the Governor's phone, where Council is not the only sub-tab. The Council desk takes the focus as it opens; what the door promised is the promise sheet, open.
     ["openDesk('council', 'run')", (n) => n.openDesk('council', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
     ["openDesk('governor') on the Governor's phone", (n) => n.openDesk('governor'), 's2', { tab: 'politics', sub: 'governor' }],
@@ -260,6 +268,42 @@ describe('the tabbed planning hub (SB-2)', () => {
     if (to.tool) expect(pressed(`tool-${to.tool}`), `the ${to.tool} tool is on`).toBe(true);
     if (to.focus !== undefined) expect(nav!.focus).toBe(to.focus);
     if (to.shows) byTestid(to.shows);
+  });
+
+  it("B-AC-14 (D10, S3-C17, S3-C19): Colony's standings carry each name's reputation chip, opening the player's card, and each other name's + Deal, opening Talk's composer to that player; with a card to Kai unanswered his + Deal is off and says why", () => {
+    const unanswered: DealCard = { id: 'deal-1', from: 's1', to: 's3', terms: { kind: 'pact' }, offered: 5, until: 7, status: 'offered', brokenBy: null, settled: null };
+    mount(game({ deals: [unanswered] }));
+    tap('tab-colony');
+    for (const id of ['s1', 's2', 's3']) byTestid(`colony-standing-${id}-rep`);
+    expect(findTestid('colony-standing-s1-deal'), 'no + Deal to yourself').toBeUndefined();
+    expect(byTestid('colony-standing-s3-deal').getAttribute('disabled'), "Kai's row offers no second card").not.toBeNull();
+    expect(byTestid('colony-standing-s3-deal').getAttribute('title')).toBe('Kai has not answered your last card');
+    tap('colony-standing-s2-rep');
+    byTestid('player-card-s2');
+    tap('player-card-s2-close');
+    expect(findTestid('player-card-s2'), 'and closes').toBeUndefined();
+    tap('colony-standing-s2-deal');
+    expect(selected('tab-talk'), '+ Deal opens Talk').toBe(true);
+    expect(byTestid('composer-a').getAttribute('aria-label')).toBe('Deal card for Brix');
+  });
+
+  it('B-AC-14 (D10): with politics off the standings are the league alone: no chip and no + Deal', () => {
+    mount(game({ pol: null }));
+    tap('tab-colony');
+    byTestid('colony-standing-s2');
+    expect(findTestid('colony-standing-s2-rep')).toBeUndefined();
+    expect(findTestid('colony-standing-s2-deal')).toBeUndefined();
+  });
+
+  it("B-AC-14 (D3, D11, S3-C18): while another tab is open Talk's count is the offers waiting for my answer and the unread chat; on Talk, My cards carries the offers and the tab none", () => {
+    const offer: DealCard = { id: 'deal-2', from: 's2', to: 's1', terms: { kind: 'pact' }, offered: 5, until: 7, status: 'offered', brokenBy: null, settled: null };
+    mount(game({ deals: [offer] }));
+    expect(text('talk-badge')).toBe('11 deal offer waiting');
+    tap('tab-talk');
+    expect(findTestid('talk-badge'), 'the open tab carries no count').toBeUndefined();
+    expect(text('talk-cards-badge')).toBe('11 deal offer waiting');
+    tap('talk-cards');
+    byTestid('my-cards');
   });
 
   it("C17 (DESK_DOORS, interim until SB-4): the Sheriff's Guard door turns Overview's one map to Guard, and Done goes back to the Sheriff's sub-tab", () => {
