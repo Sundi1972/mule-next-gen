@@ -190,6 +190,8 @@ export interface ReadyWords {
   all: string;
   /** The host's confirm before Continue, given the names left and how many. */
   confirm(names: string, n: number): string;
+  /** Asked at the ready press, not before: what to send ahead of `ready`, in order, such as a ballot's promised vote. */
+  first?(): MuleIntent[];
 }
 
 export const PLANNING_WORDS: ReadyWords = {

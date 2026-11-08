@@ -6,8 +6,8 @@ export type Spot = [number, number];
 
 /** A place is 12 m across (ART-DIRECTION §2), so one metre is this many scene units. */
 export const METRE = W / 12;
-/** The scaffold's colonists walk their paths at about 2.9 m/s (3.3 m of path in 0.4 of a 2.86 s lap). */
-const PACE = (2.9 * METRE) / W;
+/** The colonists walk at an easy walking pace, 1.3 m/s (Heiko, 8 Nov; the scaffold's figures ran at 2.9). */
+const PACE = (1.3 * METRE) / W;
 /** Each colonist starts this far round the walk behind the one before (the scaffold's spacing). */
 const SPACING = 0.29;
 
@@ -83,6 +83,11 @@ export function walkRoute(i: number, rim: number, blocks: GridPlace[]): Spot[] {
 
 /** Where colonist i is on its route `seconds` into the walk; past the route's end, the walk starts again at the rim. */
 export function walkerAt(i: number, seconds: number, route: Spot[]): Spot {
+  return walkerOn(i, seconds, route).spot;
+}
+
+/** Where colonist i is, and the leg of its route it is walking (from, to). */
+export function walkerOn(i: number, seconds: number, route: Spot[]): { spot: Spot; leg: [Spot, Spot] } {
   const legs = route.slice(1).map((p, k) => Math.hypot(p[0] - route[k]![0], p[1] - route[k]![1]));
   const length = legs.reduce((s, l) => s + l, 0);
   let d = (seconds * PACE + SPACING * i * length) % length;
@@ -90,9 +95,10 @@ export function walkerAt(i: number, seconds: number, route: Spot[]): Spot {
     if (d <= legs[k]!) {
       const t = legs[k]! === 0 ? 0 : d / legs[k]!;
       const [p, q] = [route[k]!, route[k + 1]!];
-      return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+      return { spot: [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t], leg: [p, q] };
     }
     d -= legs[k]!;
   }
-  return route[route.length - 1]!;
+  const last = route[route.length - 1]!;
+  return { spot: last, leg: [route[route.length - 2] ?? last, last] };
 }

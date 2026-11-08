@@ -7,12 +7,13 @@
  * the votes cast, weighted, and the TV and both phones show it with totals only (C46).
  * Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { AI_HANDS, GAME, lawImpact, POLITICS, storeQuotes, voteWeight, WALK, type GameState, type Good, type LawProposal, type TaxPromise } from '@mule/engine';
+import { AI_HANDS, GAME, lawImpact, POLITICS, storeQuotes, voteWeight, WALK, type DealCard, type GameState, type Good, type LawProposal, type TaxPromise } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
+import { isDeepStrictEqual } from 'node:util';
 import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
+import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, PHONE_SMALL, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
@@ -29,7 +30,7 @@ const MONTH_END_MS = 10_000;
 /** B-AC-6: Lena's promise, stepped up from today's tax. */
 const LENA_CAP = 8;
 
-type Phone = { page: Page; name: string; runs: MuleIntent[] };
+type Phone = { page: Page; name: string; runs: MuleIntent[]; offers: MuleIntent[] };
 
 const within = (ms: number) => ms * SCALE + 3_000;
 
@@ -45,17 +46,19 @@ async function main(): Promise<void> {
       await page.goto(base);
       return page;
     };
-    /** A phone, and every run intent it sends, read off its socket. */
+    /** A phone, and every run and offerDeal intent it sends, read off its socket. */
     const phone = async (name: string): Promise<Phone> => {
       const page = await open(name);
       const runs: MuleIntent[] = [];
+      const offers: MuleIntent[] = [];
       page.on('websocket', (ws) =>
         ws.on('framesent', ({ payload }) => {
           const msg = typeof payload === 'string' ? (JSON.parse(payload) as { t?: string; intent?: MuleIntent }) : null;
           if (msg?.t === 'intent' && msg.intent?.type === 'run') runs.push(msg.intent);
+          if (msg?.t === 'intent' && msg.intent?.type === 'offerDeal') offers.push(msg.intent);
         }),
       );
-      return { page, name, runs };
+      return { page, name, runs, offers };
     };
     const lena = await phone('Lena');
     await lena.page.getByPlaceholder('Heiko').fill(lena.name);
@@ -348,6 +351,11 @@ async function main(): Promise<void> {
       console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and on Ossa's Council desk, since month 2`);
     }
 
+    // S3-B-AC-1 (UBER-AC-3 leg A): still in month 2's planning, Lena whispers Ossa and attaches a 3-month pact. Ossa
+    // declines the first, then accepts the next; only their two phones ever hold either card. The flow has no third
+    // human, so the AI seat's view and the TV's stand for the table that must not see it.
+    await dealCardLegA(truth, lena, ossa, aiIds);
+
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e politics: ok (room ${code}, seed ${SEED})`);
   } catch (err) {
@@ -368,6 +376,120 @@ main().then(
     process.exit(1);
   },
 );
+
+const PACT_MONTHS = 3;
+/** The whisper's input at its narrowest still takes a sentence; + Deal, on the whisper line, is a thumb's target. */
+const WHISPER_INPUT_MIN = 120;
+const TAP_MIN = 32;
+
+/**
+ * S3-B-AC-1, on the real page in planning: at the small phone and the base one, + Deal sits on the whisper line beside
+ * the chip, at least TAP_MIN square, and leaves the whisper's input at least WHISPER_INPUT_MIN wide.
+ */
+async function whisperFits(page: Page): Promise<void> {
+  const base = page.viewportSize()!;
+  for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
+    await page.setViewportSize(size);
+    const input = (await page.getByTestId('chat-input').boundingBox())!;
+    const deal = (await page.getByTestId('add-deal').boundingBox())!;
+    const onLine = await page.getByTestId('whisper-line').getByTestId('add-deal').count();
+    const at = `${size.width}×${size.height}`;
+    console.log(`  whisper at ${at}: input ${input.width.toFixed(1)} px, + Deal ${deal.width.toFixed(1)}×${deal.height.toFixed(1)}`);
+    check(onLine === 1, `S3-B-AC-1: at ${at} + Deal sits on the whisper line`);
+    check(input.width >= WHISPER_INPUT_MIN, `S3-B-AC-1: at ${at} the whisper input is at least ${WHISPER_INPUT_MIN} px wide, got ${input.width.toFixed(1)}`);
+    check(deal.width >= TAP_MIN && deal.height >= TAP_MIN, `S3-B-AC-1: at ${at} + Deal is at least ${TAP_MIN}×${TAP_MIN}, got ${deal.width.toFixed(1)}×${deal.height.toFixed(1)}`);
+  }
+  await page.setViewportSize(base);
+}
+
+/**
+ * S3-B-AC-1 (UBER-AC-3 leg A) on two phones and the real server: `from` whispers `to` and offers a pact from the
+ * whisper's + Deal; `to` declines it in their thread, then accepts a second. Both phones list each card as the server
+ * settled it, and no other seat's view, nor the TV's, holds either card.
+ */
+async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string[]): Promise<void> {
+  const [fromId, toId] = [truth.idOf(from), truth.idOf(to)];
+  const pacts = () => (truth.state().politics?.deals ?? []).filter((d) => d.from === fromId && d.to === toId && d.terms.kind === 'pact');
+  const offer = async (): Promise<DealCard> => {
+    const before = pacts().length;
+    await from.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+    await from.page.getByTestId('talk-chat').click({ timeout: PRESS_MS });
+    await from.page.getByTestId(`chat-to-${toId}`).click({ timeout: PRESS_MS });
+    await from.page.getByTestId('chat-input').fill(`A pact, ${PACT_MONTHS} months?`);
+    await from.page.getByTestId('chat-send').click({ timeout: PRESS_MS });
+    await whisperFits(from.page);
+    await from.page.getByTestId('add-deal').click({ timeout: PRESS_MS });
+    // The lengths offered are the config's, and the pact sent runs the length tapped: maxMonths cuts `until`, not this.
+    const lengths = await from.page.locator('[data-testid^=composer-a-months-]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-testid')!.split('-').pop())));
+    check(JSON.stringify(lengths) === JSON.stringify(POLITICS.deals.pactMonths), `S3-B-AC-1: the composer offers pacts of ${POLITICS.deals.pactMonths.join(', ')} months, got ${lengths.join(', ')}`);
+    await from.page.getByTestId(`composer-a-months-${PACT_MONTHS}`).click({ timeout: PRESS_MS });
+    const picked = await from.page.getByTestId(`composer-a-months-${PACT_MONTHS}`).getAttribute('aria-checked');
+    check(picked === 'true', `S3-B-AC-1: the ${PACT_MONTHS}-month length is the one picked before Send, got aria-checked=${picked}`);
+    const sent = from.offers.length;
+    await from.page.getByTestId('composer-a-send').click({ timeout: PRESS_MS });
+    const card = await untilServer(from.page, () => (pacts().length > before ? pacts().at(-1)! : null), `S3-B-AC-1: the server holds ${from.name}'s offered pact`);
+    // The frames as parsed off the socket, compared by value: the order of their keys is not the promise.
+    const frames = from.offers.slice(sent);
+    check(isDeepStrictEqual(frames, [{ type: 'offerDeal', offer: { to: toId, terms: { kind: 'pact' }, months: PACT_MONTHS } }]), `S3-B-AC-1: ${from.name}'s phone sent one ${PACT_MONTHS}-month pact to ${to.name}, got ${JSON.stringify(frames)}`);
+    const months = (frames[0] as { offer?: { months?: number } } | undefined)?.offer?.months;
+    check(months === PACT_MONTHS, `S3-B-AC-1: the offerDeal frame ${from.name}'s phone sent carries months ${PACT_MONTHS}, got ${months}`);
+    return card;
+  };
+  /** The card's id, on the two phones' views only: never another seat's, never the TV's. */
+  const onlyThePair = (c: DealCard, what: string) => {
+    for (const id of [...others, null]) {
+      const seen = JSON.stringify(truth.room().viewFor(id)).includes(c.id);
+      check(!seen, `S3-B-AC-1: ${id === null ? "the TV's" : `seat ${id}'s`} view holds no card ${what}`);
+    }
+    for (const id of [fromId, toId]) check(truth.room().viewFor(id).game?.me?.deals?.cards.some((d) => d.id === c.id), `S3-B-AC-1: ${id}'s own view lists the card ${what}`);
+  };
+  /** `to` answers in the whisper thread with `from`, where the card sits. */
+  const answer = async (c: DealCard, accept: boolean) => {
+    await to.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+    await to.page.getByTestId('talk-chat').click({ timeout: PRESS_MS });
+    await to.page.getByTestId(`chat-to-${fromId}`).click({ timeout: PRESS_MS });
+    await to.page.getByTestId(`incoming-${c.id}-${accept ? 'accept' : 'decline'}`).click({ timeout: PRESS_MS });
+    const status = accept ? 'active' : 'declined';
+    return untilServer(to.page, () => pacts().find((d) => d.id === c.id && d.status === status) ?? null, `S3-B-AC-1: the server has ${to.name}'s ${status} pact`);
+  };
+  /** Both phones' My cards list the card in this state, with these words on its line. */
+  const bothList = async (c: DealCard, status: DealCard['status'], words: (me: Phone) => string) => {
+    for (const p of [from, to]) {
+      await p.page.getByTestId('talk-cards').click({ timeout: PRESS_MS });
+      await p.page.locator(`[data-testid="my-deal-${c.id}"][data-status="${status}"]`).waitFor({ timeout: PRESS_MS });
+      const line = (await p.page.getByTestId(`my-deal-${c.id}-line`).innerText()).trim();
+      check(line.includes(words(p)), `S3-B-AC-1: ${p.name}'s My cards reads "${words(p)}", got "${line}"`);
+    }
+  };
+
+  // The negative path first: a pact declined leaves the pair free to agree the next.
+  const first = await offer();
+  check(first.status === 'offered', `S3-B-AC-1: the card is offered, got ${first.status}`);
+  // The agenda's count and sender, then this card by its id: an AI seat may offer cards of its own in the same planning.
+  const fromWord = new RegExp(`From (.*, )?${from.name}\\b`);
+  await to.page.getByTestId('agenda-deals').filter({ hasText: /\d+ deal offers?/ }).filter({ hasText: fromWord }).waitFor({ timeout: PRESS_MS });
+  const held = truth.room().viewFor(toId).game?.me?.deals?.cards.find((d) => d.id === first.id);
+  check(held?.status === 'offered', `S3-B-AC-1: ${to.name}'s view holds ${first.id} as offered, got ${held?.status}`);
+  await to.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+  await to.page.getByTestId('talk-cards').click({ timeout: PRESS_MS });
+  await to.page.getByTestId(`incoming-${first.id}`).waitFor({ timeout: PRESS_MS });
+  onlyThePair(first, 'offered');
+  await answer(first, false);
+  await bothList(first, 'declined', (p) => (p === to ? 'Declined by you' : `Declined by ${to.name}`));
+  check(!pacts().some((d) => d.status === 'active'), 'S3-B-AC-1 (negative): a declined pact leaves nothing active');
+  onlyThePair(first, 'declined');
+  console.log(`✓ S3-B-AC-1 (negative): two phones — ${from.name} whispers ${to.name}, attaches a ${PACT_MONTHS}-month pact, ${to.name} taps Decline; both phones list it declined, nothing active, no third view holds it`);
+
+  const second = await offer();
+  const active = await answer(second, true);
+  // S3-RULE-1's until for a pact: its months from this month, cut at the game's last.
+  const board = truth.board();
+  const until = Math.min(board.maxMonths, board.month + PACT_MONTHS - 1);
+  check(active.until === until, `S3-B-AC-1: the server's pact binds until month ${until}, got ${active.until}`);
+  await bothList(active, 'active', () => `Binds until the end of month ${until}`);
+  onlyThePair(active, 'active');
+  console.log(`✓ S3-B-AC-1: two phones — ${from.name} whispers ${to.name}, attaches a ${PACT_MONTHS}-month pact, ${to.name} taps Accept; both phones list the pact active until month ${until}; no other seat's view nor the TV's holds it`);
+}
 
 /** E-4's words for a promise beside a candidate, as every screen gives them. */
 function said(p: TaxPromise, tax: number): string {

@@ -1,10 +1,13 @@
 import { GAME, POLITICS } from '@mule/engine';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
+import { useState } from 'react';
 import { fmt } from '../../game/derive';
 import { collapseCutWords, inCollapse, league, yourLines } from '../../game/month-end';
 import { useEscape } from '../dialog';
 import { usePhoneGame } from '../game';
 import { OnlyYou } from './OnlyYou';
+import { noNewCard } from './politics/Deals';
+import { useHubIfAny } from './politics/parts';
 import { standingOf } from './standing';
 
 /** Your place, for the shell's header: "2nd of 4" under your money, by Worth. */
@@ -19,8 +22,11 @@ export function useStanding(onOpen: () => void): { label: string; aria: string; 
  * total each, the one number everyone sees; your lines come from your own view's parts, which no one else receives.
  */
 export function StandingsSheet({ onClose }: { onClose: () => void }) {
-  const { view, self } = usePhoneGame();
+  const { view, me, self } = usePhoneGame();
+  const hub = useHubIfAny();
   useEscape(onClose);
+  // The door that opened the standings: + Deal closes them, and the composer it opens gives the focus back here.
+  const [opener] = useState(() => (typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null)));
   const { rows } = league(view);
   const mine = rows.find((r) => r.player.id === self.id);
   const p = view.me ? yourLines(view) : null;
@@ -28,6 +34,8 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
   const collapse = inCollapse(view);
   // Donations only where there is a colony to give to (politics on); the engine counts them 1:1, cut too in Collapse.
   const donations = !!view.colony;
+  // In planning each other player's row is a door to a deal card (S3-C17).
+  const planning = view.phase === 'planning' && !!view.politics && !!hub;
   const line = 'flex justify-between gap-3';
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="standings-title" data-testid="standings-sheet">
@@ -47,6 +55,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                 <th className="w-6 font-normal">#</th>
                 <th className="font-normal">Player</th>
                 <th className="text-right font-semibold text-ink">Worth</th>
+                {planning && <th className="w-0" />}
               </tr>
             </thead>
             <tbody>
@@ -66,6 +75,28 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                     <td data-num className="text-right font-mono font-bold">
                       {fmt(r.total)} cr
                     </td>
+                    {planning && (
+                      <td className="pl-1.5 text-right">
+                        {!you && (
+                          <Button
+                            disabled={!!noNewCard(view, me, r.player.id)}
+                            title={noNewCard(view, me, r.player.id) ?? undefined}
+                            size="md"
+                            variant="ghost"
+                            className="h-8 whitespace-nowrap px-1.5 text-xs text-holo"
+                            onClick={() => {
+                              opener?.focus?.();
+                              onClose();
+                              hub!.openDesk('talk', `compose:${r.player.id}`);
+                            }}
+                            aria-label={`Offer ${r.player.name} a deal card`}
+                            data-testid={`deal-standing-${r.player.id}`}
+                          >
+                            + Deal
+                          </Button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
