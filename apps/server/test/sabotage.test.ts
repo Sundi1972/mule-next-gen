@@ -115,10 +115,13 @@ describe('S4-B-AC-6: a pending order and the guards reach nobody but their party
   it('S4-B-AC-6: with Lena\'s order and Brix\'s guards in planning, no other phone and not the board gets either; Lena\'s money does not move before upkeep', () => {
     const w = world();
     const before = money(w.game, 'lena');
+    // Lena's own plot is the second guarded one: the Sheriff guards other players' plots only (AM-11).
+    const lenaPlot = w.state.tiles.findIndex((t, i) => t.terrain !== 'store' && t.owner === null && i !== w.ossaPlot && i !== w.brixPlot);
+    Object.assign(w.state.tiles[lenaPlot]!, { owner: 'lena', outfit: 'food' });
     w.game.handle('lena', cut(w.ossaPlot));
-    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot, w.brixPlot] });
+    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot, lenaPlot] });
     const id = orders(w)[0]!.id;
-    expect(w.state.politics!.guards, 'the engine holds the guards').toEqual([w.ossaPlot, w.brixPlot]);
+    expect(w.state.politics!.guards, 'the engine holds the guards').toEqual([w.ossaPlot, lenaPlot]);
 
     for (const viewer of ['brix', 'ossa', 'ai1', null]) {
       const text = wire(w.game, viewer);
@@ -135,7 +138,7 @@ describe('S4-B-AC-6: a pending order and the guards reach nobody but their party
       expect(wire(w.game, viewer), `${viewer}: the guards`).not.toMatch(/"guards":\[/);
       expect(w.game.viewFor(viewer).me?.politics?.sheriff ?? null, `${viewer}: no Sheriff's desk`).toBeNull();
     }
-    expect(w.game.viewFor('brix').me!.politics!.sheriff).toMatchObject({ canAct: true, guards: [w.ossaPlot, w.brixPlot], max: guardsMax(w.state) });
+    expect(w.game.viewFor('brix').me!.politics!.sheriff).toMatchObject({ canAct: true, guards: [w.ossaPlot, lenaPlot], max: guardsMax(w.state) });
     // Negative case: Lena's own view has her order, Brix's has the guards (checked above), and her money has not moved.
     expect(w.game.viewFor('lena').me!.politics!.sabotage).toMatchObject({ order: { kind: 'powerCut', tile: w.ossaPlot }, canOrder: true, owed: POLITICS.sabotage.orders.powerCut.cost });
     expect(w.game.viewFor('lena').me!.politics!.sabotage!.mine.map((o) => [o.id, o.public, o.outcome, o.culprit])).toEqual([[id, false, 'pending', 'lena']]);
@@ -155,12 +158,12 @@ describe('S4-B-AC-6: a pending order and the guards reach nobody but their party
 });
 
 describe('S4-B-AC-1 (server): a guarded cut is caught and named on every screen', () => {
-  it('S4-B-AC-1: Brix guards his Food plot and Lena\'s cut on it resolves: every phone\'s and the TV\'s production events carry the culprit, and her reputation falls by 10', () => {
+  it('S4-B-AC-1: Brix, the Sheriff, guards Ossa\'s Food plot (never his own, AM-11) and Lena\'s cut on it resolves: every phone\'s and the TV\'s production events carry the culprit, and her reputation falls by 10', () => {
     const w = world();
     force('powerCut', true, false);
     const rep = reputation(w.game, null, 'lena');
-    w.game.handle('lena', cut(w.brixPlot));
-    w.game.handle('brix', { type: 'guard', tiles: [w.brixPlot] });
+    w.game.handle('lena', cut(w.ossaPlot));
+    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot] });
     until(w, 'production');
 
     for (const viewer of VIEWERS) {
@@ -171,21 +174,21 @@ describe('S4-B-AC-1 (server): a guarded cut is caught and named on every screen'
       expect(events[0]!.title, String(viewer)).toMatch(/^Sabotage/);
       expect(reputation(w.game, viewer, 'lena'), `${viewer}: Lena's reputation`).toBe(rep - 10);
       expect(view.politics!.reputationReasons!.lena, String(viewer)).toEqual([{ kind: 'caught', month: 1 }]);
-      expect(view.politics!.sabotage!.incidents).toMatchObject([{ kind: 'powerCut', victim: 'brix', worked: false, culprit: 'lena', how: 'guard', investigated: false, fine: null }]);
-      expect(view.news.join(' '), `${viewer}: the news names her`).toMatch(/Caught! Lena tried to cut the power to Brix's Food plot; a guard stopped it\./);
+      expect(view.politics!.sabotage!.incidents).toMatchObject([{ kind: 'powerCut', victim: 'ossa', worked: false, culprit: 'lena', how: 'guard', investigated: false, fine: null }]);
+      expect(view.news.join(' '), `${viewer}: the news names her`).toMatch(/Caught! Lena tried to cut the power to Ossa's Food plot; a guard stopped it\./);
     }
     // The plot makes its normal output: the engine filed no dark plot.
     expect(w.game.viewFor(null).production!.events.find((e) => e.kind === 'sabotage')!.hits).toEqual([]);
   });
 
-  it('S4-B-AC-1: under a pact with Brix the same catch costs her 30', () => {
+  it('S4-B-AC-1: under a pact with Ossa the same catch costs her 30', () => {
     const w = world();
     force('powerCut', true, false);
-    w.game.handle('lena', { type: 'offerDeal', offer: { to: 'brix', terms: { kind: 'pact' }, months: 3 } });
-    w.game.handle('brix', { type: 'answerDeal', id: w.state.politics!.deals.at(-1)!.id, accept: true });
+    w.game.handle('lena', { type: 'offerDeal', offer: { to: 'ossa', terms: { kind: 'pact' }, months: 3 } });
+    w.game.handle('ossa', { type: 'answerDeal', id: w.state.politics!.deals.at(-1)!.id, accept: true });
     const rep = reputation(w.game, null, 'lena');
-    w.game.handle('lena', cut(w.brixPlot));
-    w.game.handle('brix', { type: 'guard', tiles: [w.brixPlot] });
+    w.game.handle('lena', cut(w.ossaPlot));
+    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot] });
     until(w, 'production');
     for (const viewer of VIEWERS) expect(reputation(w.game, viewer, 'lena'), String(viewer)).toBe(rep - 30);
   });
@@ -324,11 +327,12 @@ describe('S4-B-AC-4: an investigation is public at once, and once only', () => {
 describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => {
   it('S4-T-AC-8: the board\'s sabotage keys are exactly terms, incidents and sheriff; sheriff.guards is guardsMax, never the count posted (AM-1)', () => {
     const w = world();
-    w.game.handle('brix', { type: 'guard', tiles: [w.brixPlot] });
+    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot] });
     const sabotage = w.game.viewFor(null).politics!.sabotage!;
-    expect(Object.keys(sabotage).sort()).toEqual(['incidents', 'sheriff', 'terms']);
-    expect(Object.keys(sabotage.sheriff).sort()).toEqual(['guards', 'investigations', 'investigationsLeft']);
-    expect(sabotage.sheriff).toEqual({ guards: guardsMax(w.state), investigations: POLITICS.sheriff.investigations, investigationsLeft: POLITICS.sheriff.investigations });
+    expect(Object.keys(sabotage).sort()).toEqual(['incidents', 'sheriff', 'sheriffRecord', 'terms']);
+    expect(Object.keys(sabotage.sheriff).sort()).toEqual(['bounty', 'guards', 'investigations', 'investigationsLeft']);
+    expect(sabotage.sheriff).toEqual({ guards: guardsMax(w.state), investigations: POLITICS.sheriff.investigations, investigationsLeft: POLITICS.sheriff.investigations, bounty: POLITICS.sheriff.bounty });
+    expect(sabotage.sheriffRecord).toEqual({ caught: 0, solved: 0 });
     expect(w.state.politics!.guards, 'one guard posted').toHaveLength(1);
     expect(sabotage.sheriff.guards, 'the public count is what he may post, not what he did').toBe(POLITICS.sheriff.guards);
     const { powerCut, rumour } = POLITICS.sabotage.orders;
@@ -414,7 +418,7 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
     }
     const { x, y } = { x: w.ossaPlot % w.state.width, y: Math.floor(w.ossaPlot / w.state.width) };
     expect(w.game.viewFor('brix').me!.politics!.sabotage!.mine).toContainEqual({
-      id: voidId, month: 1, kind: 'powerCut', victim: null, at: { x, y }, good: null, worked: false, culprit: 'brix', how: null, investigated: false, fine: null, public: false, outcome: 'void',
+      id: voidId, month: 1, kind: 'powerCut', victim: null, at: { x, y }, good: null, worked: false, culprit: 'brix', how: null, investigated: false, fine: null, bounty: null, public: false, outcome: 'void',
     });
     expect(w.game.viewFor('brix').me!.politics!.sabotage!.owed, 'a void order is not charged').toBe(0);
     // The entry is frozen at the void: a MULE put back on the plot later does not give it a crop.
@@ -638,5 +642,39 @@ describe('S4-RULE-12 (the record): orders and guards are in the record and repla
     } finally {
       if (savedKey !== undefined) process.env[KEY_VAR] = savedKey;
     }
+  });
+});
+
+describe('S4-B-AC-11 (server leg): the Sheriff\'s bounty, record and guardable plots', () => {
+  it('S4-B-AC-11: the Sheriff\'s desk lists guardable plots (no own plot, none unowned); no other view has the field', () => {
+    const w = world();
+    const guardable = w.game.viewFor('brix').me!.politics!.sheriff!.guardable;
+    expect(guardable).toEqual([w.ossaPlot]);
+    expect(guardable).not.toContain(w.brixPlot);
+    for (const viewer of ['lena', 'ossa', 'ai1', null]) expect(wire(w.game, viewer), String(viewer)).not.toContain('"guardable"');
+  });
+
+  it('S4-B-AC-11: a guarded catch pays Brix 50 from the fund; every screen has the bounty on the incident, the amount in the terms and the record, and never the guarded tile', () => {
+    const w = world();
+    force('powerCut', true, false);
+    w.state.treasury.money = 500;
+    const before = money(w.game, 'brix');
+    w.game.handle('lena', cut(w.ossaPlot));
+    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot] });
+    until(w, 'production');
+    expect(money(w.game, 'brix')).toBe(before + POLITICS.sheriff.bounty);
+    for (const viewer of VIEWERS) {
+      const sabotage = w.game.viewFor(viewer).politics!.sabotage!;
+      expect(sabotage.sheriffRecord, String(viewer)).toEqual({ caught: 1, solved: 0 });
+      expect(sabotage.sheriff.bounty, String(viewer)).toBe(POLITICS.sheriff.bounty);
+      expect(sabotage.incidents[0], String(viewer)).toMatchObject({ how: 'guard', bounty: { to: 'brix', paid: POLITICS.sheriff.bounty } });
+      if (viewer !== 'brix') expect(wire(w.game, viewer), String(viewer)).not.toMatch(/"guards":\[/);
+    }
+  });
+
+  it('S4-B-AC-11: with no Sheriff the record is null', () => {
+    const w = world();
+    w.state.politics = { ...w.state.politics!, sheriff: null };
+    for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).politics!.sabotage!.sheriffRecord, String(viewer)).toBeNull();
   });
 });
