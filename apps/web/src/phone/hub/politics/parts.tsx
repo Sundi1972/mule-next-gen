@@ -6,9 +6,12 @@ import { createPortal } from 'react-dom';
 import { AiMark } from '../../../chat/Chat';
 import { useEscape } from '../../dialog';
 import { slotOf } from '../../../game/derive';
-import { useHub, type HubNav } from '../Hub';
+import { useHubIfAny } from '../Hub';
 import { SeatWords } from '../../../components/SeatWords';
 import { brokenMove, brokenWho, brokenWords, noNewCard } from './deals-words';
+
+// The hub's navigation, or null outside it: Hub.tsx's, re-exported for the parts drawn both inside and outside it.
+export { useHubIfAny };
 
 export function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
   return (
@@ -174,16 +177,6 @@ export function Who({ view, id, size = 16, me = null, className, testid, rep = f
       {card && <PlayerCard view={view} id={id} me={me} anchor={anchor.current} onClose={() => setCard(false)} />}
     </span>
   );
-}
-
-/** The hub's navigation inside it; null elsewhere (the month end, a screen outside the hub). */
-export function useHubIfAny(): HubNav | null {
-  // useHub throws outside the hub, after the same one useContext call either way, so the hook order holds.
-  try {
-    return useHub();
-  } catch {
-    return null;
-  }
 }
 
 /** The public reasons a player's reputation moved, in the words every screen uses, newest first. Kept cards are never one. */
