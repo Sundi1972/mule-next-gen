@@ -1,12 +1,14 @@
 import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
-import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot } from '../slots';
+import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
+import { ballotOpen, OverruleBallot, OverruleRail } from './budget/OverruleBallot';
 import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail, promisedFirst } from './ElectionDay';
 import { GovernorDesk } from './Governor';
 import { CouncilBallot, CouncilRail, lawBallotComplete, lawPromisedFirst } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
+import { BudgetSub, electionVoting, ElectionsSub, isGovernor, lawVoting, LawsSub, overruleVoting } from './tabs';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
@@ -59,8 +61,6 @@ export const LAW_AGENDA: AgendaSlot = {
 export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'governor' } };
 
 export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
-
-const isGovernor = ({ view, self }: HubSeat) => view.politics !== null && view.politics.governor === self.id;
 
 export const GOVERNOR_DESK: DeskSlot = {
   id: 'governor',
@@ -176,3 +176,52 @@ export function councilNow({ view, self }: HubSeat): Now | null {
     };
   return { step: 1, of: 2, title: 'Vote on the law', detail: 'Yes or No, then Done. Nobody sees how you voted. No clock: it closes once everyone is Done.' };
 }
+
+/** The overrule vote is the month's last, so its stage follows the law vote's: it takes the stage from the ballot through its reveal. */
+export const OVERRULE_STAGE: StageSlot = { id: 'overrule-ballot', show: ballotOpen, phase: () => 'Overrule vote', Body: OverruleBallot, Rail: OverruleRail };
+
+const OVERRULE_WORDS: ReadyWords = {
+  ready: 'Cast my vote',
+  done: 'Waiting for the overrule vote',
+  waiting: STILL,
+  all: 'Everyone has cast. The result is shown.',
+  confirm: () => 'Close the vote now? Votes not cast count against undoing it, and the result is shown.',
+};
+const OVERRULE_REVEAL_WORDS: ReadyWords = {
+  ready: 'Continue',
+  done: 'Waiting for the others',
+  waiting: STILL,
+  all: 'Everyone is on. The land grant starts.',
+  confirm: () => 'Go on to the land grant now?',
+};
+
+/** The ready bar in the overrule ballot and its reveal: Cast my vote, live once this seat has a Yes or No (the caller's and the Governor's start set); then Continue. */
+export function overruleReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
+  const stage = view.politics?.overrule?.stage;
+  if (stage === 'reveal') return { ...OVERRULE_REVEAL_WORDS, label: 'READY', canReady: true };
+  if (stage !== 'ballot') return null;
+  return { ...OVERRULE_WORDS, label: 'VOTED', canReady: (me.politics?.overruleBallot ?? null) !== null };
+}
+
+/** Now through the overrule ballot and its reveal. */
+export function overruleNow({ view, self }: HubSeat): Now | null {
+  const o = view.politics?.overrule;
+  if (!o || (o.stage !== 'ballot' && o.stage !== 'reveal')) return null;
+  if (o.stage === 'reveal') return { step: 2, of: 2, title: 'The result', detail: 'On the TV and every phone at once.' };
+  const left = o.waitingFor.filter((id) => id !== self.id);
+  if (o.done.includes(self.id))
+    return {
+      step: 1,
+      of: 2,
+      title: left.length ? `You voted. Waiting for ${left.length}: ${listNames(left, null, namer(view))}` : 'Everyone has voted',
+      detail: 'Change your vote until the last one is in, or until the host closes the vote for someone who is away.',
+    };
+  return { step: 1, of: 2, title: 'Undo the Governor’s tax?', detail: 'Yes or No, then Cast my vote. Nobody sees how you voted. No clock: it closes once everyone has cast.' };
+}
+
+/** The Governor / Council tab's sub-tabs (Sheriff is WS8's). A ballot, when open, sits first in its sub-tab. */
+export const POLITICS_TABS: SubTabSlot[] = [
+  { id: 'laws', label: () => 'Laws', Body: LawsSub, show: politicsOn, first: (seat) => lawVoting(seat) || overruleVoting(seat) },
+  { id: 'budget', label: () => 'Budget', Body: BudgetSub, show: politicsOn },
+  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, show: politicsOn, first: electionVoting },
+];

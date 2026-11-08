@@ -357,6 +357,7 @@ function takeOffice(state: GameState, politics: Politics): void {
   const result = election.result!;
   Object.assign(election, { stage: 'over', ceremony: null });
   politics.termStart = state.month;
+  politics.overruled = 0; // every election starts a term, a re-elected Governor's included (AM-10)
   for (const office of POLITICS.offices) {
     const winner = result[office]?.winner;
     if (winner === undefined) continue;
@@ -773,14 +774,17 @@ export function lineMaxCredits(line: BudgetLine): number | null {
   return line === 'projects' ? null : POLITICS.budget[line].maxCredits;
 }
 
-/** What each share pays at today's fund: the share of the spare above COLONY.reserve, floored, capped by the line. See S5-RULE-3. */
+/** What one line's share pays out of `spareCredits`: the share of it, floored, capped by the line. See S5-RULE-3. */
+export function lineCredits(line: BudgetLine, share: number, spareCredits: number): number {
+  return Math.min(Math.floor((share * spareCredits) / PERCENT), lineMaxCredits(line) ?? Infinity);
+}
+
+/** What each share pays at today's fund: lineCredits of the spare above COLONY.reserve. See S5-RULE-3. */
 export function budgetCredits(state: GameState): Record<BudgetLine, number> {
   const room = spare(state);
   const shares = budgetShares(state);
   const credits = { projects: 0, welfare: 0, security: 0 };
-  for (const line of Object.keys(credits) as BudgetLine[]) {
-    credits[line] = Math.min(Math.floor((shares[line] * room) / PERCENT), lineMaxCredits(line) ?? Infinity);
-  }
+  for (const line of Object.keys(credits) as BudgetLine[]) credits[line] = lineCredits(line, shares[line], room);
   return credits;
 }
 
@@ -947,7 +951,10 @@ export function taxAsPlanningEnds(state: GameState): number {
 function overruleTakesEffect(state: GameState, politics: Politics): void {
   const overrule = politics.overrule!;
   overrule.stage = 'over';
-  if (overrule.result!.passed && overrule.target === 'tax') state.treasury.salesTax = politics.taxAtStart;
+  if (overrule.result!.passed && overrule.target === 'tax') {
+    state.treasury.salesTax = politics.taxAtStart;
+    politics.overruled += 1; // AM-10: the term's count, which the Governor's AI reads to hold
+  }
 }
 
 /** The overrule's part of a step: tallies once every player is Done, then runs the reveal's clock. */

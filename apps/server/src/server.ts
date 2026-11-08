@@ -255,6 +255,20 @@ function isProposal(v: unknown): boolean {
   return p.kind === 'enact' && Number.isInteger(p.setting) && (p.replaces === undefined || typeof p.replaces === 'string');
 }
 
+/** A sabotage target's shape: a power cut at a tile, or a rumour on a good. The rules check the rest (a direction other than up or down is refused in words). */
+function isSabotageTarget(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null) return false;
+  const t = x as Record<string, unknown>;
+  if (t.kind === 'powerCut') return Number.isInteger(t.tile);
+  return t.kind === 'rumour' && typeof t.good === 'string' && typeof t.dir === 'string';
+}
+
+/** A budget's shares: an object whose offered lines are numbers. The rules check the rest (whole steps, the sum) in words. */
+function isShares(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null || Array.isArray(x)) return false;
+  return Object.values(x).every((share) => typeof share === 'number');
+}
+
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
   const i = v as Record<string, unknown>;
@@ -306,12 +320,26 @@ function isIntent(v: unknown): v is MuleIntent {
       return i.proposal === null || isProposal(i.proposal);
     case 'voteLaw':
       return typeof i.yes === 'boolean';
+    case 'setBudget':
+      return isShares(i.shares);
+    case 'callOverrule':
+      return i.target === null || i.target === 'tax' || i.target === 'budget' || i.target === 'confidence';
+    case 'voteOverrule':
+      return typeof i.yes === 'boolean';
     case 'offerDeal':
       return isDealOffer(i.offer);
     case 'withdrawDeal':
       return typeof i.id === 'string';
     case 'answerDeal':
       return typeof i.id === 'string' && typeof i.accept === 'boolean';
+    case 'sabotage':
+      return i.target === null || isSabotageTarget(i.target);
+    case 'guard':
+      return Array.isArray(i.tiles) && i.tiles.every(int);
+    case 'investigate':
+      return typeof i.order === 'string';
+    case 'fine':
+      return typeof i.order === 'string' && int(i.amount);
     case 'donate': {
       const goods = i.goods as Record<string, unknown> | undefined;
       const record = typeof goods === 'object' && goods !== null && !Array.isArray(goods);

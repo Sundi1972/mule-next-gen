@@ -1,31 +1,52 @@
 import {
+  banMultiplier,
+  budgetCredits,
+  budgetLines,
+  budgetShares,
+  canOrder,
+  canOverrule,
   canRun,
   ceremonyBeats,
+  fineable,
+  GOODS,
+  goodWords,
+  guardsMax,
   isElectionDone,
+  isPublicOrder,
+  lineMaxCredits,
   LAW_NAME,
   lawImpact,
   lawOffered,
   nextElectionMonth,
+  orderTerms,
   partyTo,
   PERCENT,
   POLITICS,
   promisedVotes,
   reputationReasons,
+  sheriffCanAct,
   taxBounds,
   votesOpen,
   voteWeight,
+  welfareRecipient,
+  type BudgetLine,
   type CeremonyBeat,
   type CeremonyBeats,
   type DealCard,
   type ElectionHow,
   type GameState,
+  type Good,
   type LawId,
   type LawImpact,
   type LawProposal,
+  type MonthEvent,
   type NoticeEntry,
   type Office,
+  type Overrule,
+  type SabotageOrder,
+  type SabotageTarget,
 } from '@mule/engine';
-import type { CeremonyView, CouncilView, ElectionView, MyDealsView, MyPoliticsView, NewsLine, OfficeReveal, PoliticsView } from '@mule/protocol';
+import type { BudgetView, CeremonyView, CouncilView, ElectionView, IncidentView, MyDealsView, MyPoliticsView, NewsLine, OfficeReveal, OverruleView, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
@@ -118,7 +139,79 @@ export function politicsView(state: GameState): PoliticsView | null {
     reputationReasons: Object.fromEntries(
       state.players.map(({ id }) => [id, reputationReasons(state, id).map((r) => (r.kind === 'broken' ? { kind: 'broken' as const, id: r.card.id } : { ...r }))]),
     ),
+    sabotage: sabotageView(state),
+    budget: budgetView(state),
+    overrule: overruleView(state),
   };
+}
+
+/** The shares of a budget, a line not offered as 0 (as budgetShares does for the budget in force). */
+function sharesOf(state: GameState, set: { shares: Record<BudgetLine, number> } | null): Record<BudgetLine, number> {
+  const offered = budgetLines(state);
+  const shares = { ...(set?.shares ?? POLITICS.budget.default) };
+  for (const line of Object.keys(shares) as BudgetLine[]) if (!offered.includes(line)) shares[line] = 0;
+  return shares;
+}
+
+/** The colony budget as every screen sees it: public money, nothing secret (S5-RULE-10). Not frozen anywhere in RC. */
+function budgetView(state: GameState): BudgetView | null {
+  const p = state.politics;
+  if (!p) return null;
+  const now = budgetShares(state);
+  const start = sharesOf(state, p.budgetAtStart);
+  const credits = budgetCredits(state);
+  const lines = budgetLines(state).map((line) => ({
+    line,
+    share: now[line],
+    start: start[line],
+    maxShare: POLITICS.budget[line].maxShare,
+    step: POLITICS.budget.step,
+    credits: credits[line],
+    maxCredits: lineMaxCredits(line),
+  }));
+  return { lines, kept: PERCENT - lines.reduce((sum, l) => sum + l.share, 0), welfareTo: welfareRecipient(state), setBy: p.budget?.setBy ?? null, frozen: false };
+}
+
+/** What the call is about, as the setting a yes restores and the setting that stands now. */
+function overruleSettings(state: GameState, target: Overrule['target']): Pick<OverruleView, 'restores' | 'stands'> {
+  const p = state.politics!;
+  if (target === 'tax') return { restores: { tax: percent(p.taxAtStart) }, stands: { tax: percent(state.treasury.salesTax) } };
+  if (target === 'budget') return { restores: { shares: sharesOf(state, p.budgetAtStart) }, stands: { shares: budgetShares(state) } };
+  return { restores: { governor: p.governor! }, stands: { governor: p.governor! } };
+}
+
+/** Built field by field: `ballots` is read only for who has voted, never how; the yes and no only from the reveal (S5-RULE-10). */
+function overruleView(state: GameState): OverruleView | null {
+  const o = state.politics?.overrule;
+  if (!o || o.month !== state.month) return null;
+  const ballot = o.stage === 'ballot';
+  // The totals are fixed when the ballot closes; before that the weights are public, so the sum of them is too.
+  const total = o.result?.total ?? state.players.reduce((sum, { id }) => sum + voteWeight(state, id).total, 0);
+  return {
+    target: o.target,
+    caller: o.caller,
+    stage: o.stage,
+    ...overruleSettings(state, o.target),
+    voted: Object.keys(o.ballots),
+    done: [...o.done],
+    waitingFor: ballot ? state.players.filter((p) => !o.done.includes(p.id)).map((p) => p.id) : [],
+    clockMs: o.clockMs,
+    revealMs: POLITICS.overrule.revealMs,
+    total,
+    // literal-ok: more than half of all votes is the rule's definition (S5-RULE-8)
+    needed: o.result?.needed ?? Math.floor(total / 2) + 1,
+    result: o.stage === 'reveal' || o.stage === 'over' ? o.result && { passed: o.result.passed, yes: o.result.yes, no: o.result.no } : null,
+  };
+}
+
+/** The news line as an overrule's result is revealed: whether it passed, by the weighted totals; never who voted how. */
+export function overruleNews(state: GameState): string | null {
+  const o = state.politics?.overrule;
+  if (!o?.result || o.month !== state.month) return null;
+  const { passed, yes, no } = o.result;
+  const what = o.target === 'tax' ? 'tax' : o.target === 'budget' ? 'budget' : 'no-confidence';
+  const back = passed && o.target === 'tax' ? ` The tax is back at ${percent(state.politics!.taxAtStart)}%.` : '';
+  return `The overrule vote on the ${what} ${passed ? 'passes' : 'fails'}, ${yes} votes to ${no}.${back}`;
 }
 
 /** Built field by field: `ballots` is read only for who has voted, never how; the totals only from the reveal. See slice 2a RULE-47. */
@@ -170,7 +263,7 @@ function electionView(state: GameState): ElectionView | null {
  * One player's own side of politics, for their phone only: their candidacy (the election's from the ballot until the
  * result, else Politics'), their ballot, and the tax paid and reputation that weigh their vote.
  */
-export function myPoliticsView(state: GameState, playerId: string): MyPoliticsView | null {
+export function myPoliticsView(state: GameState, playerId: string, voids: readonly SabotageOrder[] = []): MyPoliticsView | null {
   const p = state.politics;
   if (!p) return null;
   const e = p.election;
@@ -183,7 +276,12 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
+    // Their own, before and after the reveal (S5-RULE-10); a past month's vote is not shown.
+    overruleBallot: p.overrule?.month === state.month ? (p.overrule.ballots[playerId] ?? null) : null,
+    canOverrule: canOverrule(state, playerId),
     promised: structuredClone(promisedVotes(state, playerId)),
+    sabotage: mySabotageView(state, playerId, voids),
+    ...sheriffDesk(state, playerId),
     ...(p.governor === playerId && state.phase === 'planning' && !votesOpen(state) ? { candidates: candidates(state) } : {}),
   };
 }
@@ -283,4 +381,242 @@ export function dealNews(before: readonly DealCard[], after: readonly DealCard[]
       }
       return { text: `${nameOf(breaker)} broke a promise to ${nameOf(other)}: a ${terms.yes ? 'yes' : 'no'} on the law. Reputation ${points(voteBroken)}.`, who: [breaker, other] };
     });
+}
+
+/* Sabotage and the Sheriff (slice 4, S4-C13). Every order and every guard reaches a view, the news or a notice through the
+   three tests just below, and nowhere else (AM-2): an order's party is its `by`, the guards' party is the sitting Sheriff. */
+
+/** What a screen may see of an order: all of it (its orderer), what is public, or nothing. */
+type Sight = 'whole' | 'public' | 'none';
+
+/** THE order-visibility test (S4-RULE-12, AM-2). `viewerId` null is the TV, the board and the record's public notices. */
+function orderSight(order: SabotageOrder, viewerId: string | null): Sight {
+  if (viewerId !== null && order.by === viewerId) return 'whole';
+  return isPublicOrder(order) ? 'public' : 'none';
+}
+
+/** Whether the viewer is told who is behind the order: its orderer, or everyone once the culprit is public. */
+function culpritSeen(order: SabotageOrder, viewerId: string | null): boolean {
+  const sight = orderSight(order, viewerId);
+  return sight === 'whole' || (sight === 'public' && order.culpritPublic);
+}
+
+/** Whether the viewer is the sitting Sheriff, whose are the guards. */
+function guardsSeen(state: GameState, viewerId: string | null): boolean {
+  return viewerId !== null && state.politics?.sheriff === viewerId;
+}
+
+/** The viewer-less audience (TV, board, public notice). */
+const EVERYONE: string | null = null;
+
+/** The sabotage event this order filed in production, if it did: this month's list, or a past month's report. */
+function eventOf(state: GameState, order: SabotageOrder): MonthEvent | undefined {
+  const filed = (e: MonthEvent) => e.sabotage?.order === order.id;
+  return state.monthEvents.find(filed) ?? state.history.flatMap((h) => h.events ?? []).find(filed);
+}
+
+/** How the culprit became known (S4-C13): a guard's catch, any other catch, or an investigation; null while unknown. */
+function howOf(state: GameState, order: SabotageOrder): IncidentView['how'] {
+  if (!order.culpritPublic) return null;
+  if (eventOf(state, order)?.sabotage?.guarded) return 'guard';
+  return order.outcome === 'caught' ? 'caught' : 'investigation';
+}
+
+/**
+ * The crop a power cut hit: the one the engine recorded when the order resolved. Only a pending order, which only its
+ * orderer sees, reads the plot's outfit now. Null when it cannot be told (the plot lost its MULE since): the words and
+ * the views then say "plot" and name no crop, and nothing here may throw.
+ */
+function cutGood(state: GameState, order: SabotageOrder): Good | null {
+  if (order.good) return order.good;
+  if (order.outcome !== 'pending' || order.target.kind !== 'powerCut') return null;
+  const outfit = state.tiles[order.target.tile]?.outfit;
+  return outfit && (GOODS as readonly string[]).includes(outfit) ? (outfit as Good) : null;
+}
+
+/** "Ossa's Food plot", or "Ossa's plot" when the crop is unknown. */
+function plotWords(state: GameState, order: SabotageOrder, nameOf: (seatId: string) => string): string {
+  const good = cutGood(state, order);
+  return `${nameOf(order.victim!)}'s ${good ? `${capital(goodWords(good))} ` : ''}plot`;
+}
+
+/** One order as `viewerId` sees it, or null when they may see none of it. */
+function incidentView(state: GameState, order: SabotageOrder, viewerId: string | null): IncidentView | null {
+  if (orderSight(order, viewerId) === 'none') return null;
+  const target = order.target;
+  const tile = target.kind === 'powerCut' ? state.tiles[target.tile]! : null;
+  return {
+    id: order.id,
+    month: order.month,
+    kind: target.kind,
+    victim: order.victim ?? null,
+    at: tile && { x: tile.x, y: tile.y },
+    good: target.kind === 'rumour' ? target.good : cutGood(state, order),
+    ...(target.kind === 'rumour' ? { dir: target.dir } : {}),
+    worked: order.worked === true,
+    culprit: culpritSeen(order, viewerId) ? order.by : null,
+    how: howOf(state, order),
+    investigated: order.investigated != null,
+    fine: order.fine ? { due: order.fine.due, paid: order.fine.paid, toVictim: order.fine.toVictim, by: order.fine.by } : null,
+  };
+}
+
+/** Sabotage as every screen sees it: the terms, the public incidents newest first, the Sheriff's count. Null with sabotage off. */
+export function sabotageView(state: GameState): NonNullable<PoliticsView['sabotage']> | null {
+  const p = state.politics;
+  if (!p || !POLITICS.sabotage.on) return null;
+  const done = p.sabotage.filter((o) => o.investigated === state.month).length;
+  return {
+    terms: structuredClone(orderTerms(state)),
+    incidents: [...p.sabotage].reverse().flatMap((o) => incidentView(state, o, EVERYONE) ?? []),
+    // What he may post, never what he has posted: a guard shows only by its catch (AM-1).
+    sheriff: { guards: guardsMax(state), investigations: POLITICS.sheriff.investigations, investigationsLeft: Math.max(0, POLITICS.sheriff.investigations - done) },
+  };
+}
+
+/** A player's own sabotage for their phone: this month's order, what it will cost, and every order they made. */
+export function mySabotageView(state: GameState, playerId: string, voids: readonly SabotageOrder[] = []): NonNullable<MyPoliticsView['sabotage']> | null {
+  const p = state.politics;
+  if (!p || !POLITICS.sabotage.on) return null;
+  const mine = p.sabotage.filter((o) => orderSight(o, playerId) === 'whole');
+  const standing = mine.find((o) => o.month === state.month && o.outcome === 'pending');
+  const charged = state.phase === 'upkeep' || state.phase === 'gameOver';
+  return {
+    order: standing ? structuredClone(standing.target) : null,
+    canOrder: canOrder(state, playerId),
+    owed: charged ? 0 : mine.filter((o) => o.month === state.month).reduce((sum, o) => sum + o.cost, 0),
+    // A void order is gone from the engine's list; the server keeps it (voidedOrders) and it reaches the same test as any other:
+    // only its orderer sees it, and as one entry that was never public and never charged.
+    mine: [
+      ...mine.flatMap((o) => {
+        const view = incidentView(state, o, playerId);
+        return view ? [{ ...view, public: isPublicOrder(o), outcome: o.outcome }] : [];
+      }),
+      ...voids.filter((o) => orderSight(o, playerId) === 'whole').flatMap((o) => {
+        const view = incidentView(state, o, playerId);
+        return view ? [{ ...view, good: o.good ?? null, public: false, outcome: 'void' as const }] : [];
+      }),
+    ].sort((a, b) => a.month - b.month),
+  };
+}
+
+/** The Sheriff's desk: only on the sitting Sheriff's view, and only with sabotage on. */
+function sheriffDesk(state: GameState, playerId: string): Pick<MyPoliticsView, 'sheriff'> {
+  if (!POLITICS.sabotage.on || !guardsSeen(state, playerId)) return {};
+  // guardsSeen is the one gate: the sitting Sheriff is the viewer, so 'notSheriff' cannot come back.
+  const can = sheriffCanAct(state, playerId) as Exclude<ReturnType<typeof sheriffCanAct>, 'notSheriff'>;
+  const done = state.politics!.sabotage.filter((o) => o.investigated === state.month).length;
+  return {
+    sheriff: {
+      canAct: can,
+      guards: [...state.politics!.guards],
+      max: guardsMax(state),
+      investigationsLeft: Math.max(0, POLITICS.sheriff.investigations - done),
+      fineable: fineable(state, playerId),
+      steps: [...POLITICS.sheriff.fine.steps],
+      multiplier: banMultiplier(state),
+    },
+  };
+}
+
+type Capture<K extends NoticeEntry['kind']> = Omit<Extract<NoticeEntry, { kind: K }>, 'type' | 'at' | 'seq' | 'month' | 'phase'>;
+/** A sabotage notice as mule-game's notify takes it: the month and phase are its own to add. */
+export type SabotageFact = Capture<'sabotage'> | Capture<'investigation'> | Capture<'fine'>;
+
+/** What happened to the orders between two lists, in the list's order; the one place both the notices and the news read from. */
+type Change =
+  | { what: 'resolved'; order: SabotageOrder }
+  | { what: 'void'; was: SabotageOrder }
+  | { what: 'investigated'; order: SabotageOrder }
+  | { what: 'fined'; order: SabotageOrder };
+
+function changes(state: GameState, before: readonly SabotageOrder[], after: readonly SabotageOrder[]): Change[] {
+  const was = new Map(before.map((o) => [o.id, o]));
+  const out: Change[] = [];
+  for (const order of after) {
+    const old = was.get(order.id);
+    if (old?.outcome === 'pending' && order.outcome !== 'pending') out.push({ what: 'resolved', order });
+    if (old && old.investigated == null && order.investigated != null) out.push({ what: 'investigated', order });
+    if (old && !old.fine && order.fine) out.push({ what: 'fined', order });
+  }
+  // A pending order gone from the list outside planning was void; in planning it was withdrawn, which is nobody's business.
+  if (state.phase !== 'planning') {
+    const kept = new Set(after.map((o) => o.id));
+    for (const old of before) if (old.outcome === 'pending' && !kept.has(old.id)) out.push({ what: 'void', was: old });
+  }
+  return out;
+}
+
+/**
+ * The record's notices for what changed between two lists of orders (S4-RULE-12). A done or caught order, an
+ * investigation and a fine are public; the orderer's own failed or void order is private to them, with its culprit.
+ */
+export function sabotageNotices(state: GameState, before: readonly SabotageOrder[], after: readonly SabotageOrder[]): SabotageFact[] {
+  return changes(state, before, after).map((change): SabotageFact => {
+    if (change.what === 'void') {
+      const { id, target, by } = change.was;
+      return { kind: 'sabotage', order: id, target: target.kind, victim: null, outcome: 'void', culprit: by, parties: [by!] };
+    }
+    const o = change.order;
+    if (change.what === 'investigated') return { kind: 'investigation', order: o.id, solved: o.culpritPublic, culprit: culpritSeen(o, EVERYONE) ? o.by : null };
+    if (change.what === 'fined') return { kind: 'fine', order: o.id, culprit: o.by!, due: o.fine!.due, paid: o.fine!.paid, toVictim: o.fine!.toVictim };
+    const base = { kind: 'sabotage' as const, order: o.id, target: o.target.kind, victim: o.victim ?? null };
+    if (orderSight(o, EVERYONE) === 'none') return { ...base, outcome: 'failed', culprit: o.by, parties: [o.by!] };
+    return { ...base, outcome: o.outcome as 'done' | 'caught', culprit: culpritSeen(o, EVERYONE) ? o.by : null };
+  });
+}
+
+/** The orders that went void between two lists, as they stood while pending: the server's own record of them (S4-RULE-3 row 1). */
+export function voidedOrders(state: GameState, before: readonly SabotageOrder[], after: readonly SabotageOrder[]): SabotageOrder[] {
+  // Frozen at the void: its crop is read now (into `good`), and the view reads only that, so a MULE put back on the plot
+  // later cannot rewrite the orderer's entry.
+  return changes(state, before, after).flatMap((change) => {
+    if (change.what !== 'void') return [];
+    const good = cutGood(state, change.was);
+    const { good: _was, ...order } = structuredClone(change.was);
+    return [{ ...order, ...(good ? { good } : {}) }];
+  });
+}
+
+const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1);
+
+/** The plot or the rumour an order was about, in words: "the power cut on Ossa's Food plot". */
+function aboutOrder(state: GameState, o: SabotageOrder, nameOf: (seatId: string) => string): string {
+  const t: SabotageTarget = o.target;
+  if (t.kind === 'rumour') return `the ${goodWords(t.good)} rumour`;
+  return `the power cut on ${plotWords(state, o, nameOf)}`;
+}
+
+/**
+ * The news for what changed between two lists of orders (S4-RULE-12's leak points): lines only for public facts, so a
+ * failed unseen or void order says nothing. A worked unseen order says "someone"; a catch, a solved case and a fine name
+ * the culprit.
+ */
+export function sabotageNews(state: GameState, before: readonly SabotageOrder[], after: readonly SabotageOrder[], nameOf: (seatId: string) => string): NewsLine[] {
+  const lines: NewsLine[] = [];
+  for (const change of changes(state, before, after)) {
+    if (change.what === 'void') continue;
+    const o = change.order;
+    if (orderSight(o, EVERYONE) === 'none') continue;
+    const culprit = culpritSeen(o, EVERYONE) ? nameOf(o.by!) : null;
+    const who = [...(culprit ? [o.by!] : []), ...(o.victim ? [o.victim] : [])];
+    const target = o.target;
+    if (change.what === 'investigated') {
+      const text = culprit ? `Solved by the Sheriff: it was ${culprit}, behind ${aboutOrder(state, o, nameOf)}.` : `The trail went cold on ${aboutOrder(state, o, nameOf)}.`;
+      lines.push({ text, who });
+    } else if (change.what === 'fined') {
+      const { paid, toVictim } = o.fine!;
+      lines.push({ text: `${nameOf(o.by!)} was fined ${paid} for sabotage${o.victim && toVictim > 0 ? `; ${toVictim} to ${nameOf(o.victim)}` : ''}.`, who });
+    } else if (target.kind === 'powerCut') {
+      const plot = plotWords(state, o, nameOf);
+      if (!culprit) lines.push({ text: `Sabotage: someone cut the power to ${plot}.`, who });
+      else if (eventOf(state, o)?.sabotage?.guarded) lines.push({ text: `Caught! ${culprit} tried to cut the power to ${plot}; a guard stopped it.`, who });
+      else lines.push({ text: `Caught! ${culprit} ${o.worked ? 'cut' : 'tried to cut'} the power to ${plot}.`, who });
+    } else if (!culprit) {
+      lines.push({ text: eventOf(state, o)?.line ?? `A rumour: ${capital(goodWords(target.good))} moves ${target.dir === 'up' ? 'higher' : 'lower'} at the auction.`, who });
+    } else {
+      lines.push({ text: `Caught! ${culprit} spread a rumour that ${goodWords(target.good)} would go ${target.dir}.`, who });
+    }
+  }
+  return lines;
 }

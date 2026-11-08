@@ -385,6 +385,7 @@ const DESCRIBED = {
       'Propose once the votes are over',
       'Only the Governor proposes a law',
       "That law is not in the colony's book",
+      'This game plays without sabotage',
       'That proposal failed in month {month}; it can come back in month {month}',
       'That law is not in force',
       '{law} is set to {settings}',
@@ -492,7 +493,7 @@ const DESCRIBED = {
     type: 'sabotage',
     command: 'sabotage',
     phases: ['planning'],
-    does: () => "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
+    does: () => `Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it. The crew is paid at upkeep, not when the order is given: ${POLITICS.sabotage.orders.powerCut.cost} cr for a power cut, ${POLITICS.sabotage.orders.rumour.cost} for a rumour.`,
     legalWhen: () => ['This game plays without sabotage', 'Orders are given in planning', "Pick another player's plot", 'That plot makes nothing to cut', 'Pick a good', 'A rumour moves a price up or down', 'A crew costs {cost} cr; you have {money}'],
     cost: null, // the crew is charged at upkeep, by the order's kind, never when the order is given
     args: { target: "{ kind: 'powerCut', tile } or { kind: 'rumour', good, dir: 'up' | 'down' } or null to withdraw" },

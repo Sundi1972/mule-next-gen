@@ -227,7 +227,7 @@ as the file owner who OKs and reviews against the spec.
 |---|---|---|
 | every engine rule function (S3-PR-1, S5-PR-1, S4-PR-1) and every politics hand (S3-PR-4, S5-PR-2, S4-PR-4) | WS7 | the rules' and hands' owner |
 | S3-PR-7, the deal-card phone and laptop screens (the composer, My cards, the reputation chip, the "You promised" ballot line) in `hub/politics/**` | **WS6**, named edits with WS7's OK per PR | WS7 carries three slices of engine and hands; its screens would be the long pole |
-| slice 4's screens (S4-PR-6 desks, S4-PR-7 show) | **WS8** | the PM's ruling |
+| slice 4's screens (S4-PR-6 desks, S4-PR-7 show) | **WS8**, except S4-PR-6's WS7 part (below, 8 Nov split) | the PM's ruling; split 8 Nov |
 | every TV part: `TvDeals.tsx` (S3-PR-7's TV task), the ban in `TvCouncil.tsx` (S4-PR-6), the overrule panel and the budget line in `TvCouncil.tsx` / `TvGovernorPromise.tsx` (S5-PR-6) | **WS4**, named edits in WS7's files | WS4 owns the TV's placement and TV-FIT |
 | S5-PR-6, the Governor's budget and the overrule desks and ballot (phone) | WS7 | kept by WS7 |
 | mocks: WS6 draws slice 3's and slice 5's (its dates: P3 8 Nov 12:00Z, P1 8 Nov 18:00Z, P4 9 Nov 18:00Z); WS8 draws slice 4's Sheriff desk (variants 8 Nov 12:00Z, whole mock 9 Nov 12:00Z) | WS6, WS8 | the PM's ruling |
@@ -912,7 +912,7 @@ switch). Steps a different ruling changes carry **[ruling: D-S4-1]** or **[rulin
 | S4-PR-1 | `packages/engine/src/sabotage.ts` (new), `politics.ts`, `diplomacy.ts` (only `sabotagePossible`'s body and `reputationReasons`' 'caught' member; stubs only if S3-PR-1 is absent), the POLITICS block of `config.ts`, engine tests `packages/engine/test/sabotage-*.test.ts` (new) and `politics.test.ts`; `apps/server/test/politics.test.ts` (the promise text only); `apps/web/src/phone/hub/politics/LawPicker.tsx` (`LAW_MEANING`, `chipWords` and the off-switch filter on `LAW_IDS` only) and `words.ts` (`JOB` only); the one-line ban filter in `apps/server/src/politics-view.ts` and `packages/ai/src/hands/vote.ts` (Task S4-1.9). Named edits, one commit per owner per task, SHAs OK'd through the PM: `types.ts`, `game.ts`, `index.ts` (WS3); `events.ts`, `production.ts`, `packages/ai/src/actions.ts`, `play.ts`, `packages/ai/test/moves.test.ts`, `vote-hand.test.ts` (WS1); `packages/ai/src/llm/moves-stub.ts` (WS2); the llm-manual snapshot (owner named by the PM) | — | the defaults `POLITICS.offices` and `POLITICS.sabotage.on` (S4-PR-6 flips them, AM-2); the T-AC-62 "Governor only" checks in five tests, the e2e included (S4-PR-6); `observe.ts` (#669 owns it); `packages/ai/src/hands/**` beyond the ban filter (S4-PR-4); every other server src line (S4-PR-5); every screen beyond the two word maps (S4-PR-6/7: no mock yet, S4-HC-8); EVENT_SHOW (WS8, S4-PR-7); `politics-value.ts`, `sim.ts` (WS1, S4-PR-3) |
 | S4-PR-2 | WS1's: `observe.ts`, `observe-politics.test.ts`, `politics-value.ts` | — | everything WS7's; WS7 only reviews against S4-C9 |
 | S4-PR-3 | WS1's: `politics-value.ts`, `sim.ts`, `packages/ai/test/**` | — | the hands (S4-PR-4, WS7); the engine (S4-PR-1) |
-| S4-PR-4 | `packages/ai/src/hands/sabotage.ts`, `sheriff.ts` (new; WS7 by the PM's 11:01Z ruling), `hands/vote.ts`; named edit (WS1): `packages/ai/test/sabotage-hands.test.ts` (new), `vote-hand.test.ts`, `council-ai.test.ts` | — | `politics-value.ts` (WS1: call its exports, never edit them); `play.ts`, `actions.ts` (landed in S4-PR-1); the engine |
+| S4-PR-4 | `packages/ai/src/hands/sabotage.ts`, `sheriff.ts` (new; WS7 by the PM's 11:01Z ruling), `hands/vote.ts`, `packages/ai/test/sabotage-hands.test.ts` (new; WS7's, PM 8 Nov); named edit (WS1): `vote-hand.test.ts`, `council-ai.test.ts`; amended 8 Nov, S4-PR-1's review leftovers M3/M4: `packages/ai/src/actions.ts` (WS1: propose's sabotage refusal, the crew's cost in sabotage's words), `packages/ai/src/llm/moves-stub.ts` and the llm-manual snapshot (WS2) | — | `politics-value.ts` (WS1: call its exports, never edit them); `play.ts`; `actions.ts` beyond the two M3/M4 lines; the engine |
 | S4-PR-5 | `apps/server/src/politics-view.ts`, `apps/server/test/sabotage.test.ts` (new), `apps/server/test/politics.test.ts`; named edits (WS3): `server.ts` (`isIntent`), `mule-game.ts` (handle's four cases, `monthEventView`, news and notice hooks) | — | the engine (S4-PR-1); the protocol (landed in #662; a shape change stops and goes to the lead); every web file |
 | S4-PR-6 | `apps/web/src/phone/hub/politics/Sabotage.tsx`, `Sheriff.tsx` (new), `ElectionDay.tsx`, `words.ts`, `LawPicker.tsx`, `apps/web/src/table/TvElection.tsx`, `TvCouncil.tsx`, `apps/web/test/politics-sabotage.test.tsx` (new); for Task S4-6.5: the POLITICS block's `offices` and `sabotage.on` defaults, engine `politics.test.ts`, server `politics.test.ts`, `apps/web/test/politics-desks.test.ts`, `apps/web/e2e/politics.ts` (only the T-AC-62 checks); named edits: `hub/tools.tsx`, `hub/desks.tsx`, `hub/today.tsx` (WS6), `packages/ui/src/components/HoloMap.tsx` (WS4, only if the mock needs a guard mark), `packages/ai/test/vote-hand.test.ts` (WS1, T-AC-62), the llm-manual snapshot (owner named by the PM) | the approved slice-4 mock's files under `design/mocks/<slug>/` (data flow, handlers, state wiring; never composition, routes or tokens) | the rest of `apps/web/e2e/politics.ts` (S4-PR-8); the production show and month end (S4-PR-7); any server or engine src file beyond the two defaults |
 | S4-PR-7 | WS8's: `packages/ui/src/events/**`, `apps/web/src/events/**`, EVENT_SHOW in `config.ts`; named edits: `TvProduction.tsx`, `phone/Production.tsx` (WS6), `MonthEnd.tsx` or `components/Colony.tsx`, `game/derive.ts` (WS4) | the approved WS8 story and month-end mock | the hub desks (S4-PR-6); the engine and server |
@@ -1280,6 +1280,20 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
 
 #### Task S4-6.0 — base and builder
 
+> **PM ruling, 8 Nov (Heiko's rulings relayed): S4-PR-6 is split three ways.** The rows of this PR in the file
+> table and the PR table read through it.
+> - **WS7** (`ws7-s4-screens`, #747): Task S4-6.3 (the Offices card's Sheriff line in `hub/politics/parts.tsx::OfficesCard`;
+>   `ElectionDay.tsx`, `TvElection.tsx` and `words.ts` are already generic over `POLITICS.offices` and need no change), the
+>   LawPicker part of Task S4-6.4 (`LAW_MEANING.sabotageBan`, P11's words), and Task S4-6.5 (the defaults flip).
+> - **WS8**: Tasks S4-6.1 and S4-6.2 (`Sabotage.tsx`, `Sheriff.tsx`, the Guard pick, the web intents,
+>   `politics-sabotage.test.tsx`) and S4-PR-7.
+> - **WS4**: the ban chip in `TvCouncil.tsx` (Task S4-6.4's TV part).
+> - The mock is WS8's P2, `design/mocks/politics-p2` (d6977e1a, approved 8 Nov), on WS6's tabbed planning hub. No new
+>   desk-placed politics screen starts before Heiko's verdict on the tabs.
+> - **The flip (Task S4-6.5) lands no earlier than both WS8 PRs and S4-PR-5**, in the order the PM accepted:
+>   hands (S4-PR-4) → server (S4-PR-5) → WS1's values (S4-PR-3) → WS8's screens and show plus WS4's chip → both
+>   switches in one commit with T-AC-62 → S4-PR-8.
+
 - [ ] **Step 1: Branch `ws7-s4-desks` off the lane at a commit containing the approved mock** (Task S4-M.1's SHA) and S4-PR-5. The PM confirms the builder; the files are WS7's. Until Task S4-6.5 flips the defaults, the screen tests build their views with the Sheriff and sabotage on in the fixture.
 
 #### Task S4-6.1 — S4-C14: ordering sabotage where the target is (P6)
@@ -1365,6 +1379,12 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
   - the ban shows in the law picker and on the TV council panel.
 
   Negative case: Brix's phone never shows Lena's order before production.
+- [ ] **Step 2b (PM ruling, 8 Nov, from WS8's #749 review): WS8's desk and show driven by the real views, never fixtures.** WS8's desk tests ran on hand-made fixtures and read `mine[].public` ("on the public record") as "the culprit is known", so an unseen saboteur was told "Everyone knows". At least one check renders WS8's desk and show from S4-PR-5's real `viewFor` views, from the saboteur's, the victim's and the Sheriff's phones, for each of three cases:
+  - an unseen cut that worked: the saboteur's desk does not say anyone knows; the victim's phone and the TV say "someone";
+  - a caught cut: every screen names the culprit;
+  - a solved investigation: every screen names the culprit from that month on, and the Sheriff's desk shows the case solved.
+
+  This may be the e2e step itself, or a component test that builds its views by playing the server (`MuleGame` + `viewFor`), never a literal fixture.
 - [ ] **Step 3: Run** `pnpm --filter @mule/web e2e` — expected PASS (core and regression, which include `politics.ts`). **Commit** `test(e2e): S4-UBER-AC-2, S4-B-AC-10 sabotage, guard, catch and fine at the table (S4-C19)`.
 
 #### Task S4-8.2 — the money rows to Heiko (S4-HC-10, D3)
