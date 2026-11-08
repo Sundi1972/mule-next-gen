@@ -19,6 +19,7 @@ let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Planning: typeof import('../src/phone/Planning').Planning;
 let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPicks;
+let forgetLawPick: typeof import('../src/phone/hub/politics/LawBallot').forgetLawPick;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,6 +27,7 @@ beforeAll(async () => {
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Planning } = await import('../src/phone/Planning'));
   ({ forgetPicks } = await import('../src/phone/hub/politics/ElectionDay'));
+  ({ forgetLawPick } = await import('../src/phone/hub/politics/LawBallot'));
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
@@ -168,6 +170,7 @@ afterEach(() => {
   if (r) act(() => r.unmount());
   root = null;
   forgetPicks();
+  forgetLawPick();
   sent.length = 0;
 });
 
@@ -303,6 +306,17 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(isDisabled('ready'), 'Done is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);
+  });
+
+  it('S3-T-AC-16: row 2 · an own No outlives the ballot unmounting and mounting again (another sub-tab), before the server answers: Done sends no promised Yes', () => {
+    mount(lawFor({ promised: LAW_YES }));
+    tap('ballot-no');
+    // The ballot leaves the screen and comes back, the vote still open; the server has not answered the No yet.
+    act(() => root!.unmount());
+    mount(lawFor({ promised: LAW_YES }));
+    expect(pressed('ballot-no'), 'the own No is still the pick').toBe(true);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(false), READY]);
   });
 
   it("S3-T-AC-16: an own No shows over the promise at once, and after the server's answer", () => {
