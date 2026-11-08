@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { auctionNeed, budgetCredits, COLONY, colonyPrestige, createGame, GOODS, HAPPINESS, observe, POLITICS, PRESTIGE, stillNeeds, welfareRecipient, type GameState, type Project } from '@mule/engine';
+import { afterEach, describe, expect, it } from 'vitest';
+import { auctionNeed, budgetCredits, COLONY, colonyPrestige, createGame, GOODS, HAPPINESS, observe, POLITICS, PRESTIGE, stillNeeds, storeForSale, storeQuotes, welfareRecipient, type GameState, type Project } from '@mule/engine';
 import { endMonth } from '../src/outlook.js';
 import { lineWorth, overruleWorth } from '../src/politics-value.js';
 
@@ -53,12 +53,37 @@ describe('S5-B-AC-6 (S5-C9\'s values): lineWorth, welfare', () => {
 });
 
 describe('S5-B-AC-6 (S5-C9\'s values): lineWorth, projects', () => {
-  it('0 with no building commissioned, and 0 when the one commissioned waits only for goods', () => {
+  const savedBuys = COLONY.fundBuysGoods;
+  afterEach(() => {
+    COLONY.fundBuysGoods = savedBuys;
+  });
+
+  it("0 with no building commissioned; 0 when the one commissioned waits only for goods the fund can't buy: the switch off, or the store has none (AM-15)", () => {
     const state = table();
     expect(lineWorth(observe(state, 'ai1'), 'ai1', 'projects', 300)).toBe(0);
-    state.colony!.projects = [park(PRESTIGE.park.credits)];
+    state.colony!.projects = [{ ...park(PRESTIGE.park.credits), funded: { credits: PRESTIGE.park.credits, goods: {} } }];
     expect(stillNeeds(state.colony!.projects[0]!).credits, 'the case: its credits are paid').toBe(0);
+    COLONY.fundBuysGoods = false;
     expect(lineWorth(observe(state, 'ai1'), 'ai1', 'projects', 300)).toBe(0);
+    COLONY.fundBuysGoods = true;
+    for (const g of Object.keys(stillNeeds(state.colony!.projects[0]!).goods) as (keyof typeof state.store.stock)[]) state.store.stock[g] = 0;
+    expect(lineWorth(observe(state, 'ai1'), 'ai1', 'projects', 300)).toBe(0);
+  });
+
+  it("while the fund buys goods (AM-15), credits toward a building that waits only for goods pay their share of its cost: its credits plus its missing goods at the store's sell price", () => {
+    const state = table();
+    state.colony!.projects = [{ ...park(PRESTIGE.park.credits), funded: { credits: PRESTIGE.park.credits, goods: {} } }];
+    const obs = observe(state, 'ai1');
+    const missing = Object.entries(stillNeeds(obs.colony!.projects[0]!).goods) as [keyof typeof obs.store.stock, number][];
+    expect(missing.length, 'the case: it waits for goods').toBeGreaterThan(0);
+    const goods = missing.reduce((n, [g, m]) => n + Math.min(m, storeForSale(obs, g)) * (storeQuotes(obs, g).sell ?? 0), 0);
+    expect(goods, 'the case: the store sells them').toBeGreaterThan(0);
+    const room = Math.max(0, W.prestigeCap - colonyPrestige(obs));
+    const mood = W.prestige * Math.min(PRESTIGE.park.prestige, room);
+    const months = endMonth(obs) - obs.month;
+    const worth = (amount: number) => (Math.min(amount, goods) / (PRESTIGE.park.credits + goods)) * months * mood * point(obs, 'ai1');
+    expect(lineWorth(obs, 'ai1', 'projects', 10)).toBeCloseTo(worth(10), 6);
+    expect(lineWorth(obs, 'ai1', 'projects', goods + 500)).toBeCloseTo(worth(goods), 6);
   });
 
   it("the share of the building it pays, times its prestige's mood for the months left, at the seat's mood point; credits past its need add nothing", () => {
