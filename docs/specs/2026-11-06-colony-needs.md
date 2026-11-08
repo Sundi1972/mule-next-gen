@@ -951,6 +951,30 @@ did       auction.ts::auctionNeed and packages/ai/src/value.ts::wholeNextMonth k
           wholeNextMonth in WS1's value.ts PR, on trunk no later than PR-8's batch (with PR-6, HC-14)
 because   under C15 hunger is the household's last meal, so advice to hold Food against hunger contradicts the rule
 goal      G-1 unchanged; whether prices move is judged in the 13 Nov play-test
+
+AM-7 · 2026-11-08 · WS7 (spec owner), from #810's design-owner review · the sick growth cut is applied at upkeep's growth line
+target    §1 C7 and C8 (where growth reads h); §2 RULE-8; the #766 ruling (SEAMS 2026-11-08T07:01Z, "growth cut in runColony after h written")
+said      the growth cut sat in runColony after h was written: upkeep grew the colony at the plain rate, runColony grew it
+          again from the same size with the new h
+did       upkeep.ts::runUpkeep applies the cut at its growth line, with nextSickShare(h_old, this upkeep's meal), the
+          same pure call on the same inputs that runColony then writes, so growth reads the new h and is rounded once.
+          colony.ts::runColony stays the only writer of h (C7's seam); the Medicine need still reads h_old; Collapse is
+          exempt; politics off or health off, no cut; the size never goes below 0. ColonistMonth.growth and the second
+          growth step are removed
+because   between the two growth steps the export ship's monthlyDemand and the fund's storeForSale read the size before
+          the cut (the store kept Food for 224 colonists' cover where the colony needed 220)
+goal      G-1 unchanged; C7's single writer kept
+
+AM-8 · 2026-11-08 · WS7 (spec owner), for WS5's §3, from #810's design-owner review · colonyHealth carries lastHealth
+target    §3 colonyHealth on MuleView; §1 C19 tomorrow; §6 B-AC-18
+said      colonyHealth: { health, medicineShort, shortMonths } | null
+did       colonyHealth also carries lastHealth: number | null (optional on the wire): `health` as it stood one upkeep
+          earlier, null at the first upkeep with health on. The engine keeps the sick share one upkeep back on the colony
+          (Colony.lastSick, written by colony.ts::runColony just before it writes the new share); the server's view reads
+          healthOf(lastSick). Same nulls as the rest: null while HEALTH.enabled is false or there is no colony
+because   WS8's gauge shows the month's move; the trunk contract #773 (WS3 OK, PM diff) added the field, and §3 must
+          name every field the view carries
+goal      G-1 unchanged; no new config number
 ```
 
 ## §9 · Ownership Boundaries
