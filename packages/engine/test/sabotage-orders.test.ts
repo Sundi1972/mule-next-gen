@@ -352,6 +352,18 @@ describe('sabotage resolution', () => {
     applyEvents(state, [plotEvent(state, 'muleTheft', p.food)]);
     expect(state.tiles[p.food]!.outfit, 'the theft took the MULE').toBeNull();
     expect(goodOf(state.politics!.sabotage[0]!)).toBe('food');
+    // runProduction files the sabotage events after applyEvents: the theft has taken the MULE by then, and the line still names Food.
+    const filed = sabotageEvents(state);
+    expect(filed).toHaveLength(1);
+    expect(filed[0]!.line).toContain('Food plot');
+  });
+
+  it('S4-B-AC-4: S4-RULE-3: a worked cut whose order has no crop (a record older than the field) words its line without one and does not throw', () => {
+    const { state } = monthOfSabotage(seedFor({ works: true, seen: false }, cutBrix), [{ by: 'lena', target: cutBrix }]);
+    resolveSabotage(state);
+    delete (state.politics!.sabotage[0] as { good?: string }).good;
+    const filed = sabotageEvents(state);
+    expect(filed[0]!.line).toMatch(/^Someone cut the power to a plot/);
   });
 
   it('S4-B-AC-4: S4-RULE-3: a cut that works on a Food plot its owner then re-outfits to Energy still names Food', () => {
