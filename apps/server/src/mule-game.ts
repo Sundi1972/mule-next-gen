@@ -1027,8 +1027,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private governorChanged(governorId: string, line: string): void {
     for (const id of [...this.ready]) if (id !== governorId) this.ready.delete(id);
     this.addNews(line, [governorId]);
-    // An AI Governor's own change comes from inside a hand's tick: the hands judge it on their next one, not re-entrantly.
-    if (!this.ai.has(governorId)) this.tickVoteHands(0);
+    // Inside tickVoteHands the loop's own second look covers it; a change from anywhere else (a human, planMonth, a move) is judged now.
+    if (!this.ticking) this.tickVoteHands(0);
   }
 
   /** During development: true once a player went to the pub or ran out of time by `at`, the wall clock unless a tick's own. */
@@ -1326,6 +1326,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Ticks every AI vote hand by dt through the same checks a phone gets. */
   private tickVoteHands(dt: number): void {
     const state = this.requireState();
+    this.ticking = true;
+    try {
+      this.tickEachHand(state, dt);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  /** True while tickVoteHands runs: a Governor's change made then is judged by its second pass, never by a re-entrant tick. */
+  private ticking = false;
+
+  private tickEachHand(state: GameState, dt: number): void {
     const settings = () => `${state.treasury.salesTax}|${JSON.stringify(state.politics?.budget)}`;
     const before = settings();
     for (const [id, hand] of this.voteHands) hand.tick(state, dt, (action) => this.aiAct(id, action));

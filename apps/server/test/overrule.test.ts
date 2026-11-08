@@ -162,7 +162,9 @@ describe('S5-C7: the server opens the overrule ballot where planning already end
     const seen: number[] = [];
     const hands = seamsOf(game).voteHands;
     hands.set('s3', { tick: (st) => void seen.push(Math.round(st.treasury.salesTax * 100)) });
-    hands.set('s4', { tick: (_st, _dt, act) => void act({ type: 'setTax', percent: 6 }) });
+    // The Governor's hand raises once (as the real one acts once a month), then rests.
+    let raised = false;
+    hands.set('s4', { tick: (_st, _dt, act) => void (raised || ((raised = true), act({ type: 'setTax', percent: 6 }))) });
     const was = Math.round(state.treasury.salesTax * 100);
     seamsOf(game).tickVoteHands(0);
     expect(state.treasury.salesTax, "the Governor's raise stood").toBeCloseTo(0.06);
