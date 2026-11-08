@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { advancePhase, AI_HANDS, createGame, DEV_STEER, DEVELOPMENT, floorConfig, GOODS, MS_PER_SECOND, type GameState } from '@mule/engine';
-import { AiSeat, applyAction, arrive, GOOD_NAME, outfitName, playbookSource, TopPickDecider, type AiAction, type AiSeatOptions, type DevClock } from '@mule/ai';
+import { AiSeat, applyAction, arrive, GOOD_NAME, outfitName, playbookSource, TopPickDecider, type AiAction, type AiSeatOptions, type Decider, type DevClock } from '@mule/ai';
 import { playFloorPhase } from '../../../packages/ai/src/floor-turn.js';
 import { createBrain } from '../src/brain/index.js';
 import { Playbooks } from '../src/brain/playbooks.js';
@@ -240,6 +240,28 @@ describe('hands-why fix: the next land brief says why the hands stopped', { time
     expect(stop.pick.key).toBe('stop');
     expect(stop.candidates.find((c) => c.key === `install:${outfitOf(good)}:${plot}`)?.veto).toBeNull();
     expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought no MULE; then kept the cash, which scored above a ${outfitName(outfitOf(good))} on plot ${plot}.`);
+  });
+
+  it("hands-why fix: FM-dev-stop-reason (keep the cash, not the best): a decider that keeps the cash over a MULE that scored higher is never told the cash scored above it", async () => {
+    // A decider may pick any option on the shortlist: the LLM's freely, the floor's TopPickDecider by a weighted draw
+    // among near ties. This one keeps the cash whenever it is offered.
+    const keepsCash: Decider = { name: 'keeps-cash', decide: (list) => ({ optionId: (list.find((o) => o.key === 'stop') ?? list[0]!).id, line: null, by: 'llm' }) };
+    const t = table({ persona: 'cautious', decider: keepsCash });
+    await monthOne(t, undefined, (state, seat) => {
+      state.players.find((p) => p.id === 'p0')!.money = 500;
+      developTurn(state, seat);
+    });
+
+    const { good, plot } = draftTarget(t.landBriefs()[0]!);
+    // The premise: the cash was kept though the draft's MULE, open to the hands, scored higher.
+    const stop = t.seat.brain.log.filter((r) => r.kind === 'develop').at(-1)!;
+    expect(stop.pick.key).toBe('stop');
+    const mule = stop.candidates.find((c) => c.key === `install:${outfitOf(good)}:${plot}`)!;
+    expect(mule.veto).toBeNull();
+    expect(mule.utility).toBeGreaterThan(stop.candidates.find((c) => c.key === 'stop')!.utility);
+    const next = t.landBriefs()[1]!;
+    expect(next).toContain(`${HANDS_HEAD} bought no MULE; then kept the cash over ${/^[AEIOU]/.test(good) ? 'an' : 'a'} ${outfitName(outfitOf(good))} on plot ${plot}.`);
+    expect(next).not.toContain('scored above');
   });
 
   it('hands-why fix: FM-dev-stop-reason (floor): on steered walking, with 10 s on the clock, the next brief says the walk to the draft\'s MULE no longer fit', async () => {
