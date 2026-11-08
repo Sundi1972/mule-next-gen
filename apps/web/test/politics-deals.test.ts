@@ -162,6 +162,7 @@ afterEach(() => {
   root = null;
   sent.length = 0;
   listeners.clear();
+  unlistenForKeys();
 });
 
 function findTestid(testid: string, node: FakeElement = host): FakeElement | undefined {
@@ -407,7 +408,26 @@ describe('the deal composer (S3-C17)', () => {
 
 /** The document's keydown listeners: the fake DOM keeps none, so a key press is delivered here. */
 const keydown = new Set<(e: { key: string }) => void>();
+/** Puts back what listenForKeys patched, after each test: a later test meets the fake DOM as it was. */
+let unlistenForKeys = (): void => undefined;
 function listenForKeys(): void {
+  const saved = (
+    [
+      [document, 'addEventListener'],
+      [document, 'removeEventListener'],
+      [FakeElement.prototype, 'focus'],
+      [FakeElement.prototype, 'querySelector'],
+    ] as [object, string][]
+  ).map(([on, key]) => [on, key, Object.getOwnPropertyDescriptor(on, key)] as const);
+  unlistenForKeys = () => {
+    for (const [on, key, was] of saved) {
+      if (was) Object.defineProperty(on, key, was);
+      else delete (on as Record<string, unknown>)[key];
+    }
+    keydown.clear();
+    (document as unknown as { activeElement: FakeElement | null }).activeElement = null;
+    unlistenForKeys = () => undefined;
+  };
   const doc = document as unknown as { addEventListener(t: string, l: unknown): void; removeEventListener(t: string, l: unknown): void };
   const [add, remove] = [doc.addEventListener.bind(doc), doc.removeEventListener.bind(doc)];
   doc.addEventListener = (t, l) => (t === 'keydown' ? void keydown.add(l as never) : add(t, l));
