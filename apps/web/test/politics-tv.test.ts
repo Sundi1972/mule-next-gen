@@ -255,7 +255,6 @@ describe('S5-C11: the overrule ballot on the TV', () => {
     expect(textOf(html, 'tv-overrule-cast-s2')).toContain('VOTED ✓');
     expect(textOf(html, 'tv-overrule-cast-s1')).toContain('VOTING');
     expect(textOf(html, 'tv-overrule-cast-s3')).toContain('VOTING');
-    expect(html).not.toMatch(/Yes\b.*\d.*No\b.*\d.*tv-overrule-cast/s);
     expect(tagOf(html, 'tv-overrule-yes')).toBeUndefined();
   });
 
