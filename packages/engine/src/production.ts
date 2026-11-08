@@ -216,6 +216,22 @@ export function crewFactor(short: { food: number; water: number }): number {
   return (1 - UPKEEP.crewDrop * hardship(short.food)) * (1 - UPKEEP.crewDrop * hardship(short.water));
 }
 
+/** The share of its output a player's sick crews let a plot make (needs RULE-15): 1 while they are well or cured. */
+function sickCrewShare(state: GameState, holdsMedicine: boolean): number {
+  const { share } = crewSickness(state, { stock: { medicine: holdsMedicine ? 1 : 0 } });
+  return 1 - HEALTH.crewSickDrop * share;
+}
+
+/**
+ * The share of its output a player's crews let every plot but its Energy plants make this production: the short-fed
+ * crews' factor times the sick crews', as if the player holds a Medicine or not. Production applies the two as parts
+ * of their own, each rounded; the computer players weigh plots by this product rather than copy the rule.
+ */
+export function crewOutputShare(state: GameState, playerId: string, { medicine }: { medicine: boolean }): number {
+  const owner = state.players.find((p) => p.id === playerId)!;
+  return crewFactor(owner.crewShort ?? { food: 0, water: 0 }) * sickCrewShare(state, medicine);
+}
+
 /** Energy a working plot burns a month: by good for raw plots, by recipe for factories. */
 export function energyUseOf(state: GameState, tile: Tile): number {
   if (!tile.owner || !tile.outfit || tile.outfit === 'greenBelt') return 0;
@@ -407,9 +423,8 @@ export function runProduction(state: GameState): {
   const crewFactorOf = new Map(state.players.map((p) => [p.id, crewFactor(p.crewShort ?? { food: 0, water: 0 })]));
   const sickFactorOf = new Map<string, number>();
   for (const p of state.players) {
-    const { cure, share } = crewSickness(state, p);
-    if (cure) p.stock.medicine--;
-    sickFactorOf.set(p.id, 1 - HEALTH.crewSickDrop * share);
+    sickFactorOf.set(p.id, sickCrewShare(state, p.stock.medicine >= 1));
+    if (crewSickness(state, p).cure) p.stock.medicine--;
   }
   /** Cuts what the parts add up to by a factor, rounded half up, as a part of its own. */
   const cutBy = (parts: Part[], factor: number, why: 'crewShort' | 'crewSick') => {
