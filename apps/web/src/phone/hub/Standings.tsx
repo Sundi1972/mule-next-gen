@@ -26,7 +26,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
   const hub = useHubIfAny();
   useEscape(onClose);
   // The door that opened the standings: + Deal closes them, and the composer it opens gives the focus back here.
-  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+  const [opener] = useState(() => (typeof document === 'undefined' ? null : (document.activeElement as HTMLElement | null)));
   const { rows } = league(view);
   const mine = rows.find((r) => r.player.id === self.id);
   const p = view.me ? yourLines(view) : null;
