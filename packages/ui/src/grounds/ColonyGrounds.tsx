@@ -4,10 +4,10 @@ import { useId, useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
 import { frontOpacity, leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
-import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
+import { AirLayer, Glow, WalkingScene, type PictureBox } from './LiveLayer';
 import { occluderOf } from './occlusion';
 import type { Spot } from './walks';
-import { glowOpacity, walkersOut } from './live';
+import { glowOpacity, SMOKE, smokes, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
 import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
 import { iso, poly, square, W } from './projection';
@@ -25,7 +25,8 @@ export interface GroundsProject extends PlaceState {
 
 /** The part of `@mule/protocol`'s ColonyView the grounds read (HC-1: read only). */
 export interface GroundsColony {
-  gauges: { happiness: number | null; wealth: number };
+  /** `environment` is the air gauge, 0 clean; with no reading the grounds show clean air (RULE-7). */
+  gauges: { happiness: number | null; wealth: number; environment?: number };
   projects: GroundsProject[];
   /** This month's general strike; once the fund has paid it, the strikers are back at work (G-5 RULE-26). */
   strike?: { paid: boolean } | null;
@@ -194,6 +195,11 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
       })
     : [];
 
+  // A damaged building's smoke leaves the top of its picture (RULE-8).
+  const smoke = placed.filter((q) => smokes(q.p.stage)).map(({ n, p, block, col, row }) => {
+    const [x, y] = iso(col, row, MASSING[p.id].height * SMOKE.height);
+    return { n, x, y, fade: fade(block) };
+  });
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
   const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode, fade?: number) => {
@@ -262,6 +268,8 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         sprite={manifest?.walker && { entry: manifest.walker, light, href: (src) => hrefOf(src, manifest, size), oneTrim: size === 'phone' }}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
+      {/* Over the buildings and colonists, under the chips, so a plot's number reads through any haze. */}
+      <AirLayer view={vb} environment={colony.gauges.environment ?? 0} light={light} smoke={smoke} />
       {chips &&
         placed.sort(inBack).map(({ n, p, col, row }) => (
           <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />

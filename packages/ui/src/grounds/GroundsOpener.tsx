@@ -8,6 +8,7 @@ import { useEventReducedMotion } from '../events/motion';
 import type { ColonyGroundsProps, GroundsColony } from './ColonyGrounds';
 import { leanAt, openerOf, type Opener } from './opener';
 import { useGroundsChange, type GroundsChange, type MonthEndView } from './useGroundsChange';
+import { useSeconds } from './clock';
 
 /** The opener while it is on screen: RULE-6's length, RULE-5's changes, and whether its clock runs yet. */
 export interface OpenerState extends Opener {
@@ -39,25 +40,6 @@ export function useGroundsOpener(view: MonthEndView & { politics: unknown }, eve
   }, [playing, ms, view.month]);
   if (!opener || !found || ended === view.month) return null;
   return { ...opener, ...found, playing };
-}
-
-/** Seconds since `on` turned true, from the page's frames; 0 while off. */
-function useSeconds(on: boolean): number {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    // Where the frame clock is missing (or half-stubbed) the view holds still rather than throw on unmount.
-    if (!on || typeof requestAnimationFrame !== 'function' || typeof cancelAnimationFrame !== 'function') return;
-    let frame = 0;
-    let first: number | null = null;
-    const tick = (now: number) => {
-      first ??= now;
-      setSeconds((now - first) / 1000);
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [on]);
-  return on ? seconds : 0;
 }
 
 function said({ name, from, to }: GroundsChange): string {

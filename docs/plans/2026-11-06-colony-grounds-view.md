@@ -230,8 +230,23 @@ fec2bab9 by PM ruling. `TableApp.tsx` carries no change from this task. Steps be
 ### Task 2.2b: C4 — smoke over a damaged building, haze by air
 
 **Plan gap found at PR-2 build:** spec C4 lists smoke and haze; Tasks 2.1–2.2 built glow and walkers only.
-**Scaffold:** `Living.tsx` (smoke). **Files:** `packages/ui/src/grounds/LiveLayer.tsx`.
-- [ ] Test first at the rendered SVG: smoke drawn over a `damaged` place only; haze opacity rises as `gauges.environment` worsens, none at a clean colony; reduced motion → still. Then implement. Commit.
+**Correction (8 Nov):** the earlier "Scaffold: `Living.tsx` (smoke)" was false: Living.tsx draws no smoke and no haze.
+**Mock first (PM approved, 8 Nov):** `design/mocks/colony-grounds/smoke-haze.html` → `src/smokehaze/` (`air.ts` holds the
+rules, `SmokeHaze.tsx` the layer, portalled into ColonyGrounds' SVG), with spec §2 RULE-7 (haze) and RULE-8 (smoke) in the same
+push. Mock due 12:00Z; the PM does the look check, Heiko gets the link. Build only after the PM's OK; ready ~16:00Z, next batch.
+**PM conditions:** haze on a clean colony is zero, asserted by a test (T-AC-15); prefer zero-download effects (SVG/CSS); if
+sprites are used, the phone's heaviest colony measured < 1 MB in the PR body.
+**Files:** `packages/ui/src/grounds/live.ts` (air.ts lifted as is), `packages/ui/src/grounds/LiveLayer.tsx`, `ColonyGrounds.tsx`
+(passes `gauges.environment`), `packages/ui/test/grounds-air.test.tsx`.
+- [x] Mock: smoke A (light puffs) / B (dark column), haze by air band, day/dusk, TV/phone, reduced motion; SVG gradients only.
+- [x] PM look check passed 8 Nov: **smoke A** (B read as fire, lost at dusk; kept out of the code). PR body: a phone shot at
+  Collapse 90 by day.
+- [x] Test first, `T-AC-15`, at the rendered SVG: no haze at a clean colony (environment < 30, or no reading); haze opacity
+  rises with the gauge; drawn under the chips; smoke over a `damaged` place only; reduced motion → the plume still. Red
+  3db1bc56d (3 of 5). Implement: `live.ts` (RULE-7/8, bands from `POLLUTION`), `LiveLayer.tsx::AirLayer` (its own clock, the
+  walkers' clock extracted as `useSeconds`), `ColonyGrounds` (`gauges.environment?`, the layer under the chips). Green; mutants
+  (haze on clean, closed smokes, reduced ignored, haze over chips) each fail one test. ui 294/294.
+- [ ] Shots TV and phone, day and dusk; review; PR into ws10-visual.
 
 **Tasks 2.1–2.2 MERGED** as PR #603 → 71555ddd (`Review: APPROVE` at 5599ad02). Task 2.2b is still open (after Heiko's session).
 
@@ -260,6 +275,14 @@ human are dropped; Mixamo is not used (licence). Builds on Task 2.2c (#776): the
 - [x] Review round 1 (CHANGES at 71ca4a90): the sprite was √2 too big (METRE/px_per_m, not W/(12√2·px_per_m)), and a 2-unit
   Icosphere helper in the model set the feet 35 px high and the figure 1.24 m. walk.py now bounds the skinned meshes only;
   re-rendered. Placement and per-route heading tests added (red ca60363c, fix 0bfe5d85). Phone dusk 857,549 B.
+- [x] Review round 2 (CHANGES at 62bc1071): the phone's day worst case was 1,026,076 B, over 1 MB (`shoot.mjs` had measured
+  dusk only). Red 77972c7b, fix f52b7fde: on the phone each suit uses one sheet (`oneTrim`); the @400 sheets are encoded at
+  `-alpha_q 50`; `shoot.mjs` measures the heaviest colony (`?worst=1`) by day and by dusk and exits 1 over budget (positive
+  control: budget 850,000 → day OVER, exit 1; restored); the walker stands on a solid shadow catcher (a contact shadow).
+  Measured: day 894,077 B, dusk 800,423 B. Round 3: `Review: APPROVE at f52b7fde`. **MERGED** #785 → 115bf9bc.
+- [x] Follow-up #801, the day shadow: the cell is 320×256, feet at (120,197); edge alpha ≤ 13/255 (was ~159). Phone day
+  907,390 B, dusk 807,718 B. Generated art, no review. **MERGED** → aeab42013.
+- Trunk: #797 on trunk as 6c0f8cd4 (batch 95); #808 (head 05cef333 = aeab42013 + trunk, CI green) in batch 96, PR #809.
 
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
@@ -445,9 +468,11 @@ The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK)
 ## Follow-ups (after the 8 Nov play-test; none blocks #535)
 
 - **Inner lamp heads** (the lamps' heads read unlit close up) and **far-to-near shadows** across neighbouring layers.
-- **Task 2.2b** smoke and haze — still open.
+- **Task 2.2b** smoke and haze — mock first (above), build after the PM's OK.
 - **WS4's SHOULD:** poll for the plate request in `apps/web/e2e/grounds-opener.ts` rather than a fixed wait (WS4's file).
-- **WS4:** `apps/web/e2e/colony.ts` takes 364 s against the 360 s watchdog.
+- **WS4:** `apps/web/e2e/colony.ts` takes 364 s against the 360 s watchdog. Checked 8 Nov: the watchdog is CI-only
+  (`MULE_E2E_FILE_LIMIT_S` is set only in `.github/workflows/ci.yml` lines 57 and 102, read by `apps/web/e2e/harness.ts:104-114`),
+  so it is not a play-test risk; WS4's CI flake. The night-PNG worktree is removed.
 - The mock's type errors in `design/mocks/colony-grounds/src/fixture.ts` and `src/Grounds.tsx`.
 
 <!-- plan-check: no-task C48 T-AC-6 — C48 is WS7's G-5 change (this spec builds its ux); C6/T-AC-6 land in WS7's grounds PR by the PM's ruling (option a), consumed here as a freeze point -->
