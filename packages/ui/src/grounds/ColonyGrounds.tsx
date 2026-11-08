@@ -196,9 +196,9 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
     : [];
 
   // A damaged building's smoke leaves the top of its picture (RULE-8).
-  const smoke = placed.filter((q) => smokes(q.p.stage)).map(({ n, p, col, row }) => {
+  const smoke = placed.filter((q) => smokes(q.p.stage)).map(({ n, p, block, col, row }) => {
     const [x, y] = iso(col, row, MASSING[p.id].height * SMOKE.height);
-    return { n, x, y };
+    return { n, x, y, fade: fade(block) };
   });
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 

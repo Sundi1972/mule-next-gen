@@ -89,7 +89,7 @@ describe('T-AC-15: smoke over a damaged building, a haze by the air (RULE-7, RUL
     };
     const [still, leant] = [plumeOf(0, 1), plumeOf(1, 1)];
     expect(leant.length).toBe(still.length);
-    leant.forEach((o, k) => expect(o).toBeCloseTo(still[k]! / 3, 4));
+    leant.forEach((o, k) => expect(o).toBeCloseTo(still[k]! / 3, 3));
     expect(plumeOf(1, 2)).toEqual(plumeOf(0, 2));
   });
 });

@@ -76,7 +76,7 @@ export const HAZE = {
 
 /** RULE-7: the haze's opacity at the far edge. None on a clean colony or with no reading, then rising evenly with the gauge. */
 export function hazeOpacity(environment: number | undefined): number {
-  if (environment === undefined || environment < SMOGGY) return 0;
+  if (environment === undefined || !Number.isFinite(environment) || environment < SMOGGY) return 0;
   const t = Math.min(1, (environment - SMOGGY) / (POLLUTION.airMax - SMOGGY));
   return HAZE.min + t * (HAZE.max - HAZE.min);
 }

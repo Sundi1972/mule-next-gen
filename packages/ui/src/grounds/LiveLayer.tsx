@@ -5,6 +5,7 @@
  */
 import { useEffect, useId, useMemo, useState, type ReactElement } from 'react';
 import { useEventReducedMotion } from '../events/motion';
+import { useSeconds } from './clock';
 import type { GridPlace } from './layout';
 import { HAZE, hazeColour, hazeOpacity, plume, SMOKE } from './live';
 import { hiddenBy, type Occluder } from './occlusion';
@@ -140,24 +141,6 @@ function Walker({ i, spot, leg, seconds, reduced, sprite, players, ghost = false
 }
 
 /** Something on the grounds drawn in painter's order: its element and its depth from the camera, col + row. */
-/** Seconds since the layer began moving, ticking each frame while `running`; 0 while it does not run. */
-function useSeconds(running: boolean): number {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    // Where the frame clock is missing (or half-stubbed) the layer stands still rather than throw on unmount.
-    if (!running || typeof requestAnimationFrame !== 'function' || typeof cancelAnimationFrame !== 'function') return;
-    let frame = 0;
-    const start = performance.now();
-    const tick = (now: number) => {
-      setSeconds((now - start) / 1000);
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [running]);
-  return seconds;
-}
-
 export interface Placed {
   depth: number;
   node: ReactElement;
@@ -223,6 +206,8 @@ export interface SmokeSource {
   n: number;
   x: number;
   y: number;
+  /** The building's fade during the opener's lean-in: its smoke fades with it, so the named place shows through. */
+  fade?: number;
 }
 
 /**
@@ -231,7 +216,7 @@ export interface SmokeSource {
  * Gradients only: nothing is downloaded.
  */
 export function AirPicture({ view, environment, light, smoke, seconds, reduced }: { view: { x: number; y: number; w: number; h: number }; environment: number; light: Light; smoke: SmokeSource[]; seconds: number; reduced: boolean }) {
-  const id = useId();
+  const id = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const haze = hazeOpacity(environment);
   const puffs = plume(reduced ? 0 : seconds);
   const colour = SMOKE.colour[light];
@@ -259,8 +244,8 @@ export function AirPicture({ view, environment, light, smoke, seconds, reduced }
         <g key={s.n} data-testid={`smoke-${s.n}`}>
           {puffs.map((q, k) => (
             <g key={k}>
-              <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r} fill={`url(#${id}puff)`} opacity={q.opacity} data-testid="puff" />
-              {light === 'dusk' && q.warm > 0 && <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r * 0.9} fill={`url(#${id}ember)`} opacity={q.warm * q.opacity} style={{ mixBlendMode: 'screen' }} />}
+              <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r} fill={`url(#${id}puff)`} opacity={q.opacity * (s.fade ?? 1)} data-testid="puff" />
+              {light === 'dusk' && q.warm > 0 && <circle cx={s.x + q.dx} cy={s.y + q.dy} r={q.r * 0.9} fill={`url(#${id}ember)`} opacity={q.warm * q.opacity * (s.fade ?? 1)} style={{ mixBlendMode: 'screen' }} />}
             </g>
           ))}
         </g>
