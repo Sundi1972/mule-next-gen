@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as engine from '../src/index.js';
 import {
   createGame,
+  crewUpkeep,
   GOOD_CONFIG,
   GOODS,
   GROWN_BASE,
@@ -173,5 +174,15 @@ describe('needs C11: a factory burns its recipe and a running draw on top', () =
     const mine = table().smithore!.energy!;
     expect(secondPass(mine + 3), 'Energy for the mine and the whole use runs').toEqual({ off: false, energy: 0 });
     expect(secondPass(mine + 2).off, 'one short of the use is turned off').toBe(true);
+  });
+});
+
+describe('needs C12: crewUpkeep, one plot crew\'s Food and Water a month, unrounded', () => {
+  it('needs C12: crewUpkeep is the CONSUMPTION row\'s Food for every outfit and no Water (AM-3); the AI weighs a plot by this rate, not the stepped marginal', () => {
+    for (const o of Object.keys(engine.CONSUMPTION) as (keyof typeof engine.CONSUMPTION)[]) {
+      expect(crewUpkeep(o), o).toEqual({ food: engine.CONSUMPTION[o].food, water: 0 });
+    }
+    expect(crewUpkeep('crystite'), 'the hungriest crew').toEqual({ food: 0.75, water: 0 });
+    expect(crewUpkeep('greenBelt')).toEqual({ food: 0, water: 0 });
   });
 });
