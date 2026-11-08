@@ -4,6 +4,7 @@ import { EMOTES } from '@mule/protocol';
 import { Button, cx, GoodTag, hungerRule, Panel, PlayerMark, sickRule, type Good } from '@mule/ui';
 import { useEffect, useRef, useState } from 'react';
 import { AiMark } from '../chat/Chat';
+import { NewsWords } from '../components/SeatWords';
 import { player, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { usePhoneGame } from './game';
@@ -45,15 +46,15 @@ export function StockPanel({ title = 'Your stock' }: { title?: string }) {
   );
 }
 
-export function NewsPanel({ news }: { news: string[] }) {
-  if (news.length === 0) return null;
+export function NewsPanel({ view }: { view: Pick<MuleView, 'news' | 'newsLines' | 'players'> }) {
+  if (view.news.length === 0) return null;
   return (
     <Panel title="News">
       <ul className="flex flex-col gap-2.5" data-testid="news">
-        {news.map((n) => (
+        {view.news.map((n, i) => (
           <li key={n} className="flex gap-2.5 text-sm leading-snug">
             <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-holo" />
-            {n}
+            <NewsWords view={view} i={i} />
           </li>
         ))}
       </ul>

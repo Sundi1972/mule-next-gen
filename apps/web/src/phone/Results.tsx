@@ -194,7 +194,7 @@ function Harvest() {
           </div>
           <AirGauge level={view.air.level} band={view.air.band} />
           <ShipLine view={view} />
-          <NewsPanel news={view.news} />
+          <NewsPanel view={view} />
         </div>
       </div>
     </PhoneShell>

@@ -177,7 +177,8 @@ describe('HC-3: in planning a Claude seat is a label, never a wait (mock #tv-rea
     expect(part(thinking, `tv-ready-${JUNO}`)).toMatch(/^\S+ Juno Claude CLAUDE · THINKING$/);
     expect(part(thinking, `tv-state-${JUNO}`)).toBe('CLAUDE · THINKING');
     expect(part(thinking, `tv-ready-${JUNO}`)).not.toContain('plays its built-in plan');
-    expect(part(thinking, 'tv-waiting'), 'nobody waits for a thinking Claude seat').not.toContain('Juno');
+    // At four seats the ready list alone says who the table waits for (TV-FIT, PM ruling 8 Nov): nowhere names Juno.
+    expect(thinking, 'nobody waits for a thinking Claude seat').not.toContain(`data-testid="waiting-${JUNO}"`);
     expect(part(thinking, 'ready-count'), 'the AIs, Juno among them, are ready').toBe('2 / 4 READY');
     expect(part(onTv(view, 'connected'), `tv-state-${JUNO}`)).toBe('CLAUDE · CONNECTED');
     const offline = onTv(view, 'offline');
