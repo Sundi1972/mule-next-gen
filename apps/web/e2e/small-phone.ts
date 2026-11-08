@@ -29,12 +29,12 @@ const RAIL: AuditScope = { roots: ['[data-testid=guide] > header', '[data-testid
 /** A WS4 screen: all of it, less the table chat. */
 const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-testid=table-chat]'] };
 /**
- * Planning proper, the hub: the rail header (where the standing sits), the tab column and the footer. Not yet the
+ * Planning proper, the hub: the rail header (where the standing sits), the tab column, Governor / Council's sub-tab row and the footer. Not yet the
  * whole stage: at 667 its map tools are 28 px tall and the ballot's ELECTED tag is 9 px, owned by the hub and politics
  * work, so the stage joins this read once those meet B-AC-11.
  */
 const HUB: AuditScope = {
-  roots: [...RAIL.roots, '[data-testid=tabs-a]', '[data-testid=actions]'],
+  roots: [...RAIL.roots, '[data-testid=tabs-a]', '[data-testid=sub-tabs]', '[data-testid=actions]'],
   skip: RAIL.skip,
   // H-9: folded, the Now card keeps to one line, and that line is its whole title (WS4's sweep A16, 6 Nov: "Plan your
   // month, …" lost the step it names), so no truncation is allowed here.
@@ -112,6 +112,8 @@ try {
   await doneThroughTheElection(ctx, PHASE_SCALE * ELECTION_WAIT_MS + 10_000);
   // Planning proper, the hub after the ballot: its header, desks and footer, read before the phone is ready.
   await voteThroughTheElection(phone, SHOWN_MS);
+  // Governor / Council open, so its sub-tab row is on the screen with the tab column.
+  await phone.locator('[data-phase=planning]').getByTestId('tab-politics').click({ timeout: SHOWN_MS });
   // The audit skips a root that matches nothing, so each is checked here: a renamed one would leave the read quiet.
   for (const root of HUB.roots) check((await phone.locator(root).count()) > 0, `B-AC-11: planning, the hub shows ${root}`);
   await both('planning, the hub', HUB);

@@ -223,10 +223,11 @@ async function main(): Promise<void> {
     check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-63: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
     await lena.page.getByTestId('gov-promise').filter({ hasText: `You promised: no higher than ${LENA_CAP}%` }).waitFor({ timeout: PRESS_MS });
     await ossa.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('sub-tabs').waitFor({ timeout: PRESS_MS });
     check((await ossa.page.getByTestId('sub-governor').count()) === 0, 'B-AC-63 (negative): Ossa, not Governor, has no Governor sub-tab');
-    // E-9 (D3, D8): a human holding an office finds it in their politics tab, named for it, open on the office's sub-tab;
-    // everyone else's tabs are the same four. CI's pinned whole-game seed never makes a human Governor, so this is
-    // where the office-first open is guarded on every run.
+    // E-9 (D3, D8): a human holding an office finds it in their politics tab, named for it; the Now line's door opened
+    // the office's sub-tab above. Everyone else's tabs are the same four. A human Governor is seated only in this script
+    // (CI's pinned whole-game seed makes none), so this is where that door and the tab's name are guarded.
     const tabs = async (page: Page) => page.locator('[data-testid=tabs-a] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
     const subs = async (page: Page) => page.locator('[data-testid=sub-tabs] [role=tab]').evaluateAll((els) => els.map((e) => `${e.getAttribute('data-testid')}${e.getAttribute('aria-selected') === 'true' ? '*' : ''}`));
     check((await lena.page.getByTestId('tab-politics').innerText()).trim() === 'Governor', `E-9 (D3): Lena's politics tab reads Governor, got "${await lena.page.getByTestId('tab-politics').innerText()}"`);

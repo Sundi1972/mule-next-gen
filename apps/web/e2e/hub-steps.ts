@@ -12,7 +12,7 @@ import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, held as holding, PHONE, PHONE_SMALL, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
-import { LAPTOP } from './shell-steps';
+import { LAPTOP, railFits } from './shell-steps';
 import { fitSettled, theTvScaleHolds } from './tv-fit-steps';
 
 /** The human sits in seat 1. */
@@ -510,9 +510,12 @@ const READ_GOV = `(async () => {
   const verdict = box('[data-testid=governor-verdict]');
   const tabs = [...(p?.querySelectorAll('[data-testid=tabs-a] [role=tab], [data-testid=sub-tabs] [role=tab]') ?? [])].map((t) => {
     const r = t.getBoundingClientRect();
-    // The label is the tab's own words: whole when nothing of them is cut short (a badge may overhang by design).
+    // The label is the tab's own words: whole when nothing of them is cut short, and when their box sits inside the
+    // tab's (a truncating span is only as wide as its text, so the box check is the one that fails; a badge may overhang).
     const label = [...t.querySelectorAll('span')].find((el) => el.textContent.trim() && !el.querySelector('span'));
-    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: !!label && label.scrollWidth > label.clientWidth + 0.5 };
+    const l = label ? label.getBoundingClientRect() : r;
+    const cut = !!label && label.scrollWidth > label.clientWidth + 0.5;
+    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: cut || l.left < r.left - 0.5 || l.right > r.right + 0.5 };
   });
   return {
     bodyBottom: body?.getBoundingClientRect().bottom ?? NaN,
@@ -584,6 +587,8 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     seen.push(`one more sub-tab ${moreTabs}`);
   }
   fits(opened, 'as it opens', 'breaks it');
+  // C20 in the rail beside it: its key element (Now) above the footer, the seat row under it in order, each seat tall enough.
+  seen.push(`railFits ${await railFits(lena, { key: 'now', sizes: [size] })}`);
   await click('tax-down');
   await planning.getByTestId('gov-within').waitFor({ timeout });
   fits(await read(), 'after −', 'within');
@@ -717,17 +722,8 @@ export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, cod
     const readWith = async (stock: Stocks): Promise<Read> => {
       Object.assign(me.stock, stock);
       room.broadcast();
-      // Overview first: This month's Short row, or none, as the stock says, then the plot as it stands.
-      const short = (['food', 'water', 'energy'] as const).filter((g) => stock[g] < need[g]);
-      const row = planning.getByTestId('agenda-needs');
-      if (short.length > 0) await row.filter({ hasText: `Short ${need[short[0]!] - stock[short[0]!]}` }).waitFor({ timeout });
-      else await row.waitFor({ state: 'detached', timeout });
-      const plot = await phone.evaluate(async () => {
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const p = document.querySelector('[data-phase=planning] [data-testid=hub-map] [data-testid^=map-plot-]')!.getBoundingClientRect();
-        return Math.min(p.width, p.height);
-      });
-      // Then the strip, in the "?" sheet.
+      // The strip in the "?" sheet first: it shows the new stock's figures, so once it does, the stock has drawn (20 of
+      // each and 120 of each leave This month alike).
       await planning.getByTestId('help-open').click({ timeout });
       for (const g of ['food', 'water', 'energy'] as const) {
         const shows = stock[g] >= need[g] ? '✓' : `short ${need[g] - stock[g]}`;
@@ -750,6 +746,16 @@ export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, cod
       });
       await planning.getByTestId('help-close').click({ timeout });
       await planning.getByTestId('help-sheet').waitFor({ state: 'detached', timeout });
+      // Then Overview: This month's Short row, or none, as the stock says, and the plot as it stands.
+      const short = (['food', 'water', 'energy'] as const).filter((g) => stock[g] < need[g]);
+      const row = planning.getByTestId('agenda-needs');
+      if (short.length > 0) await row.filter({ hasText: `Short ${need[short[0]!] - stock[short[0]!]}` }).waitFor({ timeout });
+      else await row.waitFor({ state: 'detached', timeout });
+      const plot = await phone.evaluate(async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const p = document.querySelector('[data-phase=planning] [data-testid=hub-map] [data-testid^=map-plot-]')!.getBoundingClientRect();
+        return Math.min(p.width, p.height);
+      });
       return { plot, ...strip };
     };
     const lines: string[] = [];
