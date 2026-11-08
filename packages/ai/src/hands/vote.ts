@@ -2,7 +2,6 @@ import {
   canRun,
   commissionRefusal,
   createRng,
-  lawImpact,
   lawOffered,
   moodBand,
   nextElectionMonth,
@@ -28,8 +27,10 @@ import {
   type TaxPromise,
 } from '@mule/engine';
 import type { Act } from '../actions.js';
-import { breakGain, reputationCost } from '../politics-value.js';
+import { breakGain, lawWorth, reputationCost } from '../politics-value.js';
 import type { Mind } from '../value.js';
+import { SabotageHand } from './sabotage.js';
+import { SheriffHand } from './sheriff.js';
 
 function samePromise(a: TaxPromise | undefined, b: TaxPromise): boolean {
   return a?.kind === b.kind && (a.kind !== 'cap' || (b.kind === 'cap' && a.percent === b.percent));
@@ -76,13 +77,6 @@ function leanAgainst(obs: GameState, candidates: readonly string[], office: Offi
 function fewestPlots(obs: GameState, pool: readonly string[]): string[] {
   const fewest = Math.min(...pool.map((id) => plotsOwned(obs, id)));
   return pool.filter((id) => plotsOwned(obs, id) === fewest);
-}
-
-/** What a law costs a player a month: an enact at its setting, a repeal at the setting in force (slice 2a RULE-45). */
-function lawCost(obs: GameState, proposal: LawProposal, playerId: string): number {
-  const setting = proposal.kind === 'enact' ? proposal.setting : obs.politics!.laws[proposal.law]?.setting;
-  if (setting === undefined) return 0;
-  return lawImpact(obs, { kind: 'enact', law: proposal.law, setting })[playerId]?.cost ?? 0;
 }
 
 /** An election ballot a seat is about to cast: the office and who stands for it. */
@@ -139,11 +133,14 @@ function ownLawVote(obs: GameState, mind: Mind, proposal: LawProposal, port?: Vo
   if (typeof asked === 'boolean') return asked;
   if (proposal.kind === 'enact' && proposal.law === 'landTax' && politics.baron === me) return false;
   if (mind.levelId === 'rookie') return null;
-  const costs = obs.players.map((p) => lawCost(obs, proposal, p.id)).sort((a, b) => a - b);
-  const half = Math.floor(costs.length / 2); // literal-ok: the middle of a list
-  const median = costs.length % 2 === 1 ? costs[half]! : (costs[half - 1]! + costs[half]!) / 2; // literal-ok: odd or even count
-  const mine = lawCost(obs, proposal, me);
-  return proposal.kind === 'enact' ? mine <= median : mine > median;
+  // S4-RULE-13, AM-6: the ban's vote is its worth to the seat; a tie goes to the ban (an enact passes on >= 0, a repeal only on > 0).
+  if (proposal.law === 'sabotageBan') return proposal.kind === 'enact' ? lawWorth(obs, me, proposal) >= 0 : lawWorth(obs, me, proposal) > 0;
+  // A law's worth is minus its cost (an enact) or its cost saved (a repeal): the cost rows of RULE-46 read the other way up.
+  const worths = obs.players.map((p) => lawWorth(obs, p.id, proposal)).sort((a, b) => a - b);
+  const half = Math.floor(worths.length / 2); // literal-ok: the middle of a list
+  const median = worths.length % 2 === 1 ? worths[half]! : (worths[half - 1]! + worths[half]!) / 2; // literal-ok: odd or even count
+  const mine = lawWorth(obs, me, proposal);
+  return proposal.kind === 'enact' ? mine >= median : mine > median;
 }
 
 /**
@@ -162,12 +159,18 @@ export class VoteHand {
   private acted = false;
   /** The election month it last decided its candidacy for. */
   private decidedFor: number | null = null;
+  /** Slice 4's hands (S4-C10): each draws from its own seat-salted stream, never from this hand's rng. */
+  private readonly sabotage: SabotageHand;
+  private readonly sheriff: SheriffHand;
 
   constructor(
     readonly mind: Mind,
     private readonly rng: Rng,
     private readonly port?: VotePort,
-  ) {}
+  ) {
+    this.sabotage = new SabotageHand(mind);
+    this.sheriff = new SheriffHand(mind);
+  }
 
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
@@ -199,6 +202,8 @@ export class VoteHand {
     const obs = observe(state, this.mind.me);
     if (stage === 'over' || stage === 'none') {
       this.govern(obs, act);
+      this.sabotage.order(obs, act);
+      this.sheriff.run(obs, act, () => observe(state, this.mind.me));
       this.declareAhead(obs, act);
       return;
     }
@@ -325,15 +330,15 @@ export class VoteHand {
         ? { kind: 'repeal', law }
         : { kind: 'enact', law, setting: settings[Math.floor(settings.length / 2)]! }; // literal-ok: the middle setting
       if (waiting(proposal)) continue;
-      const [self, lead] = [lawCost(obs, proposal, me), lawCost(obs, proposal, leader)];
-      candidates.push({ proposal, gain: inForce ? self - lead : lead - self });
+      const [self, lead] = [lawWorth(obs, me, proposal), lawWorth(obs, leader, proposal)];
+      candidates.push({ proposal, gain: self - lead });
     }
     const best = candidates.reduce<{ proposal: LawProposal; gain: number } | null>((b, c) => (b === null || c.gain > b.gain ? c : b), null);
     if (!best || best.gain < minGap || !this.council(obs).chance(proposeChance[this.persona])) return;
     let proposal = best.proposal;
     if (proposal.kind === 'enact' && Object.keys(politics.laws).length >= maxInForce) {
       const inForce = Object.keys(politics.laws) as LawId[];
-      const dearest = inForce.reduce((a, b) => (lawCost(obs, { kind: 'repeal', law: b }, me) > lawCost(obs, { kind: 'repeal', law: a }, me) ? b : a));
+      const dearest = inForce.reduce((a, b) => (lawWorth(obs, me, { kind: 'repeal', law: b }) > lawWorth(obs, me, { kind: 'repeal', law: a }) ? b : a));
       proposal = { ...proposal, replaces: dearest };
     }
     act({ type: 'propose', proposal });
