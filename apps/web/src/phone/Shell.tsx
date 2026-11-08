@@ -6,6 +6,8 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { useEscape } from './dialog';
 import { usePhoneGame } from './game';
+import { roadmapSteps } from './hub/month-steps';
+import type { TabId } from './hub/slots';
 import { MoveToPhone } from './MoveToPhone';
 
 /**
@@ -148,6 +150,8 @@ export function PhoneShell({
   footer,
   fill = false,
   standing,
+  tabs,
+  head,
   children,
 }: {
   phase: string;
@@ -166,6 +170,13 @@ export function PhoneShell({
   fill?: boolean;
   /** Under the money: where you stand against the others ("2nd of 4"); with the money, a tap opens the standings. */
   standing?: { label: string; aria: string; onOpen: () => void } | undefined;
+  /** The planning hub's tabs (SB-1b), a column at the stage's left. Only the hub passes them. */
+  tabs?: readonly TabButton[] | undefined;
+  /**
+   * The planning hub's rail head (SB-1b): what every tab keeps, under the money (PhaseLine and NowLine). With it the
+   * phase shares its line with the ready count, and the month moves to the phase line.
+   */
+  head?: ReactNode;
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
@@ -176,6 +187,7 @@ export function PhoneShell({
     <Wide.Provider value={wide}>
       <div ref={root} className="h-full @container/shell">
         <div className="relative flex h-full bg-table @min-[1100px]/shell:[--rail:400px] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink" data-testid="game-shell" data-wide={wide}>
+          {tabs && tabs.length > 0 && <ShellTabs tabs={tabs} />}
           <main
             className={cx(
               'min-w-0 flex-1 p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:p-6 @min-[1100px]/shell:pb-[max(1.5rem,env(safe-area-inset-bottom))]',
@@ -186,16 +198,24 @@ export function PhoneShell({
             {children}
           </main>
           <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
-            <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
-              <div className="flex items-center justify-between gap-1.5 @min-[1100px]/shell:gap-2">
-                <div className="flex min-w-0 flex-col">
-                  <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!" data-testid="month">
-                    Month {view.month} / {view.maxMonths}
-                  </span>
-                  <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
+            <header data-testid="rail-head" className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
+              {head !== undefined ? (
+                // The hub's head: the phase on one line with the ready count; the month is the phase line's (PhaseLine).
+                <div className="flex items-center justify-between gap-1.5 @min-[1100px]/shell:gap-2" data-testid="phase-title-row">
+                  <span className="truncate font-display text-base font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
+                  {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
                 </div>
-                {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-1.5 @min-[1100px]/shell:gap-2">
+                  <div className="flex min-w-0 flex-col">
+                    <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!" data-testid="month">
+                      Month {view.month} / {view.maxMonths}
+                    </span>
+                    <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
+                  </div>
+                  {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
+                </div>
+              )}
               <div className="flex items-center gap-1.5 @min-[1100px]/shell:gap-2">
                 <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
                 <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base" data-testid="self-name">
@@ -243,6 +263,7 @@ export function PhoneShell({
                   </span>
                 )}
               </div>
+              {head}
               {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
               {wide ? <TableChat /> : <FallbackBubble />}
             </header>
@@ -264,6 +285,113 @@ export function PhoneShell({
         </div>
       </div>
     </Wide.Provider>
+  );
+}
+
+/** One of the planning hub's tabs, as the shell draws it (SB-1b; the hub builds them from its TabSlots). */
+export interface TabButton {
+  id: TabId;
+  label: string;
+  /** A 24×24 stroked SVG path. */
+  icon: string;
+  on: boolean;
+  Badge?: ComponentType | undefined;
+  onPick(): void;
+}
+
+/** A 24×24 stroked path, as the hub's tab icons and Now's door draw. */
+function Glyph({ d, size, className }: { d: string; size: number; className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
+}
+
+/**
+ * The hub's tabs as a column at the stage's left (Heiko, 8 Nov: the mock's variant A; on a sideways phone height is
+ * scarce, so the tabs take the stage's width, not its height). Real tabs, each a 56 px target.
+ */
+function ShellTabs({ tabs }: { tabs: readonly TabButton[] }) {
+  return (
+    <nav
+      role="tablist"
+      aria-label="Planning"
+      aria-orientation="vertical"
+      className="flex w-14 shrink-0 flex-col gap-1 border-r border-holo-faint bg-void/40 px-1 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-[max(0.375rem,env(safe-area-inset-top))]"
+      data-testid="tabs"
+    >
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={t.on}
+          onClick={t.onPick}
+          className={cx('relative flex h-14 w-full flex-col items-center justify-center gap-0.5 rounded-control text-[10px] font-semibold leading-tight', t.on ? 'bg-holo-soft text-holo ring-1 ring-holo' : 'text-ink-2 hover:text-ink')}
+          data-testid={`tab-${t.id}`}
+        >
+          <Glyph d={t.icon} size={18} />
+          <span className="max-w-full truncate">{t.label}</span>
+          {t.Badge && <t.Badge />}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** The hub's head: the month's steps as one slim line, a bar per step, this one lit; the month and the next step by name. */
+export function PhaseLine() {
+  const { view } = usePhoneGame();
+  const steps = roadmapSteps(view);
+  const next = steps[1];
+  return (
+    <div className="flex items-center gap-2" role="img" aria-label={`Month ${view.month}: step 1 of ${steps.length}, ${steps[0]!.label}.${next ? ` Next: ${next.label}.` : ''}`} data-testid="phase-line">
+      <span className="flex min-w-0 flex-1 items-center gap-0.5" aria-hidden>
+        {steps.map((s, i) => (
+          <span key={s.id} className={cx('h-1 rounded-full', i === 0 ? 'w-5 bg-holo' : 'min-w-1 flex-1 bg-holo-line')} data-testid={`phase-step-${s.id}`} />
+        ))}
+      </span>
+      <span className="shrink-0 whitespace-nowrap text-[10px] leading-none text-ink-2" aria-hidden data-testid="phase-next">
+        <span className="label-caps text-[10px]!">
+          Month {view.month}/{view.maxMonths}
+        </span>
+        {next && <> · next {next.label}</>}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The hub's head: the one Now line, whatever the tab. Its title only, two lines at most; the "?" opens the sheet with
+ * the whole explanation. When the step lives in a tab (a ballot), the title is a door to it.
+ */
+export function NowLine({ now, onHelp, onGo }: { now: Now; onHelp(): void; onGo?: (() => void) | undefined }) {
+  const title = (
+    <span className="line-clamp-2 min-w-0 flex-1 font-display text-sm font-semibold leading-tight" data-testid="now-title">
+      {now.title}
+    </span>
+  );
+  return (
+    <section className={cx('flex min-h-10 items-center gap-1.5 rounded-panel border-2 py-0.5 pl-2 pr-0.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')} aria-live="polite" data-testid="now">
+      <span className="label-caps shrink-0 text-[10px]!">Now</span>
+      {now.step !== undefined && now.of !== undefined && (
+        <span className="shrink-0 font-mono text-[10px] text-ink-2" aria-label={`Step ${now.step} of ${now.of}`} data-testid="now-steps">
+          {now.step}/{now.of}
+        </span>
+      )}
+      {onGo ? (
+        <button type="button" onClick={onGo} className="flex min-h-8 min-w-0 flex-1 items-center gap-1 text-left" data-testid="now-go">
+          {title}
+          <Glyph d="M9 6l6 6-6 6" size={12} className="shrink-0 text-holo" />
+        </button>
+      ) : (
+        title
+      )}
+      <button type="button" onClick={onHelp} aria-haspopup="dialog" aria-label="What to do this month, in full" className="grid size-8 shrink-0 place-items-center rounded-full border border-holo-line font-display text-sm font-bold text-holo hover:border-holo" data-testid="help-open">
+        ?
+      </button>
+    </section>
   );
 }
 
