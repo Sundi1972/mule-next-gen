@@ -493,7 +493,7 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     for (const gone of RUN_ACTIONS) expect(findTestid(gone), `${gone} in Elections`).toBeUndefined();
   });
 
-  it('SB-3 (E-1): while an election is open the "Throw your hat in the ring" row is gone from This month; the Elections Now door carries it', () => {
+  it('SB-3 (E-1): while an election is open the "Throw your hat in the ring" row is gone from This month; the Elections Now door carries it', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     mount(game({ pol: announce('announce'), month: 1, mine: { running: 'governor', canRun: { governor: true } } }));
     expect(findTestid('agenda-run')).toBeUndefined();
     rerender(game({ pol: politics({ next: 7 }), month: 1, mine: { canRun: { governor: true } } }));
@@ -510,7 +510,7 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     expect(selected(sub), `${sub} is open`).toBe(true);
   });
 
-  it('SB-3 (M18): the new Governor’s "To your Governor’s desk" in the reveal opens Laws, on the tax', () => {
+  it('SB-3 (M18): the new Governor’s "To your Governor’s desk" in the reveal opens Laws, on the tax', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     const result: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: [{ id: 's1', votes: 2 }, { id: 's2', votes: 1 }] } };
     const beats = ceremonyBeats(['s1', 's2', 's3'], result);
     const total = beats.total / 1000;
@@ -527,7 +527,7 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     byTestid('gov-tax');
   });
 
-  it('SB-3 (M15): the overrule call line opens Laws', () => {
+  it('SB-3 (M15): the overrule call line opens Laws', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     const called = politics({ governor: 's2', tax: { percent: 9, start: 5, low: 0, high: 10 }, overrule: { target: 'tax', caller: 's3', stage: 'called', restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, total: 3, needed: 2, result: null } as unknown as OverruleView });
     mount(game({ pol: called }), { ...TAB_SLOTS, underNow: [...TAB_SLOTS.underNow, OVERRULE_CALL_LINE] });
     tap('overrule-call-line');
@@ -535,7 +535,7 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     expect(selected('sub-laws')).toBe(true);
   });
 
-  it('S3-RULE-12 (O-2): Abstain stands across a sub-tab switch: the ballot keeps the pick and Cast my vote stays live', () => {
+  it('S3-RULE-12 (O-2): Abstain stands across a sub-tab switch: the ballot keeps the pick and Cast my vote stays live', () => { // trace-allow: S3-RULE-12 row 2 (Abstain stands) is a rule id, not an AC id; found in the #734 owner review
     mount(game({ pol: announce('ballot'), month: 4, mine: { canRun: { governor: 'closed' } } }));
     openElections();
     const radio = (id: string) => byTestid(`ballot-governor-${id}`).findAll('input')[0]!;

@@ -352,7 +352,7 @@ describe('election day on the phone (C66, E-2)', () => {
 
   // T-AC-66 and T-AC-67 are proved on the real hub, in the Elections sub-tab: hub-tabs.test.ts (SB-3 part 2).
 
-  it('C66, E-2, E-4: the announce card (drawn on the stage as host here): election day, step 1, who runs on which promise, what the Governor does, then vote on your phone', () => {
+  it('C66, E-2, E-4: the announce card (drawn on the stage as host here): election day, step 1, who runs on which promise, what the Governor does, then vote on your phone', () => { // trace-allow: an existing test retitled when the announce and the ballot left the stage (SB-3)
     const html = inHub(announce(4, 'closed'));
     // The rail's phase name is one word, so it fits whole at 667 px; the stage card carries the full words.
     expect(html).toMatch(/>Election</);
@@ -391,7 +391,7 @@ describe('election day on the phone (C66, E-2)', () => {
       { month: 4, players: PLAYERS.map((p) => (p.id === 's3' ? { ...p, ready: true } : p.id === 's1' ? { ...p, plots: 7 } : p)) },
     );
 
-  it('C66, E-2, E-4: the ballot card (drawn on the stage as host here): step 2, each candidate on a promise, Abstain, who has voted and never for whom', () => {
+  it('C66, E-2, E-4: the ballot card (drawn on the stage as host here): step 2, each candidate on a promise, Abstain, who has voted and never for whom', () => { // trace-allow: an existing test retitled when the announce and the ballot left the stage (SB-3)
     const html = inHub(ballot());
     expect(tagOf(html, 'election-step-2')).toMatch(/aria-current="step"/);
     expect(textOf(html, 'ballot-governor-s1')).toBe("Youup to 8% (it's 5% now)");
