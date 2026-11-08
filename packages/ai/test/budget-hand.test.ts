@@ -147,7 +147,8 @@ describe('S5-C6: the AI Governor splits the fund (S5-RULE-11)', () => {
       try {
         const { state } = goodsOnly();
         welfareFirst();
-        expect(split(state, 'ai0', 'trader').sent).toEqual([{ type: 'setBudget', shares: { projects: 5, welfare: 95, security: 0 } }]);
+        POLITICS.budget.welfare.maxShare = 100; // lifted, so only a covering share could keep Projects above 0
+        expect(split(state, 'ai0', 'trader').sent).toEqual([{ type: 'setBudget', shares: { projects: 0, welfare: 100, security: 0 } }]);
       } finally {
         COLONY.fundBuysGoods = saved;
       }
