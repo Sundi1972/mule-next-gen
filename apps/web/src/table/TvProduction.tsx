@@ -91,6 +91,7 @@ const WHY: Record<string, { label: string; badge: string; tone: string; icon?: G
   special: { label: 'A special field', badge: '+', tone: 'bg-ok text-on-holo' },
   pollution: { label: 'Polluted ground', badge: '−1', tone: 'bg-warn text-void' },
   crewShort: { label: 'Crews short of Food or Water last month: makes less', badge: '−', tone: 'bg-warn text-void' },
+  crewSick: { label: 'Crews sick (colony health, no Medicine): makes less', badge: '−', tone: 'bg-warn text-void' },
   noWater: { label: 'No Water for the farm: half', badge: '½', tone: 'bg-alert text-white', icon: 'water' },
   waterOff: { label: 'Turned off: not enough Water (20%)', badge: '20%', tone: 'bg-alert text-white', icon: 'water' },
   noEnergy: { label: 'No Energy for the plot: half', badge: '½', tone: 'bg-alert text-white', icon: 'energy' },

@@ -395,10 +395,11 @@ export interface ProductionLine {
    * Energy and made UPKEEP.offOutputShare of its output (AM-17); `waterOff` the same for want of Water (AM-18).
    * `noEnergy` and `noWater` are the halvings they replaced, kept for screens and fixtures that still name them; the
    * engine no longer files `noEnergy`, and `noWater` only with AM-18 off. `crewShort`: its crews went short at the last
-   * month end and worked slower (needs C14, RULE-12), before any turn-off.
+   * month end and worked slower (needs C14, RULE-12), before any turn-off. `crewSick`: the colony was sick enough to
+   * make its crews sick and its owner held no Medicine (needs RULE-15), after `crewShort`.
    */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'crewShort' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'crewShort' | 'crewSick' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];

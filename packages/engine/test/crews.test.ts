@@ -139,7 +139,7 @@ describe('needs C14: a crew left short works slower next month (RULE-12)', () =>
   it("needs T-AC-24: crews' need 0 → no shortfall, f 1: a player with no crews and no Food records nothing short for them", () => {
     const state = newGame();
     Object.assign(p0(state).stock, { food: 0, water: 0 });
-    expect(needsOf(state, 'p0'), 'the premise: no plots, the household alone').toEqual({ food: UPKEEP.baseFood, water: UPKEEP.baseWater });
+    expect(needsOf(state, 'p0'), 'the premise: no plots, the household alone').toEqual({ food: UPKEEP.baseFood, water: UPKEEP.baseWater, medicine: 0 });
     runUpkeep(state);
     expect(p0(state).crewShort).toEqual({ food: 0, water: 0 });
     expect(crewFactor(p0(state).crewShort!)).toBe(1);

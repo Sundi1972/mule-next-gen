@@ -103,10 +103,13 @@ describe('needs C18: a sick colony reaches its players (RULE-14)', () => {
       expect(chance(0.4)).toBeCloseTo(0.13, 9);
       expect(chance(0.2)).toBeCloseTo(0.03 + 0.05, 9);
 
-      const toxic = newGame();
-      toxic.air = 100;
-      toxic.colony!.sick = 0.4;
-      expect(eventChance(toxic, EVENTS.player.sickness, 'development', { player: 'p0' }), 'within the cap').toBe(EVENTS.player.sickness.cap);
+      const cap = EVENTS.player.sickness.cap;
+      try {
+        EVENTS.player.sickness.cap = 0.1;
+        expect(chance(0.4), 'within the row\'s cap').toBe(0.1);
+      } finally {
+        EVENTS.player.sickness.cap = cap;
+      }
 
       const other = newGame();
       const before = eventChance(other, EVENTS.player.muleTheft, 'development', { player: 'p0' });
@@ -171,8 +174,8 @@ describe('needs C18: a sick colony reaches its players\' crews (RULE-15)', () =>
 
   it("needs T-AC-26: the sick cut comes after RULE-12's crew factor and before the Energy turn-off", () => {
     withHealth(() => {
-      // A farm making 5 whose crews got no Food: f 0.5 gives 2.5 → 3, then 0.85 gives 2.55 → 3. The other order gives 2.
-      const { lines } = produce([{ good: 'food', out: 5 }], 0.3, 0, { food: 1, water: 0 });
+      // A farm making 8 whose crews got no Food: f 0.5 gives 4, then 0.85 gives 3.4 → 3. The other order gives 6.8 → 7, then 3.5 → 4.
+      const { lines } = produce([{ good: 'food', out: 8 }], 0.3, 0, { food: 1, water: 0 });
       expect(lines[0]!.made).toBe(3);
       expect(lines[0]!.parts.map((p) => p.why)).toEqual(['ground', 'crewShort', 'crewSick']);
     });

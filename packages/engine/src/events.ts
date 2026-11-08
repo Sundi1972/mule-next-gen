@@ -1,5 +1,5 @@
-import { COLONY, EVENTS, GAME, GOOD_CONFIG, HARDSHIP, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
-import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
+import { COLONY, EVENTS, GAME, GOOD_CONFIG, HARDSHIP, HEALTH, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, sickShare, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
 import { airBand, cleanAir, type AirBand } from './pollution.js';
@@ -418,7 +418,7 @@ export interface ChanceInput {
 
 /**
  * A row's chance in this phase (RULE-1): the phase's base plus the row's raises and minus its lowers, never below 0
- * or above its cap; 0 in a phase the row doesn't list.
+ * or above its cap; 0 in a phase the row doesn't list. A player's sickness also rises with the colony's (needs RULE-14).
  */
 export function eventChance(state: GameState, row: EventRow, phase: Phase, input: ChanceInput = {}): number {
   const base = row.phases[phase];
@@ -427,8 +427,8 @@ export function eventChance(state: GameState, row: EventRow, phase: Phase, input
   if (row.needsColony && !state.colony) return 0;
   if (state.colony && row.neverIn?.includes(moodBand(state.colony.happiness))) return 0;
   if (state.colony && row.neverInAir?.includes(airBand(state.air).name)) return 0;
-  const { air, pollution, wealth, follows, mood, objects, foodPrice } = influences(state, row, input);
-  return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows + mood + objects + foodPrice));
+  const { air, pollution, wealth, follows, mood, objects, foodPrice, colonySick } = influences(state, row, input);
+  return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows + mood + objects + foodPrice + colonySick));
 }
 
 /** Each influence's share of a row's chance; 0 for one the row doesn't read, or with nothing to read. */
@@ -448,6 +448,7 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
     mood: state.colony ? moodPoints(row, state.colony) : 0,
     objects: (state.colony?.projects ?? []).filter((p) => p.stage === 'standing').reduce((sum, p) => sum + (row.objects?.[p.id] ?? 0), 0),
     foodPrice: row.foodPrice && state.store.posted.food > row.foodPrice.factor * GOOD_CONFIG.food.refPrice ? row.foodPrice.points : 0,
+    colonySick: row === EVENTS.player.sickness ? (HEALTH.playerSpill * (sickShare(state) ?? 0)) / HEALTH.cap : 0,
   };
 }
 

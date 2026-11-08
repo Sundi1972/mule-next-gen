@@ -236,6 +236,12 @@ function colonistMealAt(state: GameState): ColonistMealView | null {
   return { colonists: meal.colonists, food: whole(meal.food), water: whole(meal.water) };
 }
 
+/** The Food and Water a player's household and crews eat at upkeep: the view's `needs`, without the crews' Medicine. */
+function upkeepNeeds(state: GameState, playerId: string): { food: number; water: number } {
+  const { food, water } = needsOf(state, playerId);
+  return { food, water };
+}
+
 /** The colony's health as the gauge reads it (needs §3): null while colony health is off or there is no colony. */
 function colonyHealthAt(state: GameState): ColonyHealthView | null {
   const sick = sickShare(state);
@@ -1750,7 +1756,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             claimsLeft: GAME.claimsPerGrant - me.claimsThisGrant,
             hungry: me.hungry,
             sick: me.sick,
-            needs: needsOf(state, me.id),
+            needs: upkeepNeeds(state, me.id),
             monthNeeds: monthNeeds(state, me.id),
             devEndsAt: state.phase === 'development' ? this.devEndsAt : null,
             devSeconds: me.devSeconds,
