@@ -487,14 +487,17 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
   // Energy first, then Water: a rule that finds its install allowed rules the rest out, and the next one finds none.
-  if (STRATEGIST.energyFirst && needEnergy) firstOf(cands, 'energy', 'no Energy plant of my own yet');
+  if (STRATEGIST.energyFirst && needEnergy) firstOf(cands, 'energy', ENERGY_FIRST);
   if (STRATEGIST.waterFirst && needWater) firstOf(cands, 'water', 'my wells don\'t cover my Water yet');
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
+export const ENERGY_FIRST = 'no Energy plant of my own yet';
+
 /**
  * STRATEGIST.energyFirst and waterFirst: when an install of `outfit` is allowed, rules out every other candidate, "Keep
- * the cash" too, for `why`. Does nothing when another rule already left only its own installs.
+ * the cash" too, for `why`. Does nothing when another rule already left only its own installs. On the floor, the
+ * draft's shoreless narrows Energy first to reachable installs: its vetoes come off when no reachable plant is left.
  */
 function firstOf(cands: Candidate<DevAction>[], outfit: Outfit, why: string): void {
   const isIt = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === outfit;

@@ -243,10 +243,11 @@ type Seated = { page: Page; name: string };
 function busyNews(room: unknown): void {
   const game = (room as { game?: { news?: unknown; ctx?: { changed?: unknown } } }).game;
   check(Array.isArray(game?.news) && typeof game?.ctx?.changed === 'function', 'the room game still exposes its news and ctx');
-  (game as { news: string[] }).news = [
-    'Brix is Governor (appointed) · the colony fund pays the Governor.',
-    'Brix listed plot 3·4 for the land auction at 160 cr, and the colony lists plot 9·2.',
-    'Welcome to the colony. Talk tactics, then grab land.',
+  // The server keeps each line with the seats it names (F-11); the fixture's lines mark none.
+  (game as { news: { text: string; who: string[] }[] }).news = [
+    { text: 'Brix is Governor (appointed) · the colony fund pays the Governor.', who: [] },
+    { text: 'Brix listed plot 3·4 for the land auction at 160 cr, and the colony lists plot 9·2.', who: [] },
+    { text: 'Welcome to the colony. Talk tactics, then grab land.', who: [] },
   ];
   (game as { ctx: { changed(): void } }).ctx.changed();
 }
