@@ -1,22 +1,25 @@
-import type { MuleView } from '@mule/protocol';
+import type { MuleView, PlayerView } from '@mule/protocol';
 import type { ReactNode } from 'react';
 import { AiMark } from '../chat/Chat';
 
 type NewsView = Pick<MuleView, 'news' | 'newsLines' | 'players'>;
+/** What the marker reads of a seat: its name, and whether a computer plays it. */
+type Seat = Pick<PlayerView, 'id' | 'name' | 'isAi'>;
 
 /**
  * Words that name seats, with " · AI" after each computer seat's name (Heiko, 7 Nov: a quiet mark wherever a computer
  * seat is named). `who` holds one seat id per name in the words, in their order, repeats kept (as NewsLine.who): the
- * news lists and the deal cards' break words both draw through this, so the mark follows one rule everywhere.
+ * news lists and the deal cards' break words both draw through this, so the mark follows one rule everywhere. The caller
+ * pairs the words with their ids: a name the words spell differently from `players` is passed over, unmarked.
  */
-export function SeatWords({ text, who, players }: { text: string; who: readonly string[]; players: NewsView['players'] }) {
+export function SeatWords({ text, who, players }: { text: string; who: readonly string[]; players: readonly Seat[] }) {
   return <>{marked(text, who, players)}</>;
 }
 
 /**
  * News line `i` as a list shows it, through SeatWords. The seats come from newsLines, and only when that line's text is
- * the one shown, so an older server's view, or one whose lists drift, shows the words as they are. Every news list
- * draws its lines through this: the TV's news column, the phone's colony desk and its results screen.
+ * the one shown, so an older server's view, or one whose lists drift, shows the words as they are. The TV's news
+ * column draws its lines through this.
  */
 export function NewsWords({ view, i }: { view: NewsView; i: number }) {
   const text = view.news[i] ?? '';
@@ -28,7 +31,7 @@ export function NewsWords({ view, i }: { view: NewsView; i: number }) {
  * `who` names the seats in the words' order, so each is found after the one before, as a whole word ("Al", never
  * "Also"). A person's name is passed over unmarked, so a computer seat of the same name is found in its own place.
  */
-function marked(text: string, who: readonly string[], players: NewsView['players']): ReactNode[] {
+function marked(text: string, who: readonly string[], players: readonly Seat[]): ReactNode[] {
   const parts: ReactNode[] = [];
   let from = 0;
   for (const id of who) {
