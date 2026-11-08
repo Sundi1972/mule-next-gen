@@ -35,7 +35,7 @@ function edit(state: GameState): Politics {
   return state.politics;
 }
 
-/** edit() for diplomacy.ts, the only other writer of Politics (the deal cards). */
+/** edit() for diplomacy.ts, which writes the deal cards; sabotage.ts keeps its own copy for the sabotage fields (§9). */
 export { edit as editPolitics };
 
 function currentElection(state: GameState): Shared<Election> | null {

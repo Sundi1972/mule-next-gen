@@ -10,13 +10,10 @@ import { PERCENT } from './units.js';
 import { GOODS, type GameState, type Good, type MonthEvent, type SabotageOrder, type SabotageTarget } from './types.js';
 
 /**
- * Sabotage (slice 4): orders, guards, investigations, fines and rumours. This file is the contract freeze (S4-C20):
- * every export has its final signature and a stub body, so engine, server, AI and screens compile against it while
- * the rules land task by task. The flow functions do nothing, `sabotageEvents` files nothing, the intent functions
- * refuse and `captureOdds` is 0. Nothing but this file writes `politics.sabotage` or `politics.guards`.
+ * Sabotage (slice 4): secret orders, their resolution at production, the one reveal, market rumours, the Sheriff's
+ * guards, investigations and fines, and crews paid at upkeep (spec docs/specs/2026-11-07-ws7-slice4-sabotage.md).
+ * Nothing but this file writes `politics.sabotage`, `politics.guards` or `politics.rumoured` (§9).
  */
-
-const NOT_BUILT = 'Sabotage is not built yet';
 
 /** What each kind of order costs and how likely it is to work and to be seen, in credits and chances 0..1. */
 export type OrderTerms = Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
@@ -130,13 +127,13 @@ export function investigate(state: GameState, playerId: string, orderId: string)
   return state.politics!.sabotage[at]!;
 }
 
-/** The Sheriff fines an order's culprit `base` credits, before the ban's multiplier (S4-RULE-8). */
 /** S4-RULE-8's refusal for a fine off the steps, built from POLITICS.sheriff.fine.steps so the moves' text can't drift from config. */
 export function fineStepsWords(): string {
   const { steps } = POLITICS.sheriff.fine;
   return `A fine is ${steps[0]} to ${steps.at(-1)} cr, in steps of ${steps[1]! - steps[0]!}`;
 }
 
+/** The Sheriff fines an order's culprit `base` credits, before the ban's multiplier (S4-RULE-8). */
 export function fineCulprit(state: GameState, playerId: string, orderId: string, base: number): void {
   const refused = refusal(state, playerId, { votes: 'Fines are levied once the votes are over', sheriff: 'Only the Sheriff fines' });
   if (refused) throw refused;
