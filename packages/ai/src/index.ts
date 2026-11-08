@@ -18,3 +18,4 @@ export * from './hands/develop.js';
 export * from './hands/lot.js';
 export * from './hands/vote.js';
 export * from './llm/index.js';
+export * from './social/index.js';
