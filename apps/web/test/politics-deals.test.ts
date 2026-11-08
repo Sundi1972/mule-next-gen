@@ -328,6 +328,9 @@ describe('the deal composer (S3-C17)', () => {
     const refusal: Toast = { id: 2, message: 'Brix has not answered your last card' };
     act(() => setState({ toasts: [...state.toasts, refusal] }));
     expect(text('composer-a-refusal')).toContain(refusal.message);
+    // A toast after it is not this send's answer: the composer keeps the first one that came after the send.
+    act(() => setState({ toasts: [...state.toasts, { id: 3, message: 'Not connected. Trying again…' }] }));
+    expect(text('composer-a-refusal'), "a later toast is not this card's refusal").toContain(refusal.message);
 
     // Her own vote: only a declared candidate who is not herself, and no law is up.
     tap('composer-a-kind-vote');
