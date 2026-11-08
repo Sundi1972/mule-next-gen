@@ -5,7 +5,7 @@ import { PhoneBody } from './PhoneBody';
 import { Prototype } from './Prototype';
 import { MEASURED, SHERIFF_MEASURED } from './measured';
 import { TV_NOTE, type TvFocus } from './tv/TvFor';
-import { TV_DECISIONS, TV_FIT, TV_FLOOR } from './tv/measured';
+import { TV_FIT, TV_FLOOR } from './tv/measured';
 import { POLITICS } from '@mule/engine';
 import type { ShellVariant } from './proposed/Shell';
 import { SCREENS, stateOf, type State } from './scenarios';
@@ -48,8 +48,6 @@ const DECISIONS: [string, string][] = [
   ['D16', 'The colony picture is WS10’s rendered grounds, mounted exactly as the phone colony desk does: <Grounds colony={view.colony} size="phone" light={view.phase === \'upkeep\' ? \'dusk\' : \'day\'} /> (apps/web/src/components/Grounds.tsx; PM ruling 8 Nov, per WS10). The real buildings at their stage on their plate, lit by wealth; screens never draw buildings. It leads the Colony tab in the desk’s 212 px box, letterboxed on wider stages; Overview shows no colony picture (its map is the land, not the grounds).'],
   ['D17', '“This month” under Overview’s map is a fixed box, two lines of two, so the map is the same size whatever the needs or the month say (PM height check, 8 Nov; scripts/measure-needs.mjs). The figures never moved it (the Short row is one truncated line, 1 or 120); the row count did, through the box’s height: at 844 (A) 506 × 304 with nothing waiting, 312 × 187 with five rows. Now: nothing waiting is a quiet line; past four, three rows and “+N more” naming what waits behind it, which turns the box’s page.'],
   ['D18', 'The Sheriff’s month is played at the planning month’s table: Kai is the Sheriff (D15), Brix the Governor and the victim, Lena the one caught (PM, 8 Nov, replacing “Brix guards his own plot”). Three phones get three different WS8 lines, and the table is the one Heiko already knows; “+75 to Brix” stays. On the TV (PM, 8 Nov): the fine is the news’s first line, “Lena was fined 150 for sabotage; half to Brix”, with no incidents list (incidents are news lines only; the side column has no room within the fit); at month 6’s end the fund panel shows its total only (P15): “Fines 150 in” and “To victims 75 out” are the phones’ alone, and Brix’s phone keeps “+75 cr (half of Lena’s fine)”.'],
-  // The TV's own decisions (D19 on), kept by mock-hub-tv in src/tv/measured.ts.
-  ...TV_DECISIONS,
 ];
 
 /**
