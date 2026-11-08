@@ -468,6 +468,26 @@ describe('S4-PR-11 part 2: the guard pick offers only the plots the server says 
   });
 });
 
+describe('S4-PR-11 part 3: the bounty on the Sheriff’s desk (AM-11)', () => {
+  const withBounty = (bounty: number | undefined) => ({ politics: { sabotage: { terms: TERMS, incidents: INCIDENTS, sheriff: { guards: 2, investigations: 1, investigationsLeft: 1, ...(bounty === undefined ? {} : { bounty }) } } } });
+
+  it("S4-PR-11: the desk says what each catch pays, from the view's bounty, on the Cases line (it does not grow the folded desk)", () => {
+    mount(brix({}, withBounty(75)));
+    expect(text('sheriff-bounty')).toBe('75 cr for each saboteur you catch.');
+    expect(byTestid('b-cases-head').textContent).toContain('75 cr for each saboteur you catch.');
+  });
+
+  it('S4-PR-11: with no bounty in the view the desk shows no line', () => {
+    mount(brix());
+    expect(has('sheriff-bounty')).toBe(false);
+  });
+
+  it('S4-PR-11: the tabbed hub’s Sheriff sub-tab shows the same line', () => {
+    mount(brix({}, withBounty(40)), () => createElement(Sheriff.PickNavProvider, { value: { desk: '', tool: '', focus: null, openDesk() {}, pickTool() {}, takeFocus() {}, tab: 'politics', sub: 'sheriff', pick: null, open() {}, startPick() {}, endPick() {} }, children: createElement(Sheriff.SHERIFF_SUB.Body) }));
+    expect(text('sheriff-bounty')).toBe('40 cr for each saboteur you catch.');
+  });
+});
+
 describe('S4-C15, P8: guarding on the one map', () => {
   it("S4-B-AC-10: Guard a plot turns the hub's map to Guard under its bar; a tap posts or lifts; Done sends {type:'guard', tiles} and goes back", () => {
     mount(brix());

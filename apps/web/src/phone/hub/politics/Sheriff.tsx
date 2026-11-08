@@ -295,10 +295,10 @@ function DeskBody({ onGuard }: { onGuard(): void }) {
         <DeskWaits why={sheriff.canAct} />
       </>
     );
-  return <CaseFile view={view} sheriff={sheriff} incidents={view.politics?.sabotage?.incidents ?? []} onGuard={onGuard} />;
+  return <CaseFile view={view} sheriff={sheriff} incidents={view.politics?.sabotage?.incidents ?? []} bounty={view.politics?.sabotage?.sheriff.bounty} onGuard={onGuard} />;
 }
 
-function CaseFile({ view, sheriff, incidents, onGuard }: { view: MuleView; sheriff: Sheriff; incidents: IncidentView[]; onGuard(): void }) {
+function CaseFile({ view, sheriff, incidents, bounty, onGuard }: { view: MuleView; sheriff: Sheriff; incidents: IncidentView[]; bounty: number | undefined; onGuard(): void }) {
   const client = useClient();
   const newestToast = useNewestToast();
   const [asked, setAsked] = useState<Asked>({});
@@ -337,7 +337,15 @@ function CaseFile({ view, sheriff, incidents, onGuard }: { view: MuleView; sheri
         <GuardRow view={view} sheriff={sheriff} onMap={onGuard} />
       </div>
       <section className="flex flex-col gap-1" data-testid="b-cases">
-        <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]/shell:text-xs!">Cases</h3>
+        {/* The bounty sits on the Cases line, right of its label, so the folded desk does not grow (measured 294 px at 357). */}
+        <div className="flex items-baseline justify-between gap-2" data-testid="b-cases-head">
+          <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]/shell:text-xs!">Cases</h3>
+          {bounty !== undefined && (
+            <span className="min-w-0 truncate text-[11px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="sheriff-bounty">
+              {bounty} cr for each saboteur you catch.
+            </span>
+          )}
+        </div>
         {live.length === 0 && (
           <p className="text-xs text-ink-3" data-testid="b-no-cases">
             No open case: nothing to investigate or fine.
