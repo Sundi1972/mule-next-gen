@@ -109,7 +109,7 @@ The layer never redraws a building. If something needs a new shape, it is a new 
 
 **Colonists are sprite sheets** (Heiko's pick, 8 Nov: Astronaut A, CC0, poly.pizza 3hC2i0CTuO). `walker/walk.py`
 renders a rigged walk in the shared camera and light (§2, §3) on a shadow catcher: 4 headings (+x, +y, −x, −y) × 12
-frames, a 192 × 224 cell with the feet at (96, 197), 1.75 m tall. `COLONY_WALK_TINT="<suit>,<trim>"` renders those two
+frames, a 320 × 256 cell (4.2 m × 3.4 m) with the feet at (120, 197), left of centre so the day shadow falling down-right stays inside, 1.75 m tall. `COLONY_WALK_TINT="<suit>,<trim>"` renders those two
 materials neutral grey and adds a mask sheet (suit red, trim green, once with the day light); the player colours (the
 suit) and a palette of three (the helmet and trims, in place of hair) are laid through the mask offline by `walker/tint.py`
 (in linear light, so the render's shading stays its own), with an outline sheet (the figure's alpha grown 4 px, less
