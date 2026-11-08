@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, crewFactor, DEV_WALK, factoryFit, isFactory, monthNeeds, needsOf, observe, rawOutput, UPKEEP, type GameState, type Good, type Outfit, type ProcessedGood, type Tile } from '@mule/engine';
+import { advancePhase, createGame, crewFactor, DEV_WALK, factoryFit, GOOD_CONFIG, isFactory, monthNeeds, needsOf, observe, rawOutput, RECIPES, UPKEEP, type GameState, type Good, type Outfit, type ProcessedGood, type Tile } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { afterTax, foodUnits, installGain, keptUnits, monthlyNet, monthWalkSeconds, secondValue, unitValues, wholeNextMonth } from '../src/value.js';
@@ -102,5 +102,25 @@ describe("PR-8 (needs C15, PM ruling 8 Nov): no Food carry; the household's Food
     expect(units).toHaveLength(eat);
     units.forEach((x, k) => expect(x, `unit ${k}`).toBeCloseTo(k < UPKEEP.baseFood ? hunger : (UPKEEP.crewDrop * output) / crews, 6));
     expect(unitValues(obs, o, 'food', m).block, 'the block is what upkeep eats').toBe(eat);
+  });
+});
+
+describe("PR-8 (needs C15): a factory's Food units are worth the factory's run, not the household's meal", () => {
+  it("with a Medicine works, the Food it turns is valued at its share of the works' output, unit by unit", () => {
+    const m = mind();
+    const state = development(undefined);
+    state.tiles[0]!.outfit = 'medicine';
+    const obs = observe(state, ME);
+    const o = outlook(obs, ME, { lookAhead: m.level.lookAhead });
+    const works = obs.tiles[0]!;
+    const q = RECIPES.medicine.inputs.food ?? 0;
+    expect(q, 'the case: the works turns Food').toBeGreaterThan(0);
+    const inputs = Object.values(RECIPES.medicine.inputs).reduce((n, x) => n + (x ?? 0), 0);
+    const each = afterTax(obs, factoryFit(obs, works, 'medicine', ME).output * o.price('medicine')) / inputs;
+    const add = Math.ceil(q / (1 - GOOD_CONFIG.food.spoilage));
+    const v = unitValues(obs, o, 'food', m);
+    expect(v.block, "the block: the meal, then the works' Food").toBe(needsOf(obs, ME).food + add);
+    const near = v.buy.filter((x) => Math.abs(x - each) < 1e-6).length;
+    expect(near, "the works' units each buy at the works' share").toBeGreaterThanOrEqual(add);
   });
 });
