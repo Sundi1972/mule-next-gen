@@ -1039,8 +1039,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
     if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
     this.enterPhase();
-    // After the phase opens: its own report (production's harvest line, game over) replaces the news and keeps first place.
-    this.noteSabotage(settledIn, true);
+    // After the phase opens: its own report (production's harvest line, game over) replaces the news and keeps first place; any other opening writes none, so the lines go on top.
+    this.noteSabotage(settledIn, opened.phase === 'production' || opened.phase === 'gameOver');
   }
 
   private enterPhase(): void {
