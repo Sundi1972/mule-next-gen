@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { BRAIN } from '@mule/engine';
-import type { Prompt } from '@mule/ai';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { advancePhase, BRAIN, createGame, type GameState } from '@mule/engine';
+import { AiSeat, playbookSource, type Prompt } from '@mule/ai';
 import { createBudget, MOVE_CALL, worstCaseUsd } from '../src/brain/budget.js';
 import { WRITE_CALLS, WRITE_FALLBACK_MODEL, WRITE_KINDS } from '../src/brain/client.js';
+import { createBrain } from '../src/brain/index.js';
+import { Playbooks } from '../src/brain/playbooks.js';
+import { fakeSdk, KEY, readLedger, sdkMessage, type SdkParams } from './brain-fakes.js';
 
 /** The game budget these tests use; two registered seats get a share of 0.5 each. */
 const GAME_BUDGET = 1;
@@ -235,4 +241,114 @@ describe('INV-table-budget', () => {
     setSpent('h', 'x', 0.1);
     expect(budget.allow('h', 'x', 0.05)).toEqual(LOCKS);
   });
+});
+
+let dir: string;
+
+/**
+ * S-B1's measured means per call (apps/server/data/social-spike-ledger-2026-10-29.jsonl, 29 Oct), by model: the folded
+ * strategy call that carries the social reasoning, and the small reply call. The month's other write, the auction's
+ * playbook, has no measure of its own there; it is billed as the small call.
+ */
+const MEASURED = {
+  'claude-sonnet-5-5': { folded: { input: 1_258, cached_read: 1_352, cache_write: 1_352, output: 693 }, small: { input: 602, output: 115 } },
+  'claude-haiku-5-5': { folded: { input: 1_289, cached_read: 1_803, cache_write: 901, output: 1_068 }, small: { input: 602, output: 297 } },
+} as const;
+const MONTHS = 12;
+const SONNET = 'claude-sonnet-5-5';
+const HAIKU = 'claude-haiku-5-5';
+
+/** Long enough for a played game on the fake clock, many times over. */
+const GAME_MS = 120_000;
+
+/** Advances the engine state phase by phase until `phase` opens, or the game is over. */
+const advanceTo = (state: GameState, phase: GameState['phase']) => {
+  while (state.phase !== phase && state.phase !== 'gameOver') advancePhase(state);
+};
+
+/** A fake model billing each call at MEASURED for the model it names: a social land write as folded, any other as small. */
+const billing = () =>
+  fakeSdk((_n, params: SdkParams) => {
+    const model = params.model as keyof typeof MEASURED;
+    const social = 'messages' in ((params.output_config?.format?.schema as { properties?: object } | undefined)?.properties ?? {});
+    const text = social ? JSON.stringify({ edits: [], line: '', messages: [] }) : JSON.stringify({ edits: [], line: '' });
+    return sdkMessage(text, MEASURED[model][social ? 'folded' : 'small']);
+  });
+
+/**
+ * `seats` Smart seats play `MONTHS` months of asks as the game makes them: the land write at the start and at each
+ * upkeep, the auction's in production. Returns each call's ledger line, in order.
+ */
+async function table(seats: number) {
+  const sdk = billing();
+  const logPath = path.join(dir, `costs-${seats}.jsonl`);
+  const brain = createBrain({ gameId: `g-${seats}`, env: KEY, logPath, sdkFactory: () => sdk });
+  const players = Array.from({ length: seats }, (_, i) => ({ id: `ai${i}`, name: `AI ${i}`, isAi: true }));
+  const state = createGame({ seed: 4, players, maxMonths: MONTHS, politics: true });
+  const ais = players.map((p, i) => new AiSeat({ id: p.id, name: p.name, persona: 'trader', level: 'trader', seed: i + 1 }));
+  const playbooks = new Playbooks({ brain, source: playbookSource(ais), seats: ais, say: () => {} });
+  // The fake answers at once; a step of the clock lets every open write settle.
+  const settle = () => vi.advanceTimersByTimeAsync(1_000);
+  playbooks.ask(state, 1);
+  for (let month = 1; month <= MONTHS; month++) {
+    await settle();
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    advanceTo(state, 'production');
+    playbooks.askPhase(state, 'auction', []);
+    await settle();
+    advanceTo(state, 'auction');
+    playbooks.takePhase(state, 'auction');
+    advanceTo(state, 'upkeep');
+    playbooks.ask(state, month + 1);
+    if (month < MONTHS) advanceTo(state, 'planning');
+  }
+  await settle();
+  brain.finish();
+  const calls = readLedger(logPath).filter((l) => l.type === undefined && l.outcome !== 'budget');
+  return { calls, total: calls.reduce((sum, l) => sum + (l.usd as number), 0), counted: brain.countedUsd() };
+}
+
+describe('T-AC-B4: the 5-seat budget (spec B RULE-B5)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-budget-social-'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('T-AC-B4: 5 Smart seats, a fake model billing at S-B1\'s option-(1) prices for 12 months: the total stays at or below BRAIN.gameBudgetUsd; Sonnet early, Haiku late', async () => {
+    const { calls, total, counted } = await table(5);
+    // Every seat reasoned every month, and nothing was refused for want of a model.
+    const strategy = calls.filter((l) => l.kind === 'strategy');
+    expect(strategy).toHaveLength(5 * MONTHS);
+    expect(total).toBeLessThanOrEqual(BRAIN.gameBudgetUsd);
+    expect(counted).toBeLessThanOrEqual(BRAIN.gameBudgetUsd);
+    // Sonnet early, Haiku late: each seat's first land write is Sonnet's, its last Haiku's.
+    for (let i = 0; i < 5; i++) {
+      const own = strategy.filter((l) => l.seat === `ai${i}`);
+      expect(own[0]!.model, `ai${i}'s first`).toBe(SONNET);
+      expect(own.at(-1)!.model, `ai${i}'s last`).toBe(HAIKU);
+      // Once a seat falls back to Haiku it stays there: the share only shrinks.
+      const first = own.findIndex((l) => l.model === HAIKU);
+      expect(own.slice(first).every((l) => l.model === HAIKU)).toBe(true);
+    }
+  }, GAME_MS);
+
+  it('T-AC-B4: the same at 4 seats: every land write, the monthly social reasoning, is Sonnet', async () => {
+    const { calls, total } = await table(4);
+    const strategy = calls.filter((l) => l.kind === 'strategy');
+    expect(strategy).toHaveLength(4 * MONTHS);
+    expect(strategy.map((l) => l.model)).toEqual(strategy.map(() => SONNET));
+    expect(total).toBeLessThanOrEqual(BRAIN.gameBudgetUsd);
+    for (let i = 0; i < 4; i++) {
+      const auction = calls.filter((l) => l.kind === 'playbook' && l.seat === `ai${i}`);
+      expect(auction).toHaveLength(MONTHS);
+      expect(auction.slice(0, -1).every((l) => l.model === SONNET)).toBe(true);
+      // RULE-A5's worst-case margin keeps the seat's share: Sonnet's worst case for the last auction write no longer fits.
+      expect(auction.at(-1)!.model).toBe(HAIKU);
+    }
+  }, GAME_MS);
 });
