@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { POLITICS, RuleError, WALK, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -10,6 +10,14 @@ import { fakeContext, seats } from './fake-context.js';
  */
 
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
+/** The game's private seams the tests arrange or watch: the AI seats, their vote hands, the ready set and the hands' tick. */
+interface Seams {
+  ai: Map<string, { planMonth: (...args: unknown[]) => void }>;
+  voteHands: Map<string, { tick: (state: GameState, dt: number, act: (action: unknown) => boolean) => void }>;
+  startPlanning: () => void;
+  tickVoteHands: (dt: number) => void;
+}
+const seamsOf = (game: MuleGame) => game as unknown as Seams;
 
 /** Month 1's planning proper: Heiko governing, no vote open, the tax at its start (5%). */
 function planningProper() {
@@ -55,6 +63,10 @@ function refusal(run: () => void): string {
 describe('S5-C7: the server opens the overrule ballot where planning already ends', () => {
   it('S5-T-AC-10: a call opens the ballot at the last Ready; after the reveal planning ends at once, with no second planning proper', () => {
     const { game, state, run } = called();
+    // Planning proper opened once, with the AI seat's planMonth; the ballot and its end must not plan the month a second time.
+    const planned = vi.spyOn(seamsOf(game).ai.get('s3')!, 'planMonth');
+    seamsOf(game).startPlanning();
+    expect(planned).toHaveBeenCalledTimes(1);
     game.handle('s1', { type: 'ready' });
     expect(game.viewFor(null).phase, 'one Ready is not the last').toBe('planning');
     expect(state.politics!.overrule!.stage).toBe('called');
@@ -72,6 +84,7 @@ describe('S5-C7: the server opens the overrule ballot where planning already end
     run(POLITICS.overrule.revealMs + 1_000);
     expect(state.politics!.overrule!.stage, 'over, and planning with it').toBe('over');
     expect(game.viewFor(null).phase, 'no second planning proper').not.toBe('planning');
+    expect(planned, 'no second planMonth across the ballot and the reveal').toHaveBeenCalledTimes(1);
     expect(state.treasury.salesTax, 'two of three votes: a majority undoes the raise').toBeCloseTo(state.politics!.taxAtStart);
   });
 
@@ -113,6 +126,48 @@ describe('S5-C7: the server opens the overrule ballot where planning already end
     expect(ready().s2, 'and at the new budget').toBe(false);
     expect(game.viewFor(null).politics!.budget).toMatchObject({ setBy: 's1', kept: 10 });
     expect(game.viewFor(null).news.join(' ')).toMatch(/Heiko/);
+  });
+
+  it("S5-T-AC-10: the Governor's own Ready stays when they change the tax or the budget", () => {
+    const { game, ready } = planningProper();
+    game.handle('s1', { type: 'ready' });
+    game.handle('s1', { type: 'setTax', percent: 7 });
+    game.handle('s1', { type: 'setBudget', shares: { projects: 70, welfare: 20, security: 0 } });
+    expect(ready(), "Heiko's own Ready is not Mia's to look again at").toMatchObject({ s1: true, s2: false });
+  });
+
+  it("S5-T-AC-10: a setTax or setBudget that changes nothing leaves the others' Ready as it was", () => {
+    const { game, state, ready } = planningProper();
+    const budget = { projects: 100, welfare: 0, security: 0 };
+    game.handle('s2', { type: 'ready' });
+    game.handle('s1', { type: 'setTax', percent: Math.round(state.treasury.salesTax * 100) });
+    expect(ready().s2, 'the same tax').toBe(true);
+    game.handle('s1', { type: 'setBudget', shares: budget });
+    expect(ready().s2, 'the same budget, the default in force').toBe(true);
+    game.handle('s1', { type: 'setBudget', shares: { projects: 90, welfare: 10, security: 0 } });
+    expect(ready().s2, 'a different budget').toBe(false);
+    game.handle('s2', { type: 'ready' });
+    game.handle('s1', { type: 'setBudget', shares: { projects: 90, welfare: 10, security: 0 } });
+    expect(ready().s2, 'the same budget again').toBe(true);
+  });
+
+  it('S5-T-AC-10: every non-Governor seat judges an AI Governor\'s tax, even a seat whose hand ticks before the Governor\'s (S5-RULE-12)', () => {
+    const { ctx } = fakeContext();
+    const game = new MuleGame(ctx, 7, { politics: true });
+    const table = [seats[0]!, seats[1]!, { id: 's3', name: 'Early', isAi: true, color: 2 }, { id: 's4', name: 'Late', isAi: true, color: 3 }];
+    game.start(table);
+    const state = engineOf(game);
+    state.politics = { ...state.politics!, governor: 's4', election: null, council: null, taxAtStart: state.treasury.salesTax };
+    // Seat order: s3's hand ticks before s4's. s4 governs and raises the tax inside the loop; s3 only watches the tax it is shown.
+    const seen: number[] = [];
+    const hands = seamsOf(game).voteHands;
+    hands.set('s3', { tick: (st) => void seen.push(Math.round(st.treasury.salesTax * 100)) });
+    hands.set('s4', { tick: (_st, _dt, act) => void act({ type: 'setTax', percent: 6 }) });
+    const was = Math.round(state.treasury.salesTax * 100);
+    seamsOf(game).tickVoteHands(0);
+    expect(state.treasury.salesTax, "the Governor's raise stood").toBeCloseTo(0.06);
+    expect(seen.at(-1), 'the earlier seat saw the new tax before any ballot').toBe(6);
+    expect(seen[0], 'it first ticked before the raise').toBe(was);
   });
 });
 
