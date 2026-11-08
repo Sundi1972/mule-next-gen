@@ -1065,7 +1065,9 @@ Security after that. It returns 0 in RC.
 /** A public order as every screen sees it: an incident. */
 export interface IncidentView {
   id: string; month: number; kind: SabotageTarget['kind'];
-  victim: string | null; at: { x: number; y: number } | null; good: Good; dir?: 'up' | 'down';
+  victim: string | null; at: { x: number; y: number } | null;
+  good: Good | null;                      // null only for a pending cut on a plot with no MULE (AM-7)
+  dir?: 'up' | 'down';
   worked: boolean;
   culprit: string | null;                 // only when culpritPublic (or on the orderer's own list)
   how: 'guard' | 'caught' | 'investigation' | null;
@@ -1305,7 +1307,7 @@ said      the news names the plot's good (the server read it off the plot's outf
 did       the engine records the cut crop on the order at resolution (`good`, set by resolveSabotage where it sets
           `victim`, for a power cut only; the sole writer is sabotage.ts); the server reads order.good, and reads the
           plot's outfit only for a pending order, which only its orderer sees. With no crop to name, the words say
-          "Ossa's plot" and the view leaves the incident's `good` out; nothing throws
+          "Ossa's plot" and the incident's `good` is null (IncidentView.good: Good | null); nothing throws
 because   the review found a plot's outfit null by the time the line was built (the MULE taken off, sold or stolen),
           which crashed the hook and with it every later intent, and a re-outfitted plot naming the wrong crop
 goal      S4-1, S4-2 — unchanged
