@@ -432,7 +432,7 @@ tomorrow     MUST filter, per the frozen HC-4 rule: keep the seat's own orders w
              order only when its effect or its culprit is public (outcome 'done' or 'caught', or
              culpritPublic), with `by` set to null unless culpritPublic, and `cost` 0; drop every other
              order (pending, or failed unseen). Keep politics.guards only for the sitting Sheriff (else []).
-             Keep politics.rumoured (public: the posted prices before the auction's shift).
+             Keep politics.rumoured (public: the goods rumoured), without the price before the shift (AM-9).
 logic        → §2 S4-RULE-12
 seam         observe.ts (WS1 named edit), beside the ballot hiding
 mechanism    in_place
@@ -1010,6 +1010,9 @@ export interface SabotageOrder {
   victim?: string | null;
   /** Set when it resolves: whether the effect happened. 'caught' alone cannot say whether the plot went dark. */
   worked?: boolean | null;
+  /** Set when a power cut resolves: the crop of the plot it hit then. Absent for a rumour (its good is target.good),
+   *  while pending, and on a void order (AM-7). */
+  good?: Good;
   /** The month the Sheriff investigated it; null never. Once-only, and the month's count (S4-RULE-7). */
   investigated?: number | null;
   /** The fine levied on it, once (S4-RULE-8). */
@@ -1063,7 +1066,9 @@ Security after that. It returns 0 in RC.
 /** A public order as every screen sees it: an incident. */
 export interface IncidentView {
   id: string; month: number; kind: SabotageTarget['kind'];
-  victim: string | null; at: { x: number; y: number } | null; good: Good; dir?: 'up' | 'down';
+  victim: string | null; at: { x: number; y: number } | null;
+  good: Good | null;                      // null only for a pending or void cut on a plot with no MULE (AM-7, AM-9)
+  dir?: 'up' | 'down';
   worked: boolean;
   culprit: string | null;                 // only when culpritPublic (or on the orderer's own list)
   how: 'guard' | 'caught' | 'investigation' | null;
@@ -1082,7 +1087,7 @@ sabotage?: {
   order: SabotageTarget | null;            // this month's pending order
   canOrder: true | 'off' | 'notPlanning';
   owed: number;                            // crew cost due at this month's upkeep
-  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];  // culprit = them
+  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] | 'void' })[];  // culprit = them; 'void' (AM-9)
 } | null;
 sheriff?: {                                 // only on the sitting Sheriff's view
   canAct: true | 'off' | 'notPlanning' | 'votesOpen';
@@ -1309,6 +1314,20 @@ goal      S4-1, S4-2 — unchanged
 ```
 
 ```
+AM-7 · 2026-11-08 · WS7 (build: S4-PR-5's logic review, finding C1) · the crop a power cut hit is recorded on the order
+
+target    §3 SabotageOrder; S4-RULE-12's news lines
+said      the news names the plot's good (the server read it off the plot's outfit when it built the line)
+did       the engine records the cut crop on the order at resolution (`good`, set by resolveSabotage where it sets
+          `victim`, for a power cut only; the sole writer is sabotage.ts); the server reads order.good, and reads the
+          plot's outfit only for a pending order, which only its orderer sees. With no crop to name, the words say
+          "Ossa's plot" and the incident's `good` is null (IncidentView.good: Good | null); nothing throws
+because   the review found a plot's outfit null by the time the line was built (the MULE taken off, sold or stolen),
+          which crashed the hook and with it every later intent, and a re-outfitted plot naming the wrong crop
+goal      S4-1, S4-2 — unchanged
+```
+
+```
 AM-8 · 2026-11-08 · WS7 (build: S4-PR-4's boundary review, finding I2) · a guard worth nothing is not posted
 
 target    S4-RULE-13, SheriffHand's guard row
@@ -1318,6 +1337,24 @@ did       a plot is guarded only if its guardValue is above 0, as an investigati
 because   a guard that protects nothing tells the table nothing and costs nothing to skip, and WS1 tunes against this
           row, so the build's floor is written down. Until WS1's values (S4-PR-3) every guardValue is 0, so a
           non-Rookie Sheriff posts no guards yet.
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-9 · 2026-11-08 · PM rulings (S4-PR-5's boundary review, findings I2 and m13) · the void entry; a rumour's real price
+
+target    S4-RULE-3 row 1 (a void order), §3 MyPoliticsView.sabotage.mine, S4-C9 (politics.rumoured in observe)
+said      row 1 promises the orderer "the crew found nothing to cut", but the engine drops a void order and no view
+          carried it; S4-C9 called politics.rumoured public, so observe() kept each entry's pre-shift price
+did       the void: the engine is unchanged (a void order leaves politics.sabotage, uncharged). The server keeps it
+          (noteSabotage's change list) and the orderer's own `mine` lists it as one entry: outcome 'void', public
+          false, how null, culprit the orderer, worked false, fine null, its crop frozen at the void. The protocol's
+          `mine` outcome widens to SabotageOrder['outcome'] | 'void'; never in incidents, a show event or another
+          view. WS8 draws "Month 5: power cut on Ossa's plot · Void. Your crew found nothing to cut; you pay nothing."
+          The price: observe() drops rumoured[].from; engine state keeps it for endRumours, which skips an entry
+          without it (an observed copy, as the AI's outlook runs).
+because   a promise no screen kept; and a computer seat must see what a human sees (HC-4): no phone gets the
+          pre-shift price, so no AI seat may either
 goal      S4-1, S4-2 — unchanged
 ```
 

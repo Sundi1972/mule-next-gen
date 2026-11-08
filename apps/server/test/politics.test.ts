@@ -641,7 +641,7 @@ describe('the politics view', () => {
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
     const reputation = engineOf(g.game).players.find((p) => p.id === 'brix')!.reputation;
-    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, candidates: expect.any(Object), promised: { election: {}, law: null } });
+    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, candidates: expect.any(Object), promised: { election: {}, law: null }, sabotage: null });
     // C46: Brix governs, the votes are over: his own view carries each proposal's cost (politics-candidates.test.ts).
     expect(brix.politics!.election!.stage, 'planning proper has started, so the Governor can set the tax').toBe('over');
     expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
@@ -1103,7 +1103,13 @@ const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
   expect(board.me).toBeNull();
-  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'brokenDeals', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'reputationReasons', 'retry', 'sheriff', 'tax', 'term', 'weights']);
+  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'brokenDeals', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'reputationReasons', 'retry', 'sabotage', 'sheriff', 'tax', 'term', 'weights']);
+  // S4-T-AC-8: the board carries the public sabotage view and nothing of an order's party (S4-RULE-12).
+  if (politics.sabotage) {
+    expect(keysOf(politics.sabotage), NEW_FIELD).toEqual(['incidents', 'sheriff', 'terms']);
+    expect(keysOf(politics.sabotage.sheriff), NEW_FIELD).toEqual(['guards', 'investigations', 'investigationsLeft']);
+    expect(typeof politics.sabotage.sheriff.guards, 'the count he may post, never the tiles').toBe('number');
+  }
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {
@@ -1132,3 +1138,50 @@ function expectBoardKeys(board: MuleView) {
   }
   for (const id of [...e.voted, ...e.done, ...e.waitingFor]) expect(seatIds, 'voted, done and waitingFor name seats, nothing more').toContain(id);
 }
+
+describe('S4-C13 (server): the four sabotage intents on the wire', () => {
+  let savedOn: boolean;
+  beforeEach(() => {
+    savedOn = POLITICS.sabotage.on;
+    POLITICS.sabotage.on = true;
+  });
+  afterEach(() => {
+    POLITICS.sabotage.on = savedOn;
+  });
+
+  it('S4-T-AC-8: well-formed sabotage, guard, investigate and fine reach the rules and are refused in words; malformed ones are Bad message; the board carries the allow-listed sabotage view', async () => {
+    const phone = await seatedPhone({ politics: true });
+    const board = await phone.board();
+    const refused = async (intent: object) => {
+      const error = phone.nextError();
+      phone.intent(intent);
+      return error;
+    };
+    expect(await refused({ type: 'sabotage', target: { kind: 'powerCut', tile: 0 } })).toBe("Pick another player's plot");
+    expect(await refused({ type: 'sabotage', target: { kind: 'rumour', good: 'food', dir: 'sideways' } })).toBe('A rumour moves a price up or down');
+    expect(await refused({ type: 'guard', tiles: [0] })).toBe('Guards are posted once the votes are over');
+    expect(await refused({ type: 'investigate', order: 'sab-nothing' })).toBe('Investigations are made once the votes are over');
+    expect(await refused({ type: 'fine', order: 'sab-nothing', amount: 100 })).toBe('Fines are levied once the votes are over');
+    phone.intent({ type: 'sabotage', target: null });
+
+    for (const bad of [
+      { type: 'sabotage' },
+      { type: 'sabotage', target: { kind: 'powerCut' } },
+      { type: 'sabotage', target: { kind: 'powerCut', tile: 1.5 } },
+      { type: 'sabotage', target: { kind: 'rumour', good: 7, dir: 'up' } },
+      { type: 'sabotage', target: { kind: 'rumour', good: 'food' } },
+      { type: 'guard', tiles: 'all' },
+      { type: 'guard', tiles: [1, 'x'] },
+      { type: 'investigate' },
+      { type: 'fine', order: 'sab-x' },
+      { type: 'fine', order: 'sab-x', amount: 'a lot' },
+    ]) expect(await refused(bad), JSON.stringify(bad)).toBe('Bad message');
+
+    const tv = await board((g) => !!g.politics?.sabotage);
+    expect(tv.me).toBeNull();
+    expect(Object.keys(tv.politics!.sabotage!).sort()).toEqual(['incidents', 'sheriff', 'terms']);
+    const mine = await phone.waitForGame((g) => !!g.me?.politics?.sabotage);
+    expect(mine.me!.politics!.sabotage).toEqual({ order: null, canOrder: true, owed: 0, mine: [] });
+    expect(mine.me!.politics!.sheriff ?? null, 'Brix is not the Sheriff').toBeNull();
+  });
+});

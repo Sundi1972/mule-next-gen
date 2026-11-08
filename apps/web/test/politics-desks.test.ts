@@ -264,7 +264,7 @@ describe('the Council desk (C66, E-1, E-6)', () => {
     expect(textOf(html, 'change-promise')).toBe('Change promise');
     expect(tagOf(html, 'run-governor')).toBeUndefined();
     expect(textOf(html, 'job-governor')).toBe('Sets the sales tax each month; the tax fills the colony fund. Paid 50 cr a month.');
-    expect(textOf(html, 'job-term')).toBe(`A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
+    expect(textOf(html, 'job-term')).toBe(`Nobody holds both. A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
   });
 
   it("C66, E-1: the agenda's door opens the desk on its focus: the promise sheet when you don't run, your candidacy when you do", () => {
@@ -376,6 +376,17 @@ describe('election day on the phone (C66, E-2)', () => {
     expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Ready to vote</);
   });
 
+  it('S4-B-AC-7 (screen, negative): with the default Governor alone the card reads as it did and has no Sheriff line', () => {
+    expect(POLITICS.offices).toEqual(['governor']);
+    const html = inHub(announce(4, 'closed'));
+    expect(textOf(html, 'offices-card')).toContain('What the Governor does');
+    expect(textOf(html, 'offices-card')).not.toContain('Sheriff');
+    expect(textOf(html, 'offices-card')).not.toContain('Nobody holds both');
+    expect(tagOf(html, 'job-sheriff')).toBeUndefined();
+    expect(tagOf(html, 'job-governor')).toBeDefined();
+    expect(textOf(html, 'job-term')).toBe(`A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
+  });
+
   it('C66, E-2: nobody running yet reads "nobody yet", not an empty list', () => {
     const html = inHub(view(politics({ next: 7, election: election() }), me({ canRun: { governor: 'closed' } }), { month: 4 }));
     expect(textOf(html, 'announce-field-governor')).toBe('Governornobody yet');
@@ -453,6 +464,26 @@ describe('election day on the phone (C66, E-2)', () => {
       expect(textOf(one, 'ballot-sheriff-s3')).toBe('Kai');
       expect(one).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"[^>]*>Cast my vote</);
       expect(inHub(both({ governor: 's2', sheriff: 's3' }))).toMatch(/<button(?![^>]*disabled="")[^>]*data-testid="ready"[^>]*>Cast my vote</);
+    });
+
+    it('S4-B-AC-7 (screen): the ceremony shows the Governor then the Sheriff, two ballot papers and the Sheriff\'s job line', () => {
+      const announceBoth = view(politics({ next: 7, candidates: { governor: ['s1', 's2'], sheriff: ['s3', 's4'] }, promises: { s1: CAP_8, s2: HOLD }, election: election({ waitingFor: SEATS }) }), me({ canRun: { governor: 'closed', sheriff: 'closed' } }), { month: 4 });
+      const html = inHub(announceBoth);
+      expect(textOf(html, 'day-title')).toBe('Election day: Governor and Sheriff');
+      expect(html.indexOf('data-testid="announce-field-governor-s1"')).toBeLessThan(html.indexOf('data-testid="announce-field-sheriff-s3"'));
+      const card = textOf(html, 'offices-card');
+      expect(card).toContain('What the offices do');
+      expect(card).not.toContain('What the Governor does');
+      expect(textOf(html, 'job-governor')).toBe(`Sets the sales tax each month; the tax fills the colony fund. Paid ${POLITICS.pay.governor} cr a month.`);
+      expect(textOf(html, 'job-sheriff')).toBe(
+        `Posts ${POLITICS.sheriff.guards} secret guards a month, investigates one sabotage, and fines the culprits. Paid ${POLITICS.pay.sheriff} cr a month.`,
+      );
+      expect(card).toContain(`Nobody holds both. A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
+      const papers = both({ governor: 's2' });
+      const ballotHtml = inHub(papers);
+      expect(tagOf(ballotHtml, 'ballot-governor-s1')).toBeDefined();
+      expect(tagOf(ballotHtml, 'ballot-sheriff-s3')).toBeDefined();
+      expect(textOf(onTv(announceBoth), 'offices-card')).toContain(`Paid ${POLITICS.pay.sheriff} cr a month.`);
     });
   });
 

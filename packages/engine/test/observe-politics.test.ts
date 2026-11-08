@@ -102,9 +102,9 @@ describe('what a seat sees of politics slices 3-5 (HC-4)', () => {
     expect(state.politics!.overrule!.ballots).toEqual({ brix: false, ossa: true, tam: true });
   });
 
-  it("rumoured: a rumour's existence is public, so every seat sees each rumoured good and its price before the shift", () => {
+  it("S4-T-AC-6: rumoured: a rumour's existence is public, so every seat sees each rumoured good; the price before the shift is the engine's, as a human is not told it either (PM ruling, HC-4)", () => {
     const state = politicsInPlay();
-    for (const id of SEATS) expect(observe(state, id).politics!.rumoured, id).toEqual(state.politics!.rumoured);
+    for (const id of SEATS) expect(observe(state, id).politics!.rumoured, id).toEqual(state.politics!.rumoured.map(({ good }) => ({ good })));
   });
 
   it("law ballot: the proposer's opening yes is public, never the proposer's current vote; a seat's own entry overrides it", () => {

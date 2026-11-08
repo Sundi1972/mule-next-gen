@@ -19,6 +19,10 @@ import {
   votesOpen,
   proposeLaw,
   answerDeal,
+  orderSabotage,
+  setGuards,
+  investigate,
+  fineCulprit,
   offerDeal,
   withdrawDeal,
   castLawVote,
@@ -99,6 +103,7 @@ import {
   type GoodReceipt,
   type MonthEvent,
   type NoticeEntry,
+  type SabotageOrder,
   type Outfit,
   type Phase,
   type PlaybookEntry,
@@ -113,7 +118,7 @@ import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
-import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, politicsView } from './politics-view.js';
+import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, politicsView, sabotageNews, sabotageNotices, voidedOrders } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -356,6 +361,7 @@ function monthEventView(state: GameState, e: MonthEvent): Omit<EventView, 'weigh
     hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost, ...(p.good ? { good: p.good } : {}) } : {}) })),
     phase: e.phase,
     ...(e.effects ? { effects: e.effects.map((f) => ({ ...f })) } : {}),
+    ...(e.sabotage ? { sabotage: { ...e.sabotage } } : {}),
   };
 }
 
@@ -501,6 +507,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly lotHands = new Map<string, LotHand>();
   /** Each AI player's hand in politics: runs, votes and governs, keyed by seat id. */
   private readonly voteHands = new Map<string, VoteHand>();
+  /** The orders as the server last saw them, to diff for notices and news (every engine write copies Politics). */
+  private sabotageSeen: SabotageOrder[] = [];
+  /** Every order that went void, as it stood while pending, oldest first: the engine drops it, and its orderer's own list shows it. A replayed game runs the same hooks and keeps the same list. */
+  private voided: SabotageOrder[] = [];
   /** The cards as the server last saw them, to diff for notices and news. Every write copies Politics, so this is a snapshot. */
   private dealsSeen: readonly DealCard[] = [];
 
@@ -554,6 +564,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.dealsSeen = this.state.politics?.deals ?? [];
+    this.sabotageSeen = this.state.politics?.sabotage ?? [];
+    this.voided = [];
     this.ai.clear();
     this.chats.clear();
     this.monthEnds.clear();
@@ -620,12 +632,36 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * the views and the news follow in the same step. `at` stamps the notices when the open phase is not the one whose rule
    * settled the cards, as at a phase change.
    */
-  private noteDeals(at?: Stamp): void {
+  private noteDeals(at?: Stamp, withSabotage = true): void {
+    if (withSabotage) this.noteSabotage(at);
     const now = this.state?.politics?.deals ?? [];
     if (now === this.dealsSeen) return;
     for (const fact of dealNotices(this.dealsSeen, now)) this.notify(fact, at);
     for (const line of dealNews(this.dealsSeen, now, (id) => this.nameOf(id))) this.addNews(line);
     this.dealsSeen = now;
+  }
+
+  /**
+   * S4-RULE-12: the same for the orders. What changed since the server last looked (an order resolved at production,
+   * an investigation, a fine) is noticed and told on the news, public or private to its orderer by politics-view's one
+   * visibility test. Placing, replacing or withdrawing an order, and posting a guard, is neither.
+   */
+  private noteSabotage(at?: Stamp, behindHeadline = false): void {
+    const state = this.state;
+    const now = state?.politics?.sabotage ?? [];
+    if (!state || now === this.sabotageSeen) return;
+    for (const fact of sabotageNotices(state, this.sabotageSeen, now)) this.notify(fact, at);
+    this.voided = [...this.voided, ...voidedOrders(state, this.sabotageSeen, now)];
+    const lines = sabotageNews(state, this.sabotageSeen, now, (id) => this.nameOf(id));
+    if (behindHeadline) {
+      // The news is a ring of three, newest first. At a phase's opening its own line (production's harvest, game over)
+      // stays first; the cases take the slots behind it, the newest case first.
+      const [headline, ...rest] = this.news;
+      this.news = [...(headline ? [headline] : []), ...lines.reverse(), ...rest].slice(0, 3);
+    } else {
+      for (const line of lines) this.addNews(line);
+    }
+    this.sabotageSeen = now;
   }
 
   private play(seatId: string, intent: MuleIntent): void {
@@ -748,6 +784,19 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'answerDeal':
         answerDeal(state, seatId, intent.id, intent.accept);
+        return;
+      case 'sabotage':
+        orderSabotage(state, seatId, intent.target);
+        return;
+      case 'guard':
+        setGuards(state, seatId, intent.tiles);
+        return;
+      case 'investigate':
+        // The engine's return is the raw order, `by` and all: it goes nowhere. The views are built from the state.
+        investigate(state, seatId, intent.order);
+        return;
+      case 'fine':
+        fineCulprit(state, seatId, intent.order, intent.amount);
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
@@ -988,11 +1037,17 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // Planning's close and the upkeep's opening settle cards: each notice carries the phase whose rule settled it.
     // The game ends at an upkeep: its last settles are that upkeep's. (Read afresh: advancePhase moved the phase.)
     const opened = this.requireState();
-    this.noteDeals(closing.phase === 'planning' ? closing : { month: opened.month, phase: opened.phase === 'gameOver' ? 'upkeep' : opened.phase });
+    const settledIn = closing.phase === 'planning' ? closing : { month: opened.month, phase: opened.phase === 'gameOver' ? 'upkeep' : opened.phase };
+    this.noteDeals(settledIn, false);
     // The auction's edits are asked in the production show's slack, once production has run, so the draft holds this
     // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
     if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
     this.enterPhase();
+    // After the phase opens. Production's harvest line and game over replace the whole news with one headline, and the
+    // sabotage this opening settled (a worked cut, the last upkeep's fines) must not push it out, so those lines go
+    // behind it. At the other openings no sabotage change lands except planning's standard fine, which is news of its
+    // own and goes on top; the auction and upkeep headlines are written after nothing sabotage settles.
+    this.noteSabotage(settledIn, opened.phase === 'production' || opened.phase === 'gameOver');
   }
 
   private enterPhase(): void {
@@ -1742,7 +1797,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             outfitCosts: Object.fromEntries(OUTFITS.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             droneFound: me.droneFound.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
-            politics: myPoliticsView(state, me.id),
+            politics: myPoliticsView(state, me.id, this.voided),
             deals: dealsView(state, me.id),
             installedThisTurn: me.installedThisTurn,
             worthParts: worthPartsOf(state, me.id),

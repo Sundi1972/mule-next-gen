@@ -183,14 +183,15 @@ export function resolveSabotage(state: GameState): void {
     const victim = tile ? tile.owner : null;
     const worked = !guarded && works;
     const outcome: SabotageOrder['outcome'] = guarded || seen ? 'caught' : works ? 'done' : 'failed';
-    return [{ id: order.id, outcome, worked, victim, revealed: guarded || seen }];
+    // The crop is read now, at resolution: the plot may lose its MULE or be re-outfitted before anyone looks again.
+    return [{ id: order.id, outcome, worked, victim, good: tile?.outfit as Good | undefined, revealed: guarded || seen }];
   });
   if (voided.size > 0) {
     const kept = state.politics.sabotage.filter((o) => !voided.has(o.id));
     edit(state).sabotage = kept;
   }
-  for (const { id, outcome, worked, victim, revealed } of verdicts) {
-    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim });
+  for (const { id, outcome, worked, victim, good, revealed } of verdicts) {
+    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim, ...(good ? { good } : {}) });
     if (revealed) reveal(state, id);
   }
 }
@@ -229,7 +230,7 @@ export function sabotageEvents(state: GameState): MonthEvent[] {
     if (order.target.kind === 'powerCut') {
       const tile = order.target.tile;
       const event = plotEvent(state, 'powerCut', tile);
-      if (worked) return { ...event, line: `Someone cut the power to a ${capital(goodWords(state.tiles[tile]!.outfit as never))} plot: it makes nothing this month.`, sabotage };
+      if (worked) return { ...event, line: `Someone cut the power to a ${order.good ? `${capital(goodWords(order.good))} ` : ''}plot: it makes nothing this month.`, sabotage };
       return { ...event, plots: [], line: guarded ? 'Caught at a guarded plot: the power stays on.' : named, sabotage };
     }
     const { good, dir } = order.target;
@@ -262,7 +263,8 @@ export function applyRumours(state: GameState): void {
 /** Restore the posted prices exactly, when the auction ends: from the price recorded before the shift, never by undoing it. */
 export function endRumours(state: GameState): void {
   if (!state.politics || state.politics.rumoured.length === 0) return;
-  for (const { good, from } of state.politics.rumoured) state.store.posted[good] = from;
+  // A seat's observe() copy has no `from` (HC-4): the price it sees stays as posted, and the next month posts afresh.
+  for (const { good, from } of state.politics.rumoured) if (from !== undefined) state.store.posted[good] = from;
   edit(state).rumoured = [];
 }
 
