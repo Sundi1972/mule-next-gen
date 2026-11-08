@@ -546,6 +546,15 @@ describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
     };
     expect(post(3)).toBe(post(3));
     expect(new Set([1, 2, 3, 4, 5, 6, 7, 8].map(post)).size, 'the seats do not all share one coin').toBeGreaterThan(1);
+    // One seat's coin is its own each month: the month is part of the stream.
+    const inMonth = (month: number) => {
+      const obs = observe(state, 'ai1');
+      obs.month = month;
+      const { sent, act } = recorder();
+      new SheriffHand(mindOf('ai1', 'cautious', 'trader', 3)).run(obs, act);
+      return JSON.stringify(sent);
+    };
+    expect(new Set([3, 4, 5, 6, 7, 8, 9, 10].map(inMonth)).size, 'one seat draws the same every month').toBeGreaterThan(1);
   });
 });
 
