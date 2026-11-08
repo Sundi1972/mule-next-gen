@@ -183,8 +183,7 @@ async function read(phone: Page): Promise<Shown> {
     const screen = document.querySelector('[data-phase]');
     const stage = screen?.querySelector('[data-testid=stage]');
     const guide = screen?.querySelector('[data-testid=guide]');
-    const body = guide?.querySelector('header')?.nextElementSibling;
-    const tabs = screen?.querySelector('[data-testid=tabs-a]');
+    const tabs = screen?.querySelector('[data-testid=tabs]');
     const content = stage?.firstElementChild;
     const toolRow = screen?.querySelector('[data-testid=map-tools]')?.getBoundingClientRect();
     const mapBox = screen?.querySelector('[data-testid=hub-map]')?.getBoundingClientRect();
@@ -201,8 +200,8 @@ async function read(phone: Page): Promise<Shown> {
       tabs: [...(tabs?.querySelectorAll('[role=tab]') ?? [])].map((d) => d.getAttribute('data-testid')!.slice('tab-'.length)),
       tools: [...(screen?.querySelectorAll('[data-testid=map-tools] [data-testid^="tool-"]') ?? [])].map((t) => t.getAttribute('data-testid')!.slice('tool-'.length)),
       toolsAt: !toolRow || !mapBox ? 'elsewhere' : toolRow.bottom <= mapBox.top + 0.5 ? 'above' : 'elsewhere',
-      // Now first: the rail's head (the phase line, then the Now line), first under the rail's header.
-      nowFirst: !!body?.firstElementChild && !!guide?.querySelector('[data-testid=now]') && body.firstElementChild.contains(guide.querySelector('[data-testid=now]')),
+      // Now first: in the rail's head, the header (the phase line, then the Now line), above the rail's body.
+      nowFirst: !!guide?.querySelector('header [data-testid=now]'),
       nowTitle: guide?.querySelector('[data-testid=now-title]')?.textContent ?? '',
       reviewLabels: (shell?.innerText ?? '').split('\n').filter((l) => /\bSOON\b|\bSLICE\b|\bWS7\b/.test(l)),
       fill: content && stageBox ? content.getBoundingClientRect().height / (stageBox.height - pad) : 0,
@@ -508,7 +507,7 @@ const READ_GOV = `(async () => {
   const box = (sel) => p?.querySelector(sel)?.getBoundingClientRect() ?? null;
   const row = box('[data-testid=governor-tax-row]');
   const verdict = box('[data-testid=governor-verdict]');
-  const tabs = [...(p?.querySelectorAll('[data-testid=tabs-a] [role=tab], [data-testid=sub-tabs] [role=tab]') ?? [])].map((t) => {
+  const tabs = [...(p?.querySelectorAll('[data-testid=tabs] [role=tab], [data-testid=sub-tabs] [role=tab]') ?? [])].map((t) => {
     const r = t.getBoundingClientRect();
     // The label is the tab's own words: whole when nothing of them is cut short, and when their box sits inside the
     // tab's (a truncating span is only as wide as its text, so the box check is the one that fails; a badge may overhang).

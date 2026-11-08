@@ -228,7 +228,7 @@ async function main(): Promise<void> {
     // E-9 (D3, D8): a human holding an office finds it in their politics tab, named for it; the Now line's door opened
     // the office's sub-tab above. Everyone else's tabs are the same four. A human Governor is seated only in this script
     // (CI's pinned whole-game seed makes none), so this is where that door and the tab's name are guarded.
-    const tabs = async (page: Page) => page.locator('[data-testid=tabs-a] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    const tabs = async (page: Page) => page.locator('[data-testid=tabs] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
     const subs = async (page: Page) => page.locator('[data-testid=sub-tabs] [role=tab]').evaluateAll((els) => els.map((e) => `${e.getAttribute('data-testid')}${e.getAttribute('aria-selected') === 'true' ? '*' : ''}`));
     check((await lena.page.getByTestId('tab-politics').innerText()).trim() === 'Governor', `E-9 (D3): Lena's politics tab reads Governor, got "${await lena.page.getByTestId('tab-politics').innerText()}"`);
     check((await ossa.page.getByTestId('tab-politics').innerText()).trim() === 'Council', `E-9 (D3): Ossa's reads Council, got "${await ossa.page.getByTestId('tab-politics').innerText()}"`);

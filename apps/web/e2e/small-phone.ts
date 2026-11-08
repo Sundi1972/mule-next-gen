@@ -34,7 +34,7 @@ const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-t
  * work, so the stage joins this read once those meet B-AC-11.
  */
 const HUB: AuditScope = {
-  roots: [...RAIL.roots, '[data-testid=tabs-a]', '[data-testid=sub-tabs]', '[data-testid=actions]'],
+  roots: [...RAIL.roots, '[data-testid=tabs]', '[data-testid=sub-tabs]', '[data-testid=actions]'],
   skip: RAIL.skip,
   // H-9: folded, the Now card keeps to one line, and that line is its whole title (WS4's sweep A16, 6 Nov: "Plan your
   // month, …" lost the step it names), so no truncation is allowed here.
