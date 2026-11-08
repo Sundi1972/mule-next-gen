@@ -941,6 +941,16 @@ did       C15 and C16 record Heiko's approval (6 Nov 14:35Z, explainer v3 a28b86
           trunk in the same batch as PR-8 (HC-14)
 because   the old lines read as open decisions and as if sW were dropped; the code follows RULE-12 literally, which is right
 goal      G-1 unchanged
+
+AM-6 · 2026-11-08 · PM ruling (a), from #802's design-owner review · no Food carried "to stay fed"
+target    §1 C15 (its consequences for the auction's need and the AI's demand)
+said      nothing: C15 removed development's stock check but not the two places that carry Food for it
+did       auction.ts::auctionNeed and packages/ai/src/value.ts::wholeNextMonth keep only upkeep's Food and a factory's
+          Food input, never a carry to survive next month's development; goods-auction.html's "to stay fed" words and
+          FM-skip-spoilage are restated. auctionNeed and the rulebook go in WS5's #802 fix round (WS3 named edit);
+          wholeNextMonth in WS1's value.ts PR, on trunk no later than PR-8's batch (with PR-6, HC-14)
+because   under C15 hunger is the household's last meal, so advice to hold Food against hunger contradicts the rule
+goal      G-1 unchanged; whether prices move is judged in the 13 Nov play-test
 ```
 
 ## §9 · Ownership Boundaries
