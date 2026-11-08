@@ -23,7 +23,7 @@ interface Shown {
   show?(seat: HubSeat): boolean;
 }
 
-/** A desk in the rail: a tab, and the body the rail shows while it is open. */
+/** A politics desk as WS7 registers it today (politics/slots.ts), drawn as a Governor / Council sub-tab through asDeskSub until SB-3 registers SubTabSlots itself. */
 export interface DeskSlot extends Shown {
   id: string;
   label: string;

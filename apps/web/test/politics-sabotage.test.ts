@@ -160,6 +160,8 @@ function mount(view: MuleView): void {
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
   act(() => root!.render(onPhone(view)));
+  // Planning opens on Overview; the Sheriff's desk is Governor / Council's sub-tab, which opens on it as it asks first.
+  if (view.me?.politics?.sheriff && findTestid('tab-politics')) tap('tab-politics');
 }
 
 /** The server's next view, as a broadcast draws it. */
@@ -213,23 +215,24 @@ const tap = (testid: string) => act(() => (handlers(byTestid(testid)).onClick as
 const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' ').trim();
 const off = (testid: string) => byTestid(testid).getAttribute('disabled') !== null;
 const tag = (testid: string) => byTestid(testid).tagName;
-const openDesk = () => [...host.findAll('button')].find((b) => b.getAttribute('role') === 'tab' && b.getAttribute('aria-selected') === 'true')?.getAttribute('data-testid');
+/** Governor / Council's open sub-tab, or undefined on any other tab. */
+const openDesk = () => { const subs = findTestid('sub-tabs'); return subs?.findAll('button').find((b) => b.getAttribute('aria-selected') === 'true')?.getAttribute('data-testid'); };
 /** The plot's words as a screen reader hears them, which carry its flag. */
 const plotLabel = (x: number, y: number) => byTestid(`map-plot-${x}-${y}`).getAttribute('aria-label') ?? '';
 /** The live cases' rows, top to bottom. */
 const caseRows = () => allTestids('b-case-row-', byTestid('b-cases')).map((id) => id.replace('b-case-row-', ''));
 
 describe("S4-C15, P7: the Sheriff's case file (B folded)", () => {
-  it("S4-B-AC-10: only the sitting Sheriff has the Sheriff's desk; on their phone it comes first and is open", () => {
+  it("S4-B-AC-10: only the sitting Sheriff has the Sheriff's desk; on their phone Governor / Council opens on it", () => {
     mount(viewOf());
-    expect(has('desk-sheriff'), "Lena's phone").toBe(false);
+    tap('tab-politics');
+    expect(has('sub-sheriff'), "Lena's phone").toBe(false);
     expect(has('sheriff-desk-b')).toBe(false);
     act(() => root!.unmount());
 
     mount(brix());
-    const tabs = allTestids('desk-', byTestid('desks'));
-    expect(tabs[0]).toBe('desk-sheriff');
-    expect(openDesk()).toBe('desk-sheriff');
+    expect(allTestids('sub-', byTestid('sub-tabs')).filter((id) => id !== 'sub-tabs')).toContain('sub-sheriff');
+    expect(openDesk()).toBe('sub-sheriff');
     expect(text('sheriff-head')).toContain('Sheriff');
     expect(text('sheriff-head')).toContain('Only you');
     expect(text('sheriff-left')).toBe('1 investigation left');
@@ -442,7 +445,7 @@ describe('S4-C15, P8: guarding on the one map', () => {
     tap('guard-back');
     expect(sent).toEqual([{ type: 'guard', tiles: [at(2, 0)] }]);
     expect(has('guard-map')).toBe(false);
-    expect(openDesk()).toBe('desk-sheriff');
+    expect(openDesk()).toBe('sub-sheriff');
   });
 
   it('S4-B-AC-6: nobody but the Sheriff sees a guard: no other phone has the Guard map or a guarded plot', () => {
@@ -537,9 +540,9 @@ describe('S4-C14, P6: the power cut, under Look on a rival’s plot', () => {
 });
 
 describe('S4-C14, P6: the rumour at the market, and your orders', () => {
-  it("S4-C14: the Market desk offers \"Start a rumour · Only you\" on any of the nine goods, up or down, and sends {type:'sabotage', target}", () => {
+  it("S4-C14: the Sell tool's market panel offers \"Start a rumour · Only you\" on any of the nine goods, up or down, and sends {type:'sabotage', target}", () => {
     mount(viewOf());
-    tap('desk-market');
+    tap('tool-list');
     expect(text('rumour-door')).toBe('Start a rumourOnly you');
     tap('rumour-door');
     expect(allTestids('rumour-good-')).toEqual(GOODS.map((g) => `rumour-good-${g}`));
@@ -557,7 +560,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
 
   it('S4-C14: a power cut already ordered takes the month’s one order: the market shows it with Withdraw', () => {
     mount(viewOf({ sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(1, 0) }, owed: 120 } }));
-    tap('desk-market');
+    tap('tool-list');
     expect(has('rumour-door')).toBe(false);
     expect(text('order-pending-words')).toContain('You already ordered a power cut on Ossa’s smithore plot.');
     tap('order-withdraw');
@@ -572,7 +575,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
       { ...GUARDED, public: true, outcome: 'caught' },
     ];
     mount(viewOf({ sabotage: { ...NO_ORDER, mine } }));
-    tap('desk-market');
+    tap('tool-list');
     expect(allTestids('my-order-', byTestid('my-orders')).filter((id) => !id.includes('known'))).toEqual(['my-order-w3c8', 'my-order-p5d1']);
     expect(text('my-order-w3c8')).toBe('Month 4: power cut on Kai’s plotEveryone knows it was you.Caught');
     expect(text('my-order-known-p5d1'), 'it worked and nobody saw: public, but not who').toBe('Nobody knows it was you.');
@@ -581,7 +584,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
   it("S4-C14: this month's pending power cut is in Your orders under its plot's owner (the engine names the victim only when it resolves)", () => {
     const pending: Sab['mine'][number] = { id: 'sab-a1b2c3', month: 5, kind: 'powerCut', victim: null, at: { x: 1, y: 0 }, good: 'smithore', worked: false, culprit: 's1', how: null, investigated: false, fine: null, public: false, outcome: 'pending' };
     mount(viewOf({ sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(1, 0) }, owed: 120, mine: [pending] } }));
-    tap('desk-market');
+    tap('tool-list');
     expect(text('my-order-sab-a1b2c3')).toBe('Month 5: power cut on Ossa’s plotNobody knows it was you.Ordered');
   });
 
@@ -589,7 +592,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
     // WS7's #746 types IncidentView.good as Good | null; null only in the orderer's own list, for exactly this case.
     const pending = { id: 'sab-d4e5f6', month: 5, kind: 'powerCut', victim: null, at: { x: 2, y: 0 }, good: null, worked: false, culprit: 's1', how: null, investigated: false, fine: null, public: false, outcome: 'pending' } as unknown as Sab['mine'][number];
     mount(viewOf({ sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(2, 0) }, owed: 120, mine: [pending] } }));
-    tap('desk-market');
+    tap('tool-list');
     expect(text('my-order-sab-d4e5f6')).toBe('Month 5: power cut on Kai’s plotNobody knows it was you.Ordered');
     expect(byTestid('my-order-sab-d4e5f6').findAll('svg'), "no good's icon").toHaveLength(0);
   });

@@ -5,7 +5,7 @@ import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
-import type { HubNav, PlotPickSlot, TabHubSlots } from '../src/phone/hub/slots';
+import type { AgendaSlot, HubNav, PlotPickSlot, ReadyBarWords, TabHubSlots } from '../src/phone/hub/slots';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /*
@@ -157,6 +157,8 @@ const tap = (testid: string) => act(() => (props(byTestid(testid)).onClick as (e
 const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' ').trim();
 const selected = (testid: string) => byTestid(testid).getAttribute('aria-selected') === 'true';
 const pressed = (testid: string) => byTestid(testid).getAttribute('aria-pressed') === 'true';
+/** Every testid under `node`, in document order. */
+const testidsIn = (node: FakeElement): (string | null)[] => node.childNodes.flatMap((c) => (c instanceof FakeElement ? [c.getAttribute('data-testid'), ...testidsIn(c)] : []));
 /** The planning tabs, in their order. */
 const tabs = () => byTestid('tabs-a').findAll('button').map((b) => b.getAttribute('data-testid'));
 const go = (move: (n: HubNav) => void) => act(() => move(nav!));
@@ -188,6 +190,36 @@ describe('the tabbed planning hub (SB-2)', () => {
     tap('agenda-needs');
     expect(selected('tab-colony')).toBe(true);
     byTestid('tab-body-colony');
+  });
+
+  it('C66, E-1 (D5): "Throw your hat in the ring" leads This month, strong, a door into Council that opens the promise', () => {
+    mount(game());
+    const rows = byTestid('agenda-box').findAll('button').map((b) => b.getAttribute('data-testid'));
+    expect(rows[0]).toBe('agenda-run');
+    expect(byTestid('agenda-run').getAttribute('class')).toMatch(/border-holo bg-holo-soft/);
+    expect(text('agenda-run-tab')).toBe('Council');
+    tap('agenda-run');
+    expect(selected('sub-council')).toBe(true);
+    byTestid('promise-sheet');
+  });
+
+  it('B-AC-14 (D5, #751): This month is always two lines of two: a quiet line when nothing waits, four rows at most, and past four three rows and "+N more" naming the rest, which pages to them and back', () => {
+    const row = (key: string): AgendaSlot => ({ key, title: () => `Title ${key}`, sub: () => '', opens: { desk: 'colony' } });
+    const rows = () => byTestid('agenda-box').findAll('button').map((b) => b.getAttribute('data-testid'));
+    mount(game(), { ...TAB_SLOTS, agenda: [] });
+    expect(text('agenda-empty')).toBe('Nothing waits on you this month.');
+    expect(rows()).toEqual([]);
+    rerender(game(), { ...TAB_SLOTS, agenda: ['a', 'b', 'c', 'd'].map(row) });
+    expect(findTestid('agenda-empty')).toBeUndefined();
+    expect(rows()).toEqual(['agenda-a', 'agenda-b', 'agenda-c', 'agenda-d']);
+    rerender(game(), { ...TAB_SLOTS, agenda: ['a', 'b', 'c', 'd', 'e'].map(row) });
+    expect(rows()).toEqual(['agenda-a', 'agenda-b', 'agenda-c', 'agenda-more']);
+    expect(text('agenda-more')).toBe('+2 moreTitle d · Title e');
+    tap('agenda-more');
+    expect(rows()).toEqual(['agenda-d', 'agenda-e', 'agenda-back']);
+    tap('agenda-back');
+    expect(rows()[0]).toBe('agenda-a');
+    expect(byTestid('agenda-box').getAttribute('class'), 'the height is the box\'s, never its rows\'').toMatch(/\bh-19\b.*grid-rows-2|grid-rows-2.*\bh-19\b/);
   });
 
   // [the door today's code opens, on whose phone, where it must land]
@@ -277,5 +309,31 @@ describe('the tabbed planning hub (SB-2)', () => {
     mount(game({ pol: politics({ election: ballot, next: 5 }) }));
     byTestid('hub-situation');
     expect(findTestid('tabs-a')).toBeUndefined();
+  });
+
+  it("C66 (frame): the first stage shown takes the stage in place of the tabs, the tool row, the map and This month; its Rail sits under Now; the shell's phase and the ready bar's words are its own", () => {
+    const marker = (testid: string) => () => createElement('p', { 'data-testid': testid });
+    const words: ReadyBarWords = { ready: 'Cast my vote', done: 'You voted', waiting: 'Still waiting for', all: 'Everyone has voted.', confirm: (names) => `Close the ballot without ${names}?`, canReady: false, label: 'VOTED' };
+    const stage = (on: boolean): TabHubSlots => ({
+      ...TAB_SLOTS,
+      stage: [{ id: 'hidden', show: () => false, Body: marker('hidden-card') }, { id: 'day', show: () => on, phase: () => 'Election day', Body: marker('day-card'), Rail: marker('run-block') }, { id: 'later', show: () => on, Body: marker('later-card') }],
+      readyWords: [() => null, () => (on ? words : null), () => ({ ...words, ready: 'Not this one' })],
+    });
+    mount(game(), stage(true));
+    byTestid('day-card', byTestid('hub-situation'));
+    for (const gone of ['hidden-card', 'later-card', 'tabs-a', 'map-tools', 'hub-map', 'agenda']) expect(findTestid(gone), gone).toBeUndefined();
+    const rail = byTestid('guide');
+    expect(rail.textContent).toContain('Election day');
+    const order = testidsIn(rail);
+    expect(order.indexOf('now'), 'Now, then the Rail').toBeLessThan(order.indexOf('run-block'));
+    expect(text('ready')).toBe('Cast my vote');
+    expect(byTestid('ready').getAttribute('disabled'), 'not live').not.toBeNull();
+    expect(text('ready-count')).toBe('0 / 3 VOTED');
+
+    rerender(game(), stage(false));
+    expect(findTestid('day-card'), 'with none shown, planning').toBeUndefined();
+    byTestid('tab-body-overview');
+    expect(rail.textContent).toContain('Planning');
+    expect(text('ready')).toBe('Not this one');
   });
 });

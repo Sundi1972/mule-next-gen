@@ -71,14 +71,19 @@ export function useDrawn(): Drawn {
   return drawn;
 }
 
-/** The rail head every tab keeps: the phase line, then the Now line, its "?" and, while a sub-tab asks first, its door. */
+/**
+ * The rail head every tab keeps: the phase line, then the Now line, its "?" and, while a sub-tab asks first, its door.
+ * A Now that is its own card (a decision with its buttons, such as the strike's) is drawn whole under the Now line.
+ */
 const Head = createContext<{ now: Now; onHelp(): void; onGo: (() => void) | undefined } | null>(null);
 function HubHead() {
   const head = useContext(Head)!;
+  const Card = head.now.Card;
   return (
     <div className="flex flex-col gap-1.5" data-testid="rail-head">
       <PhaseLine />
       <NowLine now={head.now} onHelp={head.onHelp} onGo={head.onGo} />
+      {Card && <Card />}
     </div>
   );
 }
@@ -189,7 +194,7 @@ function shipLine(view: Pick<MuleView, 'ship'>): string {
  * The "?" sheet: the old stage-top card in full (the month's steps, Now and Next, the offices line), Now's own detail,
  * what you need this month and the ship. Over the whole phone; Close and Escape shut it.
  */
-function HelpSheet({ now, slots, seat, onClose, onOpenColony }: { now: Now; slots: TabHubSlots; seat: HubSeat; onClose(): void; onOpenColony(): void }) {
+export function HelpSheet({ now, slots, seat, onClose, onOpenColony }: { now: Now; slots: TabHubSlots; seat: HubSeat; onClose(): void; onOpenColony(): void }) {
   const { view } = usePhoneGame();
   useEscape(onClose);
   const sheet = useRef<HTMLDivElement>(null);

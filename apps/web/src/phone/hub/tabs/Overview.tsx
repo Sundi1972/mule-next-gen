@@ -1,4 +1,5 @@
 import { Button, cx } from '@mule/ui';
+import { useState } from 'react';
 import { MarketStrip } from '../desks';
 import { DESK_DOORS, useDrawn, useHub } from '../Hub';
 import { OnlyYou } from '../OnlyYou';
@@ -96,25 +97,43 @@ export function doorOf(opens: AgendaSlot['opens']): Door | null {
 
 /**
  * "This month": compact rows under the map, each opening the tab where it is done (next month's vote and the election
- * into Council, what you are short of into Colony). Two to a line from three rows on.
+ * into Council, what you are short of into Colony).
+ *
+ * The box is always two lines of two, whatever it holds, so the map above it is the same size whatever the needs or the
+ * month say (the PM's Overview height check, 8 Nov; #751's property). Nothing waiting: a quiet line holds the box. More
+ * than four: three rows and "+N more", which turns the box's page; the last page ends on "Back".
  */
+const AGENDA_CELLS = 4;
+
 function AgendaRows({ items, seat, onOpen }: { items: AgendaSlot[]; seat: HubSeat; onOpen(d: Door): void }) {
+  const [page, setPage] = useState(0);
   const rows = items.flatMap((it) => {
     const door = doorOf(it.opens);
     // A market door is the Sell tool's, in the tool row above.
     return door && door.tab !== 'overview' ? [{ it, door }] : [];
   });
-  if (rows.length === 0) return null;
+  const paged = rows.length > AGENDA_CELLS;
+  const per = paged ? AGENDA_CELLS - 1 : AGENDA_CELLS;
+  const pages = Math.max(1, Math.ceil(rows.length / per));
+  const at = Math.min(page, pages - 1);
+  const shown = rows.slice(at * per, at * per + per);
+  const cell = 'flex min-h-9 min-w-0 items-center gap-1.5 rounded-control border bg-panel px-2 py-0.5 text-left hover:border-holo';
   return (
     <section className="flex shrink-0 flex-col gap-1" aria-label="This month" data-testid="agenda">
       <span className="label-caps text-[10px]! @min-[1100px]/shell:text-sm!">This month</span>
-      <div className={cx('grid gap-1', rows.length > 2 ? 'grid-cols-2' : 'grid-cols-1')}>
-        {rows.map(({ it, door }) => (
+      {/* Two lines of two, always: the box's height never follows its rows (h-19 = two 36 px rows and the gap). */}
+      <div className="grid h-19 grid-cols-2 grid-rows-2 gap-1" data-testid="agenda-box">
+        {rows.length === 0 && (
+          <span className="col-span-2 flex items-center text-xs text-ink-3" data-testid="agenda-empty">
+            Nothing waits on you this month.
+          </span>
+        )}
+        {shown.map(({ it, door }) => (
           <button
             key={it.key}
             type="button"
             onClick={() => onOpen(door)}
-            className={cx('flex min-h-9 min-w-0 items-center gap-1.5 rounded-control border bg-panel px-2 py-0.5 text-left hover:border-holo', it.lead?.(seat) ? 'border-holo bg-holo-soft' : 'border-holo-line')}
+            className={cx(cell, it.lead?.(seat) ? 'border-holo bg-holo-soft' : 'border-holo-line')}
             data-testid={`agenda-${it.key}`}
           >
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
@@ -130,6 +149,30 @@ function AgendaRows({ items, seat, onOpen }: { items: AgendaSlot[]; seat: HubSea
             </span>
           </button>
         ))}
+        {paged && (
+          <button
+            type="button"
+            onClick={() => setPage(at + 1 < pages ? at + 1 : 0)}
+            className={cx(cell, 'justify-center border-holo-line text-xs font-semibold text-holo')}
+            aria-label={at + 1 < pages ? `${rows.length - (at + 1) * per} more this month` : 'Back to the first rows'}
+            data-testid={at + 1 < pages ? 'agenda-more' : 'agenda-back'}
+          >
+            {at + 1 < pages ? (
+              <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                <span className="text-xs font-semibold">+{rows.length - (at + 1) * per} more</span>
+                {/* What waits behind it, so a shortfall on the next page is never out of sight. */}
+                <span className="truncate text-[10px] font-normal text-ink-2" data-testid="agenda-more-titles">
+                  {rows
+                    .slice((at + 1) * per)
+                    .map(({ it }) => it.title(seat))
+                    .join(' · ')}
+                </span>
+              </span>
+            ) : (
+              'Back'
+            )}
+          </button>
+        )}
       </div>
     </section>
   );

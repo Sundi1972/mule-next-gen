@@ -4,7 +4,7 @@ import { needRows, stripRows } from './needs';
 
 /**
  * Under the roadmap: Food, Energy and Water you need this month against what you hold, red where you are short. A
- * tap opens the Colony desk, where the full list is.
+ * tap opens the Colony tab, where the full list is.
  */
 export function NeedsStrip({ onOpen }: { onOpen: (el: Element) => void }) {
   const { view, me } = usePhoneGame();
@@ -20,7 +20,7 @@ export function NeedsStrip({ onOpen }: { onOpen: (el: Element) => void }) {
         'relative flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 whitespace-nowrap rounded-control border bg-panel px-2 py-1 text-left text-[11px] hover:border-holo @min-[1100px]/shell:gap-x-4 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-base',
         short.length > 0 ? 'border-alert/60' : 'border-holo-line',
       )}
-      aria-label={`This month you need: ${rows.map((n) => `${GOOD_NAME[n.good]}, ${n.have} of ${n.need}${n.short > 0 ? `, short ${n.short}` : ''}`).join('; ')}. Opens the Colony desk.`}
+      aria-label={`This month you need: ${rows.map((n) => `${GOOD_NAME[n.good]}, ${n.have} of ${n.need}${n.short > 0 ? `, short ${n.short}` : ''}`).join('; ')}. Opens the Colony tab.`}
       data-testid="needs-strip"
     >
       <span className="font-semibold text-ink-2">This month you need</span>
