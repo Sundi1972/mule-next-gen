@@ -737,12 +737,12 @@ describe('S4-RULE-13 (G3): the ban is never proposed while sabotage is off', () 
     return sent.find((a) => a.type === 'propose')?.proposal ?? undefined;
   };
 
-  it('S4-RULE-13: with sabotage off the hand never proposes the ban, even where it would cost the leader most', () => {
+  it('S4-T-AC-9 (G3): with sabotage off the hand never proposes the ban, even where it would cost the leader most', () => {
     POLITICS.sabotage.on = false;
     expect(proposedBy(banOnTheBook())?.law).not.toBe('sabotageBan');
   });
 
-  it('S4-RULE-13: with sabotage on the same table proposes the ban, at its middle setting', () => {
+  it('S4-T-AC-9 (G3): with sabotage on the same table proposes the ban, at its middle setting', () => {
     POLITICS.sabotage.on = true;
     expect(proposedBy(banOnTheBook())).toEqual({ kind: 'enact', law: 'sabotageBan', setting: POLITICS.laws.sabotageBan.settings[1] });
   });
