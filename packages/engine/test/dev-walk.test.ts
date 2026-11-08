@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEV_WALK, createGame, foodShare, needsOf, pace, walkSeconds, type DevPlace, type GameState } from '../src/index.js';
+import { advancePhase, DEV_WALK, createGame, foodShare, needsOf, pace, sickPace, UPKEEP, walkSeconds, type DevPlace, type GameState } from '../src/index.js';
 
 /** A game with a Zipwing and a Bramblet, and two plots: one 3 across and 2 down from the store, one a step diagonal from it. */
 function walkers(): { state: GameState; plot: number; diagonal: number } {
@@ -70,5 +70,38 @@ describe('walking in development', () => {
     zip.stock.food = 0;
     zip.sick = false;
     expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(1.6 / DEV_WALK.hungerPaceMin, 9);
+  });
+});
+
+describe('needs C15: a player is hungry when their household went short at the last month end', () => {
+  /** Month 1 played to its auction; bram holds `food` for the month end, which runs, then month 2's development starts. */
+  function developAfter(food: number): GameState {
+    const { state } = walkers();
+    for (let steps = 0; state.phase !== 'auction' && steps < 10; steps++) advancePhase(state);
+    const bram = state.players.find((p) => p.id === 'bram')!;
+    expect(needsOf(state, 'bram').food, 'the premise: no plots, the household alone').toBe(UPKEEP.baseFood);
+    bram.stock.food = food;
+    for (let steps = 0; state.phase !== 'development' && steps < 10; steps++) advancePhase(state);
+    expect(state.month, "the premise: month 2's development").toBe(2);
+    return state;
+  }
+  /** The share of a fed, well colonist's pace hunger leaves bram: the pace less its sickness. */
+  const hungerShare = (state: GameState) => pace(state, 'bram') / sickPace(state, 'bram');
+
+  it('needs B-AC-14: a household that ate in full and whose stock then spoiled below their need is not hungry: it walks at full pace', () => {
+    // 3 Food: the household eats its 2, the 1 left spoils to 0, below the 2 it needs at development.
+    const state = developAfter(UPKEEP.baseFood + 1);
+    const bram = state.players.find((p) => p.id === 'bram')!;
+    expect(bram.stock.food, 'the premise: spoiled below the need').toBeLessThan(needsOf(state, 'bram').food);
+
+    expect(hungerShare(state)).toBe(1);
+    expect(bram.hungry).toBe(false);
+  });
+
+  it('needs B-AC-14 (negative): a household short at upkeep is hungry: 1 of its 2 Food walks at the half-fed pace', () => {
+    const state = developAfter(1);
+
+    expect(hungerShare(state)).toBeCloseTo(1 - (1 - DEV_WALK.hungerPaceMin) * 0.5, 9);
+    expect(state.players.find((p) => p.id === 'bram')!.hungry).toBe(true);
   });
 });
