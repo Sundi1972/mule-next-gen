@@ -810,7 +810,6 @@ export interface ColonistMealView {
   water: { took: number; need: number };
 }
 
-/** One screen's view of the game: a player's private view, or the public one for a board. */
 /** The colony's health on MuleView (needs §3, C19). */
 export interface ColonyHealthView {
   /** round(100 × (1 − h)), 60..100: h is the colonists' sick share, which never passes 0.4. */
@@ -821,6 +820,7 @@ export interface ColonyHealthView {
   shortMonths: number;
 }
 
+/** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
   month: number;
