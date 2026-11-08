@@ -524,12 +524,14 @@ function refusalLines(feedback: Feedback | null | undefined): string[] {
 
 /**
  * Last month's development as the seat's own hands played it, when no route was adopted for it, so no route outcome
- * exists (unbought-mules fix, deep4): what they bought, what they installed where, and each buy the corral refused.
+ * exists (unbought-mules fix, deep4): what they bought, what they installed where, each MULE bought that was not
+ * outfitted or installed, and each buy that brought no MULE.
  */
 function handsLines(hands: HandsDevelopment | null | undefined): string[] {
   if (!hands) return [];
   const parts = [hands.bought === 0 ? 'bought no MULE' : `bought ${plural(hands.bought, 'MULE')}`];
   if (hands.installed.length > 0) parts.push(`installed ${hands.installed.map((i) => `a ${i.outfit ? outfitName(i.outfit) : 'MULE'} on plot ${i.plot}`).join(', ')}`);
+  parts.push(...hands.unfinished);
   for (const why of hands.refused) parts.push(`a buy refused: ${why}`);
   return [`Last time (month ${hands.month}) you kept the draft development, so your hands developed on their own: ${parts.join('; ')}.`, ''];
 }

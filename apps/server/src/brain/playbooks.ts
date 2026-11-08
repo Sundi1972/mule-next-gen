@@ -3,7 +3,7 @@
  * carries the land grant's and the development's edits, taken at each of those phases' start; the auction's is asked in
  * the production show and taken at the auction's start.
  */
-import { BRAIN, cloneForSim, outfitMule, RuleError, type GameState, type Outfit, type Player, type Playbook, type PlayerId } from '@mule/engine';
+import { BRAIN, cloneForSim, outfitMule, RuleError, type GameState, type Outfit, type PhaseOutcome, type Player, type Playbook, type PlayerId } from '@mule/engine';
 import {
   afterGrant,
   atAuctionStart,
@@ -322,11 +322,7 @@ export class Playbooks {
         const view = phase === 'auction' ? atAuctionStart(state) : state;
         const draft = seat.draft(view, phase);
         const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
-        // Development has run: with no route played, what the seat's own hands did is kept for its next land brief.
-        if (phase === 'auction') {
-          if (outcome) this.handsDev.delete(seat.id);
-          else this.handsDev.set(seat.id, handsDevelopment(state, seat.id, seat.developLog()));
-        }
+        if (phase === 'auction') this.keepHands(state, seat, outcome);
         const brief = phaseBrief(view, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), {
           outcome,
           feedback: this.phaseFeedback.get(key) ?? null,
@@ -349,6 +345,20 @@ export class Playbooks {
       } catch (err) {
         console.error(`playbooks: seat ${seat.id} could not ask for its ${phase}: ${messageOf(err)}`);
       }
+    }
+  }
+
+  /**
+   * Development has run: with no route played (no `outcome`), what the seat's own hands did is kept for its next land
+   * brief. A report that cannot be read is dropped and logged; the auction's ask goes on without it.
+   */
+  private keepHands(state: GameState, seat: AiSeat, outcome: PhaseOutcome | null): void {
+    this.handsDev.delete(seat.id);
+    if (outcome) return;
+    try {
+      this.handsDev.set(seat.id, handsDevelopment(state, seat.id, seat.developLog()));
+    } catch (err) {
+      console.error(`playbooks: seat ${seat.id}'s development report could not be read, its next brief goes without it: ${messageOf(err)}`);
     }
   }
 

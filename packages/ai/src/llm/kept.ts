@@ -10,7 +10,7 @@ export interface HandsDevelopment {
   bought: number;
   /** Each MULE installed, on which plot, with the outfit it carries now. */
   installed: { plot: number; outfit: Outfit | null }[];
-  /** Each buy refused at the corral, in the brief's words. */
+  /** Each buy that brought no MULE, in the brief's words. */
   refused: string[];
   /** Each MULE bought whose outfit or install did not happen, in the brief's words. */
   unfinished: string[];
@@ -29,31 +29,61 @@ export function keptDevelopmentPlaysToday(seat: { options: Pick<AiSeatOptions, '
 }
 
 /**
- * Why a buy on the hands' own path was refused, from its log reason: the floor's clock ran out ('no time'), else the
+ * Whether the clock cut a step: ruled out before its walk began ('no time'), or given up on the way as the clock ran
+ * short on the floor ('hurry', 'hurry after a pack': develop.ts hurry), as floor-turn.ts reads it.
+ */
+const clockCut = (why: string | undefined) => why === 'no time' || !!why?.startsWith('hurry');
+
+/**
+ * Why a buy on the hands' own path did not bring a MULE, from its log reason: the clock ran out (clockCut), else the
  * corral, sold out when it holds no MULE now (read as development ends: the floor's dim counter and a refusal off the
  * floor carry no reason of their own), else it turned the buy down (the cash, a strike).
  */
 function buyRefusal(state: GameState, why: string | undefined): string {
-  if (why === 'no time') return 'no time was left';
+  if (clockCut(why)) return 'no time was left';
   if (why === 'sold out' || state.store.mules <= 0) return 'the corral was sold out';
   return 'the corral turned it down';
 }
 
+/** What became of a bought MULE whose `step` (outfit or install) failed for `why`. */
+const unfinishedText = (step: 'outfitted' | 'installed', why: string | undefined) =>
+  clockCut(why) ? `time ran out before a bought MULE was ${step}` : `a bought MULE was refused as it was ${step}`;
+
 /**
  * The seat's development as its own hands played it, from their log (AiSeat.developLog), read from `state` as
- * development ends: the MULEs they bought, what they installed and where, with the outfit the plot carries now, and
- * each buy the corral refused. A MULE counts as bought once it is outfitted: with tap-to-walk a buy logs ok as the walk
- * to the corral starts, and an empty corral shows only as the outfit refused, as the route's hand reads it (RULE-9).
+ * development ends: the MULEs they bought, what they installed and where, with the outfit the plot carries now, each
+ * buy that brought no MULE, and each MULE bought that was not outfitted or installed.
+ *
+ * A buy logged ok is a MULE bought, except with tap-to-walk, where a buy logs ok as the walk to the corral starts and
+ * an empty corral shows only as the outfit refused, with no reason (the floor gives every failure one): that is a buy
+ * that brought no MULE, as the route's hand reads it (RULE-9).
  */
 export function handsDevelopment(state: GameState, me: PlayerId, log: readonly DevLogEntry[]): HandsDevelopment {
   const hands: HandsDevelopment = { month: state.month, bought: 0, installed: [], refused: [], unfinished: [] };
+  // A MULE bought whose outfit has not been logged yet, and one outfitted whose install has not.
+  let bought = false;
+  let outfitted = false;
   for (const { action, ok, why } of log) {
-    if ((action.type === 'buyMule' || action.type === 'outfit') && !ok) hands.refused.push(buyRefusal(state, why));
-    else if (action.type === 'outfit') hands.bought++;
-    else if (action.type === 'install' && ok) {
-      const plot = tileIndex(state.width, action.x, action.y);
-      const tile = state.tiles[plot];
-      hands.installed.push({ plot, outfit: tile?.owner === me ? tile.outfit : null });
+    if (action.type === 'buyMule') {
+      if (ok) hands.bought++;
+      else hands.refused.push(buyRefusal(state, why));
+      bought = ok;
+      outfitted = false;
+    } else if (action.type === 'outfit') {
+      if (!ok && bought && why === undefined) {
+        // Tap-to-walk: the walk went, the corral had no MULE.
+        hands.bought--;
+        hands.refused.push(buyRefusal(state, why));
+      } else if (!ok && bought) hands.unfinished.push(unfinishedText('outfitted', why));
+      outfitted = ok && bought;
+      bought = false;
+    } else if (action.type === 'install') {
+      if (ok) {
+        const plot = tileIndex(state.width, action.x, action.y);
+        const tile = state.tiles[plot];
+        hands.installed.push({ plot, outfit: tile?.owner === me ? tile.outfit : null });
+      } else if (outfitted) hands.unfinished.push(unfinishedText('installed', why));
+      outfitted = false;
     }
   }
   return hands;
