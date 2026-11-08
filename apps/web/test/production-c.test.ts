@@ -111,6 +111,19 @@ describe('B-AC-6 (AM-19): good by good for every player at once, then every bonu
     expect(s.lossAt).toBeGreaterThan(s.bonusAt);
   });
 
+  it("the TV's rail folds the steps already played into one line of ✓ names; this step keeps its row and line, the steps to come theirs (TV-FIT, PM ruling 7 Nov)", () => {
+    const harvest = tvAt(m, s.goodAt.water! + 0.2);
+    expect(harvest).not.toContain('data-testid="acts-done"');
+    const losses = tvAt(m, s.lossAt + 0.2);
+    const done = losses.match(/<li[^>]*data-testid="acts-done"[^>]*>(.*?)<\/li>/)?.[1] ?? '';
+    expect(done.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).toBe('✓ Harvest ✓ Bonuses');
+    expect(done).toMatch(/data-testid="act-harvest"[^>]*data-now="false"/);
+    expect(done).toMatch(/data-testid="act-bonus"[^>]*data-now="false"/);
+    // This step is a row of its own with its line; the steps to come keep theirs, numbered.
+    expect(losses).toMatch(/<li[^>]*data-testid="act-loss"[^>]*data-now="true"[^>]*>.*?make less/);
+    expect(losses).toMatch(/<li[^>]*data-testid="act-flight"[^>]*data-now="false"/);
+  });
+
   it("the TV's rail names the step: the good being harvested, then Bonuses, then Losses", () => {
     expect(tvAt(m, s.goodAt.water! + 0.2)).toMatch(/data-testid="act-harvest"[^]*?Water/);
     expect(tvAt(m, s.bonusAt + 0.2)).toMatch(/data-testid="act-bonus"[^>]*data-now="true"/);
