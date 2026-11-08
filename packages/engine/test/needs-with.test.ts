@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, HEALTH, needsOf, needsWith, type GameState, type Outfit } from '../src/index.js';
+import { withHealth } from './health-switch.js';
 
 /**
  * needs C12: the AI asks the engine for a player's needs with one more plot (needsWith) instead of copying needsOf's
@@ -61,12 +62,9 @@ describe('needs C12: needsWith gives a player needs with one more plot', () => {
   it("needs C12: needsWith keeps RULE-15's Medicine: with the crews sick it asks 1, as needsOf does", () => {
     const state = work(newGame(true), ESTATE);
     state.colony!.sick = HEALTH.crewSickFrom;
-    HEALTH.enabled = true;
-    try {
+    withHealth(() => {
       expect(needsOf(state, 'p0').medicine, 'the premise: the crews fall sick').toBe(1);
       expect(needsWith(state, 'p0', 'alloy').medicine).toBe(1);
-    } finally {
-      HEALTH.enabled = false;
-    }
+    });
   });
 });

@@ -171,15 +171,12 @@ describe("needs C13: the store's demand is players + crews + colonists (RULE-11)
   }
 
   it("needs B-AC-12 (the Medicine case): health on, h 0.3, 4 seats holding no Medicine: the crews' cure adds 4; health off, today's", () => {
-    expect(playersMedicine(0.3), 'health off: no crew falls sick').toBeCloseTo(0, 9);
-    HEALTH.enabled = true;
-    try {
+    expect(withoutHealth(() => playersMedicine(0.3)), 'health off: no crew falls sick').toBeCloseTo(0, 9);
+    withHealth(() => {
       expect(0.3, 'the premise: h at or over crewSickFrom').toBeGreaterThanOrEqual(HEALTH.crewSickFrom);
       expect(playersMedicine(0.3)).toBeCloseTo(4, 9);
       expect(playersMedicine(0.3, DIRTY), 'in dirty air the cure is still 1 a seat: the air factor is the colonists\'').toBeCloseTo(4, 9);
       expect(playersMedicine(0), "h 0: no crew falls sick, today's").toBeCloseTo(0, 9);
-    } finally {
-      HEALTH.enabled = false;
-    }
+    });
   });
 });

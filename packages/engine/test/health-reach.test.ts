@@ -209,9 +209,9 @@ describe('needs C18: a sick colony reaches its players\' crews (RULE-15)', () =>
   it("needs T-AC-26: crewOutputShare is the share a player's crews let a plot make, short-fed and sick, with or without Medicine; the AI's one way to weigh it", () => {
     const state = newGame();
     state.colony!.sick = 0.3;
-    expect(crewOutputShare(state, 'p0', { medicine: false }), 'health off: nothing but RULE-12, and no crew went short').toBe(1);
+    expect(withoutHealth(() => crewOutputShare(state, 'p0', { medicine: false })), 'health off: nothing but RULE-12, and no crew went short').toBe(1);
     state.players.find((p) => p.id === 'p0')!.crewShort = { food: 0.5, water: 0 };
-    expect(crewOutputShare(state, 'p0', { medicine: false }), "health off: RULE-12's factor alone").toBeCloseTo(0.852, 3);
+    expect(withoutHealth(() => crewOutputShare(state, 'p0', { medicine: false })), "health off: RULE-12's factor alone").toBeCloseTo(0.852, 3);
     withHealth(() => {
       expect(crewOutputShare(state, 'p0', { medicine: true }), 'a Medicine cures the crews: RULE-12 alone').toBeCloseTo(0.852, 3);
       expect(crewOutputShare(state, 'p0', { medicine: false }), 'no Medicine at h 0.3: × (1 − 0.5 × 0.3)').toBeCloseTo(0.852 * 0.85, 3);
