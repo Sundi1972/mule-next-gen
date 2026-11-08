@@ -183,14 +183,15 @@ export function resolveSabotage(state: GameState): void {
     const victim = tile ? tile.owner : null;
     const worked = !guarded && works;
     const outcome: SabotageOrder['outcome'] = guarded || seen ? 'caught' : works ? 'done' : 'failed';
-    return [{ id: order.id, outcome, worked, victim, revealed: guarded || seen }];
+    // The crop is read now, at resolution: the plot may lose its MULE or be re-outfitted before anyone looks again.
+    return [{ id: order.id, outcome, worked, victim, good: tile?.outfit as Good | undefined, revealed: guarded || seen }];
   });
   if (voided.size > 0) {
     const kept = state.politics.sabotage.filter((o) => !voided.has(o.id));
     edit(state).sabotage = kept;
   }
-  for (const { id, outcome, worked, victim, revealed } of verdicts) {
-    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim });
+  for (const { id, outcome, worked, victim, good, revealed } of verdicts) {
+    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim, ...(good ? { good } : {}) });
     if (revealed) reveal(state, id);
   }
 }
