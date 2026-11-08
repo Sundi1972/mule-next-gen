@@ -24,6 +24,8 @@ planning month. `?path=sheriff` plays the Sheriff month (guard, catch, fine, an 
 | SB-5b | TvDeals' 8 s lifetime | WS6 | A named edit in WS7's `table/TvDeals.tsx`, as ruled. Lands after #734. | 10 Nov 18:00Z |
 | — | Batch | PM | SB-1b → SB-2 → SB-3, SB-4 and SB-5 together, after #734 and #751. | 12 Nov 12:00Z |
 
+- Named deviation (WS7, 8 Nov): ElectionDayRail stays in ElectionsSub. T-AC-66 and AM-21's month-1 run block need it (docs/specs/2026-10-28-ws7-untimed-election.md:221, :298), and the scaffold has no run block.
+
 ### SB-2 contents (WS6)
 
 - `Hub.tsx` draws `TabShell`. `HubStage`, `DeskTabs`, `AgendaRow` and `MapTools` move to `tabs/Overview.tsx`.
