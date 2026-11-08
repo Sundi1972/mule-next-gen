@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { useEventReducedMotion } from '../events/motion';
 import type { GridPlace } from './layout';
-import { behindAny } from './occlusion';
+import { hiddenBy, type Occluder } from './occlusion';
 import { iso } from './projection';
 import { METRE, walkerAt, walkRoute, type Spot } from './walks';
 
@@ -92,8 +92,8 @@ export function WalkingScene({
   walkers: number;
   rim: number;
   blocks: GridPlace[];
-  /** The blocks whose pictures stand up from the ground (the hall and every building but a flat site): a colonist behind one is hidden by it, and its outline is drawn over it. */
-  occluders?: GridPlace[];
+  /** The pictures drawn among the colonists, with their silhouettes: a colonist one of them covers gets its outline drawn over them all. */
+  occluders?: Occluder[];
   /** Each colonist's route, in place of the walk round the hall (a mock or a test places a colonist exactly). */
   routes?: Spot[][];
 }) {
@@ -115,7 +115,7 @@ export function WalkingScene({
   const t = reduced ? 0 : seconds;
   const people = routes.map((route, i) => {
     const spot = walkerAt(i, t, route);
-    const hidden = behindAny(spot, occluders);
+    const hidden = hiddenBy(spot, occluders);
     return { depth: spot[0] + spot[1], node: <Colonist key={`walker-${i}`} i={i} spot={spot} seconds={t} />, ghost: hidden ? <Colonist key={`ghost-${i}`} i={i} spot={spot} seconds={t} ghost /> : null };
   }).sort((a, b) => a.depth - b.depth);
   const drawn: ReactElement[] = [];
