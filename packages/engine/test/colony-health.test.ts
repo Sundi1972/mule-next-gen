@@ -6,6 +6,7 @@ import {
   electronicsComfort,
   GOOD_CONFIG,
   HAPPINESS,
+  hardship,
   HEALTH,
   moodInputs,
   moodTarget,
@@ -72,11 +73,34 @@ describe('needs C7: the colonists\' sick share (RULE-7)', () => {
     for (let month = 0; month < 40; month++) h = nextSickShare(h, untreated);
     expect(h, 'no Medicine: it climbs to the cap').toBe(HEALTH.cap);
     expect(nextSickShare(HEALTH.cap, untreated), 'and stays there').toBe(HEALTH.cap);
-    // Each sick colonist recovers at recovery × (1 − medicineCut × s_med) and infects at most contagion a month.
+    // Half the Medicine missing cuts recovery linearly, by 0.3 × 0.5, not along the hardship curve:
+    // p = 0.01 + 0.2 × g(0.5) + 0.15 × 0.3 with g(0.5) = (0.4 / 0.9)^1.5 = 8/27; recover = 0.3 × 0.5 × (1 − 0.15).
+    expect(nextSickShare(0.3, { ...FED, medicine: 0.5 })).toBeCloseTo(0.3 + 0.7 * (0.01 + 0.2 * (8 / 27) + 0.045) - 0.3 * 0.5 * 0.85, 12);
+
+    // Hunger counts the worse of Food and Water: half the Food missing or half the Water, the same p = 0.01 + 0.2 × 8/27 + 0.045.
+    const hungry = 0.3 + 0.7 * (0.01 + 0.2 * (8 / 27) + 0.045) - 0.3 * 0.5;
+    expect(nextSickShare(0.3, { ...FED, food: 0.5 }), 'half the Food missing').toBeCloseTo(hungry, 12);
+    expect(nextSickShare(0.3, { ...FED, water: 0.5 }), 'half the Water missing').toBeCloseTo(hungry, 12);
+    expect(nextSickShare(0.3, { ...FED, food: 0.5, water: 0.2 }), 'the worse of the two, not the lesser').toBeCloseTo(hungry, 12);
+    expect(nextSickShare(0.3, { ...FED, food: 0.05 }), 'within the tolerance: no hunger at all').toBe(nextSickShare(0.3, FED));
+
+    // Recovery beats contagion: a month on, an extra sick share h is less than h × (1 − p₀), what it would be if the sick
+    // neither infected nor recovered (p₀ = nextSickShare(0): the well's own inflow), for every s_med.
     for (let step = 0; step <= 20; step++) {
-      const sMed = step / 20;
-      expect(HEALTH.recovery * (1 - HEALTH.medicineCut * sMed), `s_med ${sMed}`).toBeGreaterThan(HEALTH.contagion);
+      const short = { ...FED, medicine: step / 20 };
+      const inflow = nextSickShare(0, short);
+      for (const h of [0.01, 0.2]) {
+        expect(nextSickShare(h, short) - inflow, `s_med ${short.medicine}, h ${h}`).toBeLessThan(h * (1 - inflow));
+      }
     }
+  });
+
+  it('needs T-AC-1: the hardship curve g at s = 0, 0.10, 0.11, 0.5 and 1 is 0, 0, about 0.00117, 0.2963 and 1', () => {
+    expect(hardship(0)).toBe(0);
+    expect(hardship(0.1), 'at the tolerance: nothing yet').toBe(0);
+    expect(hardship(0.11), '(0.01 / 0.9)^1.5').toBeCloseTo(0.00117, 5);
+    expect(hardship(0.5), '(0.4 / 0.9)^1.5 = 8/27').toBeCloseTo(0.2963, 4);
+    expect(hardship(1)).toBe(1);
   });
 });
 
@@ -103,7 +127,8 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       const kept = 1 - GOOD_CONFIG.medicine.spoilage * PRICE.storeSpoilage;
       expect(sick.left, 'the colonists take that need from the shelf').toBe(Math.floor((sick.medicine - sick.need) * kept));
       expect(well.colonists).toBe(Math.round(400 * UPKEEP.colonistGrowth.fed));
-      expect(sick.colonists, 'the growth rate is 0.05 × 0.2 lower').toBe(Math.round(400 * (UPKEEP.colonistGrowth.fed - HEALTH.growthPerSick * 0.2)));
+      // The growth reads the month's new share, not h_old's 0.2: fed and treated, 0.2 + 0.8 × (0.01 + 0.15 × 0.2) − 0.2 × 0.5 = 0.132.
+      expect(sick.colonists, 'the growth rate is 0.05 × 0.132 lower').toBe(Math.round(400 * (UPKEEP.colonistGrowth.fed - HEALTH.growthPerSick * 0.132)));
     });
   });
 
@@ -115,7 +140,6 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       expect(state.phase).toBe('upkeep');
       expect(state.history.at(-1)!.shortages, 'fed: the store had all they needed').toEqual([]);
       expect(sickShare(state), '0.3 + 0.7 × 0.055 − 0.15').toBeCloseTo(0.1885, 9);
-      expect(HEALTH.moodPerSick * sickShare(state)!, 'the target is 1.885 below the one at h 0').toBeCloseTo(1.885, 9);
 
       // The same month from h 0 ends at the base rate's 0.01, so its target is 0.1 down: the mood, a whole number
       // within one month's step of both targets, ends 2 points higher than the sick colony's.
