@@ -897,14 +897,14 @@ switch). Steps a different ruling changes carry **[ruling: D-S4-1]** or **[rulin
 | S4-PR-0 contract | — (#662) | **partly landed #662 e1e4794a (types/protocol); the held-out members, config keys and stubs move to S4-PR-1.** Task S4-0.1 (S4-C20 tracking) | S4-T-AC-16 (base half) | §3 types, protocol intents and views, NoticeEntry kinds | — | No | WS3 + WS7 |
 | S4-PR-1 engine | `ws7-s4-engine` | Tasks S4-1.0 … S4-1.13 (S4-C20 remainder, S4-C1 … S4-C8; S4-C12's AiAction half) | S4-UBER-AC-1; S4-B-AC-3, S4-B-AC-5, S4-B-AC-8; engine legs of S4-B-AC-1, -2, -6, -7; S4-T-AC-1 … -6, -11, -12, -14 (engine), -15, -16 | sabotage.ts's §3 exports; the five held-out union members; POLITICS.sabotage, .sheriff, .laws.sabotageBan, .ai.sabotage, .ai.sheriff, .reputation.moves.caught; `events.ts::storeEvent`; AiAction `sabotage`/`guard`/`investigate`/`fine` | #662; slice 3's `pactBreach`, `pactBetween`, `sabotagePossible`, `reputationReasons`, `reputation.moves` (S3-PR-1); `securitySpend` (S5-PR-1 exports it returning 0, slice 5 AM-3; a local stub only if S5-PR-1 is not in the lane) | Minimal, nothing visible: LawPicker.tsx words the type forces, words.ts JOB line. Defaults stay off (AM-2): `POLITICS.offices` ['governor'], `POLITICS.sabotage.on` false | WS7 (+ WS3, WS1, WS2 named edits) |
 | S4-PR-2 observe | `ws1-politics-observe` (#669) | Task S4-2.1 (S4-C9, tracking) | S4-T-AC-7 | observe()'s sabotage, guards and rumoured filter | #662 | No | WS1 |
-| S4-PR-3 values + sim | WS1's branch | Task S4-3.1 (S4-C11, S4-C12 sim half, tracking) | S4-T-AC-13, S4-B-AC-9, S4-UBER-AC-3 (first measure), S4-T-AC-11 (sim half) | value bodies in `politics-value.ts`; the sim's sabotage row | S4-PR-1, S4-PR-4 | No | WS1 |
+| S4-PR-3 values + sim — **MERGED #770 (e8c65180)**; sim half dropped (PM ruling B, Heiko 8 Nov "test this in real games") | WS1's branch | Task S4-3.1 (S4-C11; S4-C12's sim half dropped) | S4-T-AC-13, S4-B-AC-9; S4-UBER-AC-3's first measure → the 13 Nov play-test; S4-T-AC-11's sim half dropped | value bodies in `politics-value.ts`; the sim's sabotage row | S4-PR-1, S4-PR-4 | No | WS1 |
 | S4-PR-4 AI hands | `ws7-s4-hands` | Task S4-4.1 (S4-C10) | S4-T-AC-9, S4-T-AC-10 | SabotageHand, SheriffHand; VoteHand's ban vote | S4-PR-1 exports; #669's value stubs | No | WS7 (+ WS1 test named edit) |
 | S4-PR-5 server | `ws7-s4-server` | Tasks S4-5.1, S4-5.2 (S4-C13) | S4-B-AC-1, -2, -4, -6 (server); S4-T-AC-8; S4-T-AC-14 (server) | the four intents on the wire; PoliticsView.sabotage, MyPoliticsView.sabotage/.sheriff, EventView.sabotage filled; news; the three notices | S4-PR-1; #662 protocol; S4-PR-2 | No | WS7 (+ WS3 named edits) |
 | mocks | the mock owner's design branch | Task S4-M.1 (P6-P11, tracking) | — | the approved mock under `design/mocks/<slug>/` at a SHA | §3 views | mock only | WS6 per spec; the PM confirms the mock and screen builders (SEAMS 7 Nov 11:02Z relays a P2 mock to WS8) |
 | S4-PR-6 desks | `ws7-s4-desks` | Tasks S4-6.0 … S4-6.5 (S4-C14, S4-C15, S4-C16, S4-C18; the defaults flipped on, AM-2) | S4-B-AC-10 (screen legs, contract), S4-B-AC-7 (screen leg, e2e month 1) | `POLITICS.offices` ['governor', 'sheriff'] and `POLITICS.sabotage.on` true as defaults | S4-PR-5 views; the approved mock | Yes | WS7 files (+ WS6, WS4, WS1 named edits); the PM confirms the builder |
 | S4-PR-7 show | WS8's branch | Task S4-7.1 (S4-C17, tracking) | screen legs of S4-B-AC-1, -2, -3 | EVENT_SHOW rows; kind 'sabotage' stories | S4-PR-1 events; S4-PR-5 EventView.sabotage; the approved mock | Yes | WS8 (+ WS6, WS4 named edits) |
-| S4-PR-9 Sheriff incentives, engine + server (AM-11) | `ws7-s4-sheriff` | canGuard + S4-RULE-6 own-plot row; bounty at a guard catch and a solved investigation (officePay, as far as the fund reaches; order.bounty); captureOdds + ownPlotDetectBonus; politics.sheriffRecord reset in takeOffice; config bounty 50, ownPlotDetectBonus 0.2; the election view carries the record; rulebook | S4-B-AC-11 (engine+server legs), S4-B-AC-12, S4-T-AC-17..20 | — | S4-PR-1, S4-PR-5 | No | WS7 (protocol + mule-game/politics-view named edits as before: WS3 OKs by SHA) |
-| S4-PR-10 Sheriff incentives, AI values | WS1's | guardValue never offers the Sheriff's own plots and weighs the bounty (value × chance targeted + bounty × chance caught); sabotage values read the new captureOdds (no change expected: they call it) | S4-T-AC-9 rows extended | — | S4-PR-9's config keys + canGuard | No | WS1 |
+| S4-PR-9 Sheriff incentives, engine + server (AM-11) — **MERGED #793 (82d0db8b) + follow-up #799 (e8ba0a80, slice 4 AM-12)** | `ws7-s4-bounty` | canGuard + S4-RULE-6 own-plot row; bounty at a guard catch and a solved investigation (officePay, as far as the fund reaches; order.bounty); captureOdds + ownPlotDetectBonus; politics.sheriffRecord reset in takeOffice; config bounty 50, ownPlotDetectBonus 0.2; the election view carries the record; rulebook | S4-B-AC-11 (engine+server legs), S4-B-AC-12, S4-T-AC-17..20 | — | S4-PR-1, S4-PR-5 | No | WS7 (protocol + mule-game/politics-view named edits as before: WS3 OKs by SHA) |
+| S4-PR-10 Sheriff incentives, AI values — due **10 Nov 18:00Z**, after S4-PR-9 (merged) | WS1's | guardValue never offers the Sheriff's own plots and weighs the bounty (value × chance targeted + bounty × chance caught); sabotage values read the new captureOdds (no change expected: they call it) | S4-T-AC-9 rows extended | — | S4-PR-9's config keys + canGuard | No | WS1 |
 | S4-PR-11 Sheriff incentives, screens | WS8's + WS7's | WS8: GUARD_PICK offers only canGuard plots; the desk shows the bounty (order.bounty, POLITICS.sheriff.bounty). WS7: ElectionDay + TvElection show the outgoing Sheriff's record line | S4-B-AC-11 (record leg) | — | S4-PR-9 | **Yes** | WS8, WS7 |
 | S4-PR-8 e2e + rows | `ws7-s4-e2e` | Tasks S4-8.1 … S4-8.3 (S4-C19; rows to Heiko) | S4-UBER-AC-2, S4-B-AC-10, S4-UBER-AC-3 (final), S4-B-AC-9 | — | every PR above | e2e only | WS7, WS1 |
 
@@ -1192,7 +1192,11 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
 
 ---
 
-### S4-PR-3 · values and the sim (WS1)
+### S4-PR-3 · values and the sim (WS1) — MERGED #770 (e8c65180)
+
+**Amended 8 Nov (PM ruling B, from Heiko's 8 Nov "test this in real games"):** the sim half is dropped. Steps 1b,
+2's sim row, 3 and 4 are not done; S4-T-AC-11's sim half is dropped (its engine half stands, Task S4-1.11), and
+S4-UBER-AC-3's first measure moves to the 13 Nov play-test. Step 1's value bodies landed in #770.
 
 #### Task S4-3.1 — S4-C11, S4-C12: what WS7 needs from WS1, and its check
 
@@ -1478,7 +1482,7 @@ their own branches and reach `feat/strategist` through the PM's batches.
 | S5-PR-0 · contract [RC] | — (#662, landed e1e4794a) | Task S5-0.1 (check only): §3's types, intents, views | none | §3 types and protocol | — | No | WS3 (landed) |
 | S5-PR-1 · engine [RC] | `ws7-s5-engine` | Tasks S5-1.0-1.9 (S5-C1, C2, C3, C4, C5; config; S5-C9's AiAction part as WS1 named edits) | S5-B-AC-2, S5-T-AC-1..8, S5-T-AC-12 (engine half) | politics.ts: `setBudget`, `budgetLines`, `budgetShares`, `budgetCredits`, `callOverrule`, `canOverrule`, `openOverrule`, `voteOverrule`, `securitySpend` (0 in RC); colony.ts: `welfareRecipient`; config: `POLITICS.budget`, `.overrule`, `.ai.budget`, `.ai.overrule`, `HAPPINESS.weights.welfare/welfareUnit/welfareCap`; AiAction `setBudget`, `callOverrule`, `voteOverrule` | §3 types (#662); S3-PR-1's politics.ts | No | WS7 (+ WS1 named edits) |
 | S5-PR-2 · AI hands [RC] | `ws7-s5-hands` | Tasks S5-2.0-2.4 (S5-C6) | S5-T-AC-13, S5-T-AC-14, S5-T-AC-15 | `BudgetHand`, `OverruleHand` (hands/budget.ts) | S5-PR-1; #669's `lineWorth` / `overruleWorth` stubs | No | WS7 (+ WS1 named edit: the test file) |
-| S5-PR-3 · values, sim, observe [RC] | WS1's branch, plus #669 | Tasks S5-3.1-3.3, tracking (S5-C9's values, play loop, sim row; observe via #669) | S5-T-AC-16, S5-T-AC-17, S5-T-AC-12 (sim half), S5-B-AC-6, S5-UBER-AC-1 | `lineWorth`, `overruleWorth` real bodies (projects, welfare, tax); the sim's budget-and-overrule row | S5-PR-1, S5-PR-2 | No | WS1 |
+| S5-PR-3 · values, play loop, observe [RC] — **#796** | WS1's branch, plus #669 | Tasks S5-3.1-3.3, tracking (S5-C9's values, play loop and parity row; observe via #669; the sim row dropped 8 Nov) | S5-T-AC-17, S5-T-AC-12 (sim half), S5-B-AC-6, S5-UBER-AC-1 | `lineWorth`, `overruleWorth` real bodies (projects, welfare, tax); the sim's budget-and-overrule row | S5-PR-1, S5-PR-2 | No | WS1 |
 | S5-PR-4 · server [RC] | WS3's branch | Tasks S5-4.1-4.3, tracking (S5-C7, incl. continuePlanning's null-election fix) | S5-T-AC-10, S5-B-AC-4, S5-B-AC-5 | the three intents accepted; the overrule ballot at planning's end; Ready cleared on a Governor's change | S5-PR-1; S5-PR-5's `overruleNews` | No | WS3 |
 | S5-PR-5 · views [RC] | `ws7-s5-views` | Tasks S5-5.0-5.2 (S5-C8) | S5-T-AC-11 | `PoliticsView.budget/.overrule`, `MyPoliticsView.overruleBallot/.canOverrule`, `ColonyView.welfare`, `overruleNews(state)` | S5-PR-1 | No | WS7 |
 | S5-mocks [RC] | WS6's branch | Tasks S5-M.1-M.2, tracking: P12, P13, P14, P15 → Heiko | none | the approved mocks under `design/mocks/<slug>/` | the RC views' shape (§3) | mock only | WS6 |
@@ -1876,7 +1880,11 @@ Before suggesting merge of `ws7-s5-engine` into `ws7-politics`:
   `pnpm --filter @mule/ai test budget-hand` stays green with the real bodies, and the hands now call (B-AC-6 needs
   calls, which the 0 stubs never make).
 
-#### Task S5-3.3 — the sim plays and reports slice 5 [ruling: D-S5-2]
+#### Task S5-3.3 — the sim plays and reports slice 5 [ruling: D-S5-2] — S5-PR-3 is #796
+
+**Amended 8 Nov:** Steps 2 and 5 and S5-T-AC-16 are dropped: S5-UBER-AC-1 is proven in play (Heiko, 8 Nov). Steps 1, 3
+and 4 stand; the parity row (play.ts plays the overrule as the server does, red on the old play.ts) is the merge gate.
+#796 merges into `ws7-politics` on APPROVE, per the #770 precedent.
 
 - [ ] **Step 1: WS1's `play.ts` planning case** (line 409): after the Governor's tick, tick every hand once more;
   after `planMonth`, call `openOverrule` and, if it opened, loop the votes as before (S5-C9).
@@ -1892,7 +1900,7 @@ Before suggesting merge of `ws7-s5-engine` into `ws7-politics`:
 
 #### S5-PR-3 merge gate (WS1's PR; WS7's checks)
 
-- [ ] S5-T-AC-16, S5-T-AC-17, S5-B-AC-6 and S5-T-AC-12 (sim half) green by id; S5-UBER-AC-1 holds on both sets
+- [ ] S5-T-AC-17, S5-B-AC-6 and S5-T-AC-12 (sim half) green by id; the parity row green (S5-T-AC-16 and the sim leg of S5-UBER-AC-1 dropped, 8 Nov: proven in play)
 - [ ] CI 4/4; one review once CI is green; WS7 confirms the hands' tests unchanged at WS1's head SHA
 
 ---
