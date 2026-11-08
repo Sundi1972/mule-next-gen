@@ -258,6 +258,10 @@ condition); tell the PM, since it narrows G-1's reach.
   - *7 Nov, at 21a77b5e: FAILED* — 16/24 (67%) per seat; cross-seat 0; paid lines 0. All 8 misses per seat are the land
     ask, closed 0.3–0.5 s after it opened because the scripted host pressed Ready at once (§8). Paced rerun (host Ready
     8 s, then 3 s, after each wait) in progress; PR-1b's merge to main is held until this gate passes.
+  - *8 Nov, PM ruling: the measured end check is dropped.* The paced rerun was voided by Mac sleep and is not run
+    again (Heiko, 8 Nov: real games over measured runs). **Gate P1 now passes on Heiko's real play: his 25-minute
+    Claude seat test in Desktop and on his phone, by 10 Nov.** Then the main merge with his OK via the PM. Recorded in
+    #618's body.
 
 ## Phase 2 — wave 2: the table sees what the seat is doing
 
@@ -391,4 +395,4 @@ Gated by S1's answer (D-1 b's condition, above).
   3–5 s. The finding: the land ask's window is set by how fast the host taps Ready (spec §8 note). PM rulings: (a) rerun
   with the host pressing Ready 8 s after each wait, then at 3 s; (d) no fix work until (a) reports. If 8 s clears 90%
   the realistic table is fine and the fast-host case goes to Heiko as a card — a planning hold (b) against variant d-ii;
-  (c), a projected land ask, is ruled out. PR-1b's merge to main is held until Gate P1 passes.
+  (c), a projected land ask, is ruled out. PR-1b's merge to main is held until Gate P1 passes. *8 Nov: the measured check is dropped; Gate P1 passes on Heiko's 25-minute real play by 10 Nov (PM ruling).*
