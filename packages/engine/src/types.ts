@@ -660,6 +660,8 @@ export interface SabotageOrder {
   culpritPublic: boolean;
   /** Set when it resolves: the tile's owner then; null for a rumour, and while pending. */
   victim?: string | null;
+  /** Set when a power cut resolves: the crop of the plot it hit then. Absent for a rumour (its good is target.good), while pending, and on a void order. */
+  good?: Good;
   /** Set when it resolves: whether the effect happened. */
   worked?: boolean | null;
   /** The month the Sheriff investigated it; null if never. */
