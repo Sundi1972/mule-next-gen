@@ -59,6 +59,7 @@ function Variant({ variant, state, title, blurb }: { variant: 'a' | 'b'; state: 
       </h2>
       <p className="max-w-2xl text-sm text-ink-2">{blurb}</p>
       <div className="flex flex-wrap items-start gap-4">
+        <Flow key={`${state}-357`} variant={variant} state={state} w={357} h={309} />
         <Flow key={`${state}-300`} variant={variant} state={state} w={300} h={375} />
         <Flow key={`${state}-400`} variant={variant} state={state} w={400} h={390} />
       </div>
@@ -92,7 +93,7 @@ function Page({ title, children }: { title: string; children: ReactNode }) {
 }
 
 const A = { title: 'A · Three jobs', blurb: 'The office’s three powers as three sections, in the order a month uses them: Guard, Investigate, Fine. Only work that can still be done is on the desk; cold and closed cases are history.' };
-const B = { title: 'B · The case file (chosen)', blurb: 'Guards as one line on top, then one list of every case, newest first, each with only its next step: Investigate, then Fine. Cold and closed cases fold under one line.' };
+const B = { title: 'B · The case file (chosen), folded', blurb: 'Guards as one row on top, then one list of every case, each a 44 px row with its next step on a chip (Investigate, Fine Lena); a tap opens it in place, one at a time. Cold and closed cases fold under one line. Folded 8 Nov: in WS6’s Sheriff sub-tab at 667 (357 × 309) B measured 651 px; folded it is 294.' };
 
 export default function App() {
   const [r, setR] = useState(route);

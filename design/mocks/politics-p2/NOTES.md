@@ -101,3 +101,14 @@ Real components from apps/web (hub desks, LookPanel, HoloMap flag 'sabotage', th
 - A rumour may name any of the nine goods (the engine checks GOODS). The engine refuses an order the player cannot pay
   for ("A crew costs N cr; you have M"): the build shows that refusal as today's toasts do.
 - The ban's multiplier is a prop in the mock: trunk's LawId has no 'sabotageBan' yet; ws7-s4-engine adds it.
+
+## B folded (8 Nov, WS6's finding via the PM)
+
+Measured in WS6's hub-tabs prototype (ws6-mock-hub-tabs 83385f8d, ?beat=6-file, 667 phone): the Sheriff sub-tab is
+357 × 309 px; B at 73e797fd was 651 px tall (guard box 117, fine case 195, each open case 104). Splitting guards
+into their own sub-tab still leaves cases at 492 px; folding only solved or fined cases changes nothing this month
+(all three live cases need action). So: every case folds to one 44 px row with its next step on a chip; a tap opens
+it in place, one at a time, scrolled just into view; guards are one row. Measured at 357 wide in this mock: 294 px
+folded (fits 309); fine case open 415 with its button on screen; the last case's Investigate scrolled into view.
+B's rule is kept (one list, a case keeps its place, only its step changes); its first screen changes (the step's
+controls are a tap away), so it goes to Heiko as a change.

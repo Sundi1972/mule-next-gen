@@ -22,6 +22,12 @@ export function caseTitle(view: View, c: IncidentView): string {
   return `Power cut on ${possessive(name(view, c.victim))} ${GOOD_NAME[c.good].toLowerCase()} plot`;
 }
 
+/** A case in a folded row's few words: "Cut: Kai’s energy plot", "Rumour: food up". */
+export function caseShort(view: View, c: IncidentView): string {
+  if (c.kind === 'rumour') return `Rumour: ${GOOD_NAME[c.good].toLowerCase()} ${c.dir === 'down' ? 'down' : 'up'}`;
+  return `Cut: ${possessive(name(view, c.victim))} ${GOOD_NAME[c.good].toLowerCase()} plot`;
+}
+
 /** Which state a case is in, from the Sheriff's chair: what they can still do with it. */
 export type CaseState = 'open' | 'cold' | 'fineable' | 'closed';
 export function caseState(c: IncidentView, sheriff: SheriffState): CaseState {
@@ -68,7 +74,7 @@ function CaseChip({ view, c, state, solved }: { view: View; c: IncidentView; sta
 
 /** How the culprit was found, for a revealed case. */
 export function howFound(c: IncidentView): string {
-  if (c.how === 'guard') return 'Your guard caught them on the plot.';
+  if (c.how === 'guard') return 'Your guard caught them.';
   if (c.how === 'caught') return 'Caught in the act.';
   if (c.how === 'investigation') return 'Your investigation found them.';
   return '';
@@ -99,30 +105,30 @@ export function FineControl({ view, c, sheriff, onFine }: { view: View; c: Incid
   const culprit = name(view, c.culprit);
   return (
     <div className="flex flex-col gap-1" data-testid={`fine-${c.id}`}>
-      <div className="flex items-center gap-1">
-        <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="50 less" disabled={i === 0} onClick={() => setI(i - 1)} data-testid={`fine-down-${c.id}`}>
-          −
-        </Button>
-        <span className="flex h-11 w-20 shrink-0 flex-col items-center justify-center">
-          <span data-num className="font-mono text-xl font-bold leading-none" data-testid={`fine-value-${c.id}`}>
-            {total}
-          </span>
-          {sheriff.multiplier > 1 && (
-            <span className="font-mono text-[10px] text-ink-3" data-testid={`fine-multiplier-${c.id}`}>
-              {base} × {sheriff.multiplier} ban
+      {/* One row where it fits (WS6's 357 px sub-tab), the button under the stepper where it does not. */}
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="flex shrink-0 items-center gap-1">
+          <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="50 less" disabled={i === 0} onClick={() => setI(i - 1)} data-testid={`fine-down-${c.id}`}>
+            −
+          </Button>
+          <span className="flex h-11 w-16 shrink-0 flex-col items-center justify-center">
+            <span data-num className="font-mono text-xl font-bold leading-none" data-testid={`fine-value-${c.id}`}>
+              {total}
             </span>
-          )}
+            {sheriff.multiplier > 1 && (
+              <span className="font-mono text-[10px] text-ink-3" data-testid={`fine-multiplier-${c.id}`}>
+                {base} × {sheriff.multiplier} ban
+              </span>
+            )}
+          </span>
+          <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="50 more" disabled={i === steps.length - 1} onClick={() => setI(i + 1)} data-testid={`fine-up-${c.id}`}>
+            +
+          </Button>
         </span>
-        <Button size="md" variant="outline" className="w-11 shrink-0 px-0" aria-label="50 more" disabled={i === steps.length - 1} onClick={() => setI(i + 1)} data-testid={`fine-up-${c.id}`}>
-          +
+        <Button size="md" variant="danger" className="min-w-36 flex-1 whitespace-nowrap px-2" onClick={() => onFine(base)} data-testid={`fine-confirm-${c.id}`}>
+          Fine {culprit} {total} cr
         </Button>
-        <span className="min-w-0 flex-1 text-[11px] leading-tight text-ink-3" data-testid={`fine-range-${c.id}`}>
-          {steps[0]}–{steps.at(-1)} cr{sheriff.multiplier > 1 ? `, ×${sheriff.multiplier} under the ban` : ''}
-        </span>
       </div>
-      <Button size="md" variant="danger" className="w-full whitespace-nowrap px-2" onClick={() => onFine(base)} data-testid={`fine-confirm-${c.id}`}>
-        Fine {culprit} {total} cr
-      </Button>
       <span className="text-[11px] text-ink-3 @min-[1100px]/shell:text-sm" data-testid={`fine-split-${c.id}`}>
         {c.victim ? `${total / 2} cr to ${name(view, c.victim)}, ${total / 2} cr to the colony fund.` : `All ${total} cr to the colony fund: a rumour has no victim.`}
         {` Not fined by the end of planning: the standard ${STANDARD_FINE * sheriff.multiplier} cr.`}
@@ -206,5 +212,61 @@ export function DeskWaits({ why }: { why: Exclude<SheriffState['canAct'], true> 
     <p className="rounded-panel border border-holo-line bg-panel p-2.5 text-sm text-ink-2" role="status" data-testid={`sheriff-waits-${why}`}>
       {words}
     </p>
+  );
+}
+
+/**
+ * Guards in one row (B, folded, 8 Nov): the count, each guarded plot, and the way to the map. Replaces B's 117 px guard
+ * box in WS6's 309 px Sheriff sub-tab at 667 (measured).
+ */
+export function GuardRow({ view, sheriff, onMap }: { view: View; sheriff: SheriffState; onMap(): void }) {
+  const posted = sheriff.guards.map((i) => view.tiles[i]!);
+  const free = sheriff.max - posted.length;
+  return (
+    <div className="flex items-center gap-1.5" data-testid="guard-line">
+      <GuardGlyph size={14} />
+      <span className="shrink-0 text-sm" data-testid="guard-count">
+        <strong className="font-mono font-bold">{posted.length}</strong>/{sheriff.max}
+      </span>
+      <ul className="flex min-w-0 flex-1 flex-wrap gap-1" data-testid="guard-plots" aria-label="Guarded plots">
+        {posted.map((t) => (
+          <li key={`${t.x},${t.y}`} className="flex items-center gap-1 rounded-chip border border-holo-line bg-panel px-1 text-[11px]" data-testid={`guard-plot-${t.x}-${t.y}`}>
+            {t.owner && <Who view={view} id={t.owner} size={12} />}
+            <span className="font-mono text-ink-3">{plotName(t.x, t.y)}</span>
+          </li>
+        ))}
+      </ul>
+      <Button size="md" variant={free > 0 ? 'holo' : 'outline'} className="shrink-0 px-3" onClick={onMap} data-testid="guard-open-map">
+        {free > 0 ? 'Guard a plot' : 'Move guards'}
+      </Button>
+    </div>
+  );
+}
+
+/** A folded case's next step, in its row: what the Sheriff can do with it, or how it came out. */
+export function StepChip({ view, c, state, result, fined }: { view: View; c: IncidentView; state: CaseState; result: string | null | undefined; fined: number | undefined }) {
+  const [words, tone] =
+    fined !== undefined ? ['Fined', 'border-ok text-ok']
+    : result === null ? ['Cold', 'border-holo-line text-ink-3']
+    : state === 'fineable' ? [`Fine ${name(view, c.culprit)}`, 'border-alert bg-alert-bg text-alert-ink']
+    : state === 'open' ? ['Investigate', 'border-holo text-holo']
+    : state === 'cold' ? ['Cold', 'border-holo-line text-ink-3']
+    : ['Closed', 'border-holo-line text-ink-3'];
+  return (
+    <span className={cx('shrink-0 whitespace-nowrap rounded-chip border px-1.5 text-[11px] font-semibold leading-5', tone)} data-testid={`step-chip-${c.id}`}>
+      {words}
+    </span>
+  );
+}
+
+/** A case's details under its folded row: when, where, whether it worked. */
+export function CaseMeta({ c, extra }: { c: IncidentView; extra?: string }) {
+  return (
+    <span className="text-[11px] text-ink-3 @min-[1100px]/shell:text-sm" data-testid={`case-meta-${c.id}`}>
+      Month {c.month}
+      {c.at && ` · plot ${plotName(c.at.x, c.at.y)}`}
+      {c.worked ? ' · it worked' : ' · it failed'}
+      {extra && ` · ${extra}`}
+    </span>
   );
 }
