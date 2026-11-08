@@ -42,7 +42,7 @@ export const isOpen = (c: DealCard) => c.status === 'offered' || c.status === 'a
 
 /**
  * Why `me` may not offer `to` a card now, in the engine's words, or null: one unanswered card to a player at a time
- * (S3-RULE-2 row 5). Every "+ Deal" door asks this.
+ * (S3-RULE-2 row 5). The composer asks it for every door; the whisper's "+ Deal" asks it too.
  */
 export function noNewCard(view: Pick<MuleView, 'players'>, me: Pick<MyView, 'id' | 'deals'>, to: string): string | null {
   const waiting = (me.deals?.cards ?? []).some((c) => c.from === me.id && c.to === to && c.status === 'offered');
@@ -121,10 +121,12 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
   const other = view.players.find((p) => p.id === to)!;
   const myRep = view.players.find((p) => p.id === me.id)?.reputation ?? 0;
   const refuseBelow = POLITICS.ai.deals.refuseBelow;
-  const pactNo = cards.some((c) => c.terms.kind === 'pact' && isOpen(c) && between(c, me.id, to)) ? `You already have a pact with ${other.name}` : undefined;
+  // S3-RULE-2 row 5 first: an unanswered card of mine to them is not a pact, whatever it offers.
+  const waiting = noNewCard(view, me, to);
+  const pactNo = !waiting && cards.some((c) => c.terms.kind === 'pact' && isOpen(c) && between(c, me.id, to)) ? `You already have a pact with ${other.name}` : undefined;
   const offer = toOffer(to, draft);
   const refusal = sentAfter === null ? null : (toasts.filter((t) => t.id > sentAfter).at(-1) ?? null);
-  const blocked = offersLeft <= 0 ? `You have ${cards.filter((c) => c.from === me.id && c.status === 'offered').length} cards waiting for an answer` : draft.kind === 'pact' ? pactNo : undefined;
+  const blocked = offersLeft <= 0 ? `You have ${cards.filter((c) => c.from === me.id && c.status === 'offered').length} cards waiting for an answer` : (waiting ?? (draft.kind === 'pact' ? pactNo : undefined));
   const landed = cards.some((c) => c.from === me.id && c.to === to && c.status === 'offered' && before.current && !before.current.has(c.id));
   useEffect(() => {
     if (landed) onSent();
