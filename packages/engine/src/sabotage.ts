@@ -263,7 +263,8 @@ export function applyRumours(state: GameState): void {
 /** Restore the posted prices exactly, when the auction ends: from the price recorded before the shift, never by undoing it. */
 export function endRumours(state: GameState): void {
   if (!state.politics || state.politics.rumoured.length === 0) return;
-  for (const { good, from } of state.politics.rumoured) state.store.posted[good] = from;
+  // A seat's observe() copy has no `from` (HC-4): the price it sees stays as posted, and the next month posts afresh.
+  for (const { good, from } of state.politics.rumoured) if (from !== undefined) state.store.posted[good] = from;
   edit(state).rumoured = [];
 }
 
