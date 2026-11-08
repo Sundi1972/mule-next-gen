@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { lawImpact, POLITICS, type Council, type GameState, type LawId, type LawProposal } from '@mule/engine';
+import { lawImpact, lawOffered, POLITICS, type Council, type GameState, type LawId, type LawProposal } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
-const LAW_IDS = Object.keys(POLITICS.laws) as LawId[];
+/** The laws on the book: the sabotage ban only while sabotage is on (S4-C7), so the four older laws by default. */
+const LAW_IDS = (Object.keys(POLITICS.laws) as LawId[]).filter(lawOffered);
 
 /** Month 1's planning with Heiko (s1) governing, the election over, nothing on the ballot, and a land tax in force. */
 function governing() {
@@ -29,6 +30,7 @@ describe("T-AC-46-5 (server): the Governor's own view carries every proposal's c
     expect(candidates, "the Governor's own view").toBeDefined();
     const enacts = LAW_IDS.flatMap((law) => POLITICS.laws[law].settings.map((s) => `${law}:${s}`));
     expect(Object.keys(candidates!).sort()).toEqual([...enacts, 'repeal:landTax'].sort());
+    expect(Object.keys(candidates!).filter((k) => k.includes('sabotageBan')), 'S4-B-AC-8: no ban while sabotage is off').toEqual([]);
     for (const [key, impact] of Object.entries(candidates!)) expect(impact, key).toEqual(lawImpact(state, proposalOf(key)));
   });
 

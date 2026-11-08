@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import { POLITICS, SOCIAL_EVENTS, type DealCard } from '@mule/engine';
+import { POLITICS, SOCIAL_EVENTS, START, type DealCard } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ReactElement } from 'react';
@@ -50,12 +50,15 @@ const LENA = 's1';
 const OSSA = 's2';
 const KAI = 's3';
 const BRIX = 's4';
+/** A person whose name holds the computer seat's: never marked as one. */
+const KAI_LEE = 's5';
 /** Each seat's reputation sits on one side of a threshold: 70, 69, 30, 29 as config has it today. */
 const PLAYERS: PlayerView[] = [
   aPlayer({ id: LENA, name: 'Lena', slot: 0, reputation: repHigh }),
   aPlayer({ id: OSSA, name: 'Ossa', slot: 1, reputation: repHigh - 1 }),
   aPlayer({ id: KAI, name: 'Kai', slot: 2, reputation: repLow, isAi: true }),
   aPlayer({ id: BRIX, name: 'Brix', slot: 3, reputation: repLow - 1 }),
+  aPlayer({ id: KAI_LEE, name: 'Kai Lee', slot: 4, reputation: START.reputation }),
 ];
 const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
@@ -193,9 +196,9 @@ const text = (testid: string) => byTestid(testid).textContent;
 
 describe('the reputation chip (S3-C19)', () => {
   it('S3-B-AC-6: a chip beside every name in the hub (Who) shows PlayerView.reputation with the 70/30 thresholds readable, and its tap lists the public reasons', () => {
-    // Brix broke a vote card to Lena in month 2 and was blamed for unrest in month 1; Ossa broke one too. Lena and Brix
+    // Brix broke a vote card to Kai Lee in month 2 and was blamed for unrest in month 1; Ossa broke one too. Lena and Brix
     // kept a pact: a kept card moves the number, never the reasons.
-    const brixBroke = card({ id: 'deal-b1', from: BRIX, to: LENA, terms: { kind: 'vote', office: 'governor', candidate: KAI }, status: 'broken', brokenBy: BRIX, settled: 2 });
+    const brixBroke = card({ id: 'deal-b1', from: BRIX, to: KAI_LEE, terms: { kind: 'vote', office: 'governor', candidate: KAI }, status: 'broken', brokenBy: BRIX, settled: 2 });
     const ossaBroke = card({ id: 'deal-o1', from: OSSA, to: LENA, terms: { kind: 'pact' }, status: 'broken', brokenBy: OSSA, settled: 2 });
     const kept = card({ id: 'deal-k1', from: LENA, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
     const p = politics({
@@ -229,7 +232,8 @@ describe('the reputation chip (S3-C19)', () => {
     expect(text(`player-card-${BRIX}-band`)).toBe(`Reputation ${repLow - 1} · Low name: −1 vote, and AI players turn down their cards.`);
     expect(text(`player-card-${BRIX}`), 'the thresholds, readable').toContain(`${repHigh} and up: +1 vote. Under ${repLow}: −1 vote, and AI players turn down their cards.`);
     expect(allTestids('reason-'), "Brix's public reasons, newest first").toEqual(['reason-deal-b1', 'reason-unrest-1']);
-    expect(text('reason-deal-b1')).toBe(`M2Broke a promise to Lena: a vote for Kai · AI−${-POLITICS.reputation.moves.voteBroken}`);
+    // The mark follows the computer seat's id, never its name in the words: Kai Lee is a person.
+    expect(text('reason-deal-b1')).toBe(`M2Broke a promise to Kai Lee: a vote for Kai · AI−${-POLITICS.reputation.moves.voteBroken}`);
     expect(text('reason-unrest-1')).toBe(`M1Blamed for the unrest−${-SOCIAL_EVENTS.player.blamedForUnrest.reputation}`);
     expect(findTestid('reason-deal-k1'), 'a kept card is never among the reasons').toBeUndefined();
     expect(findTestid('reason-deal-o1'), "Ossa's broken card is Ossa's reason, not Brix's").toBeUndefined();
@@ -305,7 +309,7 @@ describe('the deal composer (S3-C17)', () => {
   it("S3-B-AC-1: the composer also opens from a name's player card and from a standings row, in planning", () => {
     mount(gameFor(myView(LENA)), hub);
     tap('standing');
-    tap(`standing-${OSSA}-deal`);
+    tap(`deal-standing-${OSSA}`);
     expect(findTestid('standings-sheet'), 'the standings give way to the composer').toBeUndefined();
     expect(text('composer-a')).toContain('Ossa');
     tap('composer-a-close');
@@ -398,5 +402,51 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(byTestid('my-deal-deal-in1').getAttribute('data-status')).toBe('declined');
     expect(text('my-deals-settled')).toContain('Declined by you');
     expect(text('my-deals-active')).not.toContain('Pact · 3 months · Binds until the end of month 4');
+  });
+});
+
+// ---- The break words' seats, for SeatWords on every screen ----------------------------------------------------------
+
+describe("the break words' seats (S3-C20)", () => {
+  it('S3-B-AC-2: brokenWho gives the seats brokenWords names, in its words’ order, for each kind of card, with and without the breaker', async () => {
+    const { brokenWho, brokenWords } = await import('../src/phone/hub/politics/deals-words');
+    const view = { players: PLAYERS };
+    const broken = (over: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to'>) => card({ status: 'broken', settled: 2, ...over });
+    const rows: [DealCard, boolean, string, string[]][] = [
+      [broken({ id: 'p1', from: LENA, to: BRIX, brokenBy: BRIX }), true, 'Brix broke a pact with Lena', [BRIX, LENA]],
+      [broken({ id: 'p2', from: LENA, to: BRIX, brokenBy: LENA }), false, 'Broke a pact with Brix', [BRIX]],
+      [broken({ id: 'v1', from: BRIX, to: KAI_LEE, terms: { kind: 'vote', office: 'governor', candidate: KAI }, brokenBy: BRIX }), true, 'Brix broke a promise to Kai Lee: a vote for Kai', [BRIX, KAI_LEE, KAI]],
+      [broken({ id: 'l1', from: OSSA, to: LENA, terms: { kind: 'vote', law: true, yes: false }, brokenBy: OSSA }), true, 'Ossa broke a promise to Lena: a no on the law', [OSSA, LENA]],
+    ];
+    for (const [c, named, words, who] of rows) {
+      expect(brokenWords(view, c, named), c.id).toBe(words);
+      expect(brokenWho(c, named), c.id).toEqual(who);
+    }
+  });
+});
+
+// ---- S3-C20 · the month's broken cards on the phone's month end -----------------------------------------------------
+
+describe("the phone's month end (S3-C20)", () => {
+  it("S3-B-AC-2: the phone's month end lists the month's broken cards in public (who broke a promise to whom, what was promised, the drop), from brokenIn; none for a kept card or one broken in an earlier month", async () => {
+    const { Results } = await import('../src/phone/Results');
+    const broke = (over: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to'>) => card({ status: 'broken', settled: 2, ...over });
+    const vote = broke({ id: 'deal-v2', from: BRIX, to: KAI_LEE, terms: { kind: 'vote', office: 'governor', candidate: KAI }, brokenBy: BRIX });
+    const pact = broke({ id: 'deal-p2', from: LENA, to: KAI, brokenBy: KAI });
+    const earlier = broke({ id: 'deal-p1', from: OSSA, to: LENA, brokenBy: OSSA, settled: 1 });
+    const kept = card({ id: 'deal-k2', from: LENA, to: BRIX, offered: 2, until: 2, status: 'kept', settled: 2 });
+    const monthEnd = (brokenDeals: DealCard[]) => gameFor(myView(LENA, [kept]), politics({ brokenDeals }), { phase: 'upkeep' });
+    mount(monthEnd([vote, pact, earlier]), () => createElement(Results));
+
+    expect(text('broken-cards')).toContain('Broken this month · in public');
+    expect(allTestids('broken-deal-').filter((id) => !/-(words|drop)$/.test(id)), "month 2's broken cards, and only those").toEqual(['broken-deal-v2', 'broken-deal-p2']);
+    expect(text('broken-deal-v2-words')).toBe('Brix broke a promise to Kai Lee: a vote for Kai · AI');
+    expect(text('broken-deal-v2-drop')).toBe(`−${-POLITICS.reputation.moves.voteBroken}`);
+    expect(text('broken-deal-p2-words'), 'the computer seat that broke it is marked').toBe('Kai · AI broke a pact with Lena');
+    expect(text('broken-deal-p2-drop')).toBe(`−${-POLITICS.reputation.moves.pactBroken}`);
+    expect(findTestid('broken-deal-k2'), 'a kept card is never listed').toBeUndefined();
+
+    rerender(monthEnd([earlier]));
+    expect(findTestid('broken-cards'), 'nothing broke this month: no list').toBeUndefined();
   });
 });

@@ -83,7 +83,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                               hub!.openDesk('talk', `compose:${r.player.id}`);
                             }}
                             aria-label={`Offer ${r.player.name} a deal card`}
-                            data-testid={`standing-${r.player.id}-deal`}
+                            data-testid={`deal-standing-${r.player.id}`}
                           >
                             + Deal
                           </Button>

@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1330 settings in 53 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1357 settings in 53 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>57ab9b9ac810</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>bab4f14b7f19</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -990,6 +990,7 @@
 <tr><td><code>POLITICS.reputation.moves.kept</code></td><td class="n">3</td><td>See the note on <code>POLITICS.reputation.moves</code>.</td></tr>
 <tr><td><code>POLITICS.reputation.moves.voteBroken</code></td><td class="n">-10</td><td>See the note on <code>POLITICS.reputation.moves</code>.</td></tr>
 <tr><td><code>POLITICS.reputation.moves.pactBroken</code></td><td class="n">-20</td><td>See the note on <code>POLITICS.reputation.moves</code>.</td></tr>
+<tr><td><code>POLITICS.reputation.moves.caught</code></td><td class="n">-10</td><td>A caught saboteur&#39;s reputation points, before the sabotage ban&#39;s multiplier (slice 4, S4-RULE-5; placeholder until WS1&#39;s sim row).</td></tr>
 <tr><td><code>POLITICS.reputation.keptPerPartnerPerTerm</code></td><td class="n">1</td><td>Kept gains a player can earn from cards with one other party in one term.</td></tr>
 </tbody>
 </table></div>
@@ -1015,6 +1016,41 @@
 </tbody>
 </table></div>
 
+<h3 id="politics-sabotage"><code>POLITICS.sabotage</code></h3>
+<p>Sabotage orders (slice 4, S4-RULE-1..4). Every number is a placeholder until WS1 tunes it (HC-25). The engine builds it OFF (AM-2); the screen PR flips <code>on</code> once WS6&#39;s mock is approved.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>POLITICS.sabotage.on</code></td><td class="n">false</td><td>The sim and test switch (not a lobby option, D-S4-2): false refuses every order and files no incident.</td></tr>
+<tr><td><code>POLITICS.sabotage.streamSalt</code></td><td class="n">1521515118</td><td>Salt of the order stream&#39;s seed, so its draws never move another stream&#39;s.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.powerCut</code></td><td class="n"></td><td>Cut the power to one plot: its output is 0 that month.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.powerCut.cost</code></td><td class="n">120</td><td>Credits the crew costs, charged at that month&#39;s upkeep.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.powerCut.success</code></td><td class="n">0.6</td><td>Chance, 0..1, that the cut works.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.powerCut.detect</code></td><td class="n">0.3</td><td>Chance, 0..1, that the order is seen (caught on the spot), before the guards and Security.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.rumour</code></td><td class="n"></td><td>Spread a rumour that moves one good&#39;s opening price at the auction.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.rumour.cost</code></td><td class="n">60</td><td>Credits the crew costs, charged at that month&#39;s upkeep.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.rumour.success</code></td><td class="n">0.8</td><td>Chance, 0..1, that the rumour takes.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.rumour.detect</code></td><td class="n">0.15</td><td>Chance, 0..1, that the order is seen.</td></tr>
+<tr><td><code>POLITICS.sabotage.orders.rumour.shift</code></td><td class="n">0.25</td><td>Share, 0..1, of the posted price a worked rumour moves it, up or down.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="politics-sheriff"><code>POLITICS.sheriff</code></h3>
+<p>The Sheriff&#39;s powers (slice 4, S4-RULE-6..8). Placeholders until WS1 tunes them (HC-25).</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>POLITICS.sheriff.guards</code></td><td class="n">2</td><td>Plots the Sheriff may guard in a month, before Security.</td></tr>
+<tr><td><code>POLITICS.sheriff.guardsPerHundred</code></td><td class="n">1</td><td>Extra guards per 100 credits of Security spent that month (slice 5 supplies the figure).</td></tr>
+<tr><td><code>POLITICS.sheriff.securityDetect</code></td><td class="n">0.1</td><td>Added to an order&#39;s chance of being seen, 0..1, per 100 credits of Security spent that month.</td></tr>
+<tr><td><code>POLITICS.sheriff.investigations</code></td><td class="n">1</td><td>Investigations the Sheriff may open in a month.</td></tr>
+<tr><td><code>POLITICS.sheriff.investigateOdds</code></td><td class="n">0.5</td><td>Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3).</td></tr>
+<tr><td><code>POLITICS.sheriff.fine.steps</code></td><td class="n">[50, 100, 150, 200, 250, 300]</td><td>The base fines the Sheriff may levy, in credits, before the ban&#39;s multiplier.</td></tr>
+<tr><td><code>POLITICS.sheriff.fine.standard</code></td><td class="n">150</td><td>The fine an unfined case pays when planning ends, in credits, before the multiplier.</td></tr>
+<tr><td><code>POLITICS.sheriff.victimShare</code></td><td class="n">0.5</td><td>Share, 0..1, of a paid fine the victim gets as restitution; the fund keeps the rest.</td></tr>
+</tbody>
+</table></div>
+
 <h3 id="politics-laws"><code>POLITICS.laws</code></h3>
 <p>The colony&#39;s book of laws, each with its settings.</p>
 <div class="table-wrap"><table>
@@ -1029,6 +1065,8 @@
 <tr><td><code>POLITICS.laws.emissionCap</code></td><td class="n"></td><td>The air level above which no new mine or smelter of the listed outfits may be outfitted.</td></tr>
 <tr><td><code>POLITICS.laws.emissionCap.settings</code></td><td class="n">[40, 50, 60]</td><td>See the note on <code>POLITICS.laws.emissionCap</code>.</td></tr>
 <tr><td><code>POLITICS.laws.emissionCap.blocks</code></td><td class="n">[&quot;rareEarth&quot;, &quot;alloy&quot;]</td><td>See the note on <code>POLITICS.laws.emissionCap</code>.</td></tr>
+<tr><td><code>POLITICS.laws.sabotageBan</code></td><td class="n"></td><td>Times a caught saboteur&#39;s fine and reputation loss are multiplied (slice 4, S4-RULE-10).</td></tr>
+<tr><td><code>POLITICS.laws.sabotageBan.settings</code></td><td class="n">[2, 3]</td><td>See the note on <code>POLITICS.laws.sabotageBan</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1036,6 +1074,18 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
+<tr><td><code>POLITICS.ai.sabotage</code></td><td class="n"></td><td>How AI seats order sabotage (slice 4, S4-RULE-13). Placeholders until WS1 tunes them in PR-3.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.orderChance</code></td><td class="n"></td><td>Chance, 0..1, per month that a persona considers an order at all.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.orderChance.trader</code></td><td class="n">0</td><td>See the note on <code>POLITICS.ai.sabotage.orderChance</code>.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.orderChance.cautious</code></td><td class="n">0</td><td>See the note on <code>POLITICS.ai.sabotage.orderChance</code>.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.orderChance.aggressive</code></td><td class="n">0.2</td><td>See the note on <code>POLITICS.ai.sabotage.orderChance</code>.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.orderChance.saboteur</code></td><td class="n">0.6</td><td>See the note on <code>POLITICS.ai.sabotage.orderChance</code>.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.minEdge</code></td><td class="n">0</td><td>Credits an order must be worth, after spite, cost and expected capture, before a seat places it.</td></tr>
+<tr><td><code>POLITICS.ai.sabotage.grudge</code></td><td class="n">2</td><td>Weight on a victim who was caught sabotaging this seat, when picking a target.</td></tr>
+<tr><td><code>POLITICS.ai.sheriff</code></td><td class="n"></td><td>How an AI Sheriff fines (slice 4, S4-RULE-13); every other case pays the standard fine.</td></tr>
+<tr><td><code>POLITICS.ai.sheriff.fine</code></td><td class="n"></td><td>Base fines in credits (before the ban): on the Worth leader, and on a pact partner.</td></tr>
+<tr><td><code>POLITICS.ai.sheriff.fine.leader</code></td><td class="n">300</td><td>See the note on <code>POLITICS.ai.sheriff.fine</code>.</td></tr>
+<tr><td><code>POLITICS.ai.sheriff.fine.partner</code></td><td class="n">50</td><td>See the note on <code>POLITICS.ai.sheriff.fine</code>.</td></tr>
 <tr><td><code>POLITICS.ai.deals</code></td><td class="n"></td><td>The AI&#39;s deal cards (slice 3, placeholders until WS1&#39;s sim row).</td></tr>
 <tr><td><code>POLITICS.ai.deals.refuseBelow</code></td><td class="n">30</td><td>Cards from a proposer below this reputation are declined.</td></tr>
 <tr><td><code>POLITICS.ai.deals.offersPerMonth</code></td><td class="n">2</td><td>Offers a seat makes in a month, at most.</td></tr>
@@ -1063,6 +1113,13 @@
 <tr><td><code>POLITICS.ai.runSheriff.cautious</code></td><td class="n">0.4</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
 <tr><td><code>POLITICS.ai.runSheriff.aggressive</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
 <tr><td><code>POLITICS.ai.runSheriff.saboteur</code></td><td class="n">0.7</td><td>See the note on <code>POLITICS.ai.runSheriff</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="politics-ai-part-2"><code>POLITICS.ai</code>, continued</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
 <tr><td><code>POLITICS.ai.taxTarget</code></td><td class="n"></td><td>The sales tax in whole percent a persona steers toward as Governor: 10 for every persona (pace set C, Heiko, 6 Nov).</td></tr>
 <tr><td><code>POLITICS.ai.taxTarget.trader</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
 <tr><td><code>POLITICS.ai.taxTarget.cautious</code></td><td class="n">10</td><td>See the note on <code>POLITICS.ai.taxTarget</code>.</td></tr>
@@ -1072,13 +1129,6 @@
 <tr><td><code>POLITICS.ai.fundMonths</code></td><td class="n">3</td><td>The fund is low under this many months of the elected offices&#39; pay.</td></tr>
 <tr><td><code>POLITICS.ai.council</code></td><td class="n"></td><td>The AI in the council. Placeholders until the sim tunes them.</td></tr>
 <tr><td><code>POLITICS.ai.council.minGap</code></td><td class="n">20</td><td>Credits a month a law must cost the leader more than the AI Governor before it proposes it.</td></tr>
-</tbody>
-</table></div>
-
-<h3 id="politics-ai-part-2"><code>POLITICS.ai</code>, continued</h3>
-<div class="table-wrap"><table>
-<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
-<tbody>
 <tr><td><code>POLITICS.ai.council.proposeChance</code></td><td class="n"></td><td>Chance an AI Governor proposes its best law in a month it has one, per persona.</td></tr>
 <tr><td><code>POLITICS.ai.council.proposeChance.trader</code></td><td class="n">0.5</td><td>See the note on <code>POLITICS.ai.council.proposeChance</code>.</td></tr>
 <tr><td><code>POLITICS.ai.council.proposeChance.cautious</code></td><td class="n">0.3</td><td>See the note on <code>POLITICS.ai.council.proposeChance</code>.</td></tr>
@@ -1107,6 +1157,13 @@
 <tr><td><code>POLITICS.ai.budget.tilt.saboteur.security</code></td><td class="n">0.5</td><td>See the note on <code>POLITICS.ai.budget.tilt</code>.</td></tr>
 <tr><td><code>POLITICS.ai.overrule</code></td><td class="n"></td><td>How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.minGain</code></td><td class="n">20</td><td>Credits a month a change must cost the seat before it calls an overrule.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="politics-ai-part-3"><code>POLITICS.ai</code>, continued</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
 <tr><td><code>POLITICS.ai.overrule.longShot</code></td><td class="n"></td><td>Chance a persona calls an overrule that cannot win, as a protest.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.longShot.trader</code></td><td class="n">0.1</td><td>See the note on <code>POLITICS.ai.overrule.longShot</code>.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.longShot.cautious</code></td><td class="n">0.05</td><td>See the note on <code>POLITICS.ai.overrule.longShot</code>.</td></tr>
@@ -1115,13 +1172,6 @@
 <tr><td><code>POLITICS.ai.overrule.rookieYes</code></td><td class="n">0.5</td><td>A Rookie&#39;s chance of a yes: a coin from the overrule&#39;s own stream.</td></tr>
 <tr><td><code>POLITICS.ai.overrule.unhappyTilt</code></td><td class="n">30</td><td>Credits a month an unhappy colony makes a seat more willing to vote yes.</td></tr>
 <tr><td><code>POLITICS.ai.colony</code></td><td class="n"></td><td>The AI Governor&#39;s colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them.</td></tr>
-</tbody>
-</table></div>
-
-<h3 id="politics-ai-part-3"><code>POLITICS.ai</code>, continued</h3>
-<div class="table-wrap"><table>
-<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
-<tbody>
 <tr><td><code>POLITICS.ai.colony.commissions</code></td><td class="n"></td><td>Whether an AI Governor of each persona commissions a prestige object once the fund holds <code>commissionShare</code> of its credits.</td></tr>
 <tr><td><code>POLITICS.ai.colony.commissions.trader</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.commissions</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.commissions.cautious</code></td><td class="n">true</td><td>See the note on <code>POLITICS.ai.colony.commissions</code>.</td></tr>

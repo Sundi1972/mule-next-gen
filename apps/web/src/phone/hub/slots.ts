@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { PhoneGame } from '../game';
 import type { Now } from '../Shell';
+import type { HubNav } from './Hub';
 import type { ReadyWords } from './ready';
 
 /**
@@ -156,4 +157,105 @@ export function settle(place: HubPlace, drawn: HubSlots, seat: HubSeat): HubPlac
   const first = head?.first?.(seat) ? head.id : null;
   if (first === place.first) return place;
   return first ? { ...goTo(place, { desk: first }, drawn), first } : { ...place, first };
+}
+
+/*
+ * The tabbed hub's slots (SB-1a, the approved hub-tabs mock): types only, frozen for the lanes that build against
+ * them. HubSlots above stays in use until the tabbed hub replaces it; TabHubPlace then takes HubPlace's name.
+ */
+
+/** The four tabs, in order; `politics` is "Governor" on the Governor's phone and "Council" on every other. */
+export type TabId = 'overview' | 'politics' | 'colony' | 'talk';
+
+/** Where a door leads: a tab, a sub-tab of it, a focus for its body to read, or a map tool on Overview. */
+export interface Door {
+  tab: TabId;
+  sub?: string;
+  focus?: string;
+  tool?: string;
+}
+
+/** A tab: its button in the tab column or bar, and the stage it draws while open. */
+export interface TabSlot extends Shown {
+  id: TabId;
+  label(seat: HubSeat): string;
+  /** A 24×24 stroked SVG path. */
+  icon: string;
+  Body: ComponentType;
+  /** Drawn on the tab when something wants the player there: an offer, an open ballot, a broken promise. */
+  Badge?: ComponentType;
+  /** In the rail under Now while this tab shows (Overview: the open tool's panel). */
+  Rail?: ComponentType;
+  /** In the footer above Ready while this tab shows (Overview: the open tool's action). */
+  Action?: ComponentType;
+}
+
+/** A sub-tab of the Governor / Council tab: Laws, Budget, Elections, Sheriff. */
+export interface SubTabSlot extends Shown {
+  id: string;
+  label(seat: HubSeat): string;
+  Body: ComponentType;
+  Badge?: ComponentType;
+  /** Opens first, once, as it starts asking: an open ballot (as a desk's `first` did). */
+  first?(seat: HubSeat): boolean;
+}
+
+/** A plot-picking mode another tab hands to Overview's one map, standing in for the tool row until "back to". */
+export interface PlotPickSlot extends Shown {
+  id: string;
+  /** The bar's verb, e.g. "Guarding". */
+  label: string;
+  /** One line under it: what a tap does. */
+  hint(seat: HubSeat): string;
+  back: Door & { label: string };
+  /** The pick draws its own bar inside Map (WS8's Guard: "Guarding · 1 of 2 · Done · back to Sheriff"). */
+  ownBar?: boolean;
+  Map: ComponentType;
+  Panel?: ComponentType;
+  Action?: ComponentType;
+}
+
+/** What the tabbed hub draws: each entry keeps `show(seat)`, as HubSlots' do. */
+export interface TabHubSlots {
+  tabs: TabSlot[];
+  politicsTabs: SubTabSlot[];
+  tools: MapToolSlot[];
+  agenda: AgendaSlot[];
+  banners: BannerSlot[];
+  /** The offices line and the like: in the "?" sheet, under the month's steps. */
+  lines: BannerSlot[];
+  picks: PlotPickSlot[];
+  nows: ((seat: HubSeat) => Now | null)[];
+  underNow: BannerSlot[];
+  /** Ceremonies only: the first shown takes the stage, tabs and all. */
+  stage: StageSlot[];
+  readyWords: ((seat: HubSeat) => ReadyBarWords | null)[];
+}
+
+/**
+ * Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, the plot pick, and the sub-tab that last asked first.
+ * Replaces HubPlace (and takes its name) when SB-2 grafts the tabbed hub.
+ */
+export interface TabHubPlace {
+  tab: TabId;
+  sub: string;
+  tool: string;
+  focus: string | null;
+  pick: string | null;
+  first: string | null;
+}
+
+/**
+ * The tabbed hub's navigation: today's HubNav plus the tab, sub-tab and plot pick, and the moves between them.
+ * Replaces HubNav (and takes its name) when SB-2 grafts the tabbed hub.
+ */
+export interface TabHubNav extends HubNav {
+  tab: TabId;
+  /** The open sub-tab of the Governor / Council tab. */
+  sub: string;
+  /** The plot-picking mode another tab handed to Overview's map, or null. */
+  pick: string | null;
+  open(door: Door): void;
+  startPick(id: string): void;
+  endPick(): void;
 }

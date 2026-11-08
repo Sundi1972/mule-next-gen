@@ -1,12 +1,13 @@
 import { POLITICS, SOCIAL_EVENTS, START, type DealCard } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AiMark } from '../../../chat/Chat';
 import { slotOf } from '../../../game/derive';
 import { useHub, type HubNav } from '../Hub';
-import { brokenMove, brokenWords } from './deals-words';
+import { SeatWords } from '../../../components/SeatWords';
+import { brokenMove, brokenWho, brokenWords } from './deals-words';
 
 export function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
   return (
@@ -18,19 +19,6 @@ export function Section({ title, children, testid }: { title: ReactNode; childre
 }
 
 type NameView = Pick<MuleView, 'players'> & Partial<Pick<MuleView, 'politics'>>;
-
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * Words with the AI mark after each computer seat's name. Not after a possessive ("Ossa’s vote"): there the card's
- * label carries it ("Card from Ossa · AI").
- */
-export function Marked({ text, view }: { text: string; view: Pick<MuleView, 'players'> }) {
-  const ai = view.players.filter((p) => p.isAi).map((p) => escapeRe(p.name));
-  if (ai.length === 0) return <>{text}</>;
-  const parts = text.split(new RegExp(`\\b(${ai.join('|')})\\b(?![’']s)`, 'g'));
-  return <>{parts.map((p, i) => (i % 2 === 1 ? <Fragment key={i}>{p}<AiMark /></Fragment> : p))}</>;
-}
 
 /** Who on a deal card: the name, its chip, and the mark for a computer seat. */
 export function CardWho(props: Parameters<typeof Who>[0]) {
@@ -184,15 +172,15 @@ export function useHubIfAny(): HubNav | null {
 }
 
 /** The public reasons a player's reputation moved, in the words every screen uses, newest first. Kept cards are never one. */
-export function reasonRows(view: NameView, id: string): { key: string; month: number; words: string; move: number }[] {
+export function reasonRows(view: NameView, id: string): { key: string; month: number; words: string; who: string[]; move: number }[] {
   const reasons = view.politics?.reputationReasons?.[id] ?? [];
   const broken = view.politics?.brokenDeals ?? [];
   return reasons.flatMap((r) => {
-    if (r.kind === 'unrest') return [{ key: `unrest-${r.month}`, month: r.month, words: 'Blamed for the unrest', move: SOCIAL_EVENTS.player.blamedForUnrest.reputation }];
-    if (r.kind === 'caught') return [{ key: `caught-${r.month}`, month: r.month, words: 'Caught sabotaging', move: 0 }];
+    if (r.kind === 'unrest') return [{ key: `unrest-${r.month}`, month: r.month, words: 'Blamed for the unrest', who: [], move: SOCIAL_EVENTS.player.blamedForUnrest.reputation }];
+    if (r.kind === 'caught') return [{ key: `caught-${r.month}`, month: r.month, words: 'Caught sabotaging', who: [], move: 0 }];
     const c = broken.find((x: DealCard) => x.id === r.id);
     if (!c) return [];
-    return [{ key: c.id, month: c.settled ?? 0, words: brokenWords(view, c, false), move: brokenMove(c) }];
+    return [{ key: c.id, month: c.settled ?? 0, words: brokenWords(view, c, false), who: brokenWho(c, false), move: brokenMove(c) }];
   });
 }
 
@@ -242,7 +230,7 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; 
                 <li key={r.key} className="flex items-baseline gap-2" data-testid={`reason-${r.key}`}>
                   <span className="shrink-0 font-mono text-[10px] text-ink-3">M{r.month}</span>
                   <span className="min-w-0 flex-1">
-                    <Marked text={r.words} view={view} />
+                    <SeatWords text={r.words} who={r.who} players={view.players} />
                   </span>
                   {r.move !== 0 && (
                     <span data-num className="shrink-0 font-mono font-bold text-alert">
