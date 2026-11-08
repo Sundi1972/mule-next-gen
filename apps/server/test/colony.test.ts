@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, callStrike, COLONY, colonyScore, colonyScoreOf, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
+import { advancePhase, callStrike, COLONY, colonyScore, colonyScoreOf, HAPPINESS, HARDSHIP, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -104,6 +104,21 @@ describe('the colony at the table', () => {
     expect(state.history.at(-1)!.shortages.length, 'two goods short').toBe(2);
     for (const viewer of [null, 's1', 's2']) {
       expect(game.viewFor(viewer).colony!.gauges, `${viewer ?? 'the TV'}'s view`).toMatchObject({ happiness: 60 - HAPPINESS.maxStep, band: 'restless' });
+    }
+  });
+
+  it('B-AC-24: from 60, a month ending with the shelf empty of Food and Water shows every screen happiness 47, Restless: the capped step, then the month\'s shock (G-5 AM-20)', () => {
+    const { game, state } = governed();
+    expect(state.colony!.happiness).toBe(60);
+    while (state.phase !== 'auction') advancePhase(state);
+    state.air = 70;
+    state.colonists = 400;
+    state.store.stock.food = 0;
+    state.store.stock.water = 0;
+    advancePhase(state);
+    const fell = HAPPINESS.maxStep + HARDSHIP.shock;
+    for (const viewer of [null, 's1', 's2']) {
+      expect(game.viewFor(viewer).colony!.gauges, `${viewer ?? 'the TV'}'s view`).toMatchObject({ happiness: 60 - fell, band: 'restless' });
     }
   });
 
