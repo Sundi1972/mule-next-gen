@@ -7,6 +7,11 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
+// The screens load here, with the file, after the fake DOM above: imported inside a test, their cold transform ran on
+// the first test's clock and timed it out on a busy machine (WS8's #786, the same fix).
+import { ClientProvider } from '../src/net/react';
+import { PhoneApp } from '../src/phone/PhoneApp';
+import { TableApp } from '../src/table/TableApp';
 
 /**
  * The riot's shelves on the screens that play it (G-5 C26), at promise altitude: the TV's overlay and a phone alone,
@@ -141,14 +146,10 @@ function client(state: object): TableClient {
 const base = { status: 'playing', chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null, code: 'ABCD' };
 
 async function phoneAlone(view: MuleView) {
-  const { PhoneApp } = await import('../src/phone/PhoneApp');
-  const { ClientProvider } = await import('../src/net/react');
   const game = { ...view, me: mine(OSSA) };
   return createElement(ClientProvider, { client: client({ ...base, role: 'player', seatId: OSSA, view: table(game, 0) }), children: createElement(PhoneApp, { room: 'ABCD' }) });
 }
 async function tv(view: MuleView) {
-  const { TableApp } = await import('../src/table/TableApp');
-  const { ClientProvider } = await import('../src/net/react');
   return createElement(ClientProvider, { client: client({ ...base, role: 'board', seatId: null, view: table(view, 1) }), children: createElement(TableApp, { room: 'ABCD' }) });
 }
 
