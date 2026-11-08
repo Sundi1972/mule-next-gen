@@ -631,6 +631,7 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(findTestid(thread), "the card sits at the foot of Brix's whisper with Lena").toBeDefined();
     expect(text('incoming-deal-in1-from-rep')).toBe(String(repHigh));
     expect(text('incoming-deal-in1-to-rep')).toBe(String(repLow - 1));
+    expect(findTestid('outgoing-deal-out1'), "Brix's card to Ossa is not in his whisper with Lena").toBeUndefined();
     tap('incoming-deal-in1-accept');
     expect(sent).toEqual([{ type: 'answerDeal', id: 'deal-in1', accept: true }]);
 
