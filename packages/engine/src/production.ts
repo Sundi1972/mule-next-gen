@@ -188,6 +188,15 @@ const QUARTER_SLACK = 1e-9; // literal-ok: a float tolerance (RULE-10's ε), not
 export type Needs = { food: number; water: number; medicine: number };
 
 /**
+ * The Food and Water one plot's crew adds to its owner's need a month, before the estate's one round-up (needs C12,
+ * RULE-10): the rate the computer players weigh a plot by. needsWith minus needsOf is the stepped marginal instead,
+ * which jumps with how many plots the owner already works. Water is none: a plot takes its Water as it produces (AM-3).
+ */
+export function crewUpkeep(outfit: Outfit): { food: number; water: number } {
+  return { food: CONSUMPTION[outfit].food, water: 0 };
+}
+
+/**
  * Food and Water a household working plots of these outfits needs, and the Medicine that keeps its crews well (needs
  * RULE-10, AM-3): the crews' Food summed over the plots and rounded up once; Water the household's alone.
  */
@@ -232,6 +241,22 @@ export function crewSickness(state: GameState, player: { stock: Pick<Stock, 'med
  */
 export function crewFactor(short: { food: number; water: number }): number {
   return (1 - UPKEEP.crewDrop * hardship(short.food)) * (1 - UPKEEP.crewDrop * hardship(short.water));
+}
+
+/** The share of its output a player's sick crews let a plot make (needs RULE-15): 1 while they are well or cured. */
+function sickCrewShare(state: GameState, holdsMedicine: boolean): number {
+  const { share } = crewSickness(state, { stock: { medicine: holdsMedicine ? 1 : 0 } });
+  return 1 - HEALTH.crewSickDrop * share;
+}
+
+/**
+ * The share of its output a player's crews let every plot but its Energy plants make this production: the short-fed
+ * crews' factor times the sick crews', as if the player holds a Medicine or not. Production applies the two as parts
+ * of their own, each rounded; the computer players weigh plots by this product rather than copy the rule.
+ */
+export function crewOutputShare(state: GameState, playerId: string, { medicine }: { medicine: boolean }): number {
+  const owner = state.players.find((p) => p.id === playerId)!;
+  return crewFactor(owner.crewShort ?? { food: 0, water: 0 }) * sickCrewShare(state, medicine);
 }
 
 /** Energy a working plot burns a month (needs RULE-10): CONSUMPTION's, on top of its recipe's for a factory. */
@@ -425,9 +450,8 @@ export function runProduction(state: GameState): {
   const crewFactorOf = new Map(state.players.map((p) => [p.id, crewFactor(p.crewShort ?? { food: 0, water: 0 })]));
   const sickFactorOf = new Map<string, number>();
   for (const p of state.players) {
-    const { cure, share } = crewSickness(state, p);
-    if (cure) p.stock.medicine--;
-    sickFactorOf.set(p.id, 1 - HEALTH.crewSickDrop * share);
+    sickFactorOf.set(p.id, sickCrewShare(state, p.stock.medicine >= 1));
+    if (crewSickness(state, p).cure) p.stock.medicine--;
   }
   /** Cuts what the parts add up to by a factor, rounded half up, as a part of its own. */
   const cutBy = (parts: Part[], factor: number, why: 'crewShort' | 'crewSick') => {
