@@ -4,7 +4,7 @@ import { Fragment } from 'react';
 import { toSlot } from '../game/derive';
 import { LINE_NAME, neededWords, overruleQuestion } from '../phone/hub/politics/budget/words';
 
-/* The TV in planning: the budget line under the Governor's promise, and the overrule call at the head of the side column. */
+/* The TV's budget line, and the call to an overrule vote. WS4 places both. */
 
 /**
  * "Budget: Projects ▲ 80% · Welfare ▲ 10% → Kai · kept ▲ 10%". A share moved this month is in holo with ▲ or ▼ before it,
@@ -55,8 +55,8 @@ export function TvBudgetLine({ game }: { game: MuleView }) {
 }
 
 /**
- * The call, at the head of the planning side column above who the table waits for, from the call until the ballot opens. It
- * sits in the side, not the header, because the side's news gives way before the body scales.
+ * The call to an overrule vote: who called it, the tax from start to now and the votes it needs, from the call until the
+ * ballot opens. WS4 places it.
  */
 export function TvOverruleCall({ game }: { game: MuleView }) {
   const o = game.politics?.overrule;
