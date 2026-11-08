@@ -122,6 +122,11 @@ describe('the tabbed hub shell (SB-1b)', () => {
     expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pb-2', 'pt-[max(0.375rem,env(safe-area-inset-top))]']));
     expect(body(hub)).toEqual(expect.arrayContaining(['gap-2', 'px-3', 'py-2']));
     expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pt-1.5', 'pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
+    // And none of the other phases' base packing left beside them.
+    expect(classes(hub, 'rail-head')).not.toEqual(expect.arrayContaining(['gap-1']));
+    expect(classes(hub, 'rail-head')).not.toEqual(expect.arrayContaining(['pt-[max(0.5rem,env(safe-area-inset-top))]']));
+    for (const c of ['gap-2.5', 'py-2.5']) expect(body(hub)).not.toEqual(expect.arrayContaining([c]));
+    for (const c of ['gap-2', 'pt-2.5', 'pb-[max(0.625rem,env(safe-area-inset-bottom))]']) expect(classes(hub, 'actions')).not.toEqual(expect.arrayContaining([c]));
     // At 667×375 the head and actions pack as every phase does there, so the hub's rail keeps the room it has at 844.
     expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['short:gap-0.5', 'short:pb-1', 'short:pt-[max(0.25rem,env(safe-area-inset-top))]']));
     expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['short:pt-1.5', 'short:pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
