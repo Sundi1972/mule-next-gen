@@ -5,6 +5,7 @@
 import {
   analysisSeconds,
   DEVELOPMENT,
+  fineStepsWords,
   LOTS,
   GAME,
   MULE,
@@ -48,6 +49,16 @@ export type IntentType =
   | 'repair'
   | 'propose'
   | 'voteLaw'
+  | 'setBudget'
+  | 'callOverrule'
+  | 'voteOverrule'
+  | 'offerDeal'
+  | 'withdrawDeal'
+  | 'answerDeal'
+  | 'sabotage'
+  | 'guard'
+  | 'investigate'
+  | 'fine'
   | 'continue'
   | 'steer'
   | 'act';
@@ -294,7 +305,7 @@ export const MOVES: MoveTable = {
       refused("candidates are open: not from the ballot until the result, nor in an election month's announce after month 1", 'Candidates are closed until the result'),
       refused(`for Governor, you have not served ${POLITICS.maxGovernorTermsInRow} Governor terms in a row`, `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`),
       refused(`the office is one that is elected: ${POLITICS.offices.join(', ')}`, 'The <office> is not elected yet'),
-      refused('a Sheriff run carries no promise', 'Sheriff candidates make no promise yet'),
+      refused('a Sheriff run carries no promise', 'Sheriff candidates make no promise'),
       refused(`a cap promise is a whole ${TAX_MIN}% to ${TAX_MAX}%`, `A tax promise is ${TAX_MIN}% to ${TAX_MAX}%`),
       refused('a Governor run carries a promise', 'Pick a promise to run for Governor'),
     ],
@@ -333,6 +344,7 @@ export const MOVES: MoveTable = {
       refused('it is planning', 'The tax is set in planning'),
       refused("this month's election, if any, is over", 'Wait for the election to end'),
       refused('you are the Governor', 'Only the Governor sets the tax'),
+      refused('no overrule vote on the tax is open', 'An overrule vote on the tax is called: it holds until it is settled'),
       refused(`the percent is whole, at most ${TAX_STEP} from the month's starting rate, and ${TAX_MIN}% to ${TAX_MAX}%`, 'The tax can be <low>% to <high>% this month'),
     ],
     cost: null,
@@ -443,5 +455,177 @@ export const MOVES: MoveTable = {
     legalWhen: () => [refused('the law ballot is open', 'The law ballot is not open')],
     cost: null,
     args: [{ name: 'yes', kind: 'boolean' }],
+  },
+  setBudget: {
+    type: 'setBudget',
+    command: 'setBudget',
+    phases: ['planning'],
+    does: () => "Shares the colony fund's spare credits between the budget's lines, in whole percent; the buildings, Welfare and the rest are paid from those shares at month end.",
+    legalWhen: () => [
+      refused('the game plays with a council', "This game plays without the colony's council"),
+      refused('the votes are over', 'Set the budget once the votes are over'),
+      refused('you are the Governor', 'Only the Governor sets the budget'),
+      refused('every line you share is one the colony has', 'The colony has no <line> line yet'),
+      refused(`a share is a whole number of percent, in steps of ${POLITICS.budget.step}, up to its line's limit`, `<Line> is 0% to <max>%, in steps of ${POLITICS.budget.step}`),
+      refused(`the shares add up to at most ${PERCENT}%`, `The shares add up to <total>%: at most ${PERCENT}%`),
+    ],
+    cost: null,
+    args: [{ name: 'shares', kind: 'enum', values: ['{ projects, welfare, security }'] }],
+  },
+  callOverrule: {
+    type: 'callOverrule',
+    command: 'callOverrule',
+    phases: ['planning'],
+    does: () => "Calls this month's overrule vote on a setting the Governor changed; null takes your own call back.",
+    legalWhen: () => [
+      refused('the game plays with a council', "This game plays without the colony's council"),
+      refused('the votes are over', 'Call an overrule once the votes are over'),
+      refused('the colony has a Governor', 'There is no Governor to overrule'),
+      refused('you are not the Governor', "The Governor can't overrule themself"),
+      refused('no vote is called this month', "<name> already called this month's vote"),
+      refused('the target is the tax', 'Only the tax can be overruled in this version'),
+      refused('the target is not the no-confidence vote', "Only the Sheriff's inquiry opens a no-confidence vote"),
+      refused('the setting changed since the month began', 'The <target> is as it was when the month began'),
+      refused('you have a call to withdraw', 'There is no call of yours to withdraw'),
+    ],
+    cost: null,
+    args: [{ name: 'target', kind: 'enum', values: ['tax', 'null'] }],
+  },
+  voteOverrule: {
+    type: 'voteOverrule',
+    command: 'voteOverrule',
+    phases: ['planning'],
+    does: () => "Votes yes (restore the setting the month began with) or no (keep the Governor's) on the open overrule ballot; a later vote replaces it until the ballot closes.",
+    legalWhen: () => [refused('the overrule ballot is open', 'The overrule vote is not open')],
+    cost: null,
+    args: [{ name: 'yes', kind: 'boolean' }],
+  },
+  offerDeal: {
+    type: 'offerDeal',
+    command: 'offerDeal',
+    phases: ['planning'],
+    does: () =>
+      'Offers another player a deal card: a pact for a few months, or a promise to vote for a candidate or on the next law; nothing binds until they accept.',
+    legalWhen: () => [
+      refused('the game plays with deals', 'This game plays without deals'),
+      refused('it is planning', 'Cards are offered in planning'),
+      refused('it names another player', 'Pick another player'),
+      refused(`you have fewer than ${POLITICS.deals.maxOpenOffers} cards waiting for an answer`, 'You have <count> cards waiting for an answer'),
+      refused('they have answered your last card', '<name> has not answered your last card'),
+      refused(`a pact runs ${POLITICS.deals.pactMonths.join(', ')} months`, `A pact runs ${POLITICS.deals.pactMonths.slice(0, -1).join(', ')} or ${POLITICS.deals.pactMonths.at(-1)} months`),
+      refused('you have no pact with them yet', 'You already have a pact with <name>'),
+      refused('a vote for an office names an elected office', 'The <office> is not elected yet'),
+      refused('an election is left this game', 'No election is left this game'),
+      refused('you promise your vote to someone other than yourself', 'Promise your vote to someone else'),
+      refused('the candidate is running for that office', '<name> is not running for <office>'),
+      refused('a vote on a law has a law up for a vote', 'No law is up for a vote'),
+      refused('you have not promised your vote on this ballot', 'You already promised your vote on this ballot'),
+    ],
+    cost: null,
+    args: [
+      { name: 'to', kind: 'player' },
+      { name: 'terms', kind: 'enum', values: ["{ kind: 'pact' }", "{ kind: 'vote', office, candidate }", "{ kind: 'vote', law: true, yes }"] },
+      { name: 'months', kind: 'number', values: POLITICS.deals.pactMonths.map(String) },
+    ],
+  },
+  withdrawDeal: {
+    type: 'withdrawDeal',
+    command: 'withdrawDeal',
+    phases: ['planning'],
+    does: () => 'Takes back a card this seat offered and the other player has not answered.',
+    legalWhen: () => [
+      refused('the game plays with deals', 'This game plays without deals'),
+      refused('the card is yours and still waiting for an answer', 'That card is no longer open'),
+    ],
+    cost: null,
+    args: [{ name: 'id', kind: 'enum', values: ["the card's id, 'deal-…'"] }],
+  },
+  answerDeal: {
+    type: 'answerDeal',
+    command: 'answerDeal',
+    phases: ['planning'],
+    does: () => 'Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.',
+    legalWhen: () => [
+      refused('it is planning', 'Cards are answered in planning'),
+      refused('the card was offered to you and is still waiting for an answer', 'That card is no longer open'),
+      refused('a pact accepted is your only pact with them', 'You already have a pact with <name>'),
+    ],
+    cost: null,
+    args: [
+      { name: 'id', kind: 'enum', values: ["the card's id, 'deal-…'"] },
+      { name: 'accept', kind: 'boolean' },
+    ],
+  },
+  sabotage: {
+    type: 'sabotage',
+    command: 'sabotage',
+    phases: ['planning'],
+    does: () =>
+      "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning', 'Orders are given in planning'),
+      refused("a power cut names another player's plot", "Pick another player's plot"),
+      refused('that plot has a MULE making a good', 'That plot makes nothing to cut'),
+      refused('a rumour names a good', 'Pick a good'),
+      refused('a rumour moves its price up or down', 'A rumour moves a price up or down'),
+      refused('you can pay the crew', 'A crew costs <cost> cr; you have <money>'),
+    ],
+    cost: null,
+    args: [
+      { name: 'target', kind: 'enum', values: ["{ kind: 'powerCut', tile }", "{ kind: 'rumour', good, dir: 'up' | 'down' }", 'null to withdraw'] },
+    ],
+  },
+  guard: {
+    type: 'guard',
+    command: 'guard',
+    phases: ['planning'],
+    does: () => "The Sheriff posts the whole list of plots guarded this month (any owner's); a guarded plot's cut always fails and names its saboteur. It replaces the earlier list.",
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning and the votes are over', 'Guards are posted once the votes are over'),
+      refused('you are the Sheriff', 'Only the Sheriff posts guards'),
+      refused("every plot is a player's", "Guards watch players' plots"),
+      refused('you guard no more plots than the limit', 'You have <count> guards'),
+    ],
+    cost: null,
+    args: [{ name: 'tiles', kind: 'plot' }],
+  },
+  investigate: {
+    type: 'investigate',
+    command: 'investigate',
+    phases: ['planning'],
+    does: () => 'The Sheriff investigates one public incident whose culprit is unknown; it may name the culprit or go cold. One investigation a month.',
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning and the votes are over', 'Investigations are made once the votes are over'),
+      refused('you are the Sheriff', 'Only the Sheriff investigates'),
+      refused('you have not investigated this month', 'One investigation a month'),
+      refused('the incident is public', 'No such incident'),
+      refused('its culprit is not yet known', 'That one is solved'),
+      refused('it has not been investigated before', 'The trail went cold on that one'),
+    ],
+    cost: null,
+    args: [{ name: 'order', kind: 'enum', values: ["the incident's order id, 'sab-…'"] }],
+  },
+  fine: {
+    type: 'fine',
+    command: 'fine',
+    phases: ['planning'],
+    does: () => 'The Sheriff fines a revealed culprit once; the base is multiplied by any sabotage ban and shared with the victim.',
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning and the votes are over', 'Fines are levied once the votes are over'),
+      refused('you are the Sheriff', 'Only the Sheriff fines'),
+      refused('the culprit is revealed', 'Only a revealed culprit is fined'),
+      refused('the case is not yet fined', 'Already fined'),
+      refused('the culprit is not you', "You can't fine yourself"),
+      refused(`the amount is ${POLITICS.sheriff.fine.steps[0]} to ${POLITICS.sheriff.fine.steps.at(-1)} in steps of ${POLITICS.sheriff.fine.steps[1]! - POLITICS.sheriff.fine.steps[0]!}`, fineStepsWords()),
+    ],
+    cost: null,
+    args: [
+      { name: 'order', kind: 'enum', values: ["the incident's order id, 'sab-…'"] },
+      { name: 'amount', kind: 'number', values: POLITICS.sheriff.fine.steps.map(String) },
+    ],
   },
 };

@@ -7,9 +7,11 @@ import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from '.
 import { generateMap, tileIndex } from './map.js';
 import { colonyPrestige, colonyWealth, keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
+import { closePlanningDeals, monthEndDeals } from './diplomacy.js';
 import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
+import { applyRumours, endRumours, resolveSabotage, settleSabotage } from './sabotage.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type GameState, type Good, type Outfit, type Phase, type Player, type Species, type TakenMule, type Tile } from './types.js';
 import { runUpkeep } from './upkeep.js';
@@ -519,6 +521,8 @@ export function advancePhase(state: GameState): void {
   if (state.phase === 'planning') {
     keepPromise(state);
     closeVotes(state);
+    // Offers nobody answered expire with planning, and so do vote cards whose ballot has passed.
+    closePlanningDeals(state);
   }
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
@@ -552,6 +556,7 @@ export function advancePhase(state: GameState): void {
     if (soldOut) state.store.muleFactor = Math.min(MULE.maxFactor, state.store.muleFactor * (1 + MULE.scarcityUp));
     else if (state.store.mules >= state.store.mulesAtStart * MULE.surplusShare) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
+    resolveSabotage(state);
     const { produced, pollutionBy, lines, events } = runProduction(state);
     state.history.push({
       events,
@@ -578,15 +583,18 @@ export function advancePhase(state: GameState): void {
     // A pirate raid or a store fire changes the stock before the prices are posted.
     firePhase(state, 'auction');
     postPrices(state);
+    applyRumours(state);
     startAuction(state);
   }
   if (next === 'upkeep') {
     // Goods the auction didn't reach trade nothing.
     endAuction(state);
+    endRumours(state);
     state.auction = null;
     firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
     collectLawTaxes(state);
+    settleSabotage(state);
     payGrant(state);
     payOffices(state);
     runColony(state, shortages);
@@ -601,6 +609,8 @@ export function advancePhase(state: GameState): void {
       // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
       if (!state.whatIf) report.events = [...state.monthEvents];
     }
+    // Pacts whose last month this is settle kept; at the game's end every card still running settles.
+    monthEndDeals(state, isGameOver(state));
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {

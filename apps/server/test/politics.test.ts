@@ -175,7 +175,7 @@ describe('politics over the wire', () => {
     }
     // Well-formed, so they reach RULE-10, which refuses them.
     const refused: [object, string][] = [
-      [{ type: 'run', office: 'sheriff', promise: HOLD }, 'Sheriff candidates make no promise yet'],
+      [{ type: 'run', office: 'sheriff', promise: HOLD }, 'Sheriff candidates make no promise'],
       [{ type: 'run', office: 'governor' }, 'Pick a promise to run for Governor'],
       [{ type: 'run', office: 'governor', promise: { kind: 'cap', percent: 16 } }, 'A tax promise is 0% to 15%'],
     ];
@@ -572,6 +572,7 @@ describe('B-AC-60, B-AC-61: running any month, and a ballot that waits for every
 
     g.game.handle('lena', { type: 'continue' });
     expect(g.game.viewFor(null).news[0]).toBe('Lena closed the ballot without Ossa.');
+    expect(g.game.viewFor(null).newsLines![0], 'F-11: the line names the host, then whom she went on without').toEqual({ text: 'Lena closed the ballot without Ossa.', who: ['lena', 'ossa'] });
     g.advance(WALK.tickMs);
     expect(election(g.game).stage).toBe('ceremony');
     expect(engineOf(g.game).politics!.election!.ballots, 'Ossa abstained').not.toHaveProperty('ossa');
@@ -640,7 +641,7 @@ describe('the politics view', () => {
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
     const reputation = engineOf(g.game).players.find((p) => p.id === 'brix')!.reputation;
-    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, candidates: expect.any(Object) });
+    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, candidates: expect.any(Object), promised: { election: {}, law: null } });
     // C46: Brix governs, the votes are over: his own view carries each proposal's cost (politics-candidates.test.ts).
     expect(brix.politics!.election!.stage, 'planning proper has started, so the Governor can set the tax').toBe('over');
     expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
@@ -779,6 +780,19 @@ describe('the politics view', () => {
     }
   });
 
+  it('S4-B-AC-7 (server): with both offices on, month 1 ends with a Governor and a Sheriff on every screen, the ceremony showed both, and the views carry the Sheriff pay; never one player in both', () => {
+    const g = started({ seed: NOBODY_RUNS_SEED });
+    setMoney(g.game, { lena: 900, brix: 1_200, ossa: 1_100, ai1: 1_000 });
+    doneThrough(g);
+    expect(beatsOf(g.game).offices.map((o) => o.office)).toEqual(['governor', 'sheriff']);
+    for (const view of screens(g.game)) {
+      expect(view.politics!.governor, 'a Governor in office').toBe('brix');
+      expect(view.politics!.sheriff, 'a Sheriff in office').toBe('ossa');
+      expect(view.politics!.sheriff).not.toBe(view.politics!.governor);
+      expect(view.politics!.pay).toEqual({ governor: POLITICS.pay.governor, sheriff: POLITICS.pay.sheriff });
+    }
+  });
+
   it("B-AC-5: another phone and the board never receive Brix's ballot", () => {
     const g = started();
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
@@ -805,7 +819,7 @@ describe('the politics view', () => {
     g.game.handle('ossa', { type: 'run', office: 'sheriff' });
     const shown = { lena: CAP_8, brix: { kind: 'lower' } };
     const refused = JSON.stringify(screens(g.game));
-    expect(() => g.game.handle('ossa', { type: 'run', office: 'sheriff', promise: HOLD })).toThrow('Sheriff candidates make no promise yet');
+    expect(() => g.game.handle('ossa', { type: 'run', office: 'sheriff', promise: HOLD })).toThrow('Sheriff candidates make no promise');
     expect(JSON.stringify(screens(g.game)), 'a refused promise changes no screen').toBe(refused);
 
     // Politics' until the ballot opens, the election's after.
@@ -1089,7 +1103,7 @@ const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
   expect(board.me).toBeNull();
-  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'retry', 'sheriff', 'tax', 'term', 'weights']);
+  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'brokenDeals', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'reputationReasons', 'retry', 'sheriff', 'tax', 'term', 'weights']);
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {
