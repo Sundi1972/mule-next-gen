@@ -2,7 +2,10 @@ import { GAME, POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import { Fragment, type ReactNode } from 'react';
+import { sabotageNews } from '../events/sabotage';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
+import { brokenIn, brokenMove, brokenWords } from '../phone/hub/politics/deals-words';
+import { RepChip } from '../phone/hub/politics/parts';
 import { collapseCutWords, colonyReport, type ColonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
 
 /**
@@ -153,6 +156,9 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                         `You (${r.player.name})`
                       )}
                     </span>
+                    {/* S3-C19: the reputation chip, with politics on; not at 'compact' (the phone with no TV, where the name has no room) nor at game over. */}
+                    {view.politics && density !== 'compact' && !final && <RepChip view={view} id={r.player.id} tv={tv} testid={`league-rep-${r.player.id}`} />}
+                    {tv && !final && <BrokeMark view={view} id={r.player.id} />}
                   </span>
                 </td>
                 <td className={cx(s.cell, 'text-right')}>
@@ -375,10 +381,17 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
   // The TV puts everyone who went hungry on one line (TvHungryLine); the phone with no TV names a few and counts the rest.
   const shownHungry = r.hungry.slice(0, HUNGRY_LINES_COMPACT);
   const moreHungry = tv ? 0 : r.hungry.length - shownHungry.length;
+  const sabotage = sabotageNews(view);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-3 p-5' : 'gap-1 px-2.5 py-1.5')} aria-label="How the colony is doing" data-testid="colony-panel">
       <header className={cx('flex flex-wrap items-baseline', tv ? 'gap-x-4' : 'gap-x-2')} {...(verdict ? { 'data-testid': 'tv-verdict' } : {})}>
         <h2 className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>{verdict ? 'How the colony did' : 'How the colony is doing'}</h2>
+        {/* WS8's named edit (S4-C17; PM ruling 8 Nov, TV-FIT): the TV only counts the month's sabotage, on this row. */}
+        {tv && sabotage.length > 0 && (
+          <span className="label-caps text-base! text-alert!" data-testid="sabotage-tag">
+            {`Sabotage ×${sabotage.length}`}
+          </span>
+        )}
         {verdict && (
           <>
             <span className={cx('font-display font-semibold', v.failed ? 'text-alert-ink' : 'text-ok', tv ? 'text-2xl' : 'text-xs')} data-testid="verdict-title">
@@ -459,6 +472,17 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false, 
           </span>
         </Block>
       </div>
+      {/* WS8's named edit (S4-C17, approved mock politics-p2 @ d6977e1a): one line per sabotage this month, everyone's;
+          on the phone only (the TV has the tag above). */}
+      {!tv && sabotage.length > 0 && (
+        <div className="flex flex-col gap-0.5" data-testid="sabotage-news">
+          {sabotage.map((l, i) => (
+            <span key={i} className={cx(line, 'text-ink')} data-testid="sabotage-line">
+              {l}
+            </span>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -561,5 +585,23 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
         </div>
       )}
     </section>
+  );
+}
+
+
+/**
+ * S3-C20 on the TV's month end (PM ruling A, 8 Nov): what the cards a player broke this month cost them, "✗ −10" after
+ * their chip, the label the whole public words. No height, so six seats keep the floor (the mock's box drew 0.560); the
+ * TV says the words in full in planning's banner and the news, the phones' month end lists them.
+ */
+function BrokeMark({ view, id }: { view: MuleView; id: string }) {
+  const theirs = brokenIn(view, view.month).filter((c) => (c.brokenBy ?? c.from) === id);
+  if (theirs.length === 0) return null;
+  const cost = theirs.reduce((sum, c) => sum - brokenMove(c), 0);
+  const label = `Broke this month: ${theirs.map((c) => brokenWords(view, c)).join('; ')}. Reputation −${cost}.`;
+  return (
+    <span role="img" aria-label={label} className="shrink-0 whitespace-nowrap font-mono text-2xl font-bold text-alert" data-testid={`league-broke-${id}`}>
+      ✗ −{cost}
+    </span>
   );
 }
