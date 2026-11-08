@@ -694,7 +694,7 @@ export interface ShipView {
 export type ScorePartsView = Omit<ScoreParts, 'total'>;
 
 /** A reason a plot made more or less than its base, as a badge on the map: every one the engine names but the base and the events. */
-export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'crewShort' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff';
+export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'crewShort' | 'crewSick' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff';
 
 /** One working plot in the month's production show. Public, like the auction's status table. */
 export interface ProductionLineView {

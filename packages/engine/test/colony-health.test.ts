@@ -1,19 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  cloneForSim,
   colonistMedicineNeed,
   createGame,
   electronicsComfort,
   GOOD_CONFIG,
+  grownColonists,
+  growthRate,
   HAPPINESS,
   hardship,
   HEALTH,
   healthGauge,
   healthOf,
+  monthlyDemand,
   moodTarget,
   nextSickShare,
   PERCENT,
+  POLLUTION,
   PRICE,
+  runColony,
   runUpkeep,
   severity,
   shipInPort,
@@ -167,6 +173,42 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
     });
   });
 
+  it('needs T-AC-9 (WS7 minor A): a Collapse month with h > 0 sizes the colony by the Collapse rule alone, with no sick cut on top', () => {
+    withHealth(() => {
+      const state = stockedAtAuction();
+      state.colonists = 400;
+      state.colony!.sick = 0.3;
+      state.air = POLLUTION.bands.find((b) => b.name === 'collapse')!.from;
+      const { colonistMonth } = runUpkeep(state);
+      runColony(state, colonistMonth);
+      expect(state.colonists).toBe(Math.round(400 * (1 - POLLUTION.collapseLeave)));
+    });
+  });
+
+  it("FM-sick-size-readers: with health on, the export ship keeps the store's cover for the colony's size after the sick cut, not before it", () => {
+    withHealth(() => {
+      const state = stockedAtAuction();
+      state.colonists = 2000;
+      state.colony!.sick = HEALTH.cap;
+      Object.assign(state.store.stock, { food: 700, water: 700, medicine: 0 });
+      // A hold the store's surplus can't fill, so the ship buys down to the cover it keeps.
+      state.ship = { ...state.ship, arrives: state.month, goods: ['food'], hold: { food: 1000 }, bought: {} };
+      expect(shipInPort(state)).toBe(true);
+      const before = cloneForSim(state);
+      advancePhase(state);
+      expect(state.phase).toBe('upkeep');
+      expect(state.colonists, 'the premise: sickness cut the growth').toBeLessThan(Math.round(2000 * UPKEEP.colonistGrowth.fed));
+      const sized = cloneForSim(before);
+      sized.colonists = state.colonists;
+      expect(state.store.stock.food).toBe(Math.ceil(monthlyDemand(sized, 0).food * PRICE.targetCover));
+    });
+  });
+
+  it('needs T-AC-4: the sick growth cut floors the colony at 0: rate 0 with h 0.4 gives 0, not a negative', () => {
+    expect(grownColonists(100, 0, 0.4)).toBe(0);
+    expect(grownColonists(100, 1, 0.4), 'above 0 it still cuts').toBe(98);
+  });
+
   it("FM-medicine-shortage: an upkeep the colonists go short of Medicine reports Medicine short, as Food and Water, and the mood does not count it", () => {
     withHealth(() => {
       const state = stockedAtAuction();
@@ -186,6 +228,23 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       const explained = HEALTH.moodPerSick * (sickShare(short)! - sickShare(stocked)!);
       expect(explained).toBeCloseTo(2, 9);
       expect(Math.abs(stocked.colony!.happiness - short.colony!.happiness - explained), 'the whole-number mood, within its rounding').toBeLessThan(1);
+    });
+  });
+
+  it('needs T-AC-9: growth reads the h this upkeep writes, also when the meal went short (Medicine short; hungry)', () => {
+    withHealth(() => {
+      for (const shelf of [{ food: 500, water: 500, medicine: 0 }, { food: 0, water: 500, medicine: 500 }]) {
+        const state = toAuction(game());
+        expect(shipInPort(state), 'the premise: no export ship this upkeep').toBe(false);
+        state.colonists = 2000;
+        state.colony!.sick = 0.1;
+        Object.assign(state.store.stock, shelf);
+        const short = { food: shelf.food === 0 ? 1 : 0, water: 0, medicine: shelf.medicine === 0 ? 1 : 0 };
+        const rate = growthRate(state, severity(short));
+        advancePhase(state);
+        expect(state.phase).toBe('upkeep');
+        expect(state.colonists, `shelf ${JSON.stringify(shelf)}: the cut reads the h the colony now holds`).toBe(grownColonists(2000, rate, sickShare(state)!));
+      }
     });
   });
 });
@@ -249,18 +308,37 @@ describe('needs HC-13: health ships switched off', () => {
     expect(sickShare(offOn), 'politics off: no colony, so no sick share').toBeNull();
     expect(stableJson(offOn), 'and health on moves nothing without a colony').toBe(stableJson(plain(false)));
   });
+
+  it('needs T-AC-11: health off, or politics off, a hungry upkeep grows the colony at the plain rate, with no sick cut', () => {
+    const hungry = (politics: boolean) => {
+      const state = toAuction(game(politics));
+      expect(shipInPort(state), 'the premise: no export ship this upkeep').toBe(false);
+      state.colonists = 2000;
+      Object.assign(state.store.stock, { food: 0, water: 500, medicine: 500 });
+      const rate = growthRate(state, severity({ food: 1, water: 0 }));
+      advancePhase(state);
+      return { colonists: state.colonists, plain: Math.round(2000 * rate) };
+    };
+    const off = hungry(true);
+    expect(off.colonists, 'health off').toBe(off.plain);
+    const noColony = withHealth(() => hungry(false));
+    expect(noColony.colonists, 'health on, politics off').toBe(noColony.plain);
+  });
 });
 
 describe('needs C19: the gauge reads the engine, never a second copy of its numbers', () => {
   it('needs C19 (bands): health is round(100 × (1 − h)); the gauge is well from 90, at the limit at the cap\'s health, and marks where crews fall sick', () => {
     expect(healthOf(0.12)).toBe(88);
+    expect(healthOf(0.155), 'half a point rounds up').toBe(85);
     expect(healthGauge()).toEqual({ wellFrom: 90, atLimit: 60, crewSickAt: 80 });
-    const cap = HEALTH.cap;
+    const { cap, crewSickFrom } = HEALTH;
     try {
       HEALTH.cap = 0.3;
+      HEALTH.crewSickFrom = 0.3;
       expect(healthGauge().atLimit, 'the limit follows the cap, as a tuning --set moves it').toBe(70);
+      expect(healthGauge().crewSickAt, 'and the crews\' mark follows crewSickFrom').toBe(70);
     } finally {
-      HEALTH.cap = cap;
+      Object.assign(HEALTH, { cap, crewSickFrom });
     }
   });
 });

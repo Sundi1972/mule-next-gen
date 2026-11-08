@@ -1,5 +1,5 @@
-import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
-import { hardship } from './colony.js';
+import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, HEALTH, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { hardship, sickShare } from './colony.js';
 import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase, strikeEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
@@ -182,13 +182,29 @@ export function crewOf(state: GameState, playerId: string): number {
   return crew;
 }
 
-/** Food and Water a player's household and crew need this month. */
-export function needsOf(state: GameState, playerId: string): { food: number; water: number } {
+/** Food and Water a player's household and crew need this month, and the Medicine that keeps the crews well (needs RULE-15). */
+export function needsOf(state: GameState, playerId: string): { food: number; water: number; medicine: number } {
   const crew = crewOf(state, playerId);
   return {
     food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
     water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+    medicine: crewsFallSick(state) ? 1 : 0,
   };
+}
+
+/** Whether the colony is sick enough to make players' crews sick: health on and h at least HEALTH.crewSickFrom. */
+function crewsFallSick(state: GameState): boolean {
+  return HEALTH.enabled && (sickShare(state) ?? 0) >= HEALTH.crewSickFrom;
+}
+
+/**
+ * A player's crews at production (needs RULE-15, first match wins): well while the colony is not sick enough; cured
+ * when the player holds a Medicine, which they take; otherwise sick, `share` of them, min(1, crewSpill × h).
+ */
+export function crewSickness(state: GameState, player: { stock: Pick<Stock, 'medicine'> }): { cure: boolean; share: number } {
+  if (!crewsFallSick(state)) return { cure: false, share: 0 };
+  if (player.stock.medicine >= 1) return { cure: true, share: 0 };
+  return { cure: false, share: Math.min(1, HEALTH.crewSpill * sickShare(state)!) };
 }
 
 /**
@@ -316,7 +332,8 @@ export function feedOf(good: ProcessedGood): Partial<Stock> {
 /**
  * Runs one production phase. Order matters and mirrors the design:
  * 0. every plot of a player but Energy plants makes crewFactor of its output, rounded half up, from how short its crews
- *    went at the last month end (needs C14), before any turn-off below cuts it;
+ *    went at the last month end (needs C14), then the share its sick crews leave it (crewSickness: a player who holds a
+ *    Medicine takes one and has none sick), rounded half up again, before any turn-off below cuts it;
  * 1. Energy plots and wells produce first and each pays its own use of its good from its own output, never from the
  *    stock (AM-17, AM-18 W5);
  * 2. an owner whose Energy can't cover the uses of all its other plots turns plots off, biggest use first, until the
@@ -388,11 +405,22 @@ export function runProduction(state: GameState): {
     if (made > 0) parts.push({ why: 'noWater', delta: Math.floor(made * UPKEEP.shortOutputShare) - made });
   };
   const crewFactorOf = new Map(state.players.map((p) => [p.id, crewFactor(p.crewShort ?? { food: 0, water: 0 })]));
-  /** Cuts what the parts add up to to the owner's crew factor, rounded half up, as a part of its own (needs C14). */
-  const crewCut = (tile: Tile, parts: Part[]) => {
+  const sickFactorOf = new Map<string, number>();
+  for (const p of state.players) {
+    const { cure, share } = crewSickness(state, p);
+    if (cure) p.stock.medicine--;
+    sickFactorOf.set(p.id, 1 - HEALTH.crewSickDrop * share);
+  }
+  /** Cuts what the parts add up to by a factor, rounded half up, as a part of its own. */
+  const cutBy = (parts: Part[], factor: number, why: 'crewShort' | 'crewSick') => {
     const made = parts.reduce((n, p) => n + p.delta, 0);
-    const delta = Math.round(made * crewFactorOf.get(tile.owner!)!) - made;
-    if (made > 0 && delta !== 0) parts.push({ why: 'crewShort', delta });
+    const delta = Math.round(made * factor) - made;
+    if (made > 0 && delta !== 0) parts.push({ why, delta });
+  };
+  /** The owner's crews: short-fed crews' factor (needs C14), then sick crews' (needs RULE-15). */
+  const crewCut = (tile: Tile, parts: Part[]) => {
+    cutBy(parts, crewFactorOf.get(tile.owner!)!, 'crewShort');
+    cutBy(parts, sickFactorOf.get(tile.owner!)!, 'crewSick');
   };
   /** Cuts what the parts add up to to the turned-off share, as a part of its own, named for the good it went without. */
   const switchOff = (parts: Part[], why: OffWhy) => {
@@ -526,12 +554,12 @@ export function rankGround(tile: Tile): { good: RawGood; rating: number }[] {
 /**
  * What a player needs of each good for next month: Food and Water for the
  * household and crew, Energy for their plots and factories, the inputs their
- * factories turn, and a Medicine against sickness when the air is bad. The
+ * factories turn, a Medicine against sickness when the air is bad and one for the crews when the colony is sick. The
  * auction's status screen measures surplus and shortage against this.
  */
 export function monthNeeds(state: GameState, playerId: string): Stock {
   const need = emptyStock();
-  const { food, water } = needsOf(state, playerId);
+  const { food, water, medicine } = needsOf(state, playerId);
   need.food = food;
   need.water = water;
   for (const t of state.tiles) {
@@ -542,6 +570,6 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
     if (!isFactory(t.outfit)) continue;
     for (const [g, q] of Object.entries(feedOf(t.outfit)) as [Good, number][]) need[g] += q;
   }
-  if (airBand(state.air).sickens) need.medicine = 1;
+  need.medicine += medicine + (airBand(state.air).sickens ? 1 : 0);
   return need;
 }

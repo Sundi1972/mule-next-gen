@@ -1,5 +1,5 @@
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, OFF_WORLD, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
-import { fundIn, stillNeeds } from './colony.js';
+import { colonistMedicineNeed, fundIn, stillNeeds } from './colony.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput, waterUseOf } from './production.js';
 import { createRng, seedOf, type Rng } from './rng.js';
@@ -51,7 +51,7 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   // The MULEs players are about to install will each need Energy before any plot draws it (C6).
   demand.energy += mulesWanted(state) * energyPerNewMule();
   // Sick colonists in dirty air need more Medicine.
-  demand.medicine = (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1);
+  demand.medicine = colonistMedicineNeed(state) * (sick ? POLLUTION.sickMedicineDemand : 1);
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // The store builds a MULE from Smithore for every plot that will want one; smelters need Smithore too.
   demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;

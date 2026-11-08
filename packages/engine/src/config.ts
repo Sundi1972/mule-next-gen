@@ -1312,8 +1312,14 @@ export const HEALTH = {
   growthPerSick: 0.05,
   /** Mood points onto the month's target with the colonists' whole Electronics want met; in proportion when part. */
   electronicsBonus: 4,
-  /** The sick share from which players' crews fall sick too (read by the crews' rule). */
+  /** The sick share from which players' crews fall sick too, unless their player takes a Medicine (needs RULE-15). */
   crewSickFrom: 0.2,
+  /** Added to a player's development sickness chance with the colony at the cap; in proportion below it (needs RULE-14). */
+  playerSpill: 0.1,
+  /** A player's sick crews per unit of the colony's sick share, at most all of them (needs RULE-15). */
+  crewSpill: 1,
+  /** Share of its output a plot loses with all its crews sick, in proportion when part (needs RULE-15). */
+  crewSickDrop: 0.5,
   /** The health gauge reads "well" from this health (0..100) up; below it, a sick spell, down to the limit at the cap. */
   gaugeWellFrom: 90,
 };

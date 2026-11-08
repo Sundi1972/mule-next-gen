@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, cloneForSim, exportDemand, monthlyDemand, RECIPES, UPKEEP, type GameState } from '../src/index.js';
+import { advancePhase, cloneForSim, createGame, exportDemand, HEALTH, monthlyDemand, POLLUTION, RECIPES, UPKEEP, type GameState } from '../src/index.js';
 import { game, to, worked } from './fixtures/food-month.js';
 
 /** Month 1's production with `colonists` in the colony and no Electronics works. */
@@ -98,5 +98,33 @@ describe('needs C17: the colonists want Electronics, and so its inputs', () => {
     } finally {
       RECIPES.electronics = saved;
     }
+  });
+});
+
+describe("needs C13: the colonists' Medicine demand reads colony health (RULE-11, RULE-8)", () => {
+  /** The colonists' part of the store's Medicine demand: a politics colony of 400 at sick share `sick`, all else the same with none. */
+  function colonistsMedicine(sick: number, air: number): number {
+    const state = createGame({ seed: 7, politics: true, players: ['p0', 'p1', 'p2', 'p3'].map((id) => ({ id, name: id, isAi: false })) });
+    state.colonists = 400;
+    state.colony!.sick = sick;
+    state.air = air;
+    const none = cloneForSim(state);
+    none.colonists = 0;
+    return monthlyDemand(state).medicine - monthlyDemand(none).medicine;
+  }
+  const today = 400 / UPKEEP.colonistsPerMedicine;
+  const SMOG = POLLUTION.bands.find((b) => b.name === 'smoggy')!.from;
+
+  it("needs B-AC-12 (the Medicine case): health on, h at the cap gives the colonists' Medicine demand +40%; health off gives today's", () => {
+    expect(colonistsMedicine(HEALTH.cap, 0), 'health off: one per colonistsPerMedicine').toBeCloseTo(today, 9);
+    HEALTH.enabled = true;
+    try {
+      expect(colonistsMedicine(HEALTH.cap, 0)).toBeCloseTo(today * 1.4, 9);
+      expect(colonistsMedicine(HEALTH.cap, SMOG), 'dirty air still multiplies it').toBeCloseTo(today * 1.4 * POLLUTION.sickMedicineDemand, 9);
+      expect(colonistsMedicine(0, 0), 'h 0: today\'s').toBeCloseTo(today, 9);
+    } finally {
+      HEALTH.enabled = false;
+    }
+    expect(colonistsMedicine(HEALTH.cap, SMOG), "health off in dirty air: today's dirty-air demand").toBeCloseTo(today * POLLUTION.sickMedicineDemand, 9);
   });
 });
