@@ -366,9 +366,9 @@
   },
   "walker": {
     "cell": {
-      "width": 192,
-      "height": 224,
-      "feet": [96, 197]
+      "width": 320,
+      "height": 256,
+      "feet": [120, 197]
     },
     "px_per_m": 76.19,
     "frames": 12,
