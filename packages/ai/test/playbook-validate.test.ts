@@ -400,6 +400,7 @@ describe('the validator holds every playbook to RULE-1', () => {
       led.tiles[plain]!.owner = 'ai2';
       const both = run('development', [], { state: led, mind: mindOf(2, 'rookie') });
       expect(both.draft.development!.route).toContainEqual({ act: 'install', plot: plain });
+      expect(both.draft.development!.route, 'the led MULE, as fitted').toContainEqual({ act: 'outfit', outfit: 'food' });
       expect(both.rejected).toEqual([]);
     } finally {
       DEV_STEER.on = steering;
