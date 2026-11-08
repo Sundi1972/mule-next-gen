@@ -28,6 +28,7 @@ import {
   castLawVote,
   callOverrule,
   openOverrule,
+  budgetShares,
   setBudget,
   voteOverrule,
   DEV_STEER,
@@ -763,8 +764,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       }
       case 'setBudget': {
+        const was = JSON.stringify(budgetShares(state));
         setBudget(state, seatId, intent.shares);
-        this.governorChanged(seatId, `${this.nameOf(seatId)} set the colony budget.`);
+        if (JSON.stringify(budgetShares(state)) !== was) this.governorChanged(seatId, `${this.nameOf(seatId)} set the colony budget.`);
         return;
       }
       case 'callOverrule': {
@@ -1324,7 +1326,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Ticks every AI vote hand by dt through the same checks a phone gets. */
   private tickVoteHands(dt: number): void {
     const state = this.requireState();
+    const settings = () => `${state.treasury.salesTax}|${JSON.stringify(state.politics?.budget)}`;
+    const before = settings();
     for (const [id, hand] of this.voteHands) hand.tick(state, dt, (action) => this.aiAct(id, action));
+    // An AI Governor's change inside the loop was never seen by the hands that ticked before it (S5-RULE-12: every
+    // non-Governor seat judges each setting). They look once more, after the loop and not from inside a hand's tick.
+    if (settings() !== before) for (const [id, hand] of this.voteHands) hand.tick(state, 0, (action) => this.aiAct(id, action));
   }
 
   /**
