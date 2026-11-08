@@ -1,4 +1,4 @@
-import { airBand, DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, POLLUTION, sickPace, type GameState } from '@mule/engine';
+import { airBand, DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, POLLUTION, sickPace, UPKEEP, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -46,7 +46,7 @@ describe('the store view at the start of development', () => {
 
   it("B-AC-9: every screen sees each seat's condition in development, never in planning or production (the month end keeps it, C20): its hunger × sickness pace, species aside, and why it is sick", () => {
     const { game, state, planning, ctx, advance } = hungryWithAnEmptyCorral();
-    const want = { foodShare: foodShare(state, 's1'), foodNeed: needsOf(state, 's1').food, sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
+    const want = { foodShare: foodShare(state, 's1'), foodNeed: UPKEEP.baseFood, sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
     expect(want.foodShare).toBeLessThan(1);
     expect(want.conditionPace).toBeCloseTo(1 - (1 - DEV_WALK.hungerPaceMin) * (1 - want.foodShare));
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);

@@ -90,6 +90,7 @@ import {
   tileIndex,
   tradePossible,
   unlist as unlistLot,
+  UPKEEP,
   WALK,
   type DealCard,
   type GameState,
@@ -1101,7 +1102,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const p = state.players.find((q) => q.id === id)!;
     return {
       foodShare: foodShare(state, id),
-      foodNeed: needsOf(state, id).food,
+      // The household's need: hunger is its last meal (needs C15), so "ate n of m" is that meal, crews aside.
+      foodNeed: UPKEEP.baseFood,
       sick: p.sick,
       sickBecause: p.sick ? playerEventReason(state, 'sickness', 'development', id) : null,
       conditionPace: hungerPace(state, id) * sickPace(state, id),

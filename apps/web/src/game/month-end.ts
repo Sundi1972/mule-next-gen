@@ -109,7 +109,7 @@ export interface Hungry {
 
 /**
  * Who went hungry this month, from each player's condition, which the view keeps through the month end (Q6): the
- * share of the month's Food they held, of the need the condition carries.
+ * share of its Food the household ate at the last month end, of the household's need the condition carries.
  */
 export function hungerOf(view: MuleView): Hungry[] {
   return view.players.flatMap((p) => {

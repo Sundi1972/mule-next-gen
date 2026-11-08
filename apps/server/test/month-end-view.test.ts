@@ -149,7 +149,7 @@ describe('Month end: last month against this one (C20)', () => {
     const { ends } = playThreeMonths({ crewed: true });
     const second = ends[1]!;
     expect(second.needs['s1'], 'the premise: the crews eat 2 beside the household').toBe(UPKEEP.baseFood + 2);
-    const ate = (c: PlayerView['condition']) => Math.round(c!.foodShare * c!.foodNeed);
+    const ate = (c: PlayerView['condition'] | undefined) => Math.round(c!.foodShare * c!.foodNeed);
     for (const viewer of VIEWERS) {
       const shown = conditionsIn(second.views.get(viewer)!);
       // s1 held 1 Food: its household ate 1 of its 2, whatever its crews needed (crews included it read 2 of 4).
