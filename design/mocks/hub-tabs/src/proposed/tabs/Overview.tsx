@@ -38,7 +38,7 @@ export function OverviewTab() {
   );
 }
 
-/** The map's tools in one row above it: what a tap on the map does. The one pressed is lit. */
+/** The map's tools in one row above it: what a tap on the map does. The one pressed is lit. DS-GAP: Button has no size under 44 px; 32 px chips, as MapTools today. */
 function ToolRow({ tools, active, onPick }: { tools: MapToolSlot[]; active: string; onPick(id: string): void }) {
   return (
     <div role="toolbar" aria-label="Map tools" className="flex shrink-0 gap-1" data-testid="map-tools">

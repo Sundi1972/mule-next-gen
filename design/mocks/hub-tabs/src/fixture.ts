@@ -169,8 +169,8 @@ export function card(c: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to' 
 export const PACT = { kind: 'pact' } as const;
 export const VOTE_BRIX = { kind: 'vote', office: 'governor', candidate: 'brix' } as const;
 
-/** Brix offers Lena a vote card; Ossa · AI offers her a pact. Both wait for Lena. */
-export const OFFER_FROM_BRIX = card({ id: 'deal-q7k2m9', from: 'brix', to: 'lena', terms: VOTE_BRIX, until: 8 });
+/** Brix offers Lena a one-month pact; Ossa · AI offers her a three-month pact. Both wait for Lena. */
+export const OFFER_FROM_BRIX = card({ id: 'deal-q7k2m9', from: 'brix', to: 'lena', terms: PACT, until: 5 });
 export const OFFER_FROM_OSSA = card({ id: 'deal-b3x8re', from: 'ossa', to: 'lena', terms: PACT, until: 7 });
 /** Lena's promise, active: her vote for Brix in month 8. */
 export const PROMISED_BRIX = card({ id: 'deal-m1v0tz', from: 'lena', to: 'brix', terms: VOTE_BRIX, offered: 4, until: 8, status: 'active' });

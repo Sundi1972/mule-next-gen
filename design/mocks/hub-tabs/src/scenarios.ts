@@ -75,7 +75,7 @@ export const SCREENS: Screen[] = [
     states: [
       { id: 'composer', label: 'Composer A open (+ Deal to Brix)', seat: 'lena', world: month(), start: { tab: 'talk', focus: 'compose:brix' }, note: 'The composer over the Talk stage; the map’s tab is a tap away.' },
       { id: 'incoming-ai', label: 'Incoming: Card from Ossa · AI', seat: 'lena', world: offers, start: { tab: 'talk', focus: 'answer:deal-b3x8re' }, note: 'The AI seat’s pact, in the same sheet.' },
-      { id: 'incoming', label: 'Incoming: Brix’s vote card', seat: 'lena', world: offers, start: { tab: 'talk', focus: 'answer:deal-q7k2m9' }, note: 'A person’s card, in the same sheet.' },
+      { id: 'incoming', label: 'Incoming: Brix’s pact', seat: 'lena', world: offers, start: { tab: 'talk', focus: 'answer:deal-q7k2m9' }, note: 'A person’s card, in the same sheet.' },
       { id: 'cards', label: 'My cards', seat: 'lena', world: () => baseWorld({ cards: [OFFER_FROM_OSSA, OFFER_FROM_BRIX, PROMISED_BRIX, BROKEN_BY_KAI] }), start: { tab: 'talk', focus: 'cards' }, note: 'Offered, active, broken.' },
     ],
   },

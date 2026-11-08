@@ -41,6 +41,39 @@ const DECISIONS: [string, string][] = [
   ['D10', 'Colony: standings with reputation chips and “+ Deal” first, then the fund, the colony card (gauges, buildings, projects), the build site, what you need, the news, the ship and the facts; two columns at 844.'],
   ['D11', 'Talk: Chat and My cards; the thread has the whole stage. The composer (A) and an incoming offer open as the same sheet over the Talk stage. “+ Deal” on a whisper, a standings row or a player’s card all land here.'],
   ['D12', 'The month end and every other phase (land grant, development, the auctions, production) are unchanged: only the planning hub becomes tabs.'],
+  ['D13', 'The overrule call moves from the Colony desk’s fund card (PM ruling, 7 Nov) to the tax line in Council › Laws, beside its ballot, as WS6 decided for the tabs. It is still “at the tax line”; the line under Now opens Laws.'],
+  ['D14', 'The table chat (C20) keeps its place in the rail on every tab: the seat row and the ticker under the rail’s content, the bubble in the head. Talk is where the threads and whispers are.'],
+  ['D15', 'The cast: Brix is the human Governor (runs again in month 8), Kai the Sheriff and the caller, Ossa the AI seat and Land Baron, Lena the phone with no office. One table gives every state.'],
+];
+
+/** What reshaping the real hub touches, file by file (apps/web/src/phone/…), with the slot or interface change each needs. */
+const TOUCHES: [string, string][] = [
+  ['hub/slots.ts', 'HubSlots → TabHubSlots (src/proposed/slots.ts): desks: DeskSlot[] becomes tabs: TabSlot[] + politicsTabs: SubTabSlot[]; new picks: PlotPickSlot[]; MapToolSlot.desk dropped; stage holds ceremonies only; lines go to the “?” sheet; beneath unused on a phone. HubPlace becomes { tab, sub, tool, focus, pick }; goTo/settle take a Door. AgendaSlot and DeskDoor unchanged (desk ids translate through DESK_DOORS).'],
+  ['hub/Hub.tsx', 'HubNav gains tab, sub, pick, open(door), startPick(id), endPick(); openDesk/pickTool kept and translated (DESK_DOORS). Hub draws TabShell; HubStage, DeskTabs, DeskGroup, AgendaRow, MapTools leave for tabs/Overview.tsx; SituationStage for a ceremony only. New: the Now line as a door to a sub-tab that asks first; HelpSheet; export useHubIfAny (deals mock F-7).'],
+  ['Shell.tsx', 'PhoneShell gains, for the hub only, tabs (column A) and a head slot (PhaseLine + NowLine) in place of now/foldNow; the phase row drops “Month n / m” (it moves to PhaseLine). New exports PhaseLine, NowLine. FallbackBubble and TableChat under stay. Every other phase’s PhoneShell is unchanged.'],
+  ['hub/today.tsx', 'HUB_SLOTS → TAB_SLOTS: four tabs; politicsTabs; tools with list relabelled “Sell” and Panel: MarketDesk; agenda adds DEALS_AGENDA, OVERRULE_AGENDA, NEEDS_AGENDA, drops the drone and list rows, GOVERNOR_AGENDA shown to the Governor only; picks: WS8’s Guard; stage: the three reveals; nows/underNow/readyWords plus the overrule’s.'],
+  ['hub/desks.tsx', 'ColonyDesk, ThisMonth, News stay (Colony tab). TalkDesk and ChatBadge are replaced by tabs/Talk.tsx (TalkTab, TalkBadge; the thread fills the stage, not 240 px). MarketDesk becomes the Sell tool’s rail Panel; MarketStrip stays in it.'],
+  ['hub/tools.tsx', 'Unchanged: Look, My plots, Geo drone and Sell keep their Map, Panel and Action; Overview mounts them.'],
+  ['hub/Roadmap.tsx, NeedsStrip.tsx', 'Unchanged components, moved: from the stage into the “?” sheet. A “Short 1 Energy” agenda row replaces the strip on the stage.'],
+  ['hub/ReadyBar.tsx, Standings.tsx', 'ReadyBar unchanged. StandingsSheet stays behind “2nd of 4” (with the deals mock’s chip and + Deal); the Colony tab adds the league inline.'],
+  ['hub/politics/slots.ts', 'COUNCIL_DESK and GOVERNOR_DESK become SubTabSlots: laws, budget, elections, sheriff (shown while a Sheriff holds office); first() on an open ballot. ELECTION_DAY_STAGE, COUNCIL_STAGE and the new OVERRULE_STAGE show for the ceremony/reveal only. OFFICES_BANNER moves to lines (the “?” sheet). GOVERNOR_AGENDA gains show(isGovernor).'],
+  ['hub/politics/Council.tsx', 'CouncilDesk splits: LawsInForce + PendingLaw (export it) to Laws; CouncilBody (running, offices, results) to Elections.'],
+  ['hub/politics/Governor.tsx', 'GovernorDesk (SalesTax + LawPicker) mounts in Laws unchanged; FrozenTax replaces SalesTax’s row while a call holds the tax (budget mock).'],
+  ['hub/politics/Colony.tsx', 'ColonyWithFacts mounts in the Colony tab; Commission leaves for Budget’s Projects line (budget mock P12); the overrule call is not grafted into FundCard (it is in Laws, D13).'],
+  ['hub/politics/Offices.tsx, LawBallot.tsx, ElectionDay.tsx', 'Bodies unchanged; Offices’ openDesk calls land through DESK_DOORS. CouncilRail and ElectionDayRail are used for the reveals only; during a ballot the rail keeps Now.'],
+  ['phone/parts.tsx', 'Chat takes the deals mock’s four changes (whisper target, rep chip, DealsInThread, + Deal) and the AI mark on the recipient chips; its fixed 240 px wrapper goes.'],
+  ['Planning.tsx', '<Hub slots={TAB_SLOTS} />.'],
+  ['new: hub/tabs/{Overview, Politics, Colony, Talk}.tsx, hub/tabs/parts.tsx', 'The four tab bodies, the sub-tab row, TabBadge. The deals mock’s RailSheet anchors in the Talk stage, not the rail.'],
+  ['not designed here', 'The laptop (from 1100 px): its rail is 400 px and has room for the desks as today. Tabs there, or desks? A decision for WS6 before the build.'],
+];
+
+/** Where the design system has no answer; each is marked DS-GAP: in the code. */
+const GAPS: [string, string][] = [
+  ['Tabs', '@mule/ui has no Tabs or segmented control. The tab column, the tab bar, the sub-tabs and Talk’s Chat / My cards are hand-rolled buttons with role="tab", as today’s DeskTabs are.'],
+  ['Badge', 'No Badge component (a count or a word on a tab). TabBadge hand-rolls it, as ChatBadge does today. No on-warn or on-alert ink token: VOTE uses on-holo on warn, “!” ink on alert.'],
+  ['Small button', 'Button’s smallest size is md (44 px). The 32 px tool chips and the 36 px sub-tabs are raw buttons, as the hub’s MapTools and DeskTabs are today.'],
+  ['Sheet', 'No Sheet or Dialog component. The “?” sheet copies StandingsSheet’s overlay, its 600 px width included.'],
+  ['Icons', 'No icon set. Tab icons are 24×24 stroked paths, as DeskSlot.icon is; Hub.tsx’s Glyph is not exported, so the mock has its own.'],
 ];
 
 // ---- A phone on the mock table ----
@@ -188,6 +221,28 @@ function Index() {
           <strong className="text-ink">A</strong> keeps the stage’s full height for the map and puts the tabs under the left thumb; the 56 px it takes from the width costs the map nothing at 667, where the map is bound by width either way, and less than B’s
           44 px of height at 844. <strong className="text-ink">B</strong> reads as a familiar phone tab bar, but in landscape height is the scarce dimension, and it sits under the stage where the right thumb is busy with Ready.
         </p>
+      </Section>
+      <Section title="What the build touches" id="touches">
+        <table className="max-w-6xl text-left text-sm" data-testid="touches">
+          <tbody>
+            {TOUCHES.map(([file, change]) => (
+              <tr key={file} className="border-t border-holo-line align-top" data-testid={`touch-${file}`}>
+                <td className="w-64 py-2 pr-3 font-mono text-xs text-holo">{file}</td>
+                <td className="py-2 text-ink-2">{change}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Section>
+      <Section title="Design-system gaps (DS-GAP)" id="gaps">
+        <ul className="flex max-w-5xl flex-col gap-1 text-sm" data-testid="gaps">
+          {GAPS.map(([what, why]) => (
+            <li key={what} className="flex gap-3" data-testid={`gap-${what}`}>
+              <span className="w-28 shrink-0 font-semibold">{what}</span>
+              <span className="text-ink-2">{why}</span>
+            </li>
+          ))}
+        </ul>
       </Section>
       <Section title="Every screen and state" id="screens">
         <table className="max-w-6xl text-left text-sm" data-testid="screens">

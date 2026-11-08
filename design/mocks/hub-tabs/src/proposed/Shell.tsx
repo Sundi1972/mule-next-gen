@@ -1,5 +1,6 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { type ComponentType, type ReactNode } from 'react';
+import { FallbackBubble, TableChat } from '../../../../../apps/web/src/chat/Chat';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { fmt } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
@@ -16,7 +17,8 @@ import { Glyph } from './parts';
  *   2. the rail head holds what every tab keeps: the phase as a slim stepper line, the one Now line and its "?";
  *      the stage-top explanation card (Roadmap) is gone, its words in the "?" sheet;
  *   3. the phase title and the month share one line;
- *   4. on a phone the table chat leaves the rail for the Talk tab (TableChat under / FallbackBubble not drawn).
+ *   4. unchanged and worth saying: the table chat (C20) keeps its place, FallbackBubble in the head and TableChat
+ *      under the rail's content, so a line said aloud still pops on every tab; Talk is where the threads are.
  */
 
 export type ShellVariant = 'a' | 'b';
@@ -30,7 +32,10 @@ export interface TabButton {
   onPick(): void;
 }
 
-/** The tab column (A) or the tab bar (B). Real tabs: role="tab", aria-selected, a 44 px target at least. */
+/**
+ * The tab column (A) or the tab bar (B). Real tabs: role="tab", aria-selected, a 44 px target at least.
+ * DS-GAP: @mule/ui has no Tabs component; these are hand-rolled, as today's DeskTabs are.
+ */
 function Tabs({ variant, tabs }: { variant: ShellVariant; tabs: TabButton[] }) {
   const column = variant === 'a';
   return (
@@ -160,12 +165,12 @@ export function TabShell({
   return (
     <div className="h-full @container/shell">
       <div className="relative flex h-full bg-table pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-ink" data-testid="game-shell" data-variant={variant}>
-        {variant === 'a' && <Tabs variant="a" tabs={tabs} />}
+        {variant === 'a' && tabs.length > 0 && <Tabs variant="a" tabs={tabs} />}
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-testid="stage">
           <div className={cx('relative flex min-h-0 flex-1 flex-col p-2.5', variant === 'a' ? 'pb-[max(0.625rem,env(safe-area-inset-bottom))]' : 'pb-1.5')} data-testid="stage-body">
             {stage}
           </div>
-          {variant === 'b' && <Tabs variant="b" tabs={tabs} />}
+          {variant === 'b' && tabs.length > 0 && <Tabs variant="b" tabs={tabs} />}
         </main>
         <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
           <header className="flex flex-col gap-1.5 border-b border-holo-faint px-3 pb-2 pt-[max(0.375rem,env(safe-area-inset-top))]" data-testid="rail-head">
@@ -197,9 +202,11 @@ export function TabShell({
               )}
             </div>
             {head}
+            <FallbackBubble />
           </header>
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-2 *:shrink-0" data-testid="rail-body">
             {rail}
+            <TableChat under />
           </div>
           <div className="flex flex-col gap-1.5 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5" data-testid="actions">
             {footer}
