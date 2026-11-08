@@ -83,10 +83,10 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Good</th><th>Who counts as demand</th></tr></thead>
 <tbody>
-<tr><td>Food</td><td>Every player's household and crew (2 each, plus 1 per 4 crew); colonists, 1 per 20, in full at any price</td></tr>
-<tr><td>Water</td><td>Every player's household and crew (1 each, plus 1 per 6 crew); colonists, 1 per 20, in full at any price</td></tr>
+<tr><td>Food</td><td>Every player's household and crews (2 each, plus what each kind of plot's crew eats, see <a href="production.html#plot-consumption">What each kind of plot uses</a>); colonists, 1 per 20, in full at any price</td></tr>
+<tr><td>Water</td><td>Every player's household (1 each) and the Water their plots use; colonists, 1 per 20, in full at any price</td></tr>
 <tr><td>Energy</td><td>What every working plot and factory burns, but an Energy plant, which pays its own 1 from its own output; <span class="num">1.6</span> for every MULE the colony will want (one per idle plot, plus a month's new land, 2 a seat, while free land is left), since each will burn Energy once installed; colonists, half a unit per 20, in full at any price</td></tr>
-<tr><td>Medicine</td><td>Colonists, 1 per 50, half as much again while the air makes people sick, in full at any price</td></tr>
+<tr><td>Medicine</td><td>Colonists, 1 per 50, half as much again while the air makes people sick, in full at any price; and 1 for each player whose crews the colony's sickness reaches (switched off with colony health)</td></tr>
 <tr><td>Smithore</td><td>2 for every Alloy smelter; 1 for every MULE the colony will want (one per idle plot, plus a month's new land while free land is left); the export ship</td></tr>
 <tr><td>Alloy</td><td>1 for every Electronics works; 1 for every Electronics the colonists want; the export ship</td></tr>
 <tr><td>Rare earth</td><td>1 for every Electronics works; 1 for every Electronics the colonists want; the export ship</td></tr>
@@ -96,7 +96,7 @@
 </table></div>
 <p>The export ship's part: once its wishlist is announced (the month before it calls, and the month it is in port), each wishlist good counts a third of what the ship still wants, and goods not on the list count nothing. Before that, each good the ship might want counts its average share. See <a href="#export-ship">the export ship</a>.</p>
 <p>Colonists' demand does not bend with price: they pay nothing for their meal (they take it from the shelf, free), so their full need counts whatever the store asks. See <a href="colony-and-politics.html#colonists-meal">the colonists' meal</a>.</p>
-<p>The <span class="num">1.6</span> Energy for a new MULE is not a setting of its own. It is the average Energy a month of the outfits that buy their Energy from the stock (Food 1, Water 1, Smithore 2, Crystite 2, Rare earth 2, from <code>UPKEEP.energyUse</code>), so it follows when those are tuned. The Energy plant's own 1 is left out, because a plant pays it from its own output. In month 1 of a four-seat game that is 8 new MULEs × 1.6 = 12.8 Energy, plus 2.5 for 100 colonists: 15.3 a month, against the 28 the colony holds (20 in the store and 2 for each player), so Energy opens tight.</p>
+<p>The <span class="num">1.6</span> Energy for a new MULE is not a setting of its own. It is the average Energy a month of the outfits that buy their Energy from the stock (Food 1, Water 1, Smithore 2, Crystite 2, Rare earth 2, from <code>CONSUMPTION</code>), so it follows when those are tuned. The Energy plant's own 1 is left out, because a plant pays it from its own output. In month 1 of a four-seat game that is 8 new MULEs × 1.6 = 12.8 Energy, plus 2.5 for 100 colonists: 15.3 a month, against the 28 the colony holds (20 in the store and 2 for each player), so Energy opens tight.</p>
 <div class="box next"><h4>Under review: the Energy for new MULEs</h4><p>Measured with the build, on 40 four-seat games of seed 1 with politics on: counting the Energy new MULEs will need cut the farm-months without power from 40.4% to 31.8%, and the colonists at the end of a game fell from 77.5 to 71.7 on average. The programme manager ruled that it stays; Heiko keeps or drops it at the colony economy's first gate, from runs with and without it.</p></div>
 
 <h3 id="cover">Step 2: cover, and what the plots make</h3>
@@ -175,7 +175,7 @@
 <tr><td><code>PRICE.storeSpoilage</code></td><td class="n">0.25</td><td>Share of normal spoilage the store suffers</td></tr>
 <tr><td><code>PRICE.refDrift</code></td><td class="n">0.25</td><td>How fast the reference price follows what players pay each other</td></tr>
 <tr><td><code>PRICE.worldPull</code></td><td class="n">0.1</td><td>How fast the reference price drifts back toward the off-world price</td></tr>
-<tr><td>Energy for a new MULE</td><td class="n">1.6</td><td>Not a setting: worked out from <code>UPKEEP.energyUse</code> each time it is read (see Step 1)</td></tr>
+<tr><td>Energy for a new MULE</td><td class="n">1.6</td><td>Not a setting: worked out from <code>CONSUMPTION</code> each time it is read (see Step 1)</td></tr>
 </tbody>
 </table></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko's five rules (6 Nov): the store knows the colony's overall demand and sells at the normal, lowest price while supply covers it; prices rise when stock covers under two months and demand is bigger than production, more in a shortage and more again in a severe one; and a very high trade between players pulls the store's price towards it. From <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a> he approved counting the colony's stock (shelf plus players) rather than the shelf alone, four steps rather than a smooth curve, a quarter a month down, never below normal, and halfway towards a high trade. The 12 times ceiling, the sell-out rule and counting the Energy new MULEs will need come from the market-maker design he chose on 5 Nov. The opening prices go through the steps since the build (7 Nov): before, Water and Energy could open far under their normal price.</p></div>
@@ -185,7 +185,7 @@
 <li>A Medicine works' Food and Water inputs are not counted as demand for Food and Water (Smithore for smelters, and Alloy and Rare earth for Electronics works, are).</li>
 </ul>
 <p>Whether these are intended is for WS1 to say; WS5's store-pricing design may take them up.</p></div>
-<p class="code-ref">In the code: <code>economy.ts::monthlyDemand</code>, <code>energyPerNewMule</code>, <code>mulesWanted</code>, <code>exportDemand</code>, <code>colonistDemand</code>, <code>colonySupply</code>, <code>cover</code>, <code>expectedOutput</code>, <code>priceBand</code>, <code>nextPostedPrice</code>, <code>postPrices</code> · <code>auction.ts::noteBetween</code>, <code>teach</code> (what each walk keeps) · <code>game.ts::createGame</code> (the opening prices), <code>advancePhase</code> (when prices are posted) · <code>config.ts::PRICE</code>, <code>UPKEEP.energyUse</code></p>
+<p class="code-ref">In the code: <code>economy.ts::monthlyDemand</code>, <code>energyPerNewMule</code>, <code>mulesWanted</code>, <code>exportDemand</code>, <code>colonistDemand</code>, <code>colonySupply</code>, <code>cover</code>, <code>expectedOutput</code>, <code>priceBand</code>, <code>nextPostedPrice</code>, <code>postPrices</code> · <code>auction.ts::noteBetween</code>, <code>teach</code> (what each walk keeps) · <code>game.ts::createGame</code> (the opening prices), <code>advancePhase</code> (when prices are posted) · <code>config.ts::PRICE</code>, <code>CONSUMPTION</code></p>
 <p class="owner">Kept current by: WS1 (the store's code), WS5 (the store-pricing design, built in PR-1).</p>
 
 <h2 id="price-example">Worked example: Food in each step <span class="pill built">In the game</span></h2>
@@ -466,23 +466,22 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Part</th><th>Today</th><th>Designed</th><th>Who builds it</th></tr></thead>
 <tbody>
-<tr><td>What the colony needs</td><td>See <a href="#demand">Step 1</a></td><td>Each kind of plot eats and drinks its own amount (below)</td><td>WS5 (PR-6)</td></tr>
 <tr><td>The colonists' Medicine</td><td>1 per 50 colonists, half as much again in dirty air</td><td>See <a href="#medicine-electronics-demand">Medicine</a></td><td>WS5 (PR-10), WS7 (PR-9)</td></tr>
 </tbody>
 </table></div>
 
-<h3 id="colony-demand">What the colony needs: the demand the store counts <span class="pill designed">Designed, not in the game yet, WS5 and WS7</span></h3>
+<h3 id="colony-demand">What the colony needs: the demand the store counts <span class="pill built">In the game</span></h3>
 <p>Once a month, for each good, the store adds up what the whole colony needs in a month:</p>
 <ul>
-<li><strong>Every player's household and crews:</strong> 2 Food and 1 Water a household, plus what each kind of plot uses (see <a href="production.html#plot-consumption">What each kind of plot uses</a>).</li>
+<li><strong>Every player's household and crews:</strong> 2 Food and 1 Water a household, plus the Food each kind of plot's crew eats (see <a href="production.html#plot-consumption">What each kind of plot uses</a>).</li>
 <li><strong>The Energy their plots burn</strong>, by the same table.</li>
 <li><strong>The colonists' full need</strong>, at any price: their Food, Water, Energy and Medicine (in the game since PR-2: colonists pay nothing, so nothing caps their part), and the Electronics they want (PR-3).</li>
 <li>A festival's Food and the export ship's take, as today.</li>
 </ul>
 <p>The colony's <strong>stock</strong> is the store's shelf plus what every player holds, as today: a colony whose players hold Food is not short (Heiko's decision 9; counting the shelf alone measured worse on every count).</p>
-<div class="box example"><h4>Example: four farmers and 100 colonists</h4><p>Four players each work three farms and a well: each household and its crews eat <span class="num">3</span> Food. 100 colonists eat <span class="num">5</span>. The store counts <span class="num">4 × 3 + 5 = 17</span> Food a month, whatever the price. The colonists' 5 already count in full today; the households' 3 each come with PR-6.</p></div>
-<p>Measured over ten simulated games, the demand the store counts rises from 18.1 to 19.3 Food, 12.8 to 16.6 Water and 17.4 to 18.6 Energy a month. Water rises most, to about 20 by the end of a game, as farms and plants spread.</p>
-<p class="owner">The colonists' full need with no wages: in the game (the Politics team, WS7, PR-2). Designed, not in the game yet: what each kind of plot eats and drinks, the Maps team (WS5), PR-6.</p>
+<div class="box example"><h4>Example: four farmers and 100 colonists</h4><p>Four players each work three farms and a well: each household and its crews eat <span class="num">3</span> Food. 100 colonists eat <span class="num">5</span>. The store counts <span class="num">4 × 3 + 5 = 17</span> Food a month, whatever the price.</p></div>
+<p>Measured over ten simulated games on the first design, whose crews also drank (dropped on 7 Nov: a plot takes its Water as it produces), the demand the store counts rises from 18.1 to 19.3 Food, 12.8 to 16.6 Water and 17.4 to 18.6 Energy a month. Water rises most, to about 20 by the end of a game, as farms and plants spread.</p>
+<p class="owner">Kept current by: the Maps team (WS5). The colonists' full need with no wages: the Politics team (WS7), PR-2.</p>
 
 <h3 id="price-steps">The four steps <span class="pill built">In the game</span></h3>
 <p>In the game as designed: see <a href="#target">Step 3: the step the good is in</a>, and Steps <a href="#momentum">4</a>, <a href="#short-goods">5</a> and <a href="#ceiling">6</a> for how the price moves. One addition came with the build: the opening prices go through the same steps (see <a href="#opening-prices">the opening prices</a>).</p>
