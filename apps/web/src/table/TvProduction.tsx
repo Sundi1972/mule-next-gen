@@ -109,9 +109,20 @@ function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t:
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4" data-testid="rail">
       <ol className="flex flex-col gap-1.5" data-testid="acts">
-        {acts.map((a, i) => (
+        {/* The steps already played fold into one line of ✓ names: six seats with the gauges on their own row (PR-11)
+            drew production at 0.613 with a row each (PM ruling 7 Nov, option 3; WS4 named edit). */}
+        {now > 0 && (
+          <li className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 px-3 py-1 font-display text-xl font-semibold text-ink-3" data-testid="acts-done">
+            {acts.slice(0, now).map((a) => (
+              <span key={a.id} className="whitespace-nowrap" data-testid={`act-${a.id}`} data-now={false}>
+                <span className="font-mono text-lg font-bold text-ok">✓</span> {a.title}
+              </span>
+            ))}
+          </li>
+        )}
+        {acts.map((a, i) => i < now ? null : (
           <li key={a.id} className={cx('flex items-baseline gap-3 rounded-control px-3 py-1.5', i === now && 'bg-holo-soft')} data-testid={`act-${a.id}`} data-now={i === now}>
-            <span className={cx('font-mono text-lg font-bold', i === now ? 'text-holo' : i < now ? 'text-ok' : 'text-ink-3')}>{i < now ? '✓' : i + 1}</span>
+            <span className={cx('font-mono text-lg font-bold', i === now ? 'text-holo' : 'text-ink-3')}>{i + 1}</span>
             <span className="flex flex-col gap-1">
               <span className={cx('font-display text-2xl font-semibold leading-none', i === now ? 'text-ink' : 'text-ink-3')}>{a.title}</span>
               {i === now && a.id !== 'events' && (
