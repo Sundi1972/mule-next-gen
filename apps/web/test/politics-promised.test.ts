@@ -254,6 +254,8 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     // The server's answer to the last pick, as its broadcast brings it: it can't tell an abstention from no pick.
     const last = taps.at(-1);
     if (last && answered) rerender(electionFor({ ...seat, ballot: last === 'abstain' ? {} : { governor: last } }));
+    // The ballot shows the last pick, and only it: an Abstain over a promise is not the promised name.
+    if (last) for (const option of ['s2', 's3', 'abstain']) expect(checked(option), option).toBe(option === last);
     expect(isDisabled('ready'), 'Cast my vote is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);

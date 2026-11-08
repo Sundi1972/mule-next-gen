@@ -241,6 +241,10 @@ describe('the reputation chip (S3-C19)', () => {
     tap(`player-card-${BRIX}-close`);
     tap(`who-${LENA}-rep`);
     expect(text(`player-card-${LENA}-reasons`), 'Lena kept her pact: nothing public').toBe('What moved it, in publicNothing public. A kept card never shows here, only the number rising.');
+
+    tap(`player-card-${LENA}-close`);
+    tap(`who-${OSSA}-rep`);
+    expect(text('reason-deal-o1'), "Ossa's own reason, in the breaker-less words").toBe(`M2Broke a pact with Lena−${-POLITICS.reputation.moves.pactBroken}`);
   });
 });
 
@@ -304,6 +308,37 @@ describe('the deal composer (S3-C17)', () => {
     rerender(gameFor(myView(LENA, [listed], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } })));
     expect(findTestid('composer-a')).toBeUndefined();
     expect(byTestid('add-deal').getAttribute('disabled'), 'one unanswered card to Brix at a time').not.toBeNull();
+  });
+
+  it('S3-B-AC-1: the composer says before the send what the engine would refuse: no offers left, a vote already promised on that ballot, a pact already held; and warns an AI seat turns down a low name', () => {
+    const { refuseBelow } = POLITICS.ai.deals;
+    const lowLena = PLAYERS.map((p) => (p.id === LENA ? { ...p, reputation: refuseBelow - 1 } : p));
+    const promisedOssa = card({ id: 'deal-pv1', from: LENA, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, status: 'active' });
+    const pactKai = card({ id: 'deal-pk1', from: KAI, to: LENA, status: 'active' });
+    const waiting = [card({ id: 'deal-x1', from: LENA, to: OSSA }), card({ id: 'deal-x2', from: LENA, to: BRIX })];
+    const game = (cards: DealCard[], offersLeft: number) => ({ ...gameFor(myView(LENA, cards, { offersLeft }), politics({ candidates: { governor: [OSSA, BRIX] } })), players: lowLena });
+
+    // A pact already held with Kai, and Lena's vote promised to Ossa: the composer says both in the engine's words.
+    mount(game([promisedOssa, pactKai], 2), hub);
+    tap('desk-talk');
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    expect(text('composer-a-pact-no')).toBe('You already have a pact with Kai');
+    expect(text('composer-a-ai-warning'), 'the warning names the threshold from POLITICS.ai.deals').toBe(`Kai turns down cards from a name under ${refuseBelow}. Yours is ${refuseBelow - 1}.`);
+    tap('composer-a-kind-vote');
+    expect(text(`composer-a-choice-gov:${BRIX}-no`)).toBe('You already promised your vote on this ballot');
+    expect(findTestid(`composer-a-choice-gov:${OSSA}`), 'the promised choice is still offered').toBeDefined();
+    tap('composer-a-close');
+
+    // No offers left: Send is off, with the count of cards waiting.
+    rerender(game(waiting, 0));
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    expect(text('composer-a-refusal')).toBe('You have 2 cards waiting for an answer');
+    expect(byTestid('composer-a-send').getAttribute('disabled')).not.toBeNull();
+    tap('composer-a-close');
+    tap('talk-cards');
+    expect(text('my-deals-waiting')).toContain('· 0 more you can offer');
   });
 
   it("S3-B-AC-1: the composer also opens from a name's player card and from a standings row, in planning", () => {
@@ -417,6 +452,10 @@ describe('the incoming card and My cards (S3-C18)', () => {
     rerender(brixGame([lenasAnswer('active'), ...BRIX_CARDS.slice(1)]));
     expect(findTestid('incoming-deal-in1')).toBeUndefined();
     expect(text('thread-line-deal-in1')).toContain('Binds until the end of month 4');
+
+    tap(`chat-to-${OSSA}`);
+    expect(text(`thread-deals-${OSSA}`), "Brix's own offer to Ossa sits in their thread, as his, waiting").toContain('Waiting for Ossa');
+    expect(findTestid('outgoing-deal-out1')).toBeDefined();
 
     tap('talk-cards');
     expect(allTestids('my-deals-').filter((id) => /^my-deals-[a-z]+$/.test(id))).toEqual(['my-deals-waiting', 'my-deals-active', 'my-deals-settled']);

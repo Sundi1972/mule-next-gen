@@ -202,6 +202,7 @@ describe("the TV's break banner (S3-C20)", () => {
   it.each<[string, MuleView]>([
     ['a kept card: brokenDeals holds none', atMonth([])],
     ['a card broken in an earlier month', atMonth([{ ...LENA_VOTE, settled: 6 }])],
+    ['a card broken last month', atMonth([{ ...LENA_VOTE, settled: 7 }])],
     ['an older server with no brokenDeals', atMonth(undefined)],
     ['a game without politics', { ...game(null, 8), players: SEATS }],
   ])('S3-B-AC-2: no new broken card, no banner (%s)', (_, g) => {
