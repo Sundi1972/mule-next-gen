@@ -643,12 +643,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * an investigation, a fine) is noticed and told on the news, public or private to its orderer by politics-view's one
    * visibility test. Placing, replacing or withdrawing an order, and posting a guard, is neither.
    */
-  private noteSabotage(at?: Stamp): void {
+  private noteSabotage(at?: Stamp, behindHeadline = false): void {
     const state = this.state;
     const now = state?.politics?.sabotage ?? [];
     if (!state || now === this.sabotageSeen) return;
     for (const fact of sabotageNotices(state, this.sabotageSeen, now)) this.notify(fact, at);
-    for (const line of sabotageNews(state, this.sabotageSeen, now, (id) => this.nameOf(id))) this.addNews(line);
+    const lines = sabotageNews(state, this.sabotageSeen, now, (id) => this.nameOf(id));
+    if (behindHeadline) {
+      // The news is a ring of three, newest first. At a phase's opening its own line (production's harvest, game over)
+      // stays first; the cases take the slots behind it, the newest case first.
+      const [headline, ...rest] = this.news;
+      this.news = [...(headline ? [headline] : []), ...lines.reverse(), ...rest].slice(0, 3);
+    } else {
+      for (const line of lines) this.addNews(line);
+    }
     this.sabotageSeen = now;
   }
 
@@ -1031,8 +1039,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
     if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
     this.enterPhase();
-    // After the phase opens: its own report (production's harvest line) replaces the news, and these lines come after it.
-    this.noteSabotage(settledIn);
+    // After the phase opens: its own report (production's harvest line, game over) replaces the news and keeps first place.
+    this.noteSabotage(settledIn, true);
   }
 
   private enterPhase(): void {
