@@ -1,0 +1,22 @@
+{
+ "cell": {
+  "width": 192,
+  "height": 224,
+  "centre": [
+   96,
+   197
+  ]
+ },
+ "px_per_m": 76.19047619047619,
+ "frames": 12,
+ "headings": [
+  "+x",
+  "+y",
+  "-x",
+  "-y"
+ ],
+ "seconds": 1.3333333333333333,
+ "height_m": 1.75,
+ "model": "astro-a.glb",
+ "action": "CharacterArmature|Walk"
+}

@@ -4,7 +4,7 @@ Rendered in the shared camera (lib/frame: 2:1 dimetric from the south-east, 76.1
 (lib/light: day, or dusk with its warm fill), on a shadow catcher, so a frame drops onto the plate like a building layer.
 The colonists walk the paths between places, which run along the grid's two axes, so four headings cover every leg.
 Run: blender -b -P walk.py -- <out-dir> <model.glb|.fbx|.blend> <action substring> <name> [light=day] [frames=12]
-  [height=1.75] [samples=32] [yaw0=0]
+  [height=1.75] [samples=32] [yaw0=0] [spin=1]
   -> <out-dir>/<name>-<light>-<heading>-<frame>.png and <out-dir>/<name>-<light>-sheet.png (rows: headings, columns:
   frames), and <name>-<light>.json (cell size, feet pixel, frames, headings)."""
 import json
@@ -26,6 +26,7 @@ FRAMES = int(a[5]) if len(a) > 5 else 12
 HEIGHT = float(a[6]) if len(a) > 6 else 1.75
 SAMPLES = int(a[7]) if len(a) > 7 else 32
 YAW0 = float(a[8]) if len(a) > 8 else 0.0  # the model's own facing, so heading "+x" really walks along +x
+SPIN = float(a[9]) if len(a) > 9 else 1.0  # -1 where a rig turns the other way about z (the Quaternius human's .blend)
 # a cell 2.5 m wide and 2.9 m tall at the shared scale, the feet 0.35 m above its bottom edge
 CELL = {"width": 192, "height": 224, "centre": [96, 197]}
 # the grid's two axes both ways: +x runs down-right on screen, +y up-right (x = 12 (col - 2), y = -12 (row - 2))
@@ -46,6 +47,16 @@ else:
         if o is not None:
             bpy.context.scene.collection.objects.link(o)
 new = [o for o in bpy.data.objects if o not in before]
+# a pack's textures often sit in a subfolder its file does not point at (the Quaternius human's Textures/): find each
+# missing one by name under the model's own folder
+for im in bpy.data.images:
+    if im.source == "FILE" and not os.path.exists(bpy.path.abspath(im.filepath)):
+        name = os.path.basename(bpy.path.abspath(im.filepath))
+        for d, _, files in os.walk(os.path.dirname(os.path.dirname(MODEL)) if ext == ".blend" else os.path.dirname(MODEL)):
+            if name in files:
+                im.filepath = os.path.join(d, name)
+                im.reload()
+                break
 arm = next(o for o in new if o.type == "ARMATURE")
 meshes = [o for o in new if o.type == "MESH"]
 for o in new:  # glTF imports may carry their own cameras or lights
@@ -95,7 +106,7 @@ light.apply(LIGHT)
 os.makedirs(OUT, exist_ok=True)
 cells = []
 for h, yaw in HEADINGS.items():
-    root.rotation_euler = (0, 0, math.radians(yaw + YAW0))
+    root.rotation_euler = (0, 0, math.radians(SPIN * yaw + YAW0))
     row = []
     for k in range(FRAMES):
         f = f0 + (f1 - f0) * k / FRAMES
