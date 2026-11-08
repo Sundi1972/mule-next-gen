@@ -114,7 +114,11 @@ materials neutral grey and adds a mask sheet (suit red, trim green, once with th
 suit) and a palette of three (the helmet and trims, in place of hair) are laid through the mask offline by `walker/tint.py`
 (in linear light, so the render's shading stays its own), with an outline sheet (the figure's alpha grown 4 px, less
 itself) for the ghost behind a building; `walker/publish.py` writes the WebP and the manifest's `walker` entry. Trims:
-warm white, graphite, sand (a charcoal speckled the suit's accent panels and vanished at dusk). They walk at 1.3 m/s.
+warm white, graphite, sand (a charcoal speckled the suit's accent panels and vanished at dusk). They walk at 1.3 m/s. A walker
+stands on its own solid catcher (the frame's ring is open over a building's ground, where a walker stands), and only
+the meshes its rig moves set its height and feet (Astronaut A carries an unskinned helper sphere). On the phone each
+suit uses one sheet (its first trim), and the phone's sheets code the shadow's alpha coarser: the phone's heaviest
+colony loads 894 KB by day, 800 KB at dusk (B-AC-5, `review-loop/shoot.mjs`).
 
 ## 8. Stages — one model, derived variants
 

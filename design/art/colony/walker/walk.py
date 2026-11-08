@@ -122,7 +122,10 @@ for m in bpy.data.materials:  # the tinted parts render neutral grey: the palett
             m.node_tree.links.remove(link)
         b.default_value = NEUTRAL
 
-catcher = frame.shadow_catcher()  # the contact shadow comes with the frame, as with a building layer
+# A solid catcher under the walker: the frame's catcher is a ring, open over a building's own ground, and a walker
+# stands in that opening, so its contact shadow had nowhere to fall.
+catcher = core.mesh_obj("walk_catcher", [(-6, -6, 0), (6, -6, 0), (6, 6, 0), (-6, 6, 0)], [(0, 1, 2, 3)], core.flat("catcher", (0.5, 0.5, 0.5), 0.9))
+catcher.is_shadow_catcher = True
 light.rig()
 frame.camera(CELL)
 frame.setup(SAMPLES, 100, CELL)
