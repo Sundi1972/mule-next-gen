@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import { POLITICS } from '@mule/engine';
+import { POLITICS, type DealCard } from '@mule/engine';
 import type { CouncilView, ElectionView, MuleView, MyPoliticsView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
@@ -338,3 +338,31 @@ it("S3-T-AC-16: row 1 · outside a ballot, a promise or not, the ready press sen
   tap('ready');
   expect(sent).toEqual([READY]);
 });
+
+describe('the AI mark on the deal words (S3-C17, S3-C21, F-11)', () => {
+  // Kai is a computer seat: every place a deal names him carries the one mark, " · AI", drawn by SeatWords.
+  const withAi = (view: MuleView, cards: DealCard[]): MuleView => ({
+    ...view,
+    players: view.players.map((p) => (p.id === 's3' ? { ...p, isAi: true } : p)),
+    me: { ...view.me!, deals: { cards, offersLeft: 2, pactMonths: POLITICS.deals.pactMonths } },
+  });
+  const fromKai: DealCard = { id: 'deal-k1', from: 's3', to: 's1', terms: { kind: 'pact' }, offered: MONTH, until: MONTH + 2, status: 'offered', brokenBy: null, settled: null };
+
+  it('S3-B-AC-2: a deal from an AI seat shows " · AI" after his name in the agenda, on the ballot lines and on the composer button', () => {
+    mount(withAi(electionFor({ promised: { election: { governor: { candidate: 's2', to: ['s3'] } }, law: null } }), [fromKai]));
+    expect(text('ballot-governor-promised'), 'the election ballot').toContain('You promised Kai · AI your vote for Brix');
+    expect(text('agenda-deals'), 'the agenda').toContain('From Kai · AI · answer before Ready');
+    tap('desk-talk');
+    tap('talk-chat');
+    tap('chat-to-s3');
+    tap('add-deal');
+    expect(text('composer-a-send'), 'the composer button').toBe('Offer to Kai · AI');
+    expect(text('composer-a-note')).toBe('Kai · AI answers before planning ends, or it expires.');
+    act(() => root!.unmount());
+    root = null;
+
+    mount(withAi(lawFor({ promised: { election: {}, law: { yes: true, to: ['s3'] } } }), []));
+    expect(text('ballot-promised'), 'the law ballot').toContain('You promised Kai · AI a yes');
+  });
+});
+
