@@ -439,11 +439,26 @@ describe('the tabbed planning hub (SB-2)', () => {
       for (const part of ['phase-line', 'now', 'help-open']) byTestid(part);
     }
     expect(findTestid('roadmap'), 'the stage-top card is gone from the stage').toBeUndefined();
-    tap('help-open');
-    const sheet = byTestid('help-sheet');
-    for (const part of ['roadmap', 'help-now', 'needs-strip']) byTestid(part, sheet);
-    tap('help-close');
-    expect(findTestid('help-sheet')).toBeUndefined();
+    // A tap as a browser gives it: the "?" takes the focus, then opens the sheet; Close gives the focus back to it.
+    const proto = FakeElement.prototype as unknown as { focus?: () => void };
+    const had = Object.getOwnPropertyDescriptor(proto, 'focus');
+    proto.focus = function (this: FakeElement) {
+      (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
+    };
+    try {
+      byTestid('help-open').focus();
+      tap('help-open');
+      const sheet = byTestid('help-sheet');
+      for (const part of ['roadmap', 'help-now', 'needs-strip']) byTestid(part, sheet);
+      byTestid('help-close').focus();
+      tap('help-close');
+      expect(findTestid('help-sheet')).toBeUndefined();
+      expect((document.activeElement as unknown as FakeElement | null)?.getAttribute('data-testid'), 'the focus is back on the "?"').toBe('help-open');
+    } finally {
+      if (had) Object.defineProperty(proto, 'focus', had);
+      else delete proto.focus;
+      (document as unknown as { activeElement: FakeElement | null }).activeElement = null;
+    }
   });
 
   it('E-9 (D8): a sub-tab that asks first opens nothing by itself; while another tab or sub-tab is open the Now line is a door to it, and inside it Now is plain', () => {
