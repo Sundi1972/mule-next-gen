@@ -522,7 +522,8 @@ function MyDealRow({ c }: { c: DealCard }) {
 /** Every card of mine, by what I must do: answer, waiting, active, settled. One section of the Talk desk. */
 export function MyDeals() {
   const { me } = usePhoneGame();
-  const cards = me.deals?.cards ?? [];
+  // me.deals also carries the game's public broken cards; only this player's own are listed.
+  const cards = (me.deals?.cards ?? []).filter((c) => c.from === me.id || c.to === me.id);
   const incoming = cards.filter((c) => c.status === 'offered' && c.to === me.id);
   const waiting = cards.filter((c) => c.status === 'offered' && c.from === me.id);
   const active = cards.filter((c) => c.status === 'active');
