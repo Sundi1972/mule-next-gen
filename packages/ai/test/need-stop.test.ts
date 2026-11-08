@@ -44,8 +44,7 @@ const seatsFor = () => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI 
 const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
 
 /**
- * The Food status screen: ai0 and ai1 on three Energy plots and a Medicine works each, ai0 holding 3 over what keeps it
- * whole, ai1 none. The
+ * The Food status screen: ai0 and ai1 on three Energy plots each, ai0 holding 3 over what keeps it whole, ai1 none. The
  * store posts its prices on that colony, as it does entering the auction.
  */
 function foodScreen(): GameState {
@@ -56,10 +55,6 @@ function foodScreen(): GameState {
   for (const id of [ME, RIVAL]) {
     const free = state.tiles.filter((x) => x.terrain === 'plains' && !x.owner);
     for (let i = 0; i < 3; i++) Object.assign(free[i]!, { owner: id, outfit: 'energy' });
-    // Each also runs a Medicine works: since PM ruling (a) (8 Nov) the need to hold carries only a factory's Food past
-    // spoilage, so the works' Food is what lifts ai0's need over the Food upkeep eats, and over its own keep floor; and
-    // ai1, hungrier for it, still bids once ai0 is down to its need.
-    Object.assign(free[3]!, { owner: id, outfit: 'medicine' });
     const p = state.players.find((x) => x.id === id)!;
     for (const g of ['energy', 'water'] as const) p.stock[g] = 2 * (monthNeeds(state, id)[g] + 2);
     p.stock.food = id === ME ? wholeFood(state, id) + 3 : 0;
