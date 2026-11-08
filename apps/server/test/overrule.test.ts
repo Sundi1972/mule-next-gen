@@ -168,6 +168,25 @@ describe('S5-C7: the server opens the overrule ballot where planning already end
     expect(state.treasury.salesTax, "the Governor's raise stood").toBeCloseTo(0.06);
     expect(seen.at(-1), 'the earlier seat saw the new tax before any ballot').toBe(6);
     expect(seen[0], 'it first ticked before the raise').toBe(was);
+
+    // Outside a tick (planMonth, an LLM move): an AI Governor's change is judged at once, not on some later tick.
+    seen.length = 0;
+    game.handle('s4', { type: 'setTax', percent: 7 });
+    expect(seen, 'the earlier seat ticked at once and saw the new tax').toEqual([7]);
+  });
+
+  it('S5-T-AC-10: a tick in which the AI Governor changes nothing ticks each hand exactly once', () => {
+    const { ctx } = fakeContext();
+    const game = new MuleGame(ctx, 7, { politics: true });
+    game.start([seats[0]!, seats[1]!, { id: 's3', name: 'Early', isAi: true, color: 2 }, { id: 's4', name: 'Late', isAi: true, color: 3 }]);
+    const state = engineOf(game);
+    state.politics = { ...state.politics!, governor: 's4', election: null, council: null, taxAtStart: state.treasury.salesTax };
+    let early = 0;
+    const hands = seamsOf(game).voteHands;
+    hands.set('s3', { tick: () => void early++ });
+    hands.set('s4', { tick: () => undefined });
+    seamsOf(game).tickVoteHands(0);
+    expect(early, 'no change, no second look').toBe(1);
   });
 });
 
