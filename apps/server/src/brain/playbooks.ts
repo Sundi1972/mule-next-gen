@@ -9,7 +9,7 @@ import {
   atAuctionStart,
   GOOD_NAME,
   handsDevelopment,
-  keptDevelopmentPlaysToday,
+  keptPlaysToday,
   landBrief,
   newPlots,
   ownedPlots,
@@ -222,7 +222,7 @@ export class Playbooks {
           last,
           development?.development ?? null,
           grant.plot,
-          keptDevelopmentPlaysToday(seat, month),
+          keptPlaysToday(seat, month, 'development'),
         );
         const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development, owned: ownedPlots(state, seat.id) };
         this.asks.set(seat.id, ask);
@@ -323,11 +323,20 @@ export class Playbooks {
         const draft = seat.draft(view, phase);
         const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
         if (phase === 'auction') this.keepHands(state, seat, outcome);
-        const brief = phaseBrief(view, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), {
-          outcome,
-          feedback: this.phaseFeedback.get(key) ?? null,
-          worthBefore: this.worthAtAsk.get(seat.id) ?? null,
-        });
+        const brief = phaseBrief(
+          view,
+          seat.mind,
+          seat.brain.persona,
+          draft,
+          phase,
+          seat.brain.heard(),
+          {
+            outcome,
+            feedback: this.phaseFeedback.get(key) ?? null,
+            worthBefore: this.worthAtAsk.get(seat.id) ?? null,
+          },
+          phase === 'auction' && keptPlaysToday(seat, state.month, 'auction'),
+        );
         const roles = Object.fromEntries(Object.entries(draft.auction ?? {}).map(([g, plan]) => [g, plan.role]));
         const ask: Ask = { month: state.month, roles, written: null, started: false, controller: new AbortController() };
         this.phaseAsks.set(key, ask);
@@ -356,7 +365,10 @@ export class Playbooks {
     this.handsDev.delete(seat.id);
     if (outcome) return;
     try {
-      this.handsDev.set(seat.id, handsDevelopment(state, seat.id, seat.developLog()));
+      // The draft route the month's land brief showed, against which the hands' stop is told.
+      const shown = this.asks.get(seat.id);
+      const route = shown?.month === state.month ? (shown.development?.development?.route ?? null) : null;
+      this.handsDev.set(seat.id, handsDevelopment(state, seat.id, seat.developLog(), seat.brain.log, route));
     } catch (err) {
       console.error(`playbooks: seat ${seat.id}'s development report could not be read, its next brief goes without it: ${messageOf(err)}`);
     }

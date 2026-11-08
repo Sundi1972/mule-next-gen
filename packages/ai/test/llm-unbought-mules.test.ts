@@ -15,7 +15,7 @@ const buy = (ok: boolean, why?: string): DevLogEntry => ({ label: 'Buy a MULE at
 const outfit = (ok: boolean, why?: string): DevLogEntry => ({ label: 'Outfit it as a Food MULE', ok, at: 0, action: { type: 'outfit', outfit: 'food' }, ...(why ? { why } : {}) });
 const install = (ok: boolean, why?: string): DevLogEntry => ({ label: 'Install it on plot 1·1 (plains)', ok, at: 0, action: { type: 'install', x: 0, y: 0 }, ...(why ? { why } : {}) });
 
-const NONE = { bought: 0, installed: [], refused: [], unfinished: [] };
+const NONE = { bought: 0, installed: [], refused: [], unfinished: [], stopped: null };
 
 describe("unbought-mules fix: the hands' own development, in the brief's words", () => {
   it.each([
