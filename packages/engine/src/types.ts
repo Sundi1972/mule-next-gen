@@ -292,7 +292,10 @@ export type EventKey =
   | 'walkout'
   | 'loyalCrew'
   | 'riot'
-  | 'volunteerCleanup';
+  | 'volunteerCleanup'
+  // Slice 4: a sabotage order's events (S4-RULE-4); never a colony event.
+  | 'powerCut'
+  | 'marketRumour';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind =
@@ -311,7 +314,8 @@ export type EventKind =
   | 'colonists'
   | 'sweep'
   | 'strike'
-  | 'store';
+  | 'store'
+  | 'sabotage';
 
 /** One change an event made off the map: whose (a player's id, the store or the colony), of what, and by how much. */
 export interface EventEffect {
@@ -433,9 +437,9 @@ export interface GameState {
 }
 
 /** Where money comes into the colony fund from. */
-export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
+export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant' | 'fine';
 /** What the colony fund pays out for. */
-export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'welfare' | 'security';
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'welfare' | 'security' | 'restitution';
 
 /** One month's money into and out of the colony fund. */
 export interface FundLedger {
@@ -644,7 +648,7 @@ export type SabotageTarget =
 
 /** One player's sabotage order (slice 4). */
 export interface SabotageOrder {
-  /** 'sab-<n>'. */
+  /** 'sab-<tag>': opaque, 'sab-' and six base-36 characters, so no count of hidden orders leaks (AM-1). */
   id: string;
   /** The orderer. Engine state always holds it; only observe() sets null, on another seat's order whose culprit is not public. */
   by: string | null;
@@ -715,7 +719,7 @@ export interface InquiryRecord {
   overruled: number;
 }
 
-export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap';
+export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap' | 'sabotageBan';
 
 /** Enact a law at a setting (replacing one in force when three already are), or repeal one. */
 export type LawProposal = { kind: 'enact'; law: LawId; setting: number; replaces?: LawId } | { kind: 'repeal'; law: LawId };
