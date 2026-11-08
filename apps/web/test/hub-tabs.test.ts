@@ -327,7 +327,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     expect(findTestid('incoming-sheet'), 'no such card: no sheet').toBeUndefined();
     go((n) => n.openDesk('talk', 'answer:deal-3'));
     byTestid('incoming-sheet');
-    expect(byTestid('whisper-line').textContent, "Kai's thread").toContain('Kai');
+    expect(byTestid('whisper-line').textContent, "Kai's thread").toContain('ONLY YOU AND KAI');
   });
 
   it("C17 (DESK_DOORS, interim until SB-4): the Sheriff's Guard door turns Overview's one map to Guard, and Done goes back to the Sheriff's sub-tab", () => {
