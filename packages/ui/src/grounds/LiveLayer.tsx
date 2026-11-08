@@ -71,6 +71,8 @@ export interface WalkerSprite {
   entry: WalkerEntry;
   light: Light;
   href: (src: string) => string;
+  /** One sheet per suit, its first trim: on the phone, where a colonist is 9 px tall and each sheet counts against its 1 MB of art (B-AC-5). */
+  oneTrim?: boolean;
 }
 
 /** The heading of a leg from `p` to `q`: its larger move along the grid decides. */
@@ -93,11 +95,11 @@ export function frameAt(i: number, seconds: number, reduced: boolean, { frames, 
  * Colonist i's sheet: its suit the next of the four player colours in turn, or where that colour has no player seated, one
  * of the colony's own two (white, grey); its helmet and trims the next of its suit's variants.
  */
-function sheetOf(i: number, { entry }: WalkerSprite, players: number): { day: string; dusk: string } | undefined {
+function sheetOf(i: number, { entry, oneTrim }: WalkerSprite, players: number): { day: string; dusk: string } | undefined {
   const k = i % 4;
   const suit = k < players ? `p${k + 1}-` : `c${((k - players) % 2) + 1}-`;
   const variants = Object.keys(entry.sheets).filter((key) => key.startsWith(suit)).sort();
-  return variants.length ? entry.sheets[variants[Math.floor(i / 4) % variants.length]!] : undefined;
+  return variants.length ? entry.sheets[variants[oneTrim ? 0 : Math.floor(i / 4) % variants.length]!] : undefined;
 }
 
 /**

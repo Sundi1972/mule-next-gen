@@ -11,7 +11,8 @@
  *   - the phone (?view=phone, ColonyGrounds size="phone", 390 px wide) at 390×844, day and dusk;
  *   - a side-by-side of each with look.html's colony-day/dusk.webp at the same output height, ours on the left.
  * Logs:
- *   - B-AC-5: the bytes loaded under /art/colony/ by the dusk phone view, from a cold cache (must be ≤ 1 MB);
+ *   - B-AC-5: the bytes loaded under /art/colony/ by the phone view, day and dusk, for the heaviest colony (?worst=1: every
+ *     building standing, the most colonists), from a cold cache (each must be ≤ 1 MB; exit 1 if over);
  *   - the Stadium's drawn width in the 1280 opener shots against look.html's scale (≈ 17.5 px/m; target ≥ 0.9×).
  * Writes summary.json beside the shots. Exit 1 if a page errored or a shot could not be taken; the two numbers are
  * reported, not failed.
@@ -212,7 +213,7 @@ async function main() {
   let vite;
   let browser;
   const errors = [];
-  const summary = { at: new Date().toISOString(), manifestPlate: null, shots: [], sideBySides: [], phoneDusk: null, stadium: {} };
+  const summary = { at: new Date().toISOString(), manifestPlate: null, shots: [], sideBySides: [], phone: {}, stadium: {} };
   try {
     vite = await startVite();
     browser = await launch();
@@ -225,6 +226,7 @@ async function main() {
         { name: `opener-1280-${light}`, view: 'opener', light, viewport: { width: 1280, height: 720 } },
         { name: `opener-1920-${light}`, view: 'opener', light, viewport: { width: 1920, height: 1080 } },
         { name: `phone-390-${light}`, view: 'phone', light, viewport: { width: 390, height: 844 } },
+        { name: `phone-worst-${light}`, view: 'phone', light, viewport: { width: 390, height: 844 }, query: '&worst=1' },
       ]),
     ];
 
@@ -239,7 +241,7 @@ async function main() {
         art.push({ path: new URL(r.url()).pathname, status: r.status(), bytes: body.length });
       });
       try {
-        await page.goto(`${vite.base}/tv-beat.html?view=${shot.view}&light=${shot.light}`);
+        await page.goto(`${vite.base}/tv-beat.html?view=${shot.view}&light=${shot.light}${shot.query ?? ''}`);
         const drawn = await settle(page);
         const file = join(OUT, `${shot.name}.png`);
         if (shot.view === 'phone') await page.getByTestId('phone-desk').screenshot({ path: file });
@@ -261,12 +263,13 @@ async function main() {
           );
         }
 
-        if (shot.name === 'phone-390-dusk') {
+        if (shot.name.startsWith('phone-worst-')) {
           await page.waitForLoadState('networkidle');
           const total = art.reduce((s, a) => s + a.bytes, 0);
           const webp = art.filter((a) => a.path.endsWith('.webp')).reduce((s, a) => s + a.bytes, 0);
-          summary.phoneDusk = { total, webp, files: art.length, budget: PHONE_BUDGET, ok: total <= PHONE_BUDGET, art };
-          console.log(`B-AC-5 phone dusk: ${total} bytes under /art/colony/ (${webp} WebP in ${art.filter((a) => a.path.endsWith('.webp')).length} files + manifest), budget ${PHONE_BUDGET} → ${total <= PHONE_BUDGET ? 'ok' : 'OVER'}`);
+          summary.phone[shot.light] = { total, webp, files: art.length, budget: PHONE_BUDGET, ok: total <= PHONE_BUDGET, art };
+          if (total > PHONE_BUDGET) errors.push(`B-AC-5: the phone loads ${total} bytes at ${shot.light}, over ${PHONE_BUDGET}`);
+          console.log(`B-AC-5 phone ${shot.light}, heaviest colony: ${total} bytes under /art/colony/ (${webp} WebP in ${art.filter((a) => a.path.endsWith('.webp')).length} files + manifest), budget ${PHONE_BUDGET} → ${total <= PHONE_BUDGET ? 'ok' : 'OVER'}`);
           for (const a of art) console.log(`    ${a.status} ${String(a.bytes).padStart(8)}  ${a.path}`);
         }
       } finally {

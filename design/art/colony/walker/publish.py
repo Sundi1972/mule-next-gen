@@ -23,7 +23,10 @@ def publish(png, name):
     for w in sizes:
         dst = os.path.join(ART, "walker", f"{name}@{w}.webp")
         width = round(full_width * w / 1600)
-        subprocess.run(["cwebp", "-quiet", "-q", "82", "-alpha_q", "90", "-m", "6", "-resize", str(width), "0", os.path.join(SRC, png), "-o", dst], check=True)
+        # The contact shadow's soft alpha is most of a sheet's bytes: on the phone's smallest size, where a colonist is
+        # 9 px tall, it is coded coarser (33.8 -> 20 KB a sheet) to keep the phone inside its 1 MB of art (B-AC-5).
+        alpha_q = "50" if w == min(sizes) else "90"
+        subprocess.run(["cwebp", "-quiet", "-q", "82", "-alpha_q", alpha_q, "-m", "6", "-resize", str(width), "0", os.path.join(SRC, png), "-o", dst], check=True)
     return f"walker/{name}@{max(sizes)}.webp"
 
 
