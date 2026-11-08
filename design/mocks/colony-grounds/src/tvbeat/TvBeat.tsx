@@ -12,6 +12,7 @@ import { Scaled } from '../../../../../apps/web/src/components/Scaled';
  *                         the window as the TV scales its 1280 × 720 canvas, so a 1920 × 1080 shot is the TV's own
  *   ?view=phone           ColonyGrounds size="phone" 390 px wide, as the phone's Colony desk mounts it
  *   ?light=day|dusk       for each view
+ *   ?colony=<json>        the projects (any layout); ?width=<px> the phone desk's width
  *
  * The colony is a month-12 game placed on WS7's 5 × 5 grounds (RULE-32b: x right, y down, the hall at (2,2)).
  */
@@ -39,6 +40,11 @@ const STILL: OpenerState = {
 const params = new URLSearchParams(location.search);
 const view = params.get('view') ?? 'beat';
 const lightParam = params.get('light');
+// ?colony=<JSON of GroundsColony['projects']>: any layout, for the visibility measure (review-loop/visibility.mjs);
+// ?width=<px>: the phone desk's width (the hub's tab is 353)
+const colonyParam = params.get('colony');
+if (colonyParam) COLONY.projects = JSON.parse(colonyParam) as GroundsColony['projects'];
+const phoneWidth = Number(params.get('width') ?? 390);
 
 /** The opener always asks for dusk (RULE-1); the day shot swaps only the light, everything else as the game draws it. */
 const DayScene = (props: Omit<ColonyGroundsProps, 'manifest'>) => <Grounds {...props} light="day" />;
@@ -56,7 +62,7 @@ function Opener({ light }: { light: Light }) {
 function Phone({ light }: { light: Light }) {
   return (
     <main className="min-h-screen bg-void" data-light={light}>
-      <div className="w-[390px]" data-testid="phone-desk">
+      <div style={{ width: phoneWidth }} data-testid="phone-desk">
         <Grounds colony={COLONY} size="phone" light={light} />
       </div>
     </main>

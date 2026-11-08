@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colony grounds spike</title>
+<style>
+  :root { --bg: #f6f4ef; --card: #ffffff; --ink: #1d1f24; --ink-2: #5b606b; --line: #e3dfd6; --accent: #c2410c; --ok: #15803d; --warn: #b45309; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #14161a; --card: #1d2026; --ink: #eceae4; --ink-2: #a3a7b0; --line: #2e323a; --accent: #fb923c; --ok: #4ade80; --warn: #fbbf24; } }
+  :root[data-theme="dark"] { --bg: #14161a; --card: #1d2026; --ink: #eceae4; --ink-2: #a3a7b0; --line: #2e323a; --accent: #fb923c; --ok: #4ade80; --warn: #fbbf24; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 6px; }
+  .sub { color: var(--ink-2); margin: 0 0 20px; }
+  .verdict { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 12px 0 20px; }
+  .verdict strong { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 14.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+  td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  figure { margin: 12px 0; }
+  figure img { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  figcaption { color: var(--ink-2); font-size: 13.5px; margin-top: 6px; }
+  .pair { display: grid; grid-template-columns: 353px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+  .pending { background: var(--card); border: 1px dashed var(--line); border-radius: 8px; padding: 18px; color: var(--ink-2); }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-2); }
+  .tag.ok { color: var(--ok); border-color: currentColor; } .tag.warn { color: var(--warn); border-color: currentColor; }
+  ul { padding-left: 20px; } li { margin: 4px 0; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 14px; padding: 6px 12px; border: 0; background: var(--card); color: var(--ink); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .stage { background: #0b0d10; border-radius: 8px; overflow: hidden; display: grid; place-items: center; min-height: 120px; }
+  .stage canvas { max-width: 100%; height: auto; display: block; }
+  code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The colony grounds: walking colonists, and can every place be seen?</h1>
+  <p class="sub">WS10 spike, 8 Nov. Two questions from Heiko: nicer colonists with a real walk, and whether the one fixed view makes any building's place hard to see. Rotation and zoom are parked (zoom is Jira SA-1379).</p>
+
+  <h2 id="in-the-game">In the game: Astronaut A, as Heiko picked it (8 Nov)</h2>
+  <div class="verdict"><strong>Built</strong> on branch <code>ws10-walker</code>: the real <code>ColonyGrounds</code> and TV opener, the shipped pictures, the colonists from their sheets. Suits in the four player colours, helmets and trims in warm white, graphite or sand, walking at <strong>1.3 m/s</strong>. A colonist behind a building is hidden by it and shows as a faint white outline (#776). The phone at dusk loads <strong>804 KB</strong> of art (budget 1 MB): the colonists add about 12.5 KB per sheet in view.</div>
+  <figure><img src="spike/game/opener-1920-dusk.webp" alt="The TV opener at dusk, 1920 px, with colonists on the paths"><figcaption>TV opener, 1920 × 1080, dusk. Colonists are about 28 px tall here, true to scale beside the buildings.</figcaption></figure>
+  <figure><img src="spike/game/zoom-dusk.webp" alt="Close-up of the TV opener at dusk, enlarged twice"><figcaption>The same shot, a 900 × 420 crop enlarged twice. Colonists in orange, blue and yellow suits on the paths; faint white outlines where the Hospital and the hall hide one.</figcaption></figure>
+  <figure><img src="spike/game/zoom-day.webp" alt="Close-up of the TV opener by day, enlarged twice"><figcaption>The same crop by day.</figcaption></figure>
+  <div class="pair">
+    <figure><img src="spike/game/phone-390-dusk.webp" alt="The phone view at dusk"><figcaption>Phone, 390 px wide, dusk: the colonists are specks at this size, as the buildings' people would be.</figcaption></figure>
+    <figure><img src="spike/game/montage-day.webp" alt="All twelve suit and trim variants by day, enlarged"><figcaption>The twelve sheets, one frame each, enlarged 2× from the full-resolution render (the TV shows them at a quarter of this): rows p1–p4, columns white / graphite / sand trims.</figcaption></figure>
+  </div>
+  <figure><img src="spike/game/opener-1920-day.webp" alt="The TV opener by day, 1920 px"><figcaption>TV opener, 1920 × 1080, by day.</figcaption></figure>
+
+  <h2 id="visibility">Can every place be seen in the one view?</h2>
+  <div class="verdict"><strong>Yes, enough to find it: no place is ever fully hidden.</strong> Nobody picks a place in the game. When the Governor commissions a building, it takes the first free block nearest the town hall (rule RULE-32b), so a building in front can never get in the way of a choice. What can happen is that a new building's site lands behind a tall one. At worst two thirds of its ground is covered, and its chip on the phone always shows.</div>
+
+  <h3>How it was measured</h3>
+  <p>Every order the five buildings can be commissioned in (120 orders, 120 different layouts), with every building standing at its tallest stage. Each layout was drawn by the game's own view: the phone desk at 390 px wide, the hub's tab at 353, and the TV opener at 1280. For every place it counts how much of its ground the pictures in front of it cover, using their real transparency. Chips are drawn above every building, so only another chip can cover one.</p>
+
+  <div class="scroll"><table>
+    <tr><th>What</th><th>Phone 390</th><th>Hub tab 353</th><th>TV 1280</th></tr>
+    <tr><td>The newest site (the last building commissioned): ground covered, worst</td><td class="n">67 %</td><td class="n">67 %</td><td class="n">67 %</td></tr>
+    <tr><td>… median over the 120 orders</td><td class="n">13 %</td><td class="n">13 %</td><td class="n">13 %</td></tr>
+    <tr><td>… orders where more than half is covered</td><td class="n">21 of 120</td><td class="n">21 of 120</td><td class="n">21 of 120</td></tr>
+    <tr><td>… its ground still showing, worst case</td><td class="n">≈ 340 px² (≈ 18 × 18)</td><td class="n">≈ 280 px² (≈ 17 × 17)</td><td class="n">≈ 3 600 px² (≈ 60 × 60)</td></tr>
+    <tr><td>A chip covered by a building</td><td class="n">never</td><td class="n">never</td><td class="n">no chips on the TV opener</td></tr>
+    <tr><td>A chip overlapped by another chip, worst</td><td class="n">24 %</td><td class="n">24 %</td><td class="n">—</td></tr>
+    <tr><td>Chip size</td><td class="n">≈ 43 × 12 px</td><td class="n">≈ 39 × 11 px</td><td class="n">—</td></tr>
+  </table></div>
+
+  <h3>Which places are worst</h3>
+  <ul>
+    <li><strong>(1,2), left of the town hall</strong>: a new site there is up to two thirds hidden when the Stadium has taken the block in front of it. This is the worst case for a <em>new</em> building.</li>
+    <li><strong>(2,1), right behind the town hall</strong>: its ground is mostly behind the hall (median 59 %). It is always the first 1 × 1 place taken, though, and a building standing there rises above the hall.</li>
+    <li>The 2 × 2 blocks (the Stadium and the Spaceport) and the front places: 0–30 %.</li>
+  </ul>
+
+  <div class="pair">
+    <figure><img src="/spike/vis-worst-tab353.webp" alt="Hub tab, 353 wide: the newest site outlined in red, behind the Stadium; its chip '5 SITE' shows"><figcaption>Worst case on the hub tab (353 wide). The Observatory's new site is outlined in red, behind the Stadium. Its chip, "5 SITE", shows above everything.</figcaption></figure>
+    <figure><img src="/spike/vis-worst-tv1280.webp" alt="TV opener, the same layout at dusk, the new site outlined in red"><figcaption>The same layout on the TV opener. There are no chips here, so the caption and the lean-in have to point at the place.</figcaption></figure>
+  </div>
+  <div class="pair">
+    <figure><img src="/spike/vis-median-tab353.webp" alt="Hub tab, a typical layout, the newest site outlined"><figcaption>A typical layout (the median, 13 % covered): the newest site sits in the clear.</figcaption></figure>
+    <figure><img src="/spike/vis-median-tv1280.webp" alt="TV opener, the typical layout"><figcaption>The same on the TV.</figcaption></figure>
+  </div>
+
+  <h3>If we want the newest site to stand out more</h3>
+  <ul>
+    <li><span class="tag ok">Recommended</span> <strong>On the TV opener, fade the buildings in front of the place the caption names</strong>, to about a third, during the lean-in only. This is in WS10's live layer, about 2 hours with a test.</li>
+    <li><strong>Lift the named place's outline</strong> above the buildings, as a soft glowing edge, during the lean-in. It costs about the same as the fade and can be combined with it.</li>
+    <li>The phone needs nothing: the chip shows, and the Colony desk's list names every building with its stage.</li>
+    <li>If players should one day <em>choose</em> places, that is a rule change (WS7, RULE-32b) and needs Heiko's ruling. The same measure then shows which places need help when picking.</li>
+  </ul>
+  <p class="sub">Owners: commissioning happens on the phone's Colony desk (WS7's screen). The grounds and their live layer (chips, colonists, glow) are WS10's.</p>
+
+  <h2 id="colonists">Walking colonists with a real walk cycle</h2>
+  <div class="verdict"><strong>Yes, a real walk works, and it fits the look we have.</strong> Three free (CC0) characters with a proper walk cycle were rendered in the grounds' own camera and sun, by day and at dusk. Each costs 12–21 KB on a phone and 30–50 KB on the TV. Mixamo was not used (CC0 only, per the ruling).</div>
+
+  <div class="scroll"><table>
+    <tr><th>Source</th><th>Licence (checked)</th><th>Walk cycle</th><th>Fit</th></tr>
+    <tr><td><strong>Quaternius Astronaut A</strong> (poly.pizza 3hC2i0CTuO)</td><td><span class="tag ok">CC0</span> stated on the model page</td><td>Walk, Run, Idle, Wave, Interact (24 clips)</td><td>A space-suited colonist; suits the frontier colony</td></tr>
+    <tr><td><strong>Quaternius Astronaut B</strong> (poly.pizza 0D54W8yfrA)</td><td><span class="tag ok">CC0</span> stated on the model page</td><td>Walk, Walk_Gun, Run, Idle, Wave, Yes/No (18 clips)</td><td>A rounder, cuter suit</td></tr>
+    <tr><td><strong>Quaternius Animated Human</strong> (OpenGameArt)</td><td><span class="tag ok">CC0</span> License.txt in the zip</td><td>Walk, Run, Idle, Work</td><td>A colonist in clothes, several skins</td></tr>
+    <tr><td>Kenney Animated Characters 1–3 (OpenGameArt)</td><td><span class="tag ok">CC0</span> License.txt in the zip</td><td><span class="tag warn">no walk</span> idle, jump, run only</td><td>Would need the run slowed down; ruled out</td></tr>
+    <tr><td>Mixamo (Adobe), a noted alternative</td><td><span class="tag warn">not CC0</span> free with an Adobe account; royalty-free inside a game; the downloaded files may not be redistributed as assets</td><td>Every motion there is, retargetable</td><td>Only if the CC0 walks fall short (Heiko's 6 Nov ruling: CC0 first)</td></tr>
+  </table></div>
+
+  <h3>The samples, walking on the game's own grounds</h3>
+  <p>Below is a crop of the game's TV opener at 1920 × 1080: the art you see on <code>:5320</code>. Three colonists walk the paths round one free place, so each turns through all four directions. Pick a kind, the light and the screen. "Phone" draws everything at the size a 390-wide phone shows it.</p>
+  <div class="controls" role="group" aria-label="Walk sample">
+    <span class="seg" data-k="kind"><button data-v="today" aria-pressed="false">Today's colonist</button><button data-v="astroA" aria-pressed="true">Astronaut A</button><button data-v="astroB" aria-pressed="false">Astronaut B</button><button data-v="human" aria-pressed="false">Human</button></span>
+    <span class="seg" data-k="light"><button data-v="day" aria-pressed="false">Day</button><button data-v="dusk" aria-pressed="true">Dusk</button></span>
+    <span class="seg" data-k="screen"><button data-v="tv" aria-pressed="true">TV</button><button data-v="phone" aria-pressed="false">Phone</button></span>
+  </div>
+  <div class="stage"><canvas id="walk" width="900" height="440" aria-label="Colonists walking on the colony grounds"></canvas></div>
+  <p class="sub" id="walk-note"></p>
+
+  <h3>What it costs</h3>
+  <div class="scroll"><table>
+    <tr><th></th><th>Astronaut A</th><th>Astronaut B</th><th>Human</th><th>Today's colonist</th></tr>
+    <tr><td>Phone bytes (one sheet, 4 directions × 12 frames, @400)</td><td class="n">12 KB</td><td class="n">21 KB</td><td class="n">19 KB</td><td class="n">0 (drawn)</td></tr>
+    <tr><td>TV bytes (@800)</td><td class="n">30 KB</td><td class="n">50 KB</td><td class="n">45 KB</td><td class="n">0</td></tr>
+    <tr><td>Both lights (day and dusk sheets), TV + phone</td><td class="n">84 KB</td><td class="n">143 KB</td><td class="n">128 KB</td><td class="n">0</td></tr>
+    <tr><td>Per colonist on screen</td><td colspan="3">one picture whose frame changes 9–12 times a second; nothing re-renders but that one picture</td><td>five SVG shapes, the legs redrawn every frame</td></tr>
+    <tr><td>Render time (this Mac)</td><td colspan="3">about 1 minute per kind and light: 48 frames at 32 samples</td><td>—</td></tr>
+    <tr><td>Size on screen (1.75 m)</td><td colspan="4">TV 1920: ≈ 43 px tall · TV 1280: ≈ 29 px · phone 390: ≈ 9 px, where any figure is a dot that moves</td></tr>
+  </table></div>
+
+  <h3>What we found</h3>
+  <ul>
+    <li><strong>It fits direction C as it is.</strong> The walk is pre-rendered in the grounds' own camera and sun, with a contact shadow, like a building. The live layer only moves it along the paths and swaps the frame. No live 3D is needed.</li>
+    <li><strong>The pace has to drop.</strong> Today's colonists move at 2.9 m/s, a jog. A real walk cycle at that speed slides its feet, so the samples walk at 1.3 m/s, the pace the clips are animated for. This is a config number.</li>
+    <li><strong>Player colours.</strong> Today's colonists wear their player's colour. Sprites need either one sheet per colour (×4 bytes, about 0.5 MB on the TV for 3 kinds) or a separate colour mask tinted in the page (+1 sheet each). The mask is the cheaper way.</li>
+    <li><strong>On the phone the gain is small</strong> at 9 px tall. On the TV a real walk reads clearly.</li>
+    <li><strong>Effort to ship one kind:</strong> render and encode in under an hour, about ½ day for the live-layer change (sprite walker, heading, pace, colour mask) with its test, then the PM's look round. A second kind is a re-render only.</li>
+  </ul>
+  <div class="verdict"><strong>Recommendation: Astronaut A for the colonists, at a walking pace, with a colour mask.</strong> It is a frontier colonist, which suits the setting, CC0, the smallest file, and it reads at TV size. Astronaut B is a frog-headed cartoon; it is charming but off-tone. The Human is a good second kind, for colonists out of their suits.</div>
+</main>
+<script>
+(() => {
+  // The game's 1920 opener crop: its view box starts at (-390.99, -304.86), 2.4553 px per scene unit, cropped from (300, 560).
+  const K = 1920 / 781.9747357566383, VX = -390.98736787831916, VY = -304.86078886310906, CX = 300, CY = 560;
+  const PX_M = K * 10; // 10 scene units to the metre
+  const at = (c, r) => [((c - r) * 60 - VX) * K - CX, ((c + r) * 30 - VY) * K - CY];
+  // the paths round the free place one left and one forward of the hall
+  const LOOP = [[-1.5, 0.5], [-0.5, 0.5], [-0.5, 1.5], [-1.5, 1.5]];
+  const HEAD = { '+x': 0, '+y': 1, '-x': 2, '-y': 3 };
+  const SHEET = { cell: [96, 112], feet: [48, 98.5], px_m: 1600 / 21 / 2, frames: 12 };
+  const CYCLE = { astroA: 4 / 3, astroB: 1, human: 1 };
+  const state = { kind: 'astroA', light: 'dusk', screen: 'tv' };
+  const img = (src) => Object.assign(new Image(), { src });
+  const bg = { day: img('/spike/bg-day.webp'), dusk: img('/spike/bg-dusk.webp') };
+  const sheets = {};
+  for (const k of ['astroA', 'astroB', 'human']) for (const l of ['day', 'dusk']) sheets[k + l] = img(`/spike/walk/${k}-${l}@800.webp`);
+  const cv = document.getElementById('walk'), g = cv.getContext('2d');
+  const perim = LOOP.length; // places of path
+  function where(d) { // d: distance round the loop in places
+    const t = ((d % perim) + perim) % perim, i = Math.floor(t), f = t - i;
+    const [a, b] = [LOOP[i], LOOP[(i + 1) % perim]];
+    const dc = b[0] - a[0], dr = b[1] - a[1];
+    return { c: a[0] + dc * f, r: a[1] + dr * f, head: dc > 0 ? '+x' : dc < 0 ? '-x' : dr < 0 ? '+y' : '-y' };
+  }
+  const COLOURS = ['#e9a23b', '#4fa3e0', '#d9534f'];
+  function today(x, y, i, sec, s) { // LiveLayer.tsx's Colonist, in its scaffold's 76.19 px/m
+    const k = (PX_M / (1600 / 21)) * s, z = (m) => -m * Math.cos(Math.PI / 6) * (1600 / 21), step = Math.sin(sec * 9 + i * 1.7) * 3;
+    g.save(); g.translate(x, y); g.scale(k, k);
+    g.globalAlpha = 0.3; g.fillStyle = '#000'; g.beginPath(); g.ellipse(8, 2, 12, 4.5, 0, 0, 7); g.fill(); g.globalAlpha = 1;
+    g.strokeStyle = '#2a2f3a'; g.lineWidth = 4.5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-2.5, 0); g.lineTo(-2.5 + step, z(0.75)); g.moveTo(2.5, 0); g.lineTo(2.5 - step, z(0.75)); g.stroke();
+    g.fillStyle = COLOURS[i % 3]; g.beginPath(); g.roundRect(-6, z(1.3), 12, z(0.7) - z(1.3), 5); g.fill();
+    g.fillStyle = '#e9c9a8'; g.strokeStyle = '#3a2a20'; g.lineWidth = 1; g.beginPath(); g.arc(0, z(1.42), 6, 0, 7); g.fill(); g.stroke();
+    g.restore();
+  }
+  let t0 = performance.now(), cost = 0, n = 0;
+  function frame(now) {
+    const sec = (now - t0) / 1000, s = state.screen === 'tv' ? 1 : 390 / 1920;
+    const w = Math.round(900 * s), h = Math.round(440 * s);
+    if (cv.width !== w) { cv.width = w; cv.height = h; cv.style.width = w + 'px'; }
+    const a = performance.now();
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h);
+    if (bg[state.light].complete) g.drawImage(bg[state.light], 0, 0, w, h);
+    const pace = state.kind === 'today' ? 2.9 : 1.3; // m/s
+    const walkers = [0, 1, 2].map((i) => ({ i, ...where((sec * pace) / 12 + (i * perim) / 3) })).sort((p, q) => p.c + p.r - (q.c + q.r));
+    for (const p of walkers) {
+      const [x, y] = at(p.c, p.r);
+      if (state.kind === 'today') { today(x * s, y * s, p.i, sec, s); continue; }
+      const sh = sheets[state.kind + state.light]; if (!sh.complete) continue;
+      const f = Math.floor((sec / CYCLE[state.kind] + p.i * 0.37) * SHEET.frames) % SHEET.frames, row = HEAD[p.head];
+      const k = (PX_M / SHEET.px_m) * s, [cw, ch] = SHEET.cell;
+      g.drawImage(sh, f * cw, row * ch, cw, ch, x * s - SHEET.feet[0] * k, y * s - SHEET.feet[1] * k, cw * k, ch * k);
+    }
+    cost += performance.now() - a; n++;
+    if (n === 120) { document.getElementById('walk-note').textContent = `Drawing three walkers and the background takes ${(cost / n).toFixed(2)} ms a frame in this browser. Walk pace ${pace} m/s; ${state.screen === 'tv' ? 'TV 1920 scale' : 'phone 390 scale, actual size'}.`; cost = 0; n = 0; }
+    requestAnimationFrame(frame);
+  }
+  for (const seg of document.querySelectorAll('.seg')) seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    state[seg.dataset.k] = b.dataset.v; for (const o of seg.children) o.setAttribute('aria-pressed', String(o === b));
+  });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
