@@ -398,10 +398,14 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
     const lengths = await from.page.locator('[data-testid^=composer-a-months-]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-testid')!.split('-').pop())));
     check(JSON.stringify(lengths) === JSON.stringify(POLITICS.deals.pactMonths), `S3-B-AC-1: the composer offers pacts of ${POLITICS.deals.pactMonths.join(', ')} months, got ${lengths.join(', ')}`);
     await from.page.getByTestId(`composer-a-months-${PACT_MONTHS}`).click({ timeout: PRESS_MS });
+    const picked = await from.page.getByTestId(`composer-a-months-${PACT_MONTHS}`).getAttribute('aria-checked');
+    check(picked === 'true', `S3-B-AC-1: the ${PACT_MONTHS}-month length is the one picked before Send, got aria-checked=${picked}`);
     const sent = from.offers.length;
     await from.page.getByTestId('composer-a-send').click({ timeout: PRESS_MS });
     const card = await untilServer(from.page, () => (pacts().length > before ? pacts().at(-1)! : null), `S3-B-AC-1: the server holds ${from.name}'s offered pact`);
     const intent = JSON.stringify(from.offers.slice(sent));
+    const months = (from.offers.at(-1) as { offer?: { months?: number } } | undefined)?.offer?.months;
+    check(months === PACT_MONTHS, `S3-B-AC-1: the offerDeal frame ${from.name}'s phone sent carries months ${PACT_MONTHS}, got ${months}`);
     check(intent === JSON.stringify([{ type: 'offerDeal', offer: { to: toId, terms: { kind: 'pact' }, months: PACT_MONTHS } }]), `S3-B-AC-1: ${from.name}'s phone sent one ${PACT_MONTHS}-month pact to ${to.name}, got ${intent}`);
     return card;
   };
