@@ -1,0 +1,12 @@
+/* The live sample's own frame: the TV's 1280 × 720 canvas scaled to the column, the phone at its 390 px. */
+.livewalk { padding: 0; background: #0b0d10; color: #eceae4; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
+.livewalk .controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+.livewalk .seg { display: inline-flex; border: 1px solid #2e323a; border-radius: 8px; overflow: hidden; }
+.livewalk .seg button { font: inherit; font-size: 14px; padding: 6px 12px; border: 0; background: #1d2026; color: #eceae4; cursor: pointer; }
+.livewalk .seg button + button { border-left: 1px solid #2e323a; }
+.livewalk .seg button[aria-pressed="true"] { background: #fb923c; color: #111; }
+.livewalk .frame { overflow: hidden; display: grid; place-items: center; }
+.livewalk .tvbox { overflow: hidden; position: relative; }
+.livewalk .tv { width: 1280px; height: 720px; position: absolute; left: 0; top: 0; }
+.livewalk .phone { width: 390px; max-width: 100%; }
+.livewalk .note { color: #a3a7b0; font-size: 13.5px; padding: 8px 12px 12px; margin: 0; }
