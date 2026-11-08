@@ -342,7 +342,8 @@ export interface IncidentView {
   kind: SabotageTarget['kind'];
   victim: string | null;
   at: { x: number; y: number } | null;
-  good: Good;
+  /** null only when the crop is unknown: a pending power cut on a plot with no MULE. A settled cut always names the crop it hit (order.good). */
+  good: Good | null;
   dir?: 'up' | 'down';
   worked: boolean;
   /** Only when the culprit is public, or on the orderer's own list. */
