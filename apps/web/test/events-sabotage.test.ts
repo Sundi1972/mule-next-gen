@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
+import { ColonyPanel } from '../src/components/MonthEnd';
 import { TvMonthEnd } from '../src/table/TableApp';
 import { sabotageNews, sabotageNewsLine, sabotageSeat, withSabotageDetail } from '../src/events/sabotage';
 import { aMuleView, aPlayer } from './fixtures/views';
@@ -128,17 +129,34 @@ describe('S4-C17 · the TV’s month end says each sabotage of the month (WS4 na
   const client = { subscribe: () => () => {}, getState: () => ({ status: 'open', role: 'board', code: 'MULE', seatId: null, view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }), serverNow: () => 0, intent: () => {} } as unknown as TableClient;
   const onTv = (game: MuleView) => renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvMonthEnd, { game }) }));
 
-  it('S4-B-AC-1: the colony panel carries one line per incident, naming only whom the view names', () => {
-    const game = atMonthEnd([incident({ id: 'a', worked: false, culprit: 'lena', how: 'guard' }), rumour({ id: 'b' })]);
-    const html = onTv(game);
-    const panel = html.slice(html.indexOf('data-testid="colony-panel"'));
-    expect(words(panel)).toContain('Sabotage: Lena was caught by a guard at Ossa’s plot. The power stayed on.');
-    expect(words(panel)).toContain('Sabotage: a rumour moved Food’s opening price 25% up.');
+  const two = () => atMonthEnd([incident({ id: 'a', worked: false, culprit: 'lena', how: 'guard' }), rumour({ id: 'b' })]);
+  /** The phone with no TV: its month end's colony panel, at compact density. */
+  const compact = (game: MuleView) => renderToStaticMarkup(createElement(ColonyPanel, { view: game, density: 'compact' }));
+  /** The colony panel's header row, through its closing tag. */
+  const header = (html: string) => {
+    const at = html.indexOf('data-testid="colony-panel"');
+    return html.slice(at, html.indexOf('</header>', at));
+  };
+
+  it('PM ruling 8 Nov (TV-FIT): the TV draws no sabotage line, only a "Sabotage ×N" tag on the colony panel’s header row', () => {
+    const html = onTv(two());
+    expect(html).not.toContain('data-testid="sabotage-news"');
+    expect(words(html)).not.toContain('Lena was caught');
+    const row = header(html);
+    expect(words(row)).toContain('Sabotage ×2');
+    expect(row).toMatch(/class="[^"]*label-caps[^"]*text-alert[^"]*"[^>]*data-testid="sabotage-tag"/);
   });
 
-  it('a month with no sabotage draws no sabotage line', () => {
-    const html = onTv(atMonthEnd([]));
-    expect(html).not.toContain('data-testid="sabotage-news"');
+  it('S4-B-AC-1: the phone’s month end keeps the full lines, one per incident, and no tag', () => {
+    const html = compact(two());
+    expect(words(html)).toContain('Sabotage: Lena was caught by a guard at Ossa’s plot. The power stayed on.');
+    expect(words(html)).toContain('Sabotage: a rumour moved Food’s opening price 25% up.');
+    expect(html).not.toContain('data-testid="sabotage-tag"');
+  });
+
+  it('a month with no sabotage: no tag on the TV, no lines on the phone', () => {
+    expect(onTv(atMonthEnd([]))).not.toContain('data-testid="sabotage-tag"');
+    expect(compact(atMonthEnd([]))).not.toContain('data-testid="sabotage-news"');
   });
 });
 
