@@ -539,6 +539,36 @@ describe('S4-C14, P6: the power cut, under Look on a rival’s plot', () => {
   });
 });
 
+describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; S4-PR-9 refuses it)', () => {
+  it("S4-PR-11: on the Sheriff's phone a rival's working plot has no sabotage door, and the market no rumour door", () => {
+    lookAt(1, 0, { id: 's4', sheriff: SHERIFF });
+    expect(has('sabotage-door'), 'Look on Ossa’s smithore plot').toBe(false);
+    expect(has('order-powercut')).toBe(false);
+    tap('desk-market');
+    expect(has('rumour-door'), 'at the market').toBe(false);
+    expect(has('order-rumour')).toBe(false);
+  });
+
+  it("S4-PR-11: at the same table a player who is not the Sheriff still has both doors", () => {
+    for (const id of ['s1', 's3']) {
+      lookAt(1, 0, { id });
+      expect(has('sabotage-door'), id).toBe(true);
+      tap('desk-market');
+      expect(has('rumour-door'), id).toBe(true);
+      act(() => root!.unmount());
+      root = null;
+    }
+  });
+
+  it("S4-PR-11: the Sheriff's own past orders stay listed under Your orders", () => {
+    const mine: Sab['mine'] = [{ ...GUARDED, culprit: 's4', public: true, outcome: 'caught' }];
+    mount(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...NO_ORDER, mine } }));
+    tap('desk-market');
+    expect(has('my-order-w3c8')).toBe(true);
+    expect(has('rumour-door')).toBe(false);
+  });
+});
+
 describe('S4-C14, P6: the rumour at the market, and your orders', () => {
   it("S4-C14: the Market desk offers \"Start a rumour · Only you\" on any of the nine goods, up or down, and sends {type:'sabotage', target}", () => {
     mount(viewOf());

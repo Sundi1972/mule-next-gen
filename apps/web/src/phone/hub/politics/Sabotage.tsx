@@ -299,8 +299,17 @@ function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
   );
 }
 
+/**
+ * Why this phone may not order sabotage at all, or null when it may: the sitting Sheriff orders none (Heiko; WS7's
+ * S4-PR-9 refuses it). Only the sitting Sheriff's view carries `me.politics.sheriff`. The one place this is decided,
+ * so a reason from the server can take its place.
+ */
+export function orderBarred(me: Pick<MyView, 'politics'>): 'sheriff' | null {
+  return me.politics?.sheriff ? 'sheriff' : null;
+}
+
 /** This phone's order props: its sabotage, the ban, its pacts, and the intents a tap sends. Null with sabotage off. */
-function useOrder(): (OrderProps & { meId: string }) | null {
+function useOrder(): (OrderProps & { meId: string; barred: 'sheriff' | null }) | null {
   const { view, me } = usePhoneGame();
   const client = useClient();
   const sab = me.politics?.sabotage;
@@ -309,6 +318,7 @@ function useOrder(): (OrderProps & { meId: string }) | null {
     view,
     sab,
     meId: me.id,
+    barred: orderBarred(me),
     ban: banOf(view),
     pacts: pactPartners(me),
     onOrder: (target) => client.intent({ type: 'sabotage', target }),
@@ -321,17 +331,17 @@ export function LookSabotage() {
   const order = useOrder();
   const { looked } = useToday();
   const tile = order && looked ? tileAt(order.view, looked.x, looked.y) : undefined;
-  if (!order || !tile) return null;
+  if (!order || !tile || order.barred) return null;
   return <PowerCutOrder key={`${tile.x},${tile.y}`} tile={tile} {...order} />;
 }
 
-/** At the Market desk: the rumour's door, then this player's orders. */
+/** At the Market desk: the rumour's door (never the Sheriff's), then this player's orders. */
 export function MarketSabotage() {
   const order = useOrder();
   if (!order) return null;
   return (
     <>
-      <RumourOrder {...order} />
+      {!order.barred && <RumourOrder {...order} />}
       <MyOrders view={order.view} sab={order.sab} />
     </>
   );
