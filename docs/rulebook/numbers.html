@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a9e6faa5fa92</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>695c27092571</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -2140,7 +2140,7 @@
 <tr><td><code>STRATEGIST.cashLeftFloor</code></td><td class="n">0.75</td><td>The &quot;cash left&quot; consideration: spending down to the reserve scores this much, and keeping cashLeftFull times the reserve scores 1. The reserve itself is a hard rule, so this is only a mild preference for cash in hand.</td></tr>
 <tr><td><code>STRATEGIST.cashLeftFull</code></td><td class="n">2</td><td>Explained in the note on <code>STRATEGIST.cashLeftFloor</code>.</td></tr>
 <tr><td><code>STRATEGIST.energyFirst</code></td><td class="n">false</td><td>Energy first: while a seat has no Energy plant and may install one, every other install and &quot;Keep the cash&quot; are ruled out, so its next MULE is that plant. Spike S1&#39;s lever (c) (PM rulings, 7 and 8 Nov). OFF (Heiko, 8 Nov: &quot;the colony can choose [its own] approach&quot;): kept as a switch, <code>--set STRATEGIST.energyFirst=true</code>.</td></tr>
-<tr><td><code>STRATEGIST.medicineDespiteInputs</code></td><td class="n">true</td><td>Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can still build the colony&#39;s Medicine (blocked, hungry seats never built one: a spiral). Spike S2&#39;s lever B with START.storeStock.medicine 40 (PM ruling, 8 Nov). On with colony health (PM ruling, 8 Nov): without sick colonists it only diverts seats from their Energy plant (seed 1&#39;s Energy gate 9.6% -&gt; 15.8%). A switch: <code>--set STRATEGIST.medicineDespiteInputs=false</code>.</td></tr>
+<tr><td><code>STRATEGIST.medicineDespiteInputs</code></td><td class="n">true</td><td>Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can still build the colony&#39;s Medicine (blocked, hungry seats never built one: a spiral). Spike S2&#39;s lever B (its START.storeStock.medicine became 22: Heiko, 8 Nov, Medicine A). On with colony health (PM ruling, 8 Nov): without sick colonists it only diverts seats from their Energy plant (seed 1&#39;s Energy gate 9.6% -&gt; 15.8%). A switch: <code>--set STRATEGIST.medicineDespiteInputs=false</code>.</td></tr>
 <tr><td><code>STRATEGIST.waterFirst</code></td><td class="n">false</td><td>Water first, Energy first&#39;s twin for AM-18: once a seat has its Energy plant (or may not install one), while its wells&#39; next output (net of their own use) is short of its drink and its plots&#39; Water, and it may install a well, every other install and &quot;Keep the cash&quot; are ruled out, so its next MULE is a well. A PR-5b lever, chosen by sweep. A switch: <code>--set STRATEGIST.waterFirst=true|false</code>.</td></tr>
 </tbody>
 </table></div>
