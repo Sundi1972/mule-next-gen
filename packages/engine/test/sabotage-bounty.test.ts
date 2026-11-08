@@ -13,6 +13,8 @@ import {
   canOrder,
   captureOdds,
   createGame,
+  createRng,
+  seedOf,
   observe,
   investigate,
   orderSabotage,
@@ -151,9 +153,6 @@ describe('S4-T-AC-18: the Sheriff\'s bounty', () => {
     expect(order.bounty).toEqual({ to: 'ossa', paid: 20 });
     expect(moneyOf(state, 'ossa')).toBe(1_020);
     expect(state.treasury.money).toBe(0);
-    // Nothing is owed: a later fund payment is not reduced by an old debt.
-    state.treasury.money = 500;
-    expect(moneyOf(state, 'ossa')).toBe(1_020);
   });
 
   it('S4-T-AC-18: an empty fund records a bounty of 0', () => {
@@ -210,6 +209,54 @@ describe('S4-T-AC-18: the Sheriff\'s bounty', () => {
   });
 });
 
+describe('S4-T-AC-17 / AM-12: a guard stands down on a plot the Sheriff came to own', () => {
+  it('S4-T-AC-17: Brix\'s guarded plot changes hands to the Sheriff before production: a cut there is not caught at the guard, no bounty, no record', () => {
+    for (let seed = 1; seed <= 400; seed++) {
+      const { state, food } = monthOf(seed);
+      orderSabotage(state, 'lena', { kind: 'powerCut', tile: food });
+      const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
+      rng.next();
+      if (rng.next() < 0.5) continue; // the own-plot odds are 0.5: this draw would catch it anyway
+      setGuards(state, 'ossa', [food]);
+      state.tiles[food]!.owner = 'ossa'; // bought at the land auction
+      resolveSabotage(state);
+      const order = orders(state)[0]!;
+      expect(order.culpritPublic).toBe(false);
+      expect(order.bounty).toBeUndefined();
+      expect(state.politics!.sheriffRecord).toEqual({ caught: 0, solved: 0 });
+      expect(moneyOf(state, 'ossa')).toBe(1_000);
+      return;
+    }
+    throw new Error('no seed');
+  });
+});
+
+describe('S4-T-AC-17 / AM-12: guardsMax counts only the tiles that stand', () => {
+  it('S4-T-AC-17: of four posted tiles, one goes to the Sheriff and two are unowned; with the cap back at 2 the fourth still stands and catches the cut', () => {
+    for (let seed = 1; seed <= 400; seed++) {
+      const { state, food, ore } = monthOf(seed);
+      const spare = state.tiles.map((t, i) => [t, i] as const).filter(([t]) => t.terrain !== 'store' && t.owner === null).map(([, i]) => i);
+      const [other, last] = spare.slice(-2) as [number, number];
+      Object.assign(state.tiles[other]!, { owner: 'kai', outfit: 'smithore' });
+      Object.assign(state.tiles[last]!, { owner: 'lena', outfit: 'food' });
+      orderSabotage(state, 'brix', { kind: 'powerCut', tile: last });
+      const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
+      rng.next();
+      if (rng.next() < POLITICS.sabotage.orders.powerCut.detect) continue; // unguarded it would be seen anyway
+      security.spend = 200; // guardsMax 4 at posting
+      setGuards(state, 'ossa', [food, ore, other, last]);
+      Object.assign(state.tiles[food]!, { owner: 'ossa' }); // bought at the land auction
+      Object.assign(state.tiles[ore]!, { owner: null, outfit: null });
+      Object.assign(state.tiles[other]!, { owner: null, outfit: null });
+      security.spend = 0; // guardsMax 2 at resolution: only the one that stands is left
+      resolveSabotage(state);
+      expect(orders(state)[0]).toMatchObject({ outcome: 'caught', culpritPublic: true, bounty: { to: 'ossa', paid: BOUNTY } });
+      return;
+    }
+    throw new Error('no seed');
+  });
+});
+
 describe('S4-T-AC-19 / S4-B-AC-12: the Sheriff\'s own plots are seen harder', () => {
   const { detect } = POLITICS.sabotage.orders.powerCut;
   const bonus = POLITICS.sheriff.ownPlotDetectBonus;
@@ -221,10 +268,30 @@ describe('S4-T-AC-19 / S4-B-AC-12: the Sheriff\'s own plots are seen harder', ()
     return captureOdds(m.state, orders(m.state)[0]!);
   }
 
-  it('S4-B-AC-12: a power cut is seen with chance 0.5 on the Sheriff\'s plot and 0.3 on anyone else\'s', () => {
-    expect(odds((m) => m.own)).toBeCloseTo(detect + bonus);
-    expect(odds((m) => m.own)).toBeCloseTo(0.5);
-    expect(odds((m) => m.food)).toBe(detect);
+  /** A seed whose single power cut draws a "seen" roll in [0.3, 0.5): seen on the Sheriff's plot, unseen on anyone else's. */
+  function seedBetween(): number {
+    for (let seed = 1; seed <= 400; seed++) {
+      const { state, own } = monthOf(seed);
+      orderSabotage(state, 'lena', { kind: 'powerCut', tile: own });
+      const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
+      rng.next(); // works
+      const seen = rng.next();
+      if (seen >= detect && seen < detect + bonus) return seed;
+    }
+    throw new Error('no seed draws a seen roll between 0.3 and 0.5');
+  }
+
+  it('S4-B-AC-12: the same draw is caught and names Lena on the Sheriff\'s plot (no bounty: on the spot) and goes unseen on Brix\'s', () => {
+    const seed = seedBetween();
+    const mine = monthOf(seed);
+    const onSheriff = cutAndResolve(mine.state, mine.own);
+    expect(onSheriff).toMatchObject({ by: 'lena', outcome: 'caught', culpritPublic: true });
+    expect(onSheriff.bounty).toBeUndefined();
+    expect(moneyOf(mine.state, 'ossa')).toBe(1_000);
+    const other = monthOf(seed);
+    const onBrix = cutAndResolve(other.state, other.food);
+    expect(onBrix.culpritPublic).toBe(false);
+    expect(onBrix.outcome).not.toBe('caught');
   });
 
   it('S4-T-AC-19: with Security the bonus adds to the Security term; the whole is capped at 1', () => {

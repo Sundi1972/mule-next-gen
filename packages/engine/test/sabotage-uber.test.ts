@@ -346,7 +346,7 @@ describe('S4 §9 / §3: no order is ever stored without its orderer', () => {
   it('S4-T-AC-11 (§3 invariant): in a twelve-month game no order, at any phase, has by === null; and the walk is not vacuous', () => {
     const state = walk(5, noOrderWithoutHand);
     const orders = state.politics!.sabotage;
-    expect(orders.length).toBeGreaterThanOrEqual(8); // was 10 before AM-11: the Sheriff's own turn orders nothing
+    expect(orders.length).toBeGreaterThanOrEqual(8); // the months the Sheriff would have ordered order nothing (AM-11)
     expect(orders.some((o) => o.culpritPublic)).toBe(true);
     expect(orders.some((o) => o.fine)).toBe(true);
   });

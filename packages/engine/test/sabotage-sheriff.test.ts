@@ -175,7 +175,7 @@ describe('S4-T-AC-5: the Sheriff, S4-RULE-6 guards', () => {
     expect(state.politics).toEqual(before);
     setGuards(state, 'ossa', [food, ore]);
     expect(state.politics!.guards).toEqual([food, ore]);
-    // AM-11 reversed the old "own plot is allowed": the Sheriff's own plot is refused (S4-T-AC-17); a new list replaces the old one whole.
+    // The Sheriff's own plot is refused (S4-T-AC-17); a new list replaces the old one whole.
     expect(refused(() => setGuards(state, 'ossa', [own]))).toBe("You can't guard your own plots");
     setGuards(state, 'ossa', [ore]);
     expect(state.politics!.guards).toEqual([ore]);

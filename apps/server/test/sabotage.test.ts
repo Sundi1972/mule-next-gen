@@ -672,6 +672,10 @@ describe('S4-B-AC-11 (server leg): the Sheriff\'s bounty, record and guardable p
       expect(sabotage.incidents[0], String(viewer)).toMatchObject({ how: 'guard', bounty: { to: 'brix', paid: POLITICS.sheriff.bounty } });
       if (viewer !== 'brix') expect(wire(w.game, viewer), String(viewer)).not.toMatch(/"guards":\[/);
     }
+    // The ledger leg: once the month's upkeep has run, the officePay line carries the bounty beside the two offices' pay.
+    w.state.treasury.money = 5_000;
+    until(w, 'planning', 2);
+    expect(w.game.viewFor(null).colony!.ledger!.out.officePay).toBe(POLITICS.sheriff.bounty + POLITICS.pay.governor + POLITICS.pay.sheriff);
   });
 
   it('S4-B-AC-11: an incident whose culprit is not public carries bounty null, on the public list and in the orderer\'s own list', () => {
