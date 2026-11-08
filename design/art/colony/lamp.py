@@ -6,7 +6,7 @@ lamp there in depth order, between the place behind the crossing and the one in 
 
 Rendered in the shared camera (lib/frame, 76.19 px per metre) and light rig (lib/light), the lamp kits.lamp builds for
 the apron, standing on a solid shadow catcher. The glow pass is the globe alone: the plate already has the pool.
-Run: blender -b -P lamp.py -- <out-dir> [samples=128] [cell=WxH] [foot=X,Y]
+Run: blender -b -P lamp.py -- <out-dir> [samples=128] [cell=WxH, 320x288] [foot=X,Y, 24,216] (the shipped cell)
   -> <out-dir>/lamp/<day|dusk|glow>.png and <out-dir>/lamp/lamp.json (cell, foot pixel, px_per_m)."""
 import json
 import os
@@ -21,8 +21,8 @@ from lib import core, frame, kits, light  # noqa: E402
 a = sys.argv[sys.argv.index("--") + 1 :]
 OUT = os.path.join(a[0], "lamp")
 SAMPLES = int(a[1]) if len(a) > 1 else 128
-W, H = (int(v) for v in (a[2] if len(a) > 2 else "160x320").split("x"))
-FX, FY = (int(v) for v in (a[3] if len(a) > 3 else "56,300").split(","))
+W, H = (int(v) for v in (a[2] if len(a) > 2 else "320x288").split("x"))
+FX, FY = (int(v) for v in (a[3] if len(a) > 3 else "24,216").split(","))
 CELL = {"width": W, "height": H, "centre": [FX, FY]}
 # The plate's own apron lamps are 110 W (plate.py LAMP); the same lamp, so the same light.
 LAMP = 110.0

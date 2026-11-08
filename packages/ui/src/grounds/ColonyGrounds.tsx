@@ -144,8 +144,8 @@ function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
 }
 
 /**
- * The inner crossings of a grounds `extent` places out from the hall, in place units: every corner shared by four places,
- * where the plate lights a head-less pool. A crossing inside a building bigger than one place is under it, so not one.
+ * The inner crossings of a plate `extent` places out from the hall (1 for the 3 × 3, 2 for the 5 × 5), in place units:
+ * every corner shared by four places, where the plate lights a head-less pool. A crossing inside a building bigger than one place is under it, so not one.
  */
 export function crossingsOf(extent: number, blocks: GridPlace[]): [number, number][] {
   const lines = Array.from({ length: 2 * extent }, (_, k) => k - extent + 0.5);
@@ -179,7 +179,9 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
   const [failedPlates, setFailedPlates] = useState<ReadonlySet<string>>(() => new Set());
-  const entry = manifest?.plate?.[R <= 1 ? '3' : '5'];
+  // The plate's own extent: the 3 × 3 serves the hall alone too (R = 0), so its pools stand round the hall.
+  const plateR = R <= 1 ? 1 : 2;
+  const entry = manifest?.plate?.[plateR === 1 ? '3' : '5'];
   const named = manifest && entry ? { href: hrefOf(entry[light], manifest, size), glow: entry.glow && hrefOf(entry.glow, manifest, size), box: plateBox(entry, manifest.frame) } : null;
   // A plate that fails to load leaves the grounds as they are without one, never blank (HC-3).
   const plate = named && !failedPlates.has(named.href) ? named : null;
@@ -224,7 +226,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   // The plate lights a head-less pool at each inner crossing; the lamp stands there, in depth order with the buildings.
   const lampEntry = plate && manifest?.lamp;
   const lamps = lampEntry
-    ? crossingsOf(R, placed.map((q) => q.block)).map(([c, r]) => ({
+    ? crossingsOf(plateR, placed.map((q) => q.block)).map(([c, r]) => ({
         depth: c + r,
         node: <CrossingLamp key={`lamp-${c}_${r}`} c={c} r={r} lamp={lampEntry} href={(src) => hrefOf(src, manifest!, size)} light={light} glow={plateGlow} />,
       }))

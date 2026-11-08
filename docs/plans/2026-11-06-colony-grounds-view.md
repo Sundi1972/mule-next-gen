@@ -305,6 +305,11 @@ baked in at an inner crossing), so look.html's lit lamps between the buildings w
   Red 92b20fccd (4 of 5, the placement test guarded against an empty list). Mutants (no skip under a block, lamps
   late) each fail one test; "glow by day" was equivalent (its opacity is 0 by day), so the redundant check is gone.
 - [x] B-AC-5: phone heaviest colony 908,459 B day, 808,447 B dusk (+1,069 / +729 B).
+- [x] Review round 1 (CHANGES at 31fdfb5b6): B1 a local `design/art/colony/assets` symlink was committed (untracked,
+  `/assets` ignored); B2 with only the hall the 3 × 3 plate's four pools had no lamps (the crossings now follow the plate
+  drawn, not the occupied extent). Red 806945945; tests added for the phone's pictures, no plate, the tie with the hall;
+  mutants (no plate condition, the tie, the phone's sizes, crossings from the extent) each fail one test. `lamp.py`'s
+  defaults are the shipped cell.
 
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
