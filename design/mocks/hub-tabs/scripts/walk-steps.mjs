@@ -66,7 +66,7 @@ await beat('5-call', async ({ p, see, tap }) => {
 });
 await beat('5-ballot', async ({ see, tap }) => { await see('overrule-ballot'); await tap('overrule-yes'); await tap('ready'); await see('you-are-ready'); });
 await beat('5-reveal', async ({ see }) => { await see('hub-situation'); });
-await beat('6-file', async ({ see, tap }) => { await see('sheriff-desk-b'); await tap('guard-open-map'); await see('guard-map'); await tap('guard-back'); await see('sheriff-desk-b'); });
+await beat('6-file', async ({ see, tap }) => { await see('sheriff-desk-b'); await tap('b-case-row-w3c8'); await see('b-case-body-w3c8'); await tap('guard-open-map'); await see('guard-map'); await tap('guard-back'); await see('sheriff-desk-b'); });
 await beat('6-guard', async ({ see }) => { await see('guard-bar'); await see('map-flag-guard-6-5'); });
 await beat('7-colony', async ({ see, tap }) => { await see('colony-standings'); await tap('colony-standing-kai-rep'); });
 await beat('8-ready', async ({ see, tap }) => { await tap('ready'); await see('you-are-ready'); });

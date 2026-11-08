@@ -1,4 +1,4 @@
-// Copied from politics-p2 (WS8), variant B: design/mocks/politics-p2/src/fixture.ts at 73e797fd (the Sheriff's parts
+// Copied from politics-p2 (WS8), variant B: design/mocks/politics-p2/src/fixture.ts at d0a52c1a (the Sheriff's parts
 // only). Changes for the tabs are marked TABS:.
 import type { IncidentView, MyPoliticsView } from '@mule/protocol';
 /** The frame map's width (../../fixture's W), not imported: that fixture imports this one. */
@@ -19,6 +19,8 @@ export const INCIDENTS: IncidentView[] = [
 export const INVESTIGATION: Record<string, string | null> = { q7f2: 'brix', k1m9: null };
 
 export const FINE_STEPS = [50, 100, 150, 200, 250, 300];
+/** What a revealed case pays when planning ends unfined (POLITICS.sheriff.fine.standard on ws7-s4-engine). */
+export const STANDARD_FINE = 150;
 
 export type SheriffState = NonNullable<MyPoliticsView['sheriff']>;
 
@@ -29,7 +31,8 @@ export function sheriffOf(guards: number[]): SheriffState {
 
 /** PoliticsView.sabotage, as WS8's fixture fills it. */
 export const SABOTAGE = {
-  terms: { powerCut: { cost: 120, success: 0.7, detect: 0.25 }, rumour: { cost: 80, success: 0.8, detect: 0.15 } },
+  // WS7's config (ws7-s4-engine 4b55602a), placeholders until WS1 tunes them (HC-25).
+  terms: { powerCut: { cost: 120, success: 0.6, detect: 0.3 }, rumour: { cost: 60, success: 0.8, detect: 0.15 } },
   incidents: INCIDENTS,
   sheriff: { guards: 2, investigations: 1, investigationsLeft: 1 },
 };

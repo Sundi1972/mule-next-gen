@@ -1,8 +1,8 @@
-// Copied from politics-p2 (WS8), variant B: design/mocks/politics-p2/src/sheriff/GuardMap.tsx at 73e797fd. Not redesigned; changes for the tabs are marked TABS:.
+// Copied from politics-p2 (WS8), variant B: design/mocks/politics-p2/src/sheriff/GuardMap.tsx at d0a52c1a. Not redesigned; changes for the tabs are marked TABS:.
 import type { MuleView } from '@mule/protocol';
 import { Button, HoloMap, type MapTile } from '@mule/ui';
 import { useState } from 'react';
-import { mapTiles } from '../../../../../../apps/web/src/game/derive';
+import { mapTiles, plotName } from '../../../../../../apps/web/src/game/derive';
 import { OnlyYou } from '../../../../../../apps/web/src/phone/hub/OnlyYou';
 import { Who } from '../../../../../../apps/web/src/phone/hub/politics/parts';
 import type { SheriffState } from './fixture';
@@ -76,7 +76,7 @@ function GuardedList({ view, guards }: { view: MuleView; guards: number[] }) {
           <li key={i} className="flex items-center gap-1 rounded-chip border border-holo-line bg-panel px-1.5 py-0.5 text-xs">
             <GuardGlyph />
             {t.owner && <Who view={view} id={t.owner} size={12} />}
-            <span className="font-mono text-ink-3">({t.x + 1}, {t.y + 1})</span>
+            <span className="font-mono text-ink-3">{plotName(t.x, t.y)}</span>
           </li>
         );
       })}

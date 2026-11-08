@@ -149,7 +149,7 @@ function ElectionsSub() {
 }
 
 /**
- * Sheriff: WS8's case file, variant B (PM ruling, 8 Nov), copied unchanged from politics-p2 at 73e797fd: the guard
+ * Sheriff: WS8's case file, variant B (PM ruling, 8 Nov), copied unchanged from politics-p2 at d0a52c1a, folded: the guard
  * line, then the cases newest first, each with its next step. Its guard button hands Overview's map the Guard pick.
  * Every other phone sees who the Sheriff is and the colony's cases in public (WS8's to draw; a stub here).
  */

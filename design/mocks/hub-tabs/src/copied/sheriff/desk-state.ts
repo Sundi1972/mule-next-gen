@@ -1,4 +1,4 @@
-// Copied from politics-p2 (WS8), variant B: design/mocks/politics-p2/src/sheriff/desk-state.ts at 73e797fd. Not redesigned; changes for the tabs are marked TABS:.
+// Copied from politics-p2 (WS8), variant B: design/mocks/politics-p2/src/sheriff/desk-state.ts at d0a52c1a (unchanged since 73e797fd). Not redesigned; changes for the tabs are marked TABS:.
 import type { IncidentView } from '@mule/protocol';
 import { useState } from 'react';
 import { INVESTIGATION, type SheriffState } from './fixture';

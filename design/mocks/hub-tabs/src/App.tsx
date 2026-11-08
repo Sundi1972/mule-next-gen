@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { mockTable, SEAT_LABEL, type MockTable } from './fixture';
 import { PhoneBody } from './PhoneBody';
 import { Prototype } from './Prototype';
-import { MEASURED } from './measured';
+import { MEASURED, SHERIFF_MEASURED } from './measured';
 import type { ShellVariant } from './proposed/Shell';
 import { SCREENS, stateOf, type State } from './scenarios';
 
@@ -67,7 +67,7 @@ const TOUCHES: [string, string, string][] = [
   ['WS7', 'hub/politics/Governor.tsx', 'GovernorDesk (SalesTax + LawPicker) mounts in Laws unchanged; FrozenTax replaces SalesTax’s row while a call holds the tax (budget mock).'],
   ['WS7', 'hub/politics/Colony.tsx', 'ColonyWithFacts mounts in the Colony tab; Commission leaves for Budget’s Projects line (budget mock P12); the overrule call is not grafted into FundCard (it is in Laws, D13).'],
   ['WS7', 'hub/politics/Offices.tsx, LawBallot.tsx, ElectionDay.tsx', 'Bodies unchanged; Offices’ openDesk calls land through DESK_DOORS. CouncilRail and ElectionDayRail are used for the reveals only; during a ballot the rail keeps Now.'],
-  ['WS8', 'the Sheriff sub-tab', 'WS8’s case file, variant B (politics-p2 at 73e797fd), unchanged, as the Sheriff sub-tab’s body; its “Post a guard on the map” calls startPick(\'guard\'); its GuardMap is the Guard pick’s Map (ownBar), and Done sends guard {tiles} and opens the Sheriff sub-tab again.'],
+  ['WS8', 'the Sheriff sub-tab', 'WS8’s case file, variant B (politics-p2 at d0a52c1a, folded), unchanged, as the Sheriff sub-tab’s body; its “Post a guard on the map” calls startPick(\'guard\'); its GuardMap is the Guard pick’s Map (ownBar), and Done sends guard {tiles} and opens the Sheriff sub-tab again.'],
   ['unruled', 'phone/Planning.tsx', '<Hub slots={TAB_SLOTS} />. Not in the ownership ruling; one line.'],
   ['—', 'the laptop (from 1100 px)', 'The laptop gets the same tabs, wider (PM ruling 8 Nov; not drawn).'],
 ];
@@ -198,6 +198,38 @@ function Index() {
         <p className="max-w-4xl text-xs text-ink-3">
           The map’s drawn box (MapFit’s), in CSS px, Lena’s phone with two offers waiting, Look on, each phone alone at its own viewport (scripts/measure.mjs), so the shell’s “short” packing applies as on the phone. Today at 667 the stage-top card is 108 px
           and the needs strip 45; at 844, 76 and 27. Heiko picks the position (PM ruling, 8 Nov); every state below, and every step of the prototype, shows both.
+        </p>
+      </Section>
+      <Section title="WS8’s case file in the Sheriff sub-tab, measured" id="sheriff-measured">
+        <table className="text-left text-sm" data-testid="sheriff-measured">
+          <thead className="text-xs text-ink-3">
+            <tr>
+              <th className="py-1 pr-4 font-normal">Phone</th>
+              <th className="py-1 pr-4 font-normal">Tabs</th>
+              <th className="py-1 pr-4 font-normal">Sub-tab (w × visible h)</th>
+              <th className="py-1 pr-4 font-normal">Folded</th>
+              <th className="py-1 pr-4 font-normal">Fine case open</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SHERIFF_MEASURED.map((m) => (
+              <tr key={`${m.phone}-${m.tabs}`} className="border-t border-holo-line font-mono" data-testid={`sheriff-measured-${m.phone}-${m.tabs}`}>
+                <td className="py-1.5 pr-4">{m.phone}</td>
+                <td className="py-1.5 pr-4 font-sans">{m.tabs}</td>
+                <td className="py-1.5 pr-4">
+                  {m.width} × {m.visible}
+                </td>
+                <td className={cx('py-1.5 pr-4', m.folded <= m.visible ? 'text-ok' : 'text-warn')}>
+                  {m.folded} {m.folded <= m.visible ? '· one screen' : `· ${m.folded - m.visible} px over`}
+                </td>
+                <td className="py-1.5 pr-4">{m.fineOpen} · scrolls, Fine on screen</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="max-w-4xl text-xs text-ink-3">
+          WS8’s variant B folded (d0a52c1a): every case one 44 px row with its next step on a chip, opened in place one at a time. With the left column (A) it fits the sub-tab in one screen at both phones; the bottom bar (B) takes 40 px of its height, so
+          folded it runs 23 px over at 667 and 8 px at 844. Opened, the fine case scrolls itself into view, its button on screen.
         </p>
       </Section>
       <Section title="Key decisions" id="decisions">

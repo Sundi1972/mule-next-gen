@@ -95,7 +95,7 @@ export const SCREENS: Screen[] = [
     title: 'The map-mode hand-off: Sheriff › Guard a plot → Overview',
     graft: 'slots.ts (PlotPickSlot), Hub.tsx (startPick / endPick), tabs/Overview.tsx (PickBar)',
     states: [
-      { id: 'sheriff', label: 'Kai’s Council › Sheriff: WS8’s case file (B)', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'politics', sub: 'sheriff' }, note: 'WS8’s design B: the guard line, then the cases newest first. Tap “Post a guard on the map”.' },
+      { id: 'sheriff', label: 'Kai’s Council › Sheriff: WS8’s case file (B)', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'politics', sub: 'sheriff' }, note: 'WS8’s design B, folded (d0a52c1a): the guard line, then one 44 px row per case with its next step; tap a row to open it. “Post a guard on the map” opens Overview’s map.' },
       { id: 'guarding', label: 'Overview: “Guarding · back to Sheriff”', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'overview', pick: 'guard' }, note: 'WS8’s GuardMap on Overview’s one map; a guarded plot wears the proposed GUARD flag. Done returns to the Sheriff sub-tab.' },
     ],
   },
