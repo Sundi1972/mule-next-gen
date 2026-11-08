@@ -173,7 +173,7 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
     });
   });
 
-  it('needs RULE-8 (WS7 minor A): a Collapse month with h > 0 sizes the colony by the Collapse rule alone, with no sick cut on top', () => {
+  it('needs T-AC-9 (WS7 minor A): a Collapse month with h > 0 sizes the colony by the Collapse rule alone, with no sick cut on top', () => {
     withHealth(() => {
       const state = stockedAtAuction();
       state.colonists = 400;
@@ -185,7 +185,7 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
     });
   });
 
-  it("needs RULE-8: with health on, the export ship keeps the store's cover for the colony's size after the sick cut, not before it", () => {
+  it("FM-sick-size-readers: with health on, the export ship keeps the store's cover for the colony's size after the sick cut, not before it", () => {
     withHealth(() => {
       const state = stockedAtAuction();
       state.colonists = 2000;
