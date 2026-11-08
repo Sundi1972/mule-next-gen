@@ -1,4 +1,4 @@
-// Copied from design/mocks/politics-budget/src/proposed/TvBudgetLine.tsx (approved/awaiting-pick mock, at bfad82b4); imports re-pointed (its words from ../../copied/budget/words, the same copy the phone tabs use), no other change.
+// Copied from design/mocks/politics-budget/src/proposed/TvBudgetLine.tsx (approved/awaiting-pick mock, at bfad82b4); imports re-pointed (its words from ../../copied/budget/words, the same copy the phone tabs use); TvBudgetLine changed for the TV, marked CHANGE.
 import type { MuleView } from '@mule/protocol';
 import { cx, PlayerMark } from '@mule/ui';
 import { Fragment } from 'react';
@@ -10,7 +10,15 @@ import { LINE_NAME, neededWords, overruleQuestion } from '../../copied/budget/wo
  * under its line in TableApp's planning header column. The call's banner: see TvOverruleCall.
  */
 
-/** "Budget: Projects 80% · Welfare 10% → Kai · kept 10%", a line moved this month in holo with what it was. */
+/**
+ * "Budget: Projects ▲ 80% · Welfare ▲ 10% → Kai · kept ▲ 10%", a share moved this month in holo with its direction.
+ *
+ * CHANGE (TV only; PM ruling 8 Nov, slice 5 AM-9 (WS7)): no "(was N%)" on the TV: it wrapped the Governor's-promise row
+ * to two lines and took planning under TV-FIT's floor (0.711 → 0.678 at four seats). A moved share stays marked, as
+ * Heiko approved P14 "with changes marked": the accent colour the TV already gives a changed number, and ▲ or ▼ before
+ * it, so the direction reaches a player who cannot tell the colour; the arrow's label says what it was ("up from 70%").
+ * The phone keeps "(was N%)". WS7's OK for the real P14 graft is pending: this is the mock's form until it lands.
+ */
 export function TvBudgetLine({ game }: { game: MuleView }) {
   const budget = game.politics?.budget;
   if (!budget) return null;
@@ -32,6 +40,12 @@ export function TvBudgetLine({ game }: { game: MuleView }) {
             {i > 0 && <span aria-hidden>·</span>}
             <span className="flex items-center gap-1.5 whitespace-nowrap" data-testid={`tv-budget-${p.id}`}>
               {p.name}{' '}
+              {/* CHANGE: the direction of a moved share, before it (AM-9). */}
+              {moved && (
+                <span className="font-mono font-bold text-holo" role="img" aria-label={`${p.share > p.start ? 'up' : 'down'} from ${p.start}%`} data-testid={`tv-budget-move-${p.id}`}>
+                  {p.share > p.start ? '▲' : '▼'}
+                </span>
+              )}
               <strong data-num className={cx('font-mono font-bold', moved ? 'text-holo' : 'text-ink')}>
                 {p.share}%
               </strong>
@@ -40,11 +54,6 @@ export function TvBudgetLine({ game }: { game: MuleView }) {
                   → <PlayerMark slot={toSlot(p.to.slot)} size={18} />
                   <strong className="font-semibold text-ink">{p.to.name}</strong>
                 </>
-              )}
-              {moved && (
-                <span className="text-base text-ink-3" data-testid={`tv-budget-was-${p.id}`}>
-                  (was {p.start}%)
-                </span>
               )}
             </span>
           </Fragment>

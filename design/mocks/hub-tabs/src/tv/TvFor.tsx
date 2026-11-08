@@ -4,11 +4,12 @@ import { ClientProvider } from '../../../../../apps/web/src/net/react';
 import { TvCouncil } from '../../../../../apps/web/src/table/TvCouncil';
 import { TvElection } from '../../../../../apps/web/src/table/TvElection';
 import { TvOverrule } from './copied/TvOverrule';
+import { TV_FIT } from './measured';
 import { TvMonthEnd } from './TvMonthEnd';
-import { TV_EVENT_HOLD_S, TvPlanning, type EventKind } from './TvPlanning';
+import { TV_EVENT_HOLD_S, TV_WAITING_BOX_MAX_SEATS, TvPlanning, type EventKind } from './TvPlanning';
 import { tvClient, tvScreen, type MockWorld, type TvFocus, type TvScreen } from './world';
 
-export { TV_EVENT_HOLD_S };
+export { TV_EVENT_HOLD_S, TV_WAITING_BOX_MAX_SEATS };
 
 export type { TvFocus } from './world';
 
@@ -55,13 +56,13 @@ export function TvScreenView({ screen, focus, opensOn = null }: { screen: TvScre
 
 /** One line per step for the index: what the TV shows, and where it shows nothing, that it does so on purpose. */
 export const TV_NOTE: Record<TvFocus, string> = {
-  planning: 'TV: planning as on trunk: the header and ready count, the Governor’s promise with the budget on its row, the map, who we wait for, prices, news, the ready list with reputation chips.',
+  planning: `TV: planning as on trunk: the header and ready count, the Governor’s promise with the budget on its row, the map, who we wait for (a box up to ${TV_WAITING_BOX_MAX_SEATS} seats; above, the ready list alone), prices, news, the ready list with reputation chips.`,
   'deal-offered': 'TV: unchanged. The TV shows nothing of a private offer: a card is private to its two players.',
   'deal-broken': `TV: the broken-promise banner shows for ${TV_EVENT_HOLD_S} s and then lives in the news, a change from the deal-card mock Heiko approved.`,
-  'budget-set': 'TV: the budget on the Governor’s row: Projects, Welfare → whom, kept; a share the Governor moved in holo, with what it was.',
+  'budget-set': 'TV: the budget on the Governor’s row: Projects, Welfare → whom, kept. A share the Governor moved is in the accent colour with ▲ or ▼ before it (no “was N%” on the TV; the phone keeps it).',
   'overrule-called': `TV: the call shows over the map for ${TV_EVENT_HOLD_S} s, then folds to “Overrule called: tax frozen” on the Governor’s row; once planning ends, the ballot takes the screen: who has voted, never how.`,
   'overrule-reveal': 'TV: the overrule’s reveal: yes and no out of all the table’s votes, the needed mark, the stamp; the budget line at its foot.',
   guarding: 'TV: unchanged. Guards are secret: the TV shows nothing of the Sheriff’s guard.',
-  waiting: 'TV: “Waiting for …” with each name, and the ready list under it with every reputation chip.',
+  waiting: `TV: up to ${TV_WAITING_BOX_MAX_SEATS} seats, “Waiting for …” with each name and the host’s “can continue” line, the ready list under it with every reputation chip; from ${TV_WAITING_BOX_MAX_SEATS + 1} seats, the ready list alone, the host’s line at its foot. Under the floor at 4 seats: waiting (${TV_FIT.waiting.fit[4]}).`,
   'month-end': 'TV: the month end: the league with chips and the breaker’s “✗ −N” (a stand-in for WS4’s mark), “fund … · paid out …” in the Wealth note; no broken-cards box (TV-FIT).',
 };

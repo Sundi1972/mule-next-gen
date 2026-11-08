@@ -21,6 +21,12 @@ import { eventsOf } from './world';
 /** How long a break or an overrule call holds the TV as a moment before it folds (WS6 ruling, 8 Nov; WS4 accepted). */
 export const TV_EVENT_HOLD_S = 8;
 
+/**
+ * The most seats at which planning keeps its waiting box (PM ruling 8 Nov, option 2): from one more, the ready list
+ * alone says who is still planning, with their chips, and the host's "can continue" line moves to the list's foot.
+ */
+export const TV_WAITING_BOX_MAX_SEATS = 4;
+
 /*
  * GRAFT TARGET: apps/web/src/table/TableApp.tsx, TvGame's planning branch (WS4), which TableApp.tsx does not export:
  * copied from trunk (feat/strategist at 739fefb0, the same file as this mock's base) with the slices' changes, each
@@ -33,7 +39,8 @@ export const TV_EVENT_HOLD_S = 8;
  *      never moves; then it folds: the break lives in the news (the server's line, newest kept whole), the call in 1;
  *      a change from the politics-deals mock Heiko approved, whose banner stayed under the header all month;
  *   3. the reputation chip after each name in the ready list (politics-deals S3-C19); the waiting box above it shows
- *      none (trunk's WaitingFor, WS4 change c): the list already has them;
+ *      none (trunk's WaitingFor, WS4 change c): the list already has them. Above TV_WAITING_BOX_MAX_SEATS there is no
+ *      waiting box at all (PM ruling, option 2): the list says who is planning, and the host's line is its foot;
  *   4. the news through NewsWords, so a computer seat reads "Ossa · AI" by its id (ws7-s3-phone-pr's News).
  * Left out, as the mock has no clock or events: TvEventLayer, and the grounds opener before the month end. The moment's
  * clock is the screen's own (performance.now); the build times it from the server's clock, as the event show does.
@@ -74,6 +81,8 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
   const host = game.players.find((p) => p.id === table.hostId);
   const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
   const places = placesOf(game);
+  const box = game.players.length <= TV_WAITING_BOX_MAX_SEATS;
+  const hostLine = hostCanContinue && waiting.length > 0 ? `${host.name}, the host, can continue without them.` : null;
   const moments = useMoments(eventsOf(game), opensOn);
   const called = game.politics?.overrule?.stage === 'called';
   // The moment's banner draws only the breaks that are a moment now: TvDeals as it is, given those cards.
@@ -116,11 +125,11 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
               <StrikeWaiting game={game} />
             </div>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4" data-testid="tv-side">
-              {waiting.length > 0 ? (
+              {!box ? null : waiting.length > 0 ? (
                 <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
                   {/* CHANGE 3: no chips here (WS4 c); the ready list below has them. */}
                   <WaitingFor seats={waiting} me={null} tv />
-                  {hostCanContinue && <span className="text-lg text-ink-2">{host.name}, the host, can continue without them.</span>}
+                  {hostLine && <span className="text-lg text-ink-2">{hostLine}</span>}
                 </div>
               ) : (
                 <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow" data-testid="tv-all-ready">
@@ -211,6 +220,12 @@ export function TvPlanning({ table, game, opensOn = null }: { table: TableView<M
                   );
                 })}
               </ul>
+              {/* CHANGE 3: with no waiting box, the host's line is the ready list's foot. */}
+              {!box && hostLine && (
+                <p className="shrink-0 text-lg text-ink-2" data-testid="tv-ready-host">
+                  {hostLine}
+                </p>
+              )}
             </div>
           </div>
         </TvBody>
