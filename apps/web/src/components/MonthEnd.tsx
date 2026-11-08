@@ -3,6 +3,7 @@ import type { MuleView } from '@mule/protocol';
 import { AirGauge, airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
 import { Fragment, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
+import { brokenIn, brokenMove, brokenWords } from '../phone/hub/politics/deals-words';
 import { RepChip } from '../phone/hub/politics/parts';
 import { collapseCutWords, colonyReport, type ColonyReport, inCollapse, league, leaderWords, ordinal, winnerWords, yourLines } from '../game/month-end';
 
@@ -156,6 +157,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
                     </span>
                     {/* S3-C19: the reputation chip, with politics on; not at 'compact' (the phone with no TV, where the name has no room) nor at game over. */}
                     {view.politics && density !== 'compact' && !final && <RepChip view={view} id={r.player.id} tv={tv} testid={`league-rep-${r.player.id}`} />}
+                    {tv && !final && <BrokeMark view={view} id={r.player.id} />}
                   </span>
                 </td>
                 <td className={cx(s.cell, 'text-right')}>
@@ -564,5 +566,23 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
         </div>
       )}
     </section>
+  );
+}
+
+
+/**
+ * S3-C20 on the TV's month end (PM ruling A, 8 Nov): what the cards a player broke this month cost them, "✗ −10" after
+ * their chip, the label the whole public words. No height, so six seats keep the floor (the mock's box drew 0.560); the
+ * TV says the words in full in planning's banner and the news, the phones' month end lists them.
+ */
+function BrokeMark({ view, id }: { view: MuleView; id: string }) {
+  const theirs = brokenIn(view, view.month).filter((c) => (c.brokenBy ?? c.from) === id);
+  if (theirs.length === 0) return null;
+  const cost = theirs.reduce((sum, c) => sum - brokenMove(c), 0);
+  const label = `Broke this month: ${theirs.map((c) => brokenWords(view, c)).join('; ')}. Reputation −${cost}.`;
+  return (
+    <span role="img" aria-label={label} className="shrink-0 whitespace-nowrap font-mono text-2xl font-bold text-alert" data-testid={`league-broke-${id}`}>
+      ✗ −{cost}
+    </span>
   );
 }

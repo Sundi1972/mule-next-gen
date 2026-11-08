@@ -83,13 +83,24 @@
 
 <h3 id="tv-politics">Politics on the TV <span class="pill designed">Designed, not in the game yet, WS4</span></h3>
 <ul>
-<li><strong>A broken deal card</strong> is public: the month end's colony panel and the news say a signed card was broken and whose reputation fell. Who made which card stays secret.</li>
+<li><strong>A broken deal card</strong> is public and whole: see <a href="#tv-deals">Deal cards and reputation on the TV</a>.</li>
 <li><strong>A caught saboteur</strong> plays in production's event show ("Caught!"), the cut plot goes dark on the map, and the month end has a line for it. A sabotage that is not caught never shows.</li>
 <li><strong>The budget</strong> shows in planning's side column, under the offices line: how the Governor split the fund. The month end says what each line spent, and which player Welfare helped.</li>
 <li><strong>An overrule vote's reveal</strong> is the council's reveal as it is today.</li>
-<li><strong>Reputation</strong> shows after each name in the ready list and the league, as on the phones.</li>
+<li><strong>Reputation</strong> shows after each name: see <a href="#tv-deals">Deal cards and reputation on the TV</a>.</li>
 </ul>
 <p class="owner">Designed, not in the game yet, WS4 (the TV), with WS7 for the broken-card line (TvDeals.tsx, which WS4 places) and WS8 for the event show · the layout: WS6, approved by Heiko on 7 Nov · see <a href="#politics-phone">Politics on the phone</a></p>
+<h3 id="tv-deals">Deal cards and reputation on the TV <span class="pill built">In the game</span></h3>
+<p>With politics on, the TV shows every player's reputation and every broken deal card, as the phones do (<a href="colony-and-politics.html#reputation-deals">the rules</a>).</p>
+<ul>
+<li><strong>The reputation chip</strong> follows each name the TV lists with room: every row of planning's ready list (a Claude seat's and the folded computer players' names too), the box of who the table waits for, the players list the other phases draw, and the month end's league. It is the number, with a star at <span class="num">70</span> or more and a dashed edge with a warning under <span class="num">30</span>, so the band reads without colour. It sits after the name and its "· AI", and a long name gives way before it does.</li>
+<li><strong>The month end marks who broke a card that month</strong>: the breaker's league row says what it cost them, "✗ −10" after the chip (both added up when they broke two), and a screen reader reads the whole words ("Broke this month: Ossa broke a promise to Kai: a vote for Ossa"). The TV says those words in full in planning, in the banner and the news column (where a computer seat reads "Ossa · AI"); the phones' month end lists every broken card whole.</li>
+<li><strong>The banner in planning</strong>, when a card breaks: <span class="pill designed">Designed, not in the game yet, WS4</span> (placing it under the Governor's promise; its content is WS6's).</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>The approved mock listed the month's broken cards in a box under the colony's panel. Measured on 8 Nov with six players, all five colony buildings, the longest ledger and two broken vote promises, that box drew the month end at <span class="num">0.560</span> of its size, under the <span class="num">0.7</span> floor (<span class="num">0.731</span> without it). The colony's column sets the height whatever the number of players, so it failed at every table size. The programme manager ruled on 8 Nov, as for <a href="#tv-month-end-paid-out">what the fund paid out</a>: the TV keeps the floor, a mark on the league row that costs no height, and the whole words where people read them closely. Measured the same day, the same game with the marks drew <span class="num">0.731</span> with the chat ticker full and <span class="num">0.788</span> with it empty, the same as without them. It differs from the mock; Heiko is asked to confirm it.</p></div>
+<p class="code-ref">Mock: <code>design/mocks/politics-deals</code> (approved by Heiko, 8 Nov) · In the code: <code>apps/web/src/phone/hub/politics/parts.tsx::RepChip</code> · <code>apps/web/src/components/MonthEnd.tsx::BrokeMark</code> · <code>apps/web/src/table/TableApp.tsx::TvRep</code></p>
+<p class="owner">Kept current by: WS4 (the TV) · the chip: WS6 · the rules: WS7</p>
+
 <h2 id="tv-fit">The TV fits a real table <span class="pill built">In the game</span></h2>
 <p>Played at a real table, some TV screens ran out of room. Three rules now hold on every TV screen, and every screen below is checked at 1920 × 1080 with three chat lines said: nothing runs off the bottom, every row it promises is shown whole, and nothing is drawn under seven tenths of its size, at six players for the screens of the first two months.</p>
 <ul>
