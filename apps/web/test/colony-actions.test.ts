@@ -36,7 +36,19 @@ beforeAll(async () => {
 const player = (id: string, name: string, slot: number, money = 1000): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const stock = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
-const politics = (governor: string | null): PoliticsView => ({
+/** A budget as the server sends it: with one the Governor's Budget is the real one, the Commission under its Projects line. */
+const budget = {
+  lines: [
+    { line: 'projects', share: 60, start: 60, maxShare: 100, step: 5, credits: 400, maxCredits: null },
+    { line: 'welfare', share: 10, start: 10, maxShare: 20, step: 5, credits: 60, maxCredits: 200 },
+  ],
+  kept: 30,
+  welfareTo: 's2',
+  setBy: null,
+  frozen: false,
+};
+
+const politics = (governor: string | null, withBudget = true): PoliticsView => ({
   governor,
   sheriff: null,
   term: governor ? [1, 3] : null,
@@ -51,7 +63,8 @@ const politics = (governor: string | null): PoliticsView => ({
   promise: null,
   promiseFrom: null,
   election: null,
-});
+  ...(withBudget ? { budget } : {}),
+} as PoliticsView);
 
 const me = (held: Partial<Record<Good, number>> = {}): MyView => ({
   id: 's1',
@@ -120,8 +133,8 @@ const colonyOf = (projects: ColonyProjectView[], extra: Partial<ColonyView> = {}
 });
 
 /** Lena's (s1) view, Ossa (s2) beside her; `governor` holds the office. */
-function game(colony: ColonyView | null, opts: { governor?: string | null; money?: number; held?: Partial<Record<Good, number>>; politicsOn?: boolean } = {}): MuleView {
-  const { governor = 's1', money = 1000, held = {}, politicsOn = true } = opts;
+function game(colony: ColonyView | null, opts: { governor?: string | null; money?: number; held?: Partial<Record<Good, number>>; politicsOn?: boolean; withBudget?: boolean } = {}): MuleView {
+  const { governor = 's1', money = 1000, held = {}, politicsOn = true, withBudget = true } = opts;
   return {
     finished: false,
     month: 2,
@@ -150,7 +163,7 @@ function game(colony: ColonyView | null, opts: { governor?: string | null; money
     lotSlots: { used: 0, max: 4 },
     landAuction: null,
     production: null,
-    politics: politicsOn ? politics(governor) : null,
+    politics: politicsOn ? politics(governor, withBudget) : null,
     colony,
   };
 }
@@ -234,6 +247,7 @@ function tap(testid: string): void {
 describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
   it('B-AC-35-1: the Governor sees "Commission a project"; the list shows every catalogue row with cost, months, prestige and upkeep, and no word of a plot (C48)', () => {
     mountBudget(game(colonyOf([])));
+    expect(findTestid('commission-open', byTestid('budget-commission')), 'the button sits under Projects, in budget-commission').toBeDefined();
     expect(text('commission-open')).toBe('Commission a project');
     tap('commission-open');
     for (const id of Object.keys(PRESTIGE) as PrestigeId[]) {
@@ -251,6 +265,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
 
   it("B-AC-35-1: a row that isn't commissionable is disabled and shows the server's why, as the engine words it", () => {
     mountBudget(game(colonyOf([], { catalogue: catalogue({ observatory: 'The colony already has a Observatory', stadium: 'The colony funds one project at a time' }) })));
+    expect(findTestid('commission-open', byTestid('budget-commission')), 'in budget-commission').toBeDefined();
     tap('commission-open');
     expect(off('cat-observatory')).toBe(true);
     expect(text('cat-why-observatory')).toBe('The colony already has a Observatory');
@@ -262,6 +277,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
 
   it("B-AC-35-1: picking a row and Commission sends {type:'commission', id}", () => {
     mountBudget(game(colonyOf([])));
+    expect(findTestid('commission-open', byTestid('budget-commission')), 'in budget-commission').toBeDefined();
     tap('commission-open');
     tap('cat-park');
     expect(text('commission-confirm-line')).toBe(`Commission the Park: ${PRESTIGE.park.credits} cr and ${PRESTIGE.park.goods.alloy} Alloy, from the fund and donations`);
@@ -275,10 +291,20 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
     expect(text('commission-news')).toBe('News: Lena commissions a Park');
   });
 
-  it('B-AC-35-1: a phone that is not the Governor has no Commission button', () => {
-    mount(game(colonyOf([]), { governor: 's2' }));
+  it('B-AC-35-1: a phone that is not the Governor has no Commission button in its Budget', () => {
+    mountBudget(game(colonyOf([]), { governor: 's2' }));
     expect(has('commission-open')).toBe(false);
+  });
+
+  it('B-AC-35-1: the Colony desk of a phone that is not the Governor still has its colony card', () => {
+    mount(game(colonyOf([]), { governor: 's2' }));
     expect(has('colony-desk-card')).toBe(true);
+  });
+
+  it('B-AC-35-1 (older server fallback): a view with no budget draws the Commission on its own in Budget', () => {
+    mountBudget(game(colonyOf([]), { withBudget: false }));
+    expect(has('budget-commission')).toBe(false);
+    expect(text('commission-open')).toBe('Commission a project');
   });
 });
 
