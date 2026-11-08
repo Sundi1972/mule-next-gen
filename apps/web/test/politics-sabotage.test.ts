@@ -609,34 +609,47 @@ describe('S4-C14, P6: the power cut, under Look on a rival’s plot', () => {
   });
 });
 
-describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; S4-PR-9 refuses it)', () => {
-  it("S4-PR-11: on the Sheriff's phone a rival's working plot has no sabotage door, and the market no rumour door", () => {
-    lookAt(1, 0, { id: 's4', sheriff: SHERIFF });
+describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; the server says canOrder: \'sheriff\', #789)', () => {
+  /** The Sheriff's own view as the server sends it: the desk, and canOrder 'sheriff' (protocol #789, S4-PR-9 fills it). */
+  const SHERIFF_SAB: Sab = { ...NO_ORDER, canOrder: 'sheriff' };
+  const REASON = 'The Sheriff can’t order sabotage.';
+
+  it("S4-PR-11: on the Sheriff's phone a rival's working plot has no order control, only the reason; the market likewise", () => {
+    lookAt(1, 0, { id: 's4', sheriff: SHERIFF, sabotage: SHERIFF_SAB });
     expect(has('sabotage-door'), 'Look on Ossa’s smithore plot').toBe(false);
     expect(has('order-powercut')).toBe(false);
+    expect(has('order-confirm')).toBe(false);
+    expect(text('order-blocked')).toBe(REASON);
     tap('desk-market');
     expect(has('rumour-door'), 'at the market').toBe(false);
     expect(has('order-rumour')).toBe(false);
+    expect(text('rumour-blocked')).toBe(REASON);
   });
 
-  it("S4-PR-11: at the same table a player who is not the Sheriff still has both doors", () => {
+  it("S4-PR-11: the reason shows only where an order could start: not on the Sheriff's own plot or a free one", () => {
+    lookAt(0, 1, { id: 's4', sheriff: SHERIFF, sabotage: SHERIFF_SAB });
+    expect(has('order-blocked'), 'own plot').toBe(false);
+    act(() => root!.unmount());
+    lookAt(3, 0, { id: 's4', sheriff: SHERIFF, sabotage: SHERIFF_SAB });
+    expect(has('order-blocked'), 'free plot').toBe(false);
+  });
+
+  it('S4-PR-11: at the same table a player who is not the Sheriff (canOrder true) still has both doors and no reason', () => {
     for (const id of ['s1', 's3']) {
       lookAt(1, 0, { id });
       expect(has('sabotage-door'), id).toBe(true);
+      expect(has('order-blocked'), id).toBe(false);
       tap('desk-market');
       expect(has('rumour-door'), id).toBe(true);
+      expect(has('rumour-blocked'), id).toBe(false);
       act(() => root!.unmount());
       root = null;
     }
   });
 
-  it("S4-PR-11: the check is the public office: a seat whose view lacks the desk but holds the office still gets no door", () => {
-    // WS7's advice: view.politics.sheriff === me.id, not the private desk's presence.
-    lookAt(1, 0, { id: 's4', sheriff: null });
-    expect(has('sabotage-door')).toBe(false);
-    act(() => root!.unmount());
-    // And the desk alone does not bar a seat that does not hold the office.
-    lookAt(1, 0, { id: 's1', sheriff: SHERIFF });
+  it("S4-PR-11: the server's reason decides, not the office: the office holder with canOrder true has the doors", () => {
+    // The interim office check is gone: only canOrder 'sheriff' bars (one helper, orderBarred).
+    lookAt(1, 0, { id: 's4', sheriff: SHERIFF });
     expect(has('sabotage-door')).toBe(true);
   });
 
@@ -649,13 +662,14 @@ describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; S4-PR-9 refus
     expect(has('my-order-sab-b7c8d9')).toBe(true);
 
     // The server's next view: Brix holds the office; the engine withdrew the order for free.
-    answer(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...NO_ORDER, order: null, owed: 0, mine: [] } }));
+    answer(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...SHERIFF_SAB, order: null, owed: 0, mine: [] } }));
     expect(openDesk()).toBe('desk-sheriff');
     tap('desk-market');
     expect(has('order-pending'), 'no pending-order row').toBe(false);
     expect(byTestid('desk-body-market').textContent, 'no crew cost').not.toMatch(/cr at the month end/);
     expect(has('my-orders'), 'no Your orders head over an empty list').toBe(false);
     expect(has('rumour-door')).toBe(false);
+    expect(text('rumour-blocked')).toBe(REASON);
     expect(has('list-asset'), 'the Market desk itself is whole').toBe(true);
     tap('tool-look');
     tap('map-plot-1-0');
@@ -666,7 +680,7 @@ describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; S4-PR-9 refus
 
   it("S4-PR-11: the Sheriff's own past orders stay listed under Your orders", () => {
     const mine: Sab['mine'] = [{ ...GUARDED, culprit: 's4', public: true, outcome: 'caught' }];
-    mount(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...NO_ORDER, mine } }));
+    mount(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...SHERIFF_SAB, mine } }));
     tap('desk-market');
     expect(has('my-order-w3c8')).toBe(true);
     expect(has('rumour-door')).toBe(false);
