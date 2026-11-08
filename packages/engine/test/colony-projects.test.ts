@@ -260,4 +260,18 @@ describe('AM-15: stillToPay is what the fund would spend', () => {
       COLONY.fundBuysGoods = saved;
     }
   });
+
+  it('S5-T-AC-13: AM-15: a store holding fewer units than the building misses sells what it has: the spend is stillToPay, below credits plus the whole missing goods', () => {
+    const state = governedGame(1_000_000);
+    commission(state, 'lena', 'observatory');
+    const p = project(state, 'observatory');
+    p.funded.credits = PRESTIGE.observatory.credits;
+    state.store.stock.crystite = 1; // the Observatory misses 2
+    const price = storeQuotes(state, 'crystite').sell!;
+    const want = stillToPay(state, p);
+    expect(want).toBe(price);
+    expect(want).toBeLessThan(2 * price);
+    runColony(state, []);
+    expect(state.colony!.ledger.out.project).toBe(want);
+  });
 });
