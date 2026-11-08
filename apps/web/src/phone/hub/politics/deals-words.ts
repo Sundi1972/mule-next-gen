@@ -66,6 +66,9 @@ export function brokenWords(view: V, c: DealCard, named = true): string {
   return `${lead} a promise to ${nameOf(view, c.to, null)}: a vote for ${nameOf(view, t.candidate, null)}`;
 }
 
+/** The cards broken in `month`: the one rule for "this month's broken cards" on the TV and at the month end. */
+export const brokenIn = (view: Pick<MuleView, 'politics'>, month: number): DealCard[] => (view.politics?.brokenDeals ?? []).filter((c) => c.settled === month);
+
 /** The reputation a broken card cost its breaker. */
 export const brokenMove = (c: DealCard) => (c.terms.kind === 'pact' ? MOVES.pactBroken : MOVES.voteBroken);
 
