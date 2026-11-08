@@ -105,7 +105,7 @@ Cost: free.
 ### run
 In: planning. Args: office (governor), promise (lower | hold | cap).
 Does: Runs for an office in the next election, moving any run for the other one; null withdraws. Elections open planning in months 1, 4, 7, 10. A Governor run carries a tax promise: lower, hold, or a cap of 0% to 15%.
-Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "You can run for office in planning"); candidates are open: not from the ballot until the result, nor in an election month's announce after month 1 (else: "Candidates are closed until the result"); for Governor, you have not served 2 Governor terms in a row (else: "2 Governor terms in a row"); the office is one that is elected: governor (else: "The <office> is not elected yet"); a Sheriff run carries no promise (else: "Sheriff candidates make no promise yet"); a cap promise is a whole 0% to 15% (else: "A tax promise is 0% to 15%"); a Governor run carries a promise (else: "Pick a promise to run for Governor").
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "You can run for office in planning"); candidates are open: not from the ballot until the result, nor in an election month's announce after month 1 (else: "Candidates are closed until the result"); for Governor, you have not served 2 Governor terms in a row (else: "2 Governor terms in a row"); the office is one that is elected: governor (else: "The <office> is not elected yet"); a Sheriff run carries no promise (else: "Sheriff candidates make no promise"); a cap promise is a whole 0% to 15% (else: "A tax promise is 0% to 15%"); a Governor run carries a promise (else: "Pick a promise to run for Governor").
 Cost: free.
 
 ### vote
@@ -196,6 +196,30 @@ Cost: free.
 In: planning. Args: id (the card's id, 'deal-…'), accept (boolean).
 Does: Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.
 Legal when: it is planning (else: "Cards are answered in planning"); the card was offered to you and is still waiting for an answer (else: "That card is no longer open"); a pact accepted is your only pact with them (else: "You already have a pact with <name>").
+Cost: free.
+
+### sabotage
+In: planning. Args: target ({ kind: 'powerCut', tile } | { kind: 'rumour', good, dir: 'up' | 'down' } | null to withdraw).
+Does: Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.
+Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning (else: "Orders are given in planning"); a power cut names another player's plot (else: "Pick another player's plot"); that plot has a MULE making a good (else: "That plot makes nothing to cut"); a rumour names a good (else: "Pick a good"); a rumour moves its price up or down (else: "A rumour moves a price up or down"); you can pay the crew (else: "A crew costs <cost> cr; you have <money>").
+Cost: free.
+
+### guard
+In: planning. Args: tiles (plot).
+Does: The Sheriff posts the whole list of plots guarded this month (any owner's); a guarded plot's cut always fails and names its saboteur. It replaces the earlier list.
+Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning and the votes are over (else: "Guards are posted once the votes are over"); you are the Sheriff (else: "Only the Sheriff posts guards"); every plot is a player's (else: "Guards watch players' plots"); you guard no more plots than the limit (else: "You have <count> guards").
+Cost: free.
+
+### investigate
+In: planning. Args: order (the incident's order id, 'sab-…').
+Does: The Sheriff investigates one public incident whose culprit is unknown; it may name the culprit or go cold. One investigation a month.
+Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning and the votes are over (else: "Investigations are made once the votes are over"); you are the Sheriff (else: "Only the Sheriff investigates"); you have not investigated this month (else: "One investigation a month"); the incident is public (else: "No such incident"); its culprit is not yet known (else: "That one is solved"); it has not been investigated before (else: "The trail went cold on that one").
+Cost: free.
+
+### fine
+In: planning. Args: order (the incident's order id, 'sab-…'), amount (50 | 100 | 150 | 200 | 250 | 300).
+Does: The Sheriff fines a revealed culprit once; the base is multiplied by any sabotage ban and shared with the victim.
+Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning and the votes are over (else: "Fines are levied once the votes are over"); you are the Sheriff (else: "Only the Sheriff fines"); the culprit is revealed (else: "Only a revealed culprit is fined"); the case is not yet fined (else: "Already fined"); the culprit is not you (else: "You can't fine yourself"); the amount is 50 to 300 in steps of 50 (else: "A fine is 50 to 300 cr, in steps of 50").
 Cost: free.
 
 ## When a move is smart
