@@ -33,7 +33,7 @@ function colony(): GameState {
   return state;
 }
 
-const QUIET: MoodInputs = { short: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0 };
+const QUIET: MoodInputs = { short: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
 
 describe('C23: the colony\'s happiness (RULE-20)', () => {
   it('T-AC-31: each input moves the target its own way with the others fixed; a month\'s step never exceeds maxStep and h stays 0..100', () => {
@@ -45,6 +45,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
       broken: rng.chance(0.5) ? 1 : 0,
       prestige: rng.int(0, 25),
       gap: rng.int(0, 20_000),
+      welfare: 0,
     });
     // Worse with more of it: shortages, air, tax, a broken promise, the gap. Better with more prestige.
     const worse: (keyof MoodInputs)[] = ['short', 'air', 'tax', 'broken', 'gap'];
@@ -85,13 +86,29 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     expect(moodTarget({ ...QUIET, gap: 1_000_000 }), 'the gap past its cap takes nothing more').toBe(moodTarget({ ...QUIET, gap: W.gapCap * W.gapUnit }));
   });
 
+  it("S5-T-AC-5: S5-RULE-5's examples — 100 cr -> +2, 200 cr -> +4 (the cap holds at more), nothing paid -> +0, an earlier month's Welfare counts 0", () => {
+    const state = colony();
+    const quiet = moodTarget(moodInputs(state, []));
+    expect(quiet, 'nothing paid: the quiet month\'s base').toBe(HAPPINESS.base);
+    const paid = (credits: number, month = state.month): number => {
+      state.colony = { ...state.colony!, welfare: { month, to: 'kai', paid: credits } };
+      return moodTarget(moodInputs(state, [])) - quiet;
+    };
+    const worth = (credits: number): number => W.welfare * Math.min(credits / W.welfareUnit, W.welfareCap);
+    expect(paid(100)).toBe(worth(100));
+    expect(paid(2 * W.welfareUnit)).toBe(worth(2 * W.welfareUnit));
+    expect(paid(1_000), 'the cap: no more than welfareCap units').toBe(W.welfare * W.welfareCap);
+    expect(paid(1_000)).toBeGreaterThan(paid(W.welfareUnit));
+    expect(paid(100, state.month - 1), 'last month\'s payment counts 0').toBe(0);
+  });
+
   it('T-AC-31: moodInputs reads the month: the shortages given, the air, the tax in whole %, standing prestige and the gap', () => {
     const state = colony();
     state.air = 55;
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
     state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {} });
-    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500 });
+    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500, welfare: 0 });
   });
 
   it("T-AC-31: a real upkeep feeds the mood that upkeep's shortages, not the report's empty list from production", () => {

@@ -1,5 +1,5 @@
 import { GOODS, moodBand, POLLUTION, type PrestigeId } from '@mule/engine';
-import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
+import type { ColonyHealthView, ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
 import { airBandStyle, cx, GOOD_NAME, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
@@ -7,7 +7,7 @@ import { inCollapse, league, winnerWords } from '../game/month-end';
 import { ChangeTag } from './MonthEnd';
 import { MOOD, moodOf, type MoodBand, PERK, plaqueBoard, plaquesOf, scoreVerdict, scoreWords, STAGE, standingCount, type ColonyScore } from '../game/colony';
 
-/** The colony's parts at the TV's size and the phone's: its four gauges, its build site, and its score at game over. */
+/** The colony's parts at the TV's size and the phone's: its four gauges (five with health), its build site, and its score at game over. */
 
 export type Size = 'tv' | 'phone';
 
@@ -36,25 +36,111 @@ function Mark({ player, size }: { player: PlayerView; size: number }) {
   return <PlayerMark slot={toSlot(player.slot)} species={player.species} size={size} label={player.name} />;
 }
 
-// --- The four gauges ----------------------------------------------------------------------------------
+// --- The health words (PR-11, mock design/mocks/colony-health @ b2470c60, Heiko's option A, 7 Nov) ----------------
 
-function Gauge({ label, value, band, tone, bar, fill, note, size, testid, pulse = false, change }: { label: string; value: string; band?: string; tone?: string; bar?: string; fill?: number; note?: ReactNode; size: Size; testid: string; pulse?: boolean; change?: GaugeChange | undefined }) {
+/**
+ * Where the Health gauge draws its lines, on the 0..100 well share MuleView.colonyHealth.health carries. WS5's rule
+ * (approved 6 Nov): at most 4 in 10 colonists are ever sick, so health never reads below `floor`; from `well` up the
+ * colony is Well. `crews`: below it crews start falling sick (decision 25).
+ * SEAM: from the engine's HEALTH config once WS5's PR-10 lands it; until then the gauge's own, as the mock had them.
+ */
+// SEAM: move to engine HEALTH config with WS5 PR-10
+export const HEALTH_LOOK = { well: 90, floor: 60, crews: 80 } as const;
+
+export interface HealthBand {
+  label: string;
+  tone: string;
+  bar: string;
+}
+
+/** 90 and up: Well. 61 to 89: Sick spell. 60, the floor: At the limit. The tones are the mood's and the air's own. */
+export function healthBand(health: number): HealthBand {
+  if (health >= HEALTH_LOOK.well) return { label: 'Well', tone: 'text-ok', bar: 'bg-ok' };
+  if (health > HEALTH_LOOK.floor) return { label: 'Sick spell', tone: 'text-warn', bar: 'bg-warn' };
+  return { label: 'At the limit', tone: 'text-alert', bar: 'bg-alert' };
+}
+
+/** The month's move in the Happiness note's own words: "↓ 14 this month", "↑ 6 this month", "± 0". */
+const moveWords = (move: number) => (move === 0 ? '± 0' : `${move > 0 ? '↑' : '↓'} ${Math.abs(move)} this month`);
+
+/**
+ * The Health gauge's note: at the limit, how many are sick in ten ("4 in 10 sick"); otherwise the month's move from
+ * lastHealth; nothing in health's first month (lastHealth null or absent).
+ */
+export function healthNote(h: ColonyHealthView): string | null {
+  if (h.health <= HEALTH_LOOK.floor) return `${Math.round((100 - h.health) / 10)} in 10 sick`;
+  return h.lastHealth == null ? null : moveWords(h.health - h.lastHealth);
+}
+
+// --- The gauges ---------------------------------------------------------------------------------------
+
+/** Testids on a gauge's value, band and note: Health's (`health-value`, `health-band`, `health-note`). */
+interface GaugeIds {
+  value: string;
+  band: string;
+  note: string;
+}
+
+/**
+ * A 1 px tick on a Health bar. A transparent hit area is its sibling, so the tick can be pointed at; both sit outside
+ * the bar's overflow-hidden, so the hit area is not clipped.
+ * DS-GAP: a threshold mark on a bar. The design system has no gauge or meter with a marker; this is a new mark.
+ */
+function Tick({ at, testid, title }: { at: number; testid: string; title: string }) {
+  return (
+    <>
+      <span className="absolute -inset-y-1.5 w-3 -translate-x-1/2" style={{ left: `${at}%` }} title={title} aria-label={title} data-testid={testid} />
+      <span className="pointer-events-none absolute -inset-y-0.5 w-px -translate-x-1/2 bg-ink" style={{ left: `${at}%` }} />
+    </>
+  );
+}
+
+/** The Health bar's two ticks: the floor health never goes below, and the line below which crews start falling sick. */
+function HealthTicks() {
+  return (
+    <>
+      <Tick at={HEALTH_LOOK.floor} testid="health-floor" title={`The floor: health never goes below ${HEALTH_LOOK.floor}`} />
+      <Tick at={HEALTH_LOOK.crews} testid="health-crews" title={`Below ${HEALTH_LOOK.crews} crews start falling sick`} />
+    </>
+  );
+}
+
+function Gauge({ label, value, band, tone, bar, fill, note, size, testid, pulse = false, change, ids, ticks = false }: { label: string; value: string; band?: string; tone?: string; bar?: string; fill?: number; note?: ReactNode; size: Size; testid: string; pulse?: boolean; change?: GaugeChange | undefined; ids?: GaugeIds; ticks?: boolean }) {
   const tv = size === 'tv';
+  const track = (
+    <span className={cx('relative overflow-hidden rounded-full', tv ? 'h-2' : 'h-1.5', fill === undefined ? 'bg-transparent' : 'bg-raised')}>
+      {fill !== undefined && <span className={cx('absolute inset-y-0 left-0 rounded-full', bar)} style={{ width: `${Math.max(0, Math.min(100, fill))}%` }} />}
+    </span>
+  );
   return (
     // DS-GAP (WS8): the band flip's pulse, cev-pulse in packages/ui's events.css, until the design system has one.
     <div className={cx('flex min-w-0 flex-col rounded-control border border-holo-line bg-panel', tv ? 'gap-1 px-3 py-1.5' : 'gap-0.5 px-2 py-1', pulse && 'animate-[cev-pulse_0.8s_ease-out]')} data-testid={testid} data-from={change?.from} data-to={change?.to}>
       <span className="flex items-baseline justify-between gap-2">
         <span className={cx('label-caps', !tv && 'text-[10px]!')}>{label}</span>
-        <span data-num className={cx('whitespace-nowrap font-mono font-bold', tv ? 'text-lg' : 'text-xs')}>
+        <span data-num className={cx('whitespace-nowrap font-mono font-bold', tv ? 'text-lg' : 'text-xs')} data-testid={ids?.value}>
           {value}
         </span>
       </span>
-      <span className={cx('relative overflow-hidden rounded-full', tv ? 'h-2' : 'h-1.5', fill === undefined ? 'bg-transparent' : 'bg-raised')}>
-        {fill !== undefined && <span className={cx('absolute inset-y-0 left-0 rounded-full', bar)} style={{ width: `${Math.max(0, Math.min(100, fill))}%` }} />}
-      </span>
+      {/* With ticks, the bar sits in a wrapper that also holds them. */}
+      {!ticks ? (
+        track
+      ) : (
+        <span className="relative flex flex-col">
+          {track}
+          <HealthTicks />
+        </span>
+      )}
       <span className={cx('flex items-baseline justify-between gap-2 whitespace-nowrap', tv ? 'text-xs' : 'text-[10px]')}>
-        {band && <span className={cx('font-display font-semibold uppercase', tone)}>{band}</span>}
-        {note && <span className="truncate text-ink-3">{note}</span>}
+        {band && (
+          <span className={cx('font-display font-semibold uppercase', tone)} data-testid={ids?.band}>
+            {band}
+          </span>
+        )}
+        {note && (
+          <span className="truncate text-ink-3" data-testid={ids?.note ?? `note-${testid}`}>
+            {note}
+          </span>
+        )}
       </span>
     </div>
   );
@@ -170,9 +256,12 @@ export function useMonthEndDrift(game: MuleView, shown = true): GaugeLanding | u
 
 /**
  * Wealth, Environment, Prestige and Happiness. Environment is the air, so it keeps the air's bands. A `landing` holds
- * each changed gauge at its old number until its change lands, then counts it, the band flipping with a pulse.
+ * each changed gauge at its old number until its change lands, then counts it, the band flipping with a pulse. `paidOut`,
+ * the TV month end's only, follows the fund in Wealth's note (#tv-month-end-paid-out). With `health`
+ * (MuleView.colonyHealth) Health is a fifth cell after Happiness (option A, Heiko 7 Nov); null or absent, the four of
+ * today. `spanHealth` lays Health across two columns, for the TV month end's 3 + 2 grid.
  */
-export function ColonyGauges({ colony, size, className, landing }: { colony: ColonyView; size: Size; className?: string; landing?: GaugeLanding | undefined }) {
+export function ColonyGauges({ colony, size, className, landing, paidOut, health = null, spanHealth = false }: { colony: ColonyView; size: Size; className?: string; landing?: GaugeLanding | undefined; paidOut?: number | undefined; health?: ColonyHealthView | null | undefined; spanHealth?: boolean }) {
   const g = colony.gauges;
   const last = colony.lastGauges;
   const wealth = landed('wealth', g.wealth, landing);
@@ -182,8 +271,8 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   const tv = size === 'tv';
   const moodMove = last?.happiness == null || g.happiness === null ? null : g.happiness - last.happiness;
   return (
-    <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
-      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
+    <div className={cx('grid', health ? 'grid-cols-5' : 'grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
+      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr${paidOut === undefined ? '' : ` · paid out ${fmt(paidOut)}`}`} change={wealth.change} />
       <Gauge size={size} testid="gauge-environment" label="Environment" value={`${Math.round(environment.value)}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
       <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
@@ -191,7 +280,33 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
       ) : (
         <HappinessGauge size={size} happiness={g.happiness} band={g.band} moodMove={tv ? moodMove : null} landing={landing} />
       )}
+      {health && (
+        <div className={cx('flex min-w-0 flex-col', spanHealth && 'col-span-2')} data-testid="health-cell">
+          <HealthGauge size={size} health={health} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Health as its own gauge: the well share, its band word under the bar, and the month's move (or "4 in 10 sick" at the limit). */
+function HealthGauge({ size, health }: { size: Size; health: ColonyHealthView }) {
+  const b = healthBand(health.health);
+  const note = healthNote(health);
+  return (
+    <Gauge
+      size={size}
+      testid="gauge-health"
+      label="Health"
+      value={`${health.health}%`}
+      band={b.label}
+      tone={b.tone}
+      bar={b.bar}
+      fill={health.health}
+      ticks
+      ids={{ value: 'health-value', band: 'health-band', note: 'health-note' }}
+      {...(note === null ? {} : { note })}
+    />
   );
 }
 
@@ -800,4 +915,10 @@ export function PhoneColonyScore({ view, colony, selfId, className }: { view: Mu
       </span>
     </section>
   );
+}
+
+/** What the fund paid out this month, every line summed; undefined unless the ledger is this month's (its upkeep has run). */
+export function paidOutThisMonth(colony: ColonyView, month: number): number | undefined {
+  if (colony.ledger?.month !== month) return undefined;
+  return Object.values(colony.ledger.out).reduce((sum: number, n) => sum + (n ?? 0), 0);
 }

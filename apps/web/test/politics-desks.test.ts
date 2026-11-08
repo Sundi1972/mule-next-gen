@@ -586,7 +586,7 @@ describe('the reveal (C66, RULE-62, B-AC-62)', () => {
       const between = beatAt(BOTH, 'winner', 1, 'governor');
       expect(textOf(onPhone(inCeremony(BOTH, between), ElectionDay, 1), 'companion-wait')).toContain('Next office on the TV');
       const sheriff = onTv(inCeremony(BOTH, beatAt(BOTH, 'title', 1, 'sheriff')));
-      expect(textOf(sheriff, 'reveal-title')).toBe('And next, the colony’s newSheriff2 candidates');
+      expect(textOf(sheriff, 'reveal-title')).toBe('And next, the colony’s newSheriffguards plots, investigates sabotage, fines the culprits · 2 candidates');
       expect(textOf(sheriff, 'reveal-progress')).toBe('Governor: Ossa ✓Sheriff: now');
       expect(textOf(onPhone(inCeremony(BOTH, beatAt(BOTH, 'bars', 1, 'sheriff')), ElectionDay, 1), 'companion-wait')).toContain('The votes are being counted on the TV');
     });

@@ -4,8 +4,8 @@
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
-import type { ColonyProjectView, ColonyView, MuleView } from '@mule/protocol';
+import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type FundLine, type GameState, type PrestigeId } from '@mule/engine';
+import type { ColonyProjectView, ColonyView, IncidentView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
@@ -107,10 +107,14 @@ async function main(): Promise<void> {
     await planning.getByTestId(`donate-hint-${PROJECT}`).filter({ hasText: `Your plaque ${fmt(DONATION)} cr` }).waitFor({ timeout: PRESS_MS });
     console.log(`✓ B-AC-35-2: Lena gives ${DONATION} cr through the chips; the server's plaque and her phone both read ${DONATION} cr`);
 
-    // 1. The TV's header carries the four gauges, its wealth the server's, happiness "not yet" while it has none.
+    // 1. The TV's header carries the four gauges (five with the colony's health, PR-11: Health after Happiness), its
+    // wealth the server's, happiness "not yet" while it has none.
     const gauges = tv.getByTestId('colony-gauges');
     await gauges.waitFor({ timeout: PRESS_MS });
-    check((await gauges.locator('[data-testid^=gauge-]').count()) === 4, 'B-AC-34-3: the TV header shows four gauges');
+    const health = board().colonyHealth ?? null;
+    const cells = health ? 5 : 4;
+    check((await gauges.locator('[data-testid^=gauge-]').count()) === cells, `B-AC-34-3: the TV header shows ${cells} gauges${health ? ', Health the fifth' : ''}`);
+    if (health) await gauges.getByTestId('health-value').filter({ hasText: `${health.health}%` }).waitFor({ timeout: PRESS_MS });
     const wealth = `${fmt(colony().gauges.wealth)} cr`;
     await gauges.getByTestId('gauge-wealth').locator('[data-num]').filter({ hasText: wealth }).waitFor({ timeout: PRESS_MS });
     // The mood (C23) has its first value once planning opens; the gauge shows the server's, or "not yet" while it is null.
@@ -118,7 +122,7 @@ async function main(): Promise<void> {
     const happiness = gauges.getByTestId('gauge-happiness');
     if (mood === null) await happiness.filter({ hasText: 'not yet' }).waitFor({ timeout: PRESS_MS });
     else await happiness.locator('[data-num]').filter({ hasText: String(mood) }).waitFor({ timeout: PRESS_MS });
-    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
+    console.log(`✓ B-AC-34-3: the TV header shows the ${cells} gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
 
     await theGovernorPaysTheStrike({ server, code, phone, tv, lenaId, room, colony });
 
@@ -141,6 +145,7 @@ async function main(): Promise<void> {
     const expected = figureFor(colony().projects.find((p) => p.id === PROJECT)!);
     check(figure === expected, `B-AC-34-4: the ${PRESTIGE[PROJECT].name}'s line reads the server's "${expected}", got "${figure}"`);
     console.log(`✓ B-AC-34-4: the month end's build site shows the ${PRESTIGE[PROJECT].name} ${stage} on one line, "${figure}"`);
+    console.log(`✓ #tv-month-end-paid-out: two seats, month 1's end, the Wealth note reads ${await theFundPaidOut(tv, board())}`);
 
     // Month 2, to game over.
     await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
@@ -484,8 +489,31 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       ];
       check(staged.filter((p) => p.stage === 'building' || p.stage === 'commissioned').length === COLONY.maxOpen, `the staging has the most projects under way, ${COLONY.maxOpen}`);
       state.colony!.projects = staged.map(({ id, stage, monthsLeft }) => ({ id, stage, monthsLeft, since: 1, slot: null, funded: { credits: 120, goods: {} }, plaque: Object.fromEntries(donors) }));
+      // And the longest Wealth note a month end can have (#tv-month-end-paid-out): five figures on both sides, every line
+      // of the ledger paid, in the widest digits.
+      const report = [...state.history].reverse().find((r) => r.ledger);
+      check(report?.ledger?.month === state.month, `month ${state.month}'s end has its own ledger, got month ${report?.ledger?.month}`);
+      report.ledger.out = LONGEST_LEDGER;
+      state.treasury.money = 88_888;
+      // WS4's named edit (S4-C17, PM ruling 8 Nov): two sabotage incidents this month, so the TV's colony panel carries
+      // its "Sabotage ×2" tag while TV-FIT is read. Staged in the view, as claude-seat-tv.ts stages waitingForClaude:
+      // the engine builds sabotage off.
+      const [lena, ossa, brix] = state.players.map((p) => p.id);
+      const incidents: IncidentView[] = [
+        { id: 'sab-e2e-1', month: state.month, kind: 'powerCut', victim: ossa!, at: { x: 0, y: 0 }, good: 'smithore', worked: false, culprit: lena!, how: 'guard', investigated: false, fine: null },
+        { id: 'sab-e2e-2', month: state.month, kind: 'rumour', victim: null, at: null, good: 'food', dir: 'up', worked: true, culprit: brix!, how: 'caught', investigated: false, fine: null },
+      ];
+      const game = (room as unknown as { game: { viewFor(seat: string | null): MuleView } }).game;
+      const viewFor = game.viewFor.bind(game);
+      game.viewFor = (seat) => {
+        const view = viewFor(seat);
+        if (!view.politics) return view;
+        const sabotage = view.politics.sabotage ?? { terms: { powerCut: { cost: 0, success: 0, detect: 0 }, rumour: { cost: 0, success: 0, detect: 0 } }, sheriff: { guards: 0, investigations: 0, investigationsLeft: 0 }, incidents: [] };
+        return { ...view, politics: { ...view.politics, sabotage: { ...sabotage, incidents: [...sabotage.incidents, ...incidents] } } };
+      };
       room.broadcast();
     });
+    check(board().politics?.sabotage?.incidents.length === 2, `two sabotage incidents staged in month ${board().month}'s view, got ${board().politics?.sabotage?.incidents.length}`);
     check(board().colony?.projects.length === 5, `five projects at the build site, got ${board().colony?.projects.length}`);
     // The full ticker: the TV that has watched the game. The empty one: a TV that joins now (the server replays no chat).
     const fresh = await (await browser.newContext(TV)).newPage();
@@ -496,10 +524,17 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       [fresh, 'ticker-empty'],
     ] as const) {
       const read = await readTheSixSeatMonthEnd(page, name);
+      // The TV counts the month's sabotage on the colony panel's header row; the lines are the phone's (PM ruling 8 Nov).
+      const tag = page.getByTestId('tv-monthend').getByTestId('colony-panel').getByTestId('sabotage-tag');
+      await tag.waitFor({ timeout: PRESS_MS });
+      check((await tag.innerText()).trim().toUpperCase() === 'SABOTAGE ×2', `the ${name} TV's colony panel reads SABOTAGE ×2, got "${await tag.innerText()}"`);
+      check((await page.getByTestId('tv-monthend').getByTestId('sabotage-news').count()) === 0, `the ${name} TV draws no sabotage line`);
+      console.log(`✓ S4-C17 (PM ruling 8 Nov): six seats, month 2's end, two sabotage incidents, the TV's tag SABOTAGE ×2 and TV-FIT held: ${read.match(/scale [\d.]+ with the band/)?.[0]}`);
       const site = page.getByTestId('tv-monthend').getByTestId('build-site');
       check((await site.locator('li').count()) === 5, `the ${name} TV's build site has five lines, the standing park folded into one`);
       await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });
       console.log(`✓ B-AC-27-2: six seats, month 2's end, five projects, ${read}`);
+      console.log(`✓ #tv-month-end-paid-out: six seats, the longest ledger, the Wealth note reads ${await theFundPaidOut(page, board())}`);
     }
     // A late game's other end: all five standing share one line, and every name shows, wrapping rather than cut (review
     // of #672). The fewer lines leave the room.
@@ -530,6 +565,27 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await browser.close();
     await server.close();
   }
+}
+
+/** Every line the fund can pay, in the widest digits: 88,888 in all, beside a fund of 88,888. */
+const LONGEST_LEDGER: Partial<Record<FundLine, number>> = { officePay: 8_888, upkeep: 8_888, repair: 8_888, strikePay: 8_888, welfare: 8_888, security: 8_888, project: 35_560 };
+
+/**
+ * #tv-month-end-paid-out (PM ruling 7 Nov): the TV month end's Wealth note reads the fund and this month's paid-out total
+ * as the server has them, every line summed, and shows whole. The note is one line that truncates, so it never costs height.
+ */
+async function theFundPaidOut(tv: Page, g: MuleView): Promise<string> {
+  const c = g.colony;
+  check(c?.ledger?.month === g.month, `the month end's ledger is this month's (${g.month}), got ${c?.ledger?.month}`);
+  const total = Object.values(c.ledger.out).reduce((sum: number, n) => sum + (n ?? 0), 0);
+  const want = `fund ${c.fund.toLocaleString('en-US')} cr · paid out ${total.toLocaleString('en-US')}`;
+  const note = tv.getByTestId('tv-monthend').getByTestId('note-gauge-wealth');
+  await note.filter({ hasText: want }).waitFor({ timeout: PRESS_MS });
+  // A note that fits sizes to its words; one that does not is cut to its row, its words running past (scroll > client).
+  const fit = await note.evaluate((el) => ({ text: (el as HTMLElement).innerText, scroll: el.scrollWidth, client: el.clientWidth, row: el.parentElement!.clientWidth }));
+  check(fit.text === want, `the Wealth note reads "${want}", got "${fit.text}"`);
+  check(fit.scroll <= fit.client, `TV-FIT: the Wealth note "${want}" shows whole, ${fit.scroll} px in ${fit.client}`);
+  return `"${want}", whole (${fit.scroll} px of its ${fit.row} px row)`;
 }
 
 /**

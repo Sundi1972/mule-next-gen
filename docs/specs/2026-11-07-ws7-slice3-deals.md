@@ -813,7 +813,8 @@ offer — once per window (an election's announce; planning proper). Each candid
   a   an election ahead for an office it does not run for, and ownVote names a candidate C: its vote for C, to C
   b   a law up for a vote and ownVote gives yes/no: its vote, to the proposer if yes, else to the player whose
       lawImpact cost is highest (not itself)
-  c   sabotagePossible: a pact of the middle pactMonths to the player with the highest cardWorth(obs, me, draft)
+  c   sabotagePossible: a pact of POLITICS.ai.deals.pactMonths months (AM-9) to the player with the highest
+      cardWorth(obs, me, draft)
   sends the best by cardWorth(obs, me, draft), at most POLITICS.ai.deals.offersPerMonth a month, within maxOpenOffers.
 never    withdraws (offers expire); never offers outside planning; never asks for a vote (a card is its own promise).
 ```
@@ -1226,6 +1227,17 @@ because   a port answering no for the Governor would vote down the Governor's ow
           engine presets for them; and a candidate voting for its opponent to keep a card is not a choice any player
           makes
 goal      S3-2 — unchanged; WS2's port is asked for every seat but the Governor on the law
+
+AM-9 · 2026-11-07 · WS7 (build: S3-PR-4, the INV-1 config guard) · the AI's pact length is its own config key
+
+target    S3-RULE-9 row c
+said      a pact of the middle pactMonths
+did       a pact of POLITICS.ai.deals.pactMonths months: a named value in WS7's POLITICS.ai.deals block, 3 today
+          and one of POLITICS.deals.pactMonths. Same length as before, so no game moves (6 of 6 sims identical at
+          1a7e65b0).
+because   picking the middle element by index is an unnamed balance choice that the INV-1 literal guard refuses;
+          `pnpm sim --set` can now sweep it
+goal      S3-2 — unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
