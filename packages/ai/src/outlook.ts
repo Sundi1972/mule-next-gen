@@ -127,10 +127,18 @@ interface Future {
  * except that the seats buy their MULE.corralPerPlayer MULEs a month, so the corral
  * drains as it does in play; plots produce, everyone eats, the store builds
  * MULEs and posts prices. Returns the prices posted `months` on, raised
- * where the rollout (run on to the horizon) shows a shortage the price
- * hasn't caught up with yet: Food or Water colonists went short of count at
- * what the store posts after such a month, and Smithore, when the corral can't build its
- * monthly target, at its price at the horizon.
+ * where the rollout shows a shortage by then that the price hasn't caught up
+ * with yet: a good colonists went short of in an upkeep before the forecast's
+ * month counts at what the store posts after such a month, and Smithore, when
+ * the corral can't build its monthly target before the horizon, at the higher of
+ * its price then and at the horizon.
+ *
+ * A shortage in the forecast month's own upkeep or later doesn't count: that upkeep runs after the auction the forecast
+ * reads, and nobody builds in the status quo, so it runs dry where play doesn't. Counted to the horizon, it priced
+ * Water at 100 against a real 25-31 (forecast calibration, WS1 C, 8 Nov). The reports read are the rollout's own from
+ * `from` on: made before production, as the seats' valuation reads it, last month's real report is not among them,
+ * and the store's posting already carries its shortages (pricing RULE-6 row 2). Made at production or later, the
+ * current month's report sits just before `from`, so its upkeep's shortages are not counted either.
  */
 function rollForward(stage: GameState, months: number): Future {
   const sim = cloneForSim(stage);
@@ -153,7 +161,8 @@ function rollForward(stage: GameState, months: number): Future {
     }
   }
   prices = { ...prices };
-  for (const good of new Set(sim.history.slice(Math.max(0, from - 1)).flatMap((h) => h.shortages))) {
+  const byThen = sim.history.slice(from).filter((h) => h.month < asked);
+  for (const good of new Set(byThen.flatMap((h) => h.shortages))) {
     // The store's own price for the month after its colonists went short of the good (pricing RULE-6 row 2).
     prices[good] = Math.max(prices[good], nextPostedPrice(sim, good, undefined, [good]));
   }
