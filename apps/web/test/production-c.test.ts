@@ -216,6 +216,6 @@ describe("the TV's legend names every reason the map shows", () => {
     const legend = html.slice(start, html.indexOf('</ul>', start));
     expect(legend.match(/<li /g)?.length, 'one line per reason').toBe(reasons.length);
     expect(legend).toContain('Crews short of Food or Water last month: makes less');
-    expect(legend).toContain('Crews sick (colony health, no Medicine): makes less');
+    expect(legend).toContain('Crews sick and no Medicine: makes less');
   });
 });
