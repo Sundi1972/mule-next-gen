@@ -1,17 +1,13 @@
 import { POLITICS, type Office } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { cx } from '@mule/ui';
-import { Fragment, useEffect } from 'react';
+import { Fragment } from 'react';
 import { usePhoneGame } from '../../game';
-import { useHub } from '../Hub';
 import { Who } from './parts';
 import { OFFICE_NAME, termPromise } from './words';
 
-/** Who holds which office until when, and the next election, as one line on the hub; it opens the election's desks. */
+/** Who holds which office until when, and the next election, as one line on the hub. It opens nothing (D8). */
 export function Offices() {
-  const { view, self } = usePhoneGame();
-  const { governor, election } = view.politics!;
-  useElectionDesks(election?.stage ?? null, governor === self.id);
   return <OfficesLine />;
 }
 
@@ -68,13 +64,4 @@ function TermPromise({ view }: { view: MuleView }) {
       </strong>
     </>
   );
-}
-
-/** Once election day is over (this line returns with the hub's stage), the new Governor's phone opens the tax desk, every other the result (E-6). */
-function useElectionDesks(stage: string | null, governor: boolean): void {
-  const { openDesk } = useHub();
-  useEffect(() => {
-    if (stage === 'over') openDesk(governor ? 'governor' : 'council');
-    // Only a new stage or a new office moves the rail; openDesk is a new function on every render.
-  }, [stage, governor]);
 }
