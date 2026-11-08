@@ -12,6 +12,7 @@ import {
   nextPostedPrice,
   runProduction,
   runUpkeep,
+  storeForSale,
   stepOffWorld,
   emptyStock,
   energyUseOf,
@@ -132,6 +133,10 @@ interface Future {
  * store posts after such a month, and Smithore, when the corral can't build its
  * monthly target before the horizon, at its price there.
  *
+ * Energy counts short too when its plots turned off would empty the store's shelf by then: nobody trades in the status
+ * quo, but a seat short of Energy would buy what its plots lack, so that comes off the shelf month by month, and a shelf
+ * too short for it is a colony short of Energy (Heiko, 8 Nov, Energy A: the seats value a plant from the forecast).
+ *
  * A shortage the rollout shows only after `months` doesn't count: nobody builds in the status quo, so it runs dry
  * where play doesn't, and counted, it priced Water at 100 against a real 25-31 (forecast calibration, WS1 C, 8 Nov).
  * Last month's real shortages don't count either: the store's posting already carries them (pricing RULE-6 row 2).
@@ -145,12 +150,24 @@ function rollForward(stage: GameState, months: number): Future {
   let prices: Stock = { ...sim.store.posted };
   let last: Stock = prices;
   let corralShort = false;
+  let energyShort = false;
+  const bought = new Set<number>();
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
   for (let guard = 0; guard < (target - sim.month + 1) * 8 && sim.phase !== 'gameOver'; guard++) {
     advancePhase(sim);
     if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - newLandMules(sim.players.length));
     if (sim.phase === 'planning' && sim.store.mules < muleTarget) corralShort = true;
     if (sim.phase === 'auction') {
+      // Nobody trades in the status quo, but a seat with plots turned off for Energy would buy what they lack: it comes
+      // off the store's shelf, and a shelf too short for it by the forecast's month is a colony short of Energy.
+      const report = sim.history.find((h) => h.month === sim.month);
+      if (report && !bought.has(sim.month)) {
+        bought.add(sim.month);
+        const lacking = (report.lines ?? []).filter((l) => l.parts.some((p) => p.why === 'energyOff')).reduce((n, l) => n + energyUseOf(sim, sim.tiles[l.tile]!), 0);
+        const shelf = storeForSale(sim, 'energy');
+        sim.store.stock.energy -= Math.min(lacking, shelf);
+        if (lacking > shelf && sim.month <= asked) energyShort = true;
+      }
       last = { ...sim.store.posted };
       if (sim.month <= asked) prices = last;
       if (sim.month >= target) break;
@@ -163,6 +180,7 @@ function rollForward(stage: GameState, months: number): Future {
     prices[good] = Math.max(prices[good], nextPostedPrice(sim, good, undefined, [good]));
   }
   if (corralShort) prices.smithore = Math.max(prices.smithore, last.smithore);
+  if (energyShort) prices.energy = Math.max(prices.energy, nextPostedPrice(sim, 'energy', undefined, ['energy']));
   return { prices };
 }
 
