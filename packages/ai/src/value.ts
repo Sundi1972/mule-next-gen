@@ -240,8 +240,9 @@ function inputLasts(obs: GameState, me: string, outfit: ProcessedGood): (g: Good
   const drunk = obs.tiles.reduce((n, t) => n + (t.owner === me && t.outfit && !isFactory(t.outfit) ? waterUseOf(t) : 0), 0);
   return (g: Good, q: number) => {
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me, outfit)[g] : 0;
-    // What the seat's factories already take of it each month, before the new one gets any.
-    const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
+    // What the seat's factories already take of it each month, before the new one gets any: as inputsOf counts it, so a
+    // works' Water is its factoryWaterUse with AM-18 on, whatever its recipe says (review of #723).
+    const taken = factories.reduce((n, t) => n + (inputsOf(t.outfit as ProcessedGood)[g] ?? 0), 0);
     const plots = g === 'water' ? drunk : 0;
     let carry = p.stock[g];
     for (let m = 0; m < STRATEGIST.factoryInputMonths; m++) {
@@ -710,9 +711,12 @@ function plantsNet(obs: GameState, me: string): number {
   return obs.tiles.filter((t) => t.owner === me && t.outfit === 'energy').reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - energyUseOf(obs, t)), 0);
 }
 
-/** Units of a good the seat's factories turn in a month (Energy aside: it is the plots' use). */
+/**
+ * Units of a good the seat's factories turn in a month. Energy aside, and Water with AM-18 on: both are the plots' use,
+ * which monthNeeds already counts (wholeNextMonth), so adding them here would count them twice (review of #723).
+ */
 function factoryUse(obs: GameState, me: string, good: Good): number {
-  if (good === 'energy') return 0;
+  if (good === 'energy' || (good === 'water' && plotWaterOn())) return 0;
   return obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit)).reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[good] ?? 0), 0);
 }
 
@@ -794,7 +798,8 @@ function inputWorth(obs: GameState, o: Outlook, good: Good, me: string): number 
   for (const t of obs.tiles) {
     if (t.owner !== me || !t.outfit || !isFactory(t.outfit)) continue;
     const q = RECIPES[t.outfit].inputs[good];
-    if (!q || good === 'energy') continue;
+    // Water with AM-18 on is a use, not an input, as in unitValues' factory block.
+    if (!q || good === 'energy' || (good === 'water' && plotWaterOn())) continue;
     const all = Object.values(RECIPES[t.outfit].inputs).reduce((n, x) => n + (x ?? 0), 0);
     worth += (q * afterTax(obs, factoryFit(obs, t, t.outfit, me).output * belief(obs, o, t.outfit))) / all;
     units += q;
