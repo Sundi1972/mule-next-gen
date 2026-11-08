@@ -8,7 +8,7 @@ import { usePhoneGame } from '../../game';
 import { MapFit, useWide } from '../../Shell';
 import { useHub } from '../Hub';
 import { OnlyYou } from '../OnlyYou';
-import type { DeskSlot, Door, HubSeat, PlotPickSlot, SubTabSlot, TabId } from '../slots';
+import type { DeskSlot, HubSeat, PlotPickSlot, SubTabSlot, TabHubNav } from '../slots';
 import { Who } from './parts';
 
 /**
@@ -24,7 +24,8 @@ import { Who } from './parts';
  * focus 'guard' (useGuarding), the map tool Look's map showing GuardMap meanwhile (today.tsx).
  *
  * The tabbed hub (SB-4, against SB-1a's frozen slots): SHERIFF_SUB is the Sheriff sub-tab of the Governor / Council tab,
- * GUARD_PICK the Guard pick it hands to Overview's map. Both read the hub's navigation through PickNav (below); today's
+ * GUARD_PICK the Guard pick it hands to Overview's map. Both read the hub's navigation, SB-1a.2's frozen TabHubNav, from
+ * PickNavProvider, which the tabbed hub supplies (it moves into the hub's own context when SB-2 grafts it); today's
  * SHERIFF_DESK and GuardMap stay for today's hub until the tabbed one replaces it.
  */
 
@@ -510,28 +511,14 @@ export const SHERIFF_DESK: DeskSlot = {
   first: isSheriff,
 };
 
-/**
- * The tabbed hub's navigation as the Sheriff's slots use it: the open tab and sub-tab, the plot pick on Overview's map,
- * and the doors to change them. WS8's local stand-in with exactly the shape proposed for WS6's contract (the hub-tabs
- * mock's HubNav addition): REPLACED by the frozen HubNav once SB-1b or SB-2 lands. The tabbed hub provides it.
- */
-export interface PickNav {
-  tab: TabId;
-  sub: string;
-  pick: string | null;
-  open(door: Door): void;
-  startPick(id: string): void;
-  endPick(): void;
-}
+const PickNavContext = createContext<TabHubNav | null>(null);
 
-const PickNavContext = createContext<PickNav | null>(null);
-
-/** Hands the tabbed hub's navigation to the Sheriff sub-tab and the Guard pick. */
-export function PickNavProvider({ value, children }: { value: PickNav; children?: ReactNode }) {
+/** Hands the tabbed hub's navigation (SB-1a.2's TabHubNav) to the Sheriff sub-tab and the Guard pick. */
+export function PickNavProvider({ value, children }: { value: TabHubNav; children?: ReactNode }) {
   return <PickNavContext.Provider value={value}>{children}</PickNavContext.Provider>;
 }
 
-function usePickNav(): PickNav {
+function usePickNav(): TabHubNav {
   const nav = useContext(PickNavContext);
   if (!nav) throw new Error('Not inside the tabbed hub');
   return nav;

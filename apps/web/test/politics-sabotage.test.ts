@@ -599,20 +599,37 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
 });
 
 /*
- * SB-4, the tabbed hub's slots (frozen SB-1a, a7d2095c): the Sheriff sub-tab (SHERIFF_SUB) and the Guard pick
- * (GUARD_PICK). The tabbed hub that draws them is SB-2's, not on trunk yet; its navigation for picks is WS6's to freeze.
- * So these mount the slots' own components under a test PickNav that stands in for the hub: it records each call and
- * draws the pick in place of the sub-tab while one is on, as the hub hands Overview's map to a pick.
+ * SB-4, the tabbed hub's slots (frozen SB-1a.2, 9fdfb927): the Sheriff sub-tab (SHERIFF_SUB) and the Guard pick
+ * (GUARD_PICK). The tabbed hub that draws them is SB-2's, not on trunk yet. So these mount the slots' own components
+ * under a test TabHubNav (the contract's NAV double) that stands in for the hub: it records each call and draws the
+ * pick in place of the sub-tab while one is on, as the hub hands Overview's map to a pick.
  */
 describe('SB-4: the Sheriff sub-tab and the Guard pick, for the tabbed hub', () => {
-  type PickNav = import('../src/phone/hub/politics/Sheriff').PickNav;
+  type TabHubNav = import('../src/phone/hub/slots').TabHubNav;
+  type Door = import('../src/phone/hub/slots').Door;
   const calls: unknown[][] = [];
+  /** The contract's own double (hub-tab-slots.test.ts's NAV), today's moves included. */
+  const NAV = {
+    desk: 'colony',
+    tool: 'look',
+    focus: null,
+    openDesk: () => {},
+    pickTool: () => {},
+    takeFocus: () => {},
+    tab: 'overview',
+    sub: 'laws',
+    pick: null,
+    open: (_door: Door) => {},
+    startPick: (_id: string) => {},
+    endPick: () => {},
+  } satisfies TabHubNav;
 
   /** The stand-in hub: the Sheriff sub-tab, or while a pick is on that pick's map; every nav call recorded. */
   function TestHub(): ReactNode {
     const [pick, setPick] = useState<string | null>(null);
-    const [door, setDoor] = useState({ tab: 'politics' as PickNav['tab'], sub: 'sheriff' });
-    const nav: PickNav = {
+    const [door, setDoor] = useState({ tab: 'politics' as TabHubNav['tab'], sub: 'sheriff' });
+    const nav: TabHubNav = {
+      ...NAV,
       tab: pick ? 'overview' : door.tab,
       sub: door.sub,
       pick,
