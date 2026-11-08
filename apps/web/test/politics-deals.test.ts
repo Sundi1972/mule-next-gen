@@ -442,6 +442,7 @@ function listenForKeys(): void {
       [FakeElement.prototype, 'focus'],
       [FakeElement.prototype, 'querySelector'],
       [FakeElement.prototype, 'isConnected'],
+      [FakeElement.prototype, 'matches'],
       [document, 'querySelector'],
     ] as [object, string][]
   ).map(([on, key]) => [on, key, Object.getOwnPropertyDescriptor(on, key)] as const);
@@ -470,6 +471,12 @@ function listenForKeys(): void {
       return n === document;
     },
   });
+  // The one selector the dialogs match: :disabled, the element's own or a disabled fieldset's around it.
+  (FakeElement.prototype as unknown as { matches(s: string): boolean }).matches = function (this: FakeElement, s: string) {
+    if (s !== ':disabled') throw new Error(`fake matches: ${s}`);
+    for (let n: unknown = this; n instanceof FakeElement; n = n.parentNode) if ((n === this || n.tagName === 'FIELDSET') && n.getAttribute('disabled') !== null) return true;
+    return false;
+  };
   // The document's one selector: the open tab, where the focus goes when the opener is gone.
   (document as unknown as { querySelector(s: string): FakeElement | null }).querySelector = (s: string) => {
     if (s !== '[role=tab][aria-selected=true]') throw new Error(`fake document.querySelector: ${s}`);

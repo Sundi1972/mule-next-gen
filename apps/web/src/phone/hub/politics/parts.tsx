@@ -234,7 +234,8 @@ export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefO
     box.current?.querySelector?.<HTMLElement>(first)?.focus?.();
     return () => {
       dialogs.splice(dialogs.indexOf(self), 1);
-      const back = opener?.isConnected && opener.getAttribute('disabled') === null ? opener : document.querySelector?.<HTMLElement>('[role=tab][aria-selected=true]');
+      // :disabled covers a disabled fieldset around the opener too, which its own attribute would not say.
+      const back = opener?.isConnected && !opener.matches(':disabled') ? opener : document.querySelector?.<HTMLElement>('[role=tab][aria-selected=true]');
       back?.focus?.();
     };
   }, [self, first]);
