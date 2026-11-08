@@ -9,6 +9,7 @@ import { slotOf } from '../../../game/derive';
 import { useHub, type HubNav } from '../Hub';
 import { SeatWords } from '../../../components/SeatWords';
 import { brokenMove, brokenWho, brokenWords } from './deals-words';
+import { banOf } from './Sabotage';
 
 export function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
   return (
@@ -189,9 +190,16 @@ export function useHubIfAny(): HubNav | null {
 export function reasonRows(view: NameView, id: string): { key: string; month: number; words: string; who: string[]; move: number }[] {
   const reasons = view.politics?.reputationReasons?.[id] ?? [];
   const broken = view.politics?.brokenDeals ?? [];
+  const caught = new Map<number, number>();
   return reasons.flatMap((r) => {
+    if (r.kind === 'caught') {
+      // One row per incident: the reasons carry no id, so the n-th catch of its month. The drop is the engine's own,
+      // moves.caught times the sabotage ban; the view holds the ban in force now, not the one at the catch.
+      const n = (caught.get(r.month) ?? 0) + 1;
+      caught.set(r.month, n);
+      return [{ key: `caught-${r.month}-${n}`, month: r.month, words: 'Caught sabotaging', who: [], move: POLITICS.reputation.moves.caught * banOf({ politics: view.politics ?? null }) }];
+    }
     if (r.kind === 'unrest') return [{ key: `unrest-${r.month}`, month: r.month, words: 'Blamed for the unrest', who: [], move: SOCIAL_EVENTS.player.blamedForUnrest.reputation }];
-    if (r.kind === 'caught') return [{ key: `caught-${r.month}`, month: r.month, words: 'Caught sabotaging', who: [], move: 0 }];
     const c = broken.find((x: DealCard) => x.id === r.id);
     if (!c) return [];
     return [{ key: c.id, month: c.settled ?? 0, words: brokenWords(view, c, false), who: brokenWho(c, false), move: brokenMove(c) }];
