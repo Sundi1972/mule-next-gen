@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
   createGame,
-  expectedOutput,
   GOOD_CONFIG,
-  monthlyDemand,
   monthNeeds,
   needsOf,
   observe,
@@ -86,10 +84,10 @@ function shortOf(good: Good, id: string, money: number, held: Held = HELD[good]!
 
 /**
  * What keeps a seat whole next month, by the engine's order (upkeep.ts, game.ts startDevelopment, production.ts): upkeep
- * eats the household's Food, then half of what is left spoils, and next development is hungry under the household's
- * Food; Energy loses a quarter to spoilage before next production burns it.
+ * eats the household's and the crews' Food, and next development is hungry by that meal alone (needs C15: no carry, PM
+ * ruling 8 Nov); Energy loses a quarter to spoilage before next production burns it.
  */
-const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
+const wholeFood = (state: GameState, id: string) => needsOf(state, id).food;
 const wholeEnergy = (state: GameState, id: string) => Math.ceil(monthNeeds(state, id).energy / (1 - GOOD_CONFIG.energy.spoilage));
 /**
  * Water: the drink at upkeep, then next production's use (the drink kept back and every plot's Water, AM-18) after
@@ -143,15 +141,6 @@ function halvedFor(state: GameState, id: string, why: 'noEnergy' | 'energyOff' |
 const paid = (trades: Trade[], id: string) => trades.filter((t) => t.buyer === id).reduce((n, t) => n + t.price * t.quantity, 0);
 const units = (trades: Trade[], id: string) => trades.filter((t) => t.buyer === id).reduce((n, t) => n + t.quantity, 0);
 const sold = (trades: Trade[], id: string) => trades.filter((t) => t.seller === id);
-/** Gives `id` `count` Food farms on free plains rated +3, 5 a month each; what it holds is left as it is. */
-function farmsFor(state: GameState, id: string, count: number): void {
-  const free = state.tiles.filter((x) => x.terrain === 'plains' && !x.owner).slice(0, count);
-  for (const t of free) {
-    Object.assign(t, { owner: id, outfit: 'food', traits: [], pollution: 0, ground: { ...t.ground, food: 3 } });
-    delete t.special;
-  }
-}
-
 const ROWS = SEATS.map((s, k) => [`ai${k}`, `${s.persona}/${s.level}`]);
 const RIVAL = (id: string) => (id === 'ai0' ? 'ai1' : 'ai0');
 
@@ -293,23 +282,15 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
   });
 
   /**
-   * A seat holding the screen's need and 2 more, under what keeps it whole, beside a short rival; the store sells `shelf`.
-   * `fedColony`: the rival's farms make more Food next month than the colony eats, so next month's Food is not forecast
-   * short; the rival still holds none today.
+   * A seat 2 short of what keeps it whole, beside a short rival; the store sells `shelf`. With no Food carry the screen's
+   * need and what keeps a seat whole are one (needs C15, PM ruling 8 Nov), so it holds under both.
    */
-  const shortBesideRival = (id: string, shelf: number, { fedColony = false } = {}) => {
+  const shortBesideRival = (id: string, shelf: number) => {
     const state = auctionOf(
       'food',
       (s) => {
-        shortOf('food', id, MONEY, (t) => monthNeeds(t, id).food + 2)(s);
+        shortOf('food', id, MONEY, (t) => wholeFood(t, id) - 2)(s);
         shortOf('food', RIVAL(id), MONEY)(s);
-        if (fedColony) {
-          // 5 farms, not 4: with PR-8's slower crews, last-meal hunger and quarter spoilage (needs C14-C16) 4 left the
-          // margin too thin for ai0 to sell (each change alone tipped it); 5 restore the fed colony this case reads.
-          farmsFor(s, RIVAL(id), 5);
-          // Watered: each farm drinks 2 at production (AM-18).
-          s.players.find((p) => p.id === RIVAL(id))!.stock.water = 2 * (monthNeeds(s, RIVAL(id)).water + 2);
-        }
       },
       shelf,
     );
@@ -326,32 +307,14 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
     expect(state.players.find((p) => p.id === id)!.stock.food, 'it holds what keeps it whole').toBeGreaterThanOrEqual(whole);
   });
 
-  it.each(ROWS)('B-AC-food-short: %s (%s) short of what keeps it whole, with no Food in the store, keeps the screen need and sells no lower to a short rival', (id) => {
-    // The store's shelf is down to the colonists' month, so there is nothing to buy back: the floor is the screen's need.
-    const { state, held, need } = shortBesideRival(id!, 0);
+  it.each(ROWS)('B-AC-food-short: %s (%s) short of what keeps it whole, with no Food in the store, sells none to a short rival', (id) => {
+    // The store's shelf is down to the colonists' month, so there is nothing to buy back: what it holds is what it eats.
+    const { state, held } = shortBesideRival(id!, 0);
 
     const trades = play(state);
 
-    expect(state.players.find((p) => p.id === id)!.stock.food, `it keeps the screen's need of ${need}`).toBeGreaterThanOrEqual(need);
-    expect(state.players.find((p) => p.id === id)!.stock.food).toBe(held - sold(trades, id!).length + units(trades, id!));
-  });
-
-  it('B-AC-food-short: the trader short of what keeps it whole, with no Food in the store, sells above the screen need to a short rival', () => {
-    // Next month is not forecast severe: the colony makes more Food than it eats. The units it sells lie inside what
-    // keeps it whole next month (it holds the screen need + 2); it sells them because, with no severe forecast, their
-    // keep value falls under the bid, not because they are surplus beyond next month.
-    const { state } = shortBesideRival('ai0', 0, { fedColony: true });
-    expect(expectedOutput(state, 'food'), 'the premise: the colony makes more Food than it eats').toBeGreaterThanOrEqual(monthlyDemand(state).food);
-
-    const trades = play(state);
-
-    expect(sold(trades, 'ai0').length, 'it sold some of what it holds above the screen need').toBeGreaterThan(0);
-  });
-
-  it('B-AC-food-short: the trader holding exactly what keeps it whole sells its surplus above the screen need to a short rival', () => {
-    const { state, units, need } = sellsSurplus('food', 'ai0', 0);
-    expect(units, 'it sold some of its surplus').toBeGreaterThan(0);
-    expect(state.players.find((p) => p.id === 'ai0')!.stock.food, `it keeps the screen's need of ${need}`).toBeGreaterThanOrEqual(need);
+    expect(sold(trades, id!), 'it sold none of what it eats').toEqual([]);
+    expect(state.players.find((p) => p.id === id)!.stock.food).toBe(held + units(trades, id!));
   });
 
   it('B-AC-food-short: a seat that can pay for part of its shortfall buys what it can and never goes negative', () => buysWhatItCan('food'));

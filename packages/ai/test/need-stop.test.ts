@@ -40,8 +40,8 @@ const ME = 'ai0';
 const RIVAL = 'ai1';
 const seatsFor = () => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI ${i + 1}`, ...s, seed: SEED * 10 + i }));
 
-/** Upkeep eats the household's Food, half of the rest spoils, and next development is hungry under the household's Food. */
-const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
+/** Upkeep eats the household's and the crews' Food, and next development is hungry by that meal alone (needs C15: no carry, PM ruling 8 Nov). */
+const wholeFood = (state: GameState, id: string) => needsOf(state, id).food;
 
 /**
  * The Food status screen: ai0 and ai1 on three Energy plots and a Medicine works each, ai0 holding 3 over what keeps it
@@ -138,8 +138,16 @@ describe('RULE-4 AI: a held AI seller presses ▼ again only when it chose to se
 
   it('RULE-4 AI: a held AI seller whose keep floor is below its need holds ▼ and sells on, down to its floor', () => {
     const state = foodScreen();
+    const need = state.auction!.status.find((r) => r.id === ME)!.need;
+    // Its own draft for the good, set to hold 2 under its need: with no Food carry its valued floor is the need itself
+    // (needs C15, PM ruling 8 Nov), so the playbook path's hold is what puts the floor under it.
+    const own = (seat: AiSeat) => draftGoodPlaybook({ state, seat: ME, mind: seat.mind, seed: seat.options.seed }, 'food').auction!.food!;
+    const hand = (seat: AiSeat) => {
+      const part: GoodPlay = { ...own(seat), role: 'seller', hold: need - 2, bluff: false };
+      return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => ({ play: structuredClone(part), mind: seat.mind })); // literal-ok: AiSeat's salt for the auction hand's rng
+    };
 
-    const run = play(state);
+    const run = play(state, hand);
 
     expect(run.floor, 'the premise: its keep floor is below its need').not.toBeNull();
     expect(run.floor!, 'the premise: its keep floor is below its need').toBeLessThan(run.need);

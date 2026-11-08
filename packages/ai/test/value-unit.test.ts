@@ -198,12 +198,12 @@ describe('RULE-2: what going without a unit costs', () => {
 });
 
 describe('RULE-3: the chance the seat needs the k-th unit', () => {
-  it('T-AC-3: the Food target covers spoilage, eat + ⌈eat / keep⌉, and every unit of it is needed', () => {
+  it('T-AC-3: the Food target is what upkeep eats, no carry (needs C15, PM ruling 8 Nov), and every unit of it is needed', () => {
     const { obs, o } = view(table({ plots: [{ outfit: 'energy', x: 0 }], posted: { food: 72 } }));
     const mind = mindOf();
     const target = wholeNextMonth(obs, 'ai0', 'food');
     const eat = needsOf(obs, 'ai0').food;
-    expect(target, 'the target covers what spoils before next development').toBeGreaterThan(eat);
+    expect(target, 'the target is what upkeep eats').toBe(eat);
 
     expect(unitNeed(obs, mind, 'food')).toEqual({ sure: target, target });
     const v = unitValues(obs, o, 'food', mind);
