@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { PhoneGame } from '../game';
 import type { Now } from '../Shell';
+import type { HubNav } from './Hub';
 import type { ReadyWords } from './ready';
 
 /**
@@ -242,4 +243,19 @@ export interface TabHubPlace {
   focus: string | null;
   pick: string | null;
   first: string | null;
+}
+
+/**
+ * The tabbed hub's navigation: today's HubNav plus the tab, sub-tab and plot pick, and the moves between them.
+ * Replaces HubNav (and takes its name) when SB-2 grafts the tabbed hub.
+ */
+export interface TabHubNav extends HubNav {
+  tab: TabId;
+  /** The open sub-tab of the Governor / Council tab. */
+  sub: string;
+  /** The plot-picking mode another tab handed to Overview's map, or null. */
+  pick: string | null;
+  open(door: Door): void;
+  startPick(id: string): void;
+  endPick(): void;
 }
