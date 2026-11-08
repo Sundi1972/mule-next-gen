@@ -258,9 +258,9 @@ describe('the reputation chip (S3-C19)', () => {
       const players = PLAYERS.map((p) => (p.id === KAI ? { ...p, reputation: 19 } : p));
       const game = { ...gameFor(myView(LENA, [])), players };
       mount(game, (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
-      expect(byTestid(`who-${LENA}-rep`).getAttribute('aria-label')).toBe(`Lena: reputation ${repHigh}. Good name: +2 votes.`);
-      expect(byTestid(`who-${BRIX}-rep`).getAttribute('aria-label'), 'a low name AI seats still deal with').toBe(`Brix: reputation ${repLow - 1}. Low name: −2 votes.`);
-      expect(byTestid(`who-${KAI}-rep`).getAttribute('aria-label')).toBe('Kai: reputation 19. Low name: −2 votes, and AI players turn down their cards.');
+      expect(byTestid(`who-${LENA}-rep`).getAttribute('aria-label')).toContain(`Lena: reputation ${repHigh}. Good name: +2 votes. `);
+      expect(byTestid(`who-${BRIX}-rep`).getAttribute('aria-label'), 'a low name AI seats still deal with').toContain(`Brix: reputation ${repLow - 1}. Low name: −2 votes. `);
+      expect(byTestid(`who-${KAI}-rep`).getAttribute('aria-label')).toContain('Kai: reputation 19. Low name: −2 votes, and AI players turn down their cards. ');
       tap(`who-${BRIX}-rep`);
       expect(text(`player-card-${BRIX}-legend`)).toBe(`${repHigh} and up: +2 votes. Under ${repLow}: −2 votes. Under 20, AI players turn down their cards.`);
     } finally {

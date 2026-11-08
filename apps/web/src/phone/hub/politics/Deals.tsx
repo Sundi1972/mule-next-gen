@@ -1,4 +1,4 @@
-import { POLITICS, type DealCard, type DealOffer } from '@mule/engine';
+import { POLITICS, START, type DealCard, type DealOffer } from '@mule/engine';
 import type { MuleView, MyView } from '@mule/protocol';
 import { Button, cx } from '@mule/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -118,7 +118,7 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
   const [sentAfter, setSentAfter] = useState<number | null>(null);
   const offersLeft = me.deals?.offersLeft ?? 0;
   const other = view.players.find((p) => p.id === to)!;
-  const myRep = view.players.find((p) => p.id === me.id)?.reputation ?? 0;
+  const myRep = view.players.find((p) => p.id === me.id)?.reputation ?? START.reputation;
   const refuseBelow = POLITICS.ai.deals.refuseBelow;
   // S3-RULE-2 row 5 first: an unanswered card of mine to them is not a pact, whatever it offers.
   const waiting = noNewCard(view, me, to);

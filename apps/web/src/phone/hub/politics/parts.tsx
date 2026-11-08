@@ -28,16 +28,29 @@ export function CardWho(props: Parameters<typeof Who>[0]) {
 
 export type Band = 'good' | 'fair' | 'low';
 
-/** POLITICS.weight's thresholds: repHigh and up is a good name (+1 vote), under repLow a low one (−1 vote, AI seats refuse). */
+/** POLITICS.weight's thresholds: repHigh and up is a good name (+repVotes), under repLow a low one (−repVotes). */
 export function bandOf(rep: number): Band {
   return rep >= POLITICS.weight.repHigh ? 'good' : rep < POLITICS.weight.repLow ? 'low' : 'fair';
 }
 
-export const BAND_WORDS: Record<Band, string> = {
-  good: 'Good name: +1 vote',
-  fair: 'Fair name',
-  low: 'Low name: −1 vote, and AI players turn down their cards',
-};
+const votes = (n: number) => `${n} ${n === 1 ? 'vote' : 'votes'}`;
+
+/** A name's band in words, and AI seats' refusal under POLITICS.ai.deals.refuseBelow: a threshold of its own, not the band's. */
+export function repWords(rep: number): string {
+  const { repVotes } = POLITICS.weight;
+  const band = bandOf(rep);
+  const words = band === 'good' ? `Good name: +${votes(repVotes)}` : band === 'low' ? `Low name: −${votes(repVotes)}` : 'Fair name';
+  if (rep >= POLITICS.ai.deals.refuseBelow) return words;
+  return `${words}, ${band === 'low' ? 'and' : 'but'} AI players turn down their cards`;
+}
+
+/** The player card's key to the chip: both thresholds, and the AI seats' own when it is not repLow. */
+function repLegend(): string {
+  const { repHigh, repLow, repVotes } = POLITICS.weight;
+  const { refuseBelow } = POLITICS.ai.deals;
+  const bands = `${repHigh} and up: +${votes(repVotes)}. Under ${repLow}: −${votes(repVotes)}`;
+  return refuseBelow === repLow ? `${bands}, and AI players turn down their cards.` : `${bands}. Under ${refuseBelow}, AI players turn down their cards.`;
+}
 
 const STAR = 'M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8-4.3-4.1 5.9-.9z';
 const WARN = 'M12 4l9 16H3z M12 10v4 M12 17v.01';
@@ -86,7 +99,7 @@ export function RepChip({ view, id, tv = false, onOpen, testid }: { view: Pick<M
   const change = useChange(rep);
   const s = SIZES[tv ? 'tv' : 'phone'];
   const tid = testid ?? `rep-${id}`;
-  const label = `${name}: reputation ${rep}. ${BAND_WORDS[band]}.`;
+  const label = `${name}: reputation ${rep}. ${repWords(rep)}.`;
   const body = (
     <>
       <BandMark band={band} size={s.mark} />
@@ -242,10 +255,10 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; 
           </Button>
         </header>
         <p className="text-sm leading-snug" data-testid={`player-card-${id}-band`}>
-          <strong className="font-semibold">Reputation {rep}</strong> · {BAND_WORDS[bandOf(rep)]}.
+          <strong className="font-semibold">Reputation {rep}</strong> · {repWords(rep)}.
         </p>
-        <p className="text-[11px] leading-snug text-ink-2">
-          {POLITICS.weight.repHigh} and up: +1 vote. Under {POLITICS.weight.repLow}: −1 vote, and AI players turn down their cards.
+        <p className="text-[11px] leading-snug text-ink-2" data-testid={`player-card-${id}-legend`}>
+          {repLegend()}
         </p>
         <section className="flex flex-col gap-1" data-testid={`player-card-${id}-reasons`}>
           <span className="label-caps text-[10px]!">What moved it, in public</span>
