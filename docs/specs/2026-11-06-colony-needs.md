@@ -260,7 +260,7 @@ owner        WS7 (colony.ts); config HEALTH block (WS1 named edit)
 C8 · ADDED · health weighs on the mood, the colony's growth and its Medicine need
 
 tomorrow     MUST lower the mood's target by HEALTH.moodPerSick (10) × h; MUST lower the growth rate
-             (RULE-5) by HEALTH.growthPerSick (0.05) × h; MUST raise the colonists' Medicine need by
+             (RULE-5) by HEALTH.growthPerSick (0.2, AM-9) × h; MUST raise the colonists' Medicine need by
              × (1 + h_old) (WS5 reads it in demand, RULE-13's neighbour). No immediate hit
 logic        → RULE-8
 seam         colony.ts::moodTarget's inputs; NEW function growthRate in upkeep.ts (C4)
@@ -616,7 +616,7 @@ unknown  health off → h = 0; no colony (politics off) → none
 
 ```
 RULE-8 · Health's effects (C8)                                    shape: formula
-mood target −= HEALTH.moodPerSick (10) × h   · growth rate −= HEALTH.growthPerSick (0.05) × h
+mood target −= HEALTH.moodPerSick (10) × h   · growth rate −= HEALTH.growthPerSick (0.2, AM-9) × h
 Medicine need ×= (1 + h_old)                 · crews: WS5 RULE-14 reads h (sick from HEALTH.crewSickFrom 0.2)
 ```
 
@@ -838,10 +838,10 @@ The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; th
 
 | AC | Given · When · Then | Changes | Proof |
 |---|---|---|---|
-| B-AC-1 | Given a politics game whose colonists need 20 Food and the store holds 19 · When upkeep ends · Then the mood is unchanged, the colonists grow 4%, and the month-end line says "19 of 20 Food" | C1, C3, C4, C6 | engine test on GameState + server view test of the line |
-| B-AC-2 | Given the same colony at mood 60 short 10 of 20 Food · When upkeep ends · Then the mood is 56 and the colonists shrink 5% | C3, C4 | engine test |
-| B-AC-3 | Given the colony of B-AC-2 fed in full the next month · When upkeep ends · Then the mood is 59, not 60, and the colonists grow 3% (Restless) | C3, C4 | engine test |
-| B-AC-4 | Given Food posted at 300 and the shelf holding the colonists' need · When upkeep ends · Then they are fed in full and store.capital is unchanged by their meal | C1, C2 | engine test |
+| B-AC-1 | (Health off, AM-9) Given a politics game whose colonists need 20 Food and the store holds 19 · When upkeep ends · Then the mood is unchanged, the colonists grow 4%, and the month-end line says "19 of 20 Food" | C1, C3, C4, C6 | engine test on GameState + server view test of the line |
+| B-AC-2 | (Health off, AM-9) Given the same colony at mood 60 short 10 of 20 Food · When upkeep ends · Then the mood is 56 and the colonists shrink 5% | C3, C4 | engine test |
+| B-AC-3 | (Health off, AM-9) Given the colony of B-AC-2 fed in full the next month · When upkeep ends · Then the mood is 59, not 60, and the colonists grow 3% (Restless) | C3, C4 | engine test |
+| B-AC-4 | (Health off, AM-9) Given Food posted at 300 and the shelf holding the colonists' need · When upkeep ends · Then they are fed in full and store.capital is unchanged by their meal | C1, C2 | engine test |
 | B-AC-5 | Given a politics-off game short 10 of 20 Food · When upkeep ends · Then the colonists shrink 5% and there is no mood (D1 a) | C1, C4 | engine test |
 | T-AC-1 (B-AC-1..3) | RULE-2: g at s = 0, 0.10, 0.11, 0.5, 1 is 0, 0, ≈0.001, 0.296, 1; s is the worse of Food and Water | C3 | engine unit |
 | T-AC-2 (B-AC-3) | RULE-3: H from 0 by g 0.3 → 0.3; fed → 0.15; g 1 every month → 1, 1.5, 1.75 … toward 2; memoryCap 2 holds under a test override of memoryKeep | C3 | engine unit |
@@ -975,6 +975,19 @@ did       colonyHealth also carries lastHealth: number | null (optional on the w
 because   WS8's gauge shows the month's move; the trunk contract #773 (WS3 OK, PM diff) added the field, and §3 must
           name every field the view carries
 goal      G-1 unchanged; no new config number
+
+AM-9 · 2026-11-08 · Heiko (board, 8 Nov 06:22Z, econ-health-8nov A, SEAMS) and WS5's PR-13 (#820) · health on; sickness cuts growth 0.2 × h
+target    §1 C8 and §2 RULE-8 (growthPerSick); §6 B-AC-1..4
+said      growthPerSick 0.05 (full sickness costs 2 growth points a month); B-AC-1..4 state exact numbers with no
+          health switch named; HEALTH.enabled off by default
+did       HEALTH.enabled is on (Heiko, 8 Nov, for the 13 Nov play-test); growthPerSick is 0.2, so at the cap (h 0.4)
+          sickness cuts growth 0.08 a month, Heiko's own growthAtMax 0.02 -> 0.08. B-AC-1..4 prove hardship's and
+          upkeep's own rules and hold their numbers with health off (on, the sick share moves them: 55 and 415), so
+          they say so and their tests pin health off (de9001d1 and #820's hardship/upkeep pins); health's own effects
+          are T-AC-9..11 and B-AC-6
+because   WS1's measurement (SEAMS 05:30Z): at 0.05 full sickness cost 2 growth points a month against hunger's 9, so
+          a colony short of Medicine lost nothing it could see; at 0.08 sickness bites like hunger
+goal      G-1 unchanged; colony size with health on is judged in the 13 Nov play-test
 ```
 
 ## §9 · Ownership Boundaries
