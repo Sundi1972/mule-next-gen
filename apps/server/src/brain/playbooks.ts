@@ -3,11 +3,13 @@
  * carries the land grant's and the development's edits, taken at each of those phases' start; the auction's is asked in
  * the production show and taken at the auction's start.
  */
-import { BRAIN, cloneForSim, outfitMule, RuleError, type GameState, type Outfit, type Player, type Playbook, type PlayerId } from '@mule/engine';
+import { BRAIN, cloneForSim, outfitMule, RuleError, type GameState, type Outfit, type PhaseOutcome, type Player, type Playbook, type PlayerId } from '@mule/engine';
 import {
   afterGrant,
   atAuctionStart,
   GOOD_NAME,
+  handsDevelopment,
+  keptDevelopmentPlaysToday,
   landBrief,
   newPlots,
   ownedPlots,
@@ -19,6 +21,7 @@ import {
   type AiSeat,
   type EditPhase,
   type Feedback,
+  type HandsDevelopment,
   type LastPhase,
   type PhaseFact,
   type PlaybookSource,
@@ -158,6 +161,11 @@ export class Playbooks {
   private readonly keptDrafts = new Map<string, ReturnType<AiSeat['draft']>>();
   /** The MULE each seat led as this month's land grant started (null: none), to tell one won at the land auction since. */
   private readonly ledAtGrant = new Map<PlayerId, { month: number; led: Player['carriedMule'] }>();
+  /**
+   * What each seat's own hands did in the development just played, read as the auction is asked, when no route was
+   * adopted for it (today's path): for its next land brief, which has no route outcome to show (unbought-mules fix).
+   */
+  private readonly handsDev = new Map<PlayerId, HandsDevelopment>();
   /** Every seat's Worth when each seat's last land plan was asked, for the result line of its next. */
   private readonly worthAtAsk = new Map<PlayerId, WorthAt>();
 
@@ -185,8 +193,10 @@ export class Playbooks {
         const drafted = source.draft(state, seat.id);
         // Asked at upkeep, the month just played is still state.month, so the seat's development outcome is that
         // month's route; null at game start, or when the month's development played no route.
+        const hands = this.handsDev.get(seat.id);
         const last = {
           outcome: seat.outcome('development', state),
+          hands: hands?.month === state.month ? hands : null,
           feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null),
           worthBefore: this.worthAtAsk.get(seat.id) ?? null,
           ownStrategy: this.ownStrategy(seat.id, month),
@@ -203,7 +213,17 @@ export class Playbooks {
           console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
         }
         // The mind for the month briefed: asked at upkeep, this month's adopted fields never shape next month's plans.
-        const brief = landBrief(state, seat.mindFor(month), seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null, grant.plot);
+        const brief = landBrief(
+          state,
+          seat.mindFor(month),
+          seat.brain.persona,
+          drafted.land,
+          seat.brain.heard(),
+          last,
+          development?.development ?? null,
+          grant.plot,
+          keptDevelopmentPlaysToday(seat, month),
+        );
         const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development, owned: ownedPlots(state, seat.id) };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
@@ -302,6 +322,7 @@ export class Playbooks {
         const view = phase === 'auction' ? atAuctionStart(state) : state;
         const draft = seat.draft(view, phase);
         const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
+        if (phase === 'auction') this.keepHands(state, seat, outcome);
         const brief = phaseBrief(view, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), {
           outcome,
           feedback: this.phaseFeedback.get(key) ?? null,
@@ -324,6 +345,20 @@ export class Playbooks {
       } catch (err) {
         console.error(`playbooks: seat ${seat.id} could not ask for its ${phase}: ${messageOf(err)}`);
       }
+    }
+  }
+
+  /**
+   * Development has run: with no route played (no `outcome`), what the seat's own hands did is kept for its next land
+   * brief. A report that cannot be read is dropped and logged; the auction's ask goes on without it.
+   */
+  private keepHands(state: GameState, seat: AiSeat, outcome: PhaseOutcome | null): void {
+    this.handsDev.delete(seat.id);
+    if (outcome) return;
+    try {
+      this.handsDev.set(seat.id, handsDevelopment(state, seat.id, seat.developLog()));
+    } catch (err) {
+      console.error(`playbooks: seat ${seat.id}'s development report could not be read, its next brief goes without it: ${messageOf(err)}`);
     }
   }
 
