@@ -8,8 +8,9 @@
  * everyone still planning, then with a chat line on its ticker, then with the host ready (and "can continue without
  * them"), then with all but one ready.
  */
+import type { DealCard, GameState } from '@mule/engine';
 import type { Browser, Page } from 'playwright';
-import { check, launch, PHONE, startServer, TV } from './harness';
+import { check, held, launch, PHONE, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, voteThroughTheElection } from './politics-steps';
 import { fitSettled, theTableHasSaid, TV_SCALE_FLOOR } from './tv-fit-steps';
 
@@ -69,6 +70,35 @@ async function planningReads(tv: Page, table: number, state: string): Promise<Re
   return { table, state, ...fit };
 }
 
+/**
+ * SB-5a: stages a pact broken this month between the table's first two people, reads planning with its banner over the
+ * map, then takes the card back. The banner must lie inside the map box (over its top, inset by the overlay's padding).
+ */
+async function aBreakMoment(server: Parameters<typeof held>[0], code: string, tv: Page, table: number): Promise<Read> {
+  type Room = { game: { state: GameState }; broadcast(): void };
+  const room = server.registry.get(code) as unknown as Room | undefined;
+  check(room?.game.state.politics, `the ${table}-seat game has politics on, for its deal cards`);
+  const state = room.game.state;
+  const [from, to] = state.players.map((p) => p.id);
+  const card: DealCard = { id: 'deal-e2e-moment', from: from!, to: to!, terms: { kind: 'pact' }, offered: state.month, until: state.month + 2, status: 'broken', brokenBy: to!, settled: state.month };
+  await held(server, code, async () => {
+    state.politics!.deals.push(card);
+    room.broadcast();
+  });
+  try {
+    const banner = tv.locator('[data-phase=planning] [data-testid=tv-map-box] [data-testid=tv-moment] [data-testid=tv-break-banner]');
+    await banner.waitFor({ timeout: PRESS_MS });
+    const [b, m] = await Promise.all([banner.boundingBox(), tv.locator('[data-phase=planning] [data-testid=tv-map-box]').boundingBox()]);
+    check(b && m && b.y >= m.y - 1 && b.y + b.height <= m.y + m.height + 1, `TV-FIT (${table} people): the break banner overlays the map box, got the banner at y ${b?.y}–${b ? b.y + b.height : '?'} and the box at ${m?.y}–${m ? m.y + m.height : '?'}`);
+    return await planningReads(tv, table, 'a break moment over the map');
+  } finally {
+    await held(server, code, async () => {
+      state.politics!.deals.splice(state.politics!.deals.indexOf(card), 1);
+      room.broadcast();
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const { server, base } = await startServer({ phaseScale: SCALE });
   const browser = await launch().catch(async (err: unknown) => {
@@ -85,6 +115,11 @@ async function main(): Promise<void> {
       await at('everyone planning');
       await theTableHasSaid(tv, server, code);
       await at('with a chat line');
+      // SB-5a: a card broken now is a moment over the map, out of flow; the body keeps the scale it had a moment before.
+      const steady = reads.at(-1)!;
+      const moment = await aBreakMoment(server, code, tv, seats);
+      check(Math.abs(moment.scale - steady.scale) < 0.001, `TV-FIT (${seats} people): a break moment changes no scale, ${steady.scale.toFixed(3)} before, ${moment.scale.toFixed(3)} with its banner over the map`);
+      reads.push(moment);
       // The host ready: the table may go on without the others, and the TV must say so.
       await ready(phones[0]!);
       // Up to three seats in the waiting box, from four on the host's row (PM ruling 8 Nov).

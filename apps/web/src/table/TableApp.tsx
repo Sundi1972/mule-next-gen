@@ -45,6 +45,8 @@ import { overlayShowAt } from '../events/clock';
 import { Grounds } from '../components/Grounds';
 import { TvElection } from './TvElection';
 import { FitHeight, TvBody } from './TvFit';
+import { brokenIn } from '../phone/hub/politics/deals-words';
+import { TvDeals } from './TvDeals';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
@@ -442,9 +444,18 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         <TvBody>
           <div className="flex min-h-0 flex-1 gap-6">
             <div className="flex w-[700px] shrink-0 flex-col gap-3">
-              <StrikeMap view={game} size="tv">
-                <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
-              </StrikeMap>
+              <div className="relative" data-testid="tv-map-box">
+                <StrikeMap view={game} size="tv">
+                  <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+                </StrikeMap>
+                {/* SB-5a (WS6 ruling 8 Nov): a broken card is a moment over the map's top, out of flow like the event show's
+                    cards, so the body's scale never moves for it; the news column keeps the server's line for it. */}
+                {phase === 'planning' && brokenIn(game, game.month).length > 0 && (
+                  <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-3 p-3 empty:hidden" data-testid="tv-moment">
+                    <TvDeals game={game} />
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between font-mono text-sm text-ink-3">
                 <span>ROOM {table.code}</span>
                 <span>
