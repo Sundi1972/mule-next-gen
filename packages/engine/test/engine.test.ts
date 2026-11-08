@@ -21,6 +21,7 @@ import {
   rawOutput,
   runProduction,
   RuleError,
+  UPKEEP,
   type GameState,
   type Good,
   type Tile,
@@ -81,15 +82,15 @@ describe('createGame', () => {
   });
 
   it.each([
-    [2, 24],
-    [4, 48],
-    [6, 72],
-  ])("a %i-seat game's store starts with %i Energy, 12 a seat (S1 lever (c), PM rulings 7 and 8 Nov)", (n, energy) => {
+    [2, 36],
+    [4, 72],
+    [6, 108],
+  ])("a %i-seat game's store starts with %i Energy, 18 a seat (Heiko, 8 Nov)", (n, energy) => {
     expect(newGame(n).store.stock.energy).toBe(energy);
   });
 
-  it("the store starts with 40 Medicine (S2 lever B, PM ruling 8 Nov)", () => {
-    expect(newGame(4).store.stock.medicine).toBe(40);
+  it("the store starts with 22 Medicine, enough to about month 6 when nobody makes it (Heiko, 8 Nov: Medicine A)", () => {
+    expect(newGame(4).store.stock.medicine).toBe(22);
   });
 
   describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {
@@ -205,7 +206,7 @@ describe('production', () => {
     expect(rawOutput(state, a)).toBe(alone + 1);
   });
 
-  it('halves Food farms whose owner is short of Water', () => {
+  it('turns a Food farm off when its owner is short of Water (AM-18)', () => {
     const state = newGame();
     const tile = plainTile(state, 0, 0, 'river');
     tile.owner = 'p0';
@@ -214,7 +215,7 @@ describe('production', () => {
     p0.stock.energy = 5;
     const full = rawOutput(state, tile);
     p0.stock.water = 0;
-    expect(runProduction(state).produced.p0!.food).toBe(Math.floor(full / 2));
+    expect(runProduction(state).produced.p0!.food).toBe(Math.round(full * UPKEEP.offOutputShare));
     p0.stock.water = 5;
     expect(runProduction(state).produced.p0!.food).toBe(full);
   });

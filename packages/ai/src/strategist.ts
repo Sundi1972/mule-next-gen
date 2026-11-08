@@ -17,6 +17,7 @@ import {
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
+  plotWaterOn,
   UPKEEP,
   scoreParts,
   shipInPort,
@@ -352,14 +353,16 @@ export type SellListing = NonNullable<PlanningPlay['list']>[number];
 /**
  * What the seat lists for the land auction while its money is under what its month of needs costs (monthNeedsCost): up to AI_PLANS.sell.perMonth
  * lots, those worth least to it over what the store pays first, each sold to the store if no one bids. Its idle plots
- * and its MULEs are candidates, never its last Food or Energy MULE, nor its last Water MULE while it has a farm, nor a
- * MULE outfitted for one of `keep` (a chain's links, AM-33). Empty when it is not short.
+ * and its MULEs are candidates, never its last Food, Water or Energy MULE (every plot drinks, AM-18), nor a MULE
+ * outfitted for one of `keep` (a chain's links, AM-33). Empty when it is not short.
  */
 export function sellWanted(obs: GameState, mind: Mind, keep: readonly Outfit[] = []): SellListing[] {
   if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
-  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || (outfit === 'water' && mine.some((m) => (UPKEEP.irrigated as readonly string[]).includes(m.tile.outfit ?? '')))) && mine.filter((m) => m.tile.outfit === outfit).length === 1;
+  // A last well matters for any seat with AM-18 on, and with it off only for one with a farm to water.
+  const watered = plotWaterOn() || mine.some((m) => (UPKEEP.irrigated as readonly string[]).includes(m.tile.outfit ?? ''));
+  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || (outfit === 'water' && watered)) && mine.filter((m) => m.tile.outfit === outfit).length === 1;
   const lots = mine.flatMap(({ tile, plot }): { item: SellListing['item']; plot: number; worth: number }[] => {
     if (!tile.outfit) return [{ item: 'plot', plot, worth: plotValue(obs, mind, plot) }];
     if (isLast(tile.outfit) || keep.includes(tile.outfit)) return [];
@@ -421,6 +424,8 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const keepBackFor = (good: Good) => keepBacks.get(good) ?? keepBacks.set(good, cashReserve(obs, mind, o, good)).get(good)!;
   const needFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food');
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
+  // Its wells' next output, net of their own use, short of the drink kept back and its plots' Water (AM-18).
+  const needWater = ownSupply(o, 'water') < monthNeeds(obs, mind.me).water;
   const analysed = new Set(p.analysed);
   const cands: Candidate<DevAction>[] = [];
   const chain = focus === null ? null : chainValue(obs, o, mind, focus);
@@ -481,24 +486,27 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
     }
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
-  if (STRATEGIST.energyFirst && needEnergy) energyFirst(cands);
+  // Energy first, then Water: a rule that finds its install allowed rules the rest out, and the next one finds none.
+  if (STRATEGIST.energyFirst && needEnergy) firstOf(cands, 'energy', ENERGY_FIRST);
+  if (STRATEGIST.waterFirst && needWater) firstOf(cands, 'water', 'my wells don\'t cover my Water yet');
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
 export const ENERGY_FIRST = 'no Energy plant of my own yet';
 
 /**
- * STRATEGIST.energyFirst: when an Energy install is allowed, rules out every other candidate, "Keep the cash" too. On
- * the floor, the draft's shoreless narrows it to reachable installs: its vetoes come off when no reachable plant is left.
+ * STRATEGIST.energyFirst and waterFirst: when an install of `outfit` is allowed, rules out every other candidate, "Keep
+ * the cash" too, for `why`. Does nothing when another rule already left only its own installs. On the floor, the
+ * draft's shoreless narrows Energy first to reachable installs: its vetoes come off when no reachable plant is left.
  */
-function energyFirst(cands: Candidate<DevAction>[]): void {
-  const isPlant = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === 'energy';
-  if (!cands.some((c) => isPlant(c) && !c.veto)) return;
+function firstOf(cands: Candidate<DevAction>[], outfit: Outfit, why: string): void {
+  const isIt = (c: Candidate<DevAction>) => c.action.kind === 'install' && c.action.outfit === outfit;
+  if (!cands.some((c) => isIt(c) && !c.veto)) return;
   for (const c of cands) {
-    if (isPlant(c) || c.veto) continue;
-    c.veto = ENERGY_FIRST;
+    if (isIt(c) || c.veto) continue;
+    c.veto = why;
     c.utility = 0;
-    c.rationale = `Ruled out: ${ENERGY_FIRST}`;
+    c.rationale = `Ruled out: ${why}`;
   }
 }
 

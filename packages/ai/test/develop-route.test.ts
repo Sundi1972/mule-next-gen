@@ -38,7 +38,7 @@ import { draftPlaybook, type LeftOutPick } from '../src/playbook/draft.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { lookFirstPrices } from './look-first-prices.js';
-import { rulesOffInTest } from './rule-switches.js';
+import { analyseInTest, rulesOffInTest } from './rule-switches.js';
 
 // The HC-9 seam: the hand's in-tick draft calls throw, switched on per test; otherwise the real ones.
 const seam = vi.hoisted(() => ({ throwing: false }));
@@ -528,6 +528,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     }
 
     it("T-AC-7 (AM-27): after a route's analyses its MULE is re-picked, 'replaced' with 'ground analysed', and MULEs are added up to mulesPerMonth, 'MULE added'", () => {
+      // Built for a seat weighing every install: Energy first would make its MULE a plant (rule-switches.ts).
+      rulesOffInTest('energyFirst');
       const { state, plots, hand, log } = smithoreRoute(true);
       const steps = byIndex(hand, state);
       expect(steps.get(0)).toEqual({ route: 0, outcome: 'done' });
@@ -895,6 +897,10 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     it.each(['known', 'unknown'] as const)(
       "T-AC-7 (AM-27): led on the floor (%s ground), a lot MULE already fitted keeps its outfit, installed on a plot the pick chose, and no MULE is lost",
       (ground) => {
+        // Built for a seat weighing every install: Energy first would make its MULE a plant (rule-switches.ts).
+        rulesOffInTest('energyFirst');
+        // This row is about the led MULE: the analysis band is widened to keep the unknown ground's analysis in.
+        analyseInTest();
         // A Food MULE led in, on plains the seat's own pick would give Water: the floor cannot fit it again.
         const { state, plots } = wonMuleLot(2, 'food');
         lookFirstPrices(state);

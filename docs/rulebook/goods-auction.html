@@ -34,7 +34,7 @@
 <thead><tr><th class="n">#</th><th>Good</th><th>Kind</th><th>Who needs it in the colony</th></tr></thead>
 <tbody>
 <tr><td class="n">1</td><td>Food</td><td>Grown</td><td>Every player's household and crew; colonists</td></tr>
-<tr><td class="n">2</td><td>Water</td><td>Grown</td><td>Every player's household and crew; Food farms for irrigation; colonists</td></tr>
+<tr><td class="n">2</td><td>Water</td><td>Grown</td><td>Every player's household and crew; every working plot (a farm 2, any other plot 1, a factory its recipe); colonists</td></tr>
 <tr><td class="n">3</td><td>Energy</td><td>Grown</td><td>Every working plot and factory; colonists</td></tr>
 <tr><td class="n">4</td><td>Smithore</td><td>Mined</td><td>Alloy smelters; the store, which builds MULEs from it</td></tr>
 <tr><td class="n">5</td><td>Crystite</td><td>Mined</td><td>Nobody in the colony: only the export ship buys it (see <a href="store-and-prices.html#crystite">Crystite</a>)</td></tr>
@@ -69,7 +69,7 @@
 <tr><td>Used</td><td>What production burnt: Energy for your plots, and the inputs your factories took.</td></tr>
 <tr><td>Made</td><td>What your plots and factories made this month.</td></tr>
 <tr><td>Now</td><td>What you hold now, in bold.</td></tr>
-<tr><td>Hold</td><td>What you must hold now to be short of nothing before the next auction: the Food and Water your household and crew eat and drink at this month end, plus enough of what you use next month to survive the month end's spoilage. That is next month's Food ration; Water only if you have a Food farm to water; Energy for your plots; your factories' inputs; and Medicine when the air makes people sick (2: the 1 you need, and 1 more, because a fifth spoils). No good counts above the 10 your home depot holds.</td></tr>
+<tr><td>Hold</td><td>What you must hold now to be short of nothing before the next auction: the Food and Water your household and crew eat and drink at this month end, plus enough of what you use next month to survive the month end's spoilage. That is next month's Food ration; Water, once any plot of yours uses Water, your drink plus every plot's Water, because production keeps your drink back before any plot drinks (<a href="production.html#water-use">the Water rule</a>); Energy for your plots; your factories' inputs; and Medicine when the air makes people sick (2: the 1 you need, and 1 more, because a fifth spoils). No good counts above the 10 your home depot holds.</td></tr>
 <tr><td>Goes bad</td><td>What would be lost at month end if you kept everything you hold now: upkeep eats and drinks first, then the share of the rest that spoils, plus anything over the 10 units your home depot holds.</td></tr>
 <tr><td>Spare</td><td>Now minus Hold: green <em>+3</em> when you have more than you must hold, red <em>short 2</em> when you have less.</td></tr>
 </tbody>
@@ -279,7 +279,7 @@
 
 <h2 id="ai-shortage-fix">Computer players buy what they are short of <span class="pill progress">Being built</span></h2>
 <p>Today a computer player short of Food sometimes stands still at the bottom of the board while the store has Food for sale and it has the money. It values Food mainly by how much a hungry walk costs it in development, which often comes out below the store's price, so it refuses.</p>
-<p>The fix being built: <strong>a computer player short of Food, Energy or Water values its shortfall at least at the store's selling price, and does not sell below its own need.</strong> It buys enough to cover next month as a whole: Food it will eat plus what will spoil, Energy its plots need allowing for spoilage, and Water only when it has an irrigated farm.</p>
+<p>The fix being built: <strong>a computer player short of Food, Energy or Water values its shortfall at least at the store's selling price, and does not sell below its own need.</strong> It buys enough to cover next month as a whole: Food it will eat plus what will spoil, Energy its plots need allowing for spoilage, and Water its drink and its plots' Water once any plot of its uses Water (<a href="production.html#water-use">the Water rule</a>).</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, watching a game: "two ai players had a shortage of energy (-3) which would most likely lead to that they won't produce anything next month ... i had a surplus and the store had stock but they didn't buy? they were just standing there not even bidding". WS9 measured that a seat comes to the Food auction short in 86–87% of seat-months, and in 76–85% it refuses on value (a median of 19 cr against a store ask of 49–56), though 99% could pay for a unit. WS1's first runs of the fix: payable no-buys fell to zero for Food, Energy and Water. The cost: colonists go short of Food or Water in more months (for example 52% to 60%), because players now buy the store's stock. The PM ruled to ship it and balance at the end.</p></div>
 <div class="box next"><h4>What is changing</h4><p>WS1 is building this (branch <code>ws1-food-short</code>), due about 17:00Z on 5 Nov. The longer-term answer is WS9's resource-utility design, which values goods by what they do for the seat.</p></div>
 <p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::tradeDecision</code> (where the fix lands)</p>

@@ -1,5 +1,5 @@
-import type { GameState } from '@mule/engine';
-import { describe, expect, it } from 'vitest';
+import { START, type GameState } from '@mule/engine';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BrainService } from '../src/brain/index.js';
 import { chatter } from '../src/brain/chat.js';
 import { MuleGame } from '../src/mule-game.js';
@@ -77,6 +77,15 @@ async function recordedNeedStop() {
 }
 
 describe('RULE-4: the need stop and the conscious hold are replayed from the record', () => {
+  // A shelf of 20 Water, so the store still has room to buy Water and Heiko sells down to his need (START's 100 fills
+  // that room: Heiko, 8 Nov). Set in START, so the replay starts from the same shelf.
+  const shelf = START.storeStock.water;
+  beforeAll(() => {
+    START.storeStock.water = 20;
+  });
+  afterAll(() => {
+    START.storeStock.water = shelf;
+  });
   it('T-AC-1′: a recorded game in which a seller is stopped at their need and then holds ▼ through replays identical; without the hold it does not', { timeout: 60_000 }, async () => {
     const { record, stop, after } = await recordedNeedStop();
     // The game the record holds really stopped Heiko at his need, and the hold really sold him into shortage.

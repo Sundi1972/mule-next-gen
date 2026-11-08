@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  monthNeeds,
   advancePhase,
   castLawVote,
   closeVotes,
@@ -147,6 +148,12 @@ function play(seed: number): Played {
   const plot = tiles[1]!;
   Object.assign(state.tiles[plot]!, { owner: 'brix', outfit: 'food' });
 
+  // The victim holds its month's Water, so its farm runs whatever the order does (AM-18: every plot drinks).
+  const watered = () => {
+    const brix = state.players.find((p) => p.id === 'brix')!;
+    brix.stock.water = Math.max(brix.stock.water, monthNeeds(state, 'brix').water);
+  };
+  watered();
   // Month 1: a guarded cut. A copy with no order shows what the plot would have made.
   const noOrder1 = structuredClone(state);
   advanceTo(noOrder1, 'production');
@@ -160,6 +167,7 @@ function play(seed: number): Played {
   // Month 2: the fine, then the unguarded cut, and the ban proposed.
   advanceTo(state, 'planning');
   const fine = fineMeasured(state, caseId, 150);
+  watered();
   const noOrder2 = structuredClone(state);
   advanceTo(noOrder2, 'production');
   orderSabotage(state, 'lena', { kind: 'powerCut', tile: plot });

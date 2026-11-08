@@ -1,4 +1,4 @@
-import { GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
+import { GOODS, isFactory, plotWaterOn, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ui';
 import type { Now } from '../Shell';
 import { freePlots } from './month-steps';
@@ -39,25 +39,29 @@ const and = (parts: string[]) => (parts.length <= 1 ? (parts[0] ?? '') : `${part
 export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Outfit | null }[]): NeedRow[] {
   const outfits = plots.map((p) => p.outfit).filter((o): o is Outfit => !!o && o !== 'greenBelt');
   const factories = outfits.filter(isFactory);
+  // Raw plots that use a base good (UPKEEP.energyUse or waterUse), counted by what they are called, then the factories
+  // whose recipe takes it. Not the good's own plots: a plant or a well pays its use from its output, so the engine's
+  // monthNeeds leaves it out (AM-17 PM ruling A, AM-18 W5).
+  const users = (good: 'energy' | 'water', use: Record<RawGood, number>): string[] => {
+    const plotsOf = new Map<string, [number, string]>();
+    for (const raw of Object.keys(use) as RawGood[]) {
+      const k = outfits.filter((o) => o === raw).length;
+      if (raw === good || use[raw] <= 0 || k === 0) continue;
+      const [one, many] = PLOT[raw];
+      plotsOf.set(one, [(plotsOf.get(one)?.[0] ?? 0) + k, many]);
+    }
+    const words = [...plotsOf].map(([one, [k, many]]) => count(k, one, many));
+    const taking = factories.filter((f) => (good === 'water' ? UPKEEP.factoryWaterUse[f] : (RECIPES[f].inputs[good] ?? 0)) > 0).length;
+    if (taking > 0) words.push(count(taking, 'factory', 'factories'));
+    return words;
+  };
   const why = (g: Good): string => {
     const usedBy = [...new Set(factories)].filter((f) => (RECIPES[f].inputs[g] ?? 0) > 0);
     const inputs = usedBy.length > 0 ? `${and(usedBy.map((f) => GOOD_NAME[f]))} inputs` : '';
+    // With AM-18 on, Water names the plots and factories that drink it, as Energy names its burners.
+    if (g === 'water' && plotWaterOn()) return and(['upkeep', ...users('water', UPKEEP.waterUse)]);
     if (g === 'food' || g === 'water') return usedBy.length > 0 ? `upkeep and ${inputs}` : 'upkeep';
-    if (g === 'energy') {
-      // Raw plots that burn Energy (UPKEEP.energyUse), counted by what they are called; factories by recipe. Not a
-      // plant: it pays its own use from its own output, so the engine's monthNeeds leaves it out (AM-17, PM ruling A).
-      const burners = new Map<string, [number, string]>();
-      for (const raw of Object.keys(UPKEEP.energyUse) as RawGood[]) {
-        const k = outfits.filter((o) => o === raw).length;
-        if (raw === 'energy' || UPKEEP.energyUse[raw] <= 0 || k === 0) continue;
-        const [one, many] = PLOT[raw];
-        burners.set(one, [(burners.get(one)?.[0] ?? 0) + k, many]);
-      }
-      const words = [...burners].map(([one, [k, many]]) => count(k, one, many));
-      const burning = factories.filter((f) => (RECIPES[f].inputs.energy ?? 0) > 0).length;
-      if (burning > 0) words.push(count(burning, 'factory', 'factories'));
-      return and(words);
-    }
+    if (g === 'energy') return and(users('energy', UPKEEP.energyUse));
     if (inputs) return inputs;
     return g === 'medicine' ? 'bad air' : '';
   };

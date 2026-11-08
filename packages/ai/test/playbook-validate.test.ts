@@ -396,10 +396,11 @@ describe('the validator holds every playbook to RULE-1', () => {
         expect(r.playbook, `led, ${level}`).toEqual(r.draft);
       }
       // With a plains plot beside it the MULE isn't lost: the draft takes its next pick, as the hands' own pick did.
-      const plain = state.tiles.findIndex((t) => t.terrain === 'plains' && t.owner === null);
-      state.tiles[plain]!.owner = 'ai2';
-      const both = run('development', [], { state, mind: mindOf(2, 'rookie') });
+      const plain = led.tiles.findIndex((t) => t.terrain === 'plains' && t.owner === null);
+      led.tiles[plain]!.owner = 'ai2';
+      const both = run('development', [], { state: led, mind: mindOf(2, 'rookie') });
       expect(both.draft.development!.route).toContainEqual({ act: 'install', plot: plain });
+      expect(both.draft.development!.route, 'the led MULE, as fitted').toContainEqual({ act: 'outfit', outfit: 'food' });
       expect(both.rejected).toEqual([]);
     } finally {
       DEV_STEER.on = steering;
@@ -680,15 +681,16 @@ const SLOW_MS = 20_000;
 
 describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
   it("INV-1 (built): at Food's status screen, a seat holding Water between its need and what keeps it whole drafts a Water seller that passes the gate unchanged", () => {
-    // ai2 holds 3 Water, and Water sells dear (50 cr posted), so its draft sells some; the store sells Water too.
+    // ai2 holds one Water over its need (its plots drink too, AM-18), and Water sells dear, so its draft
+    // sells some at 200 posted (at 50 it now keeps them all); the store sells Water too.
     const state = fedSeller();
-    state.players.find((p) => p.id === 'ai2')!.stock.water = 3;
-    state.store.posted.water = 50;
+    const held = monthNeeds(state, 'ai2').water + 1;
+    state.players.find((p) => p.id === 'ai2')!.stock.water = held;
+    state.store.posted.water = 200;
     const obs = observe(state, 'ai2');
     const { whole, mustHold } = shortfallHold(obs, 'ai2', 'water');
-    expect(monthNeeds(state, 'ai2').water).toBeLessThan(3);
     expect(mustHold, 'short of what keeps it whole, the store selling').toBe(whole);
-    expect(whole).toBeGreaterThan(3);
+    expect(whole).toBeGreaterThan(held);
     const draft = draftOf(state, 'auction', mindOf(2), 102);
     expect(draft.auction!.water!.role, 'it drafts Water for sale').toBe('seller');
     const r = validatorFor({ mind: mindOf(2), seed: 102 })(state, 'ai2', draft, []);

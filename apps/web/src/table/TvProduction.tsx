@@ -90,7 +90,8 @@ const WHY: Record<string, { label: string; badge: string; tone: string; icon?: G
   species: { label: 'Your species is good at this', badge: '+1', tone: 'bg-ok text-on-holo' },
   special: { label: 'A special field', badge: '+', tone: 'bg-ok text-on-holo' },
   pollution: { label: 'Polluted ground', badge: '−1', tone: 'bg-warn text-void' },
-  noWater: { label: 'A farm with no Water makes half', badge: '½', tone: 'bg-alert text-white', icon: 'water' },
+  noWater: { label: 'No Water for the farm: half', badge: '½', tone: 'bg-alert text-white', icon: 'water' },
+  waterOff: { label: 'Turned off: not enough Water (20%)', badge: '20%', tone: 'bg-alert text-white', icon: 'water' },
   noEnergy: { label: 'No Energy for the plot: half', badge: '½', tone: 'bg-alert text-white', icon: 'energy' },
   energyOff: { label: 'Turned off: not enough Energy (20%)', badge: '20%', tone: 'bg-alert text-white', icon: 'energy' },
 };
