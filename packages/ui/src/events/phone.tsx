@@ -5,6 +5,7 @@ import { signLook, useShow } from './frame';
 import { EventBuzz, EventEffectChip, EventSignBadge } from './glyphs';
 import { EventSickTag } from './rollcall';
 import { eventEffectsAt, eventStageAt, isBuzzing, isPlaying, isRollCall, type EventSegment } from './timing';
+import type { EventSabotageSeat } from './types';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -15,10 +16,10 @@ import { eventEffectsAt, eventStageAt, isBuzzing, isPlaying, isRollCall, type Ev
  * The event's card. `news` is the moment it is announced (who, what, look at the TV); `you` is after it lands: what it
  * did to you, or where it went instead.
  */
-export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegment; me: string; at: 'news' | 'you'; buzz?: boolean }) {
+export function EventPhoneCard({ seg, me, at, buzz = false, sabotage }: { seg: EventSegment; me: string; at: 'news' | 'you'; buzz?: boolean; sabotage?: EventSabotageSeat | undefined }) {
   const { cast } = useShow();
   const ev = seg.events[0]!;
-  const you = eventYouSummary(seg, me, cast);
+  const you = eventYouSummary(seg, me, cast, sabotage);
   const roll = isRollCall(seg);
   const sign = signLook(ev.sign);
   const mixed = sign === 'neutral' || seg.events.some((e) => e.sign !== ev.sign);
@@ -70,11 +71,15 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
       {at === 'you' &&
         (you ? (
           <div className="flex flex-col gap-1 animate-[ev-pop_0.3s_ease-out]" data-testid="phone-you">
-            <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', sign === 'good' ? 'text-ok' : 'text-alert-ink')}>
+            <span className={cx('flex items-center gap-1.5 font-display text-base font-bold', youTone(you.tone, sign))}>
               {you.sick && <EventSickTag size="phone" />}
               {you.headline}
             </span>
-            <span className="text-xs leading-snug text-ink-2 max-[700px]:truncate" title={you.detail}>{you.detail}</span>
+            {you.detail && (
+              <span className="text-xs leading-snug text-ink-2 max-[700px]:truncate" title={you.detail}>
+                {you.detail}
+              </span>
+            )}
             {mine.some((f) => f.on === me) && (
               <span className="flex flex-wrap gap-1">
                 {mine
@@ -100,6 +105,9 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
     </div>
   );
 }
+
+/** The colour of what an event did to you: its own tone when it has one (a sabotage line), else the event's sign. */
+const youTone = (tone: 'ok' | 'alert' | 'ink' | undefined, sign: 'good' | 'bad' | 'neutral') => (tone === 'ink' ? 'text-ink' : tone === 'ok' || (!tone && sign === 'good') ? 'text-ok' : 'text-alert-ink');
 
 /** Before the first event, and after the last when nothing stays up. */
 export function EventWaiting() {
@@ -127,7 +135,7 @@ export function EventNowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolea
 }
 
 /** Under the current card: the phase's earlier events, one line each, and the changes off the map that are yours. */
-export function EventRailTail({ me, current }: { me: string; current: EventSegment | null }) {
+export function EventRailTail({ me, current, sabotage }: { me: string; current: EventSegment | null; sabotage?: EventSabotageSeat | undefined }) {
   const { s, t, reduced, grid, cast } = useShow();
   const done = s.segments.filter((g) => t >= g.settleAt && g !== current);
   const yours = eventEffectsAt(s, t, reduced, grid).filter((l) => l.effect.on === me);
@@ -135,13 +143,13 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
   return (
     <>
       {done.map((g) => {
-        const you = eventYouSummary(g, me, cast);
-        const good = signLook(g.events[0]!.sign) === 'good';
+        const you = eventYouSummary(g, me, cast, sabotage);
+        const sign = signLook(g.events[0]!.sign);
         return (
           <div key={g.n} className="flex items-center gap-2 rounded-control bg-raised px-2 py-1">
             <EventSignBadge ev={g.events[0]!} size={22} />
             <span className="min-w-0 flex-1 truncate text-xs font-semibold">{segTitle(g)}</span>
-            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.short : colonyNews(g) ? 'everyone' : 'not you'}</span>
+            <span className={cx('text-xs', you ? cx('font-bold', youTone(you.tone, sign)) : 'text-ink-3')}>{you ? you.short : colonyNews(g) ? 'everyone' : 'not you'}</span>
           </div>
         );
       })}
@@ -162,16 +170,17 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
 /**
  * With a TV in the room, the rail beside the phone's map, on the TV's clock: the light card, never the weather. The
  * card names the event as it is announced and buzzes, says what it did to you as it settles, and the last card
- * stays up after the last event, so the phone still says what happened to you.
+ * stays up after the last event, so the phone still says what happened to you. `sabotage` is what this phone knows of
+ * sabotage beyond the public event (its own orders, whether it is the Sheriff's), for its private line.
  */
-export function EventTvPhoneRail({ me }: { me: string }) {
+export function EventTvPhoneRail({ me, sabotage }: { me: string; sabotage?: EventSabotageSeat | undefined }) {
   const { s, t } = useShow();
   const { seg: now, stage } = eventStageAt(s, t);
   const seg = now ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {seg ? <EventPhoneCard seg={seg} me={me} at={isPlaying(seg, t) ? 'news' : 'you'} buzz={isBuzzing(seg, t)} /> : <EventWaiting />}
-      <EventRailTail me={me} current={seg} />
+      {seg ? <EventPhoneCard seg={seg} me={me} at={isPlaying(seg, t) ? 'news' : 'you'} buzz={isBuzzing(seg, t)} sabotage={sabotage} /> : <EventWaiting />}
+      <EventRailTail me={me} current={seg} sabotage={sabotage} />
     </>
   );
 }
@@ -195,14 +204,14 @@ export function EventSkipHint({ className }: { className?: string }) {
  * With no TV in the room, the rail beside the phone's own show: what is playing, then what it did to you, and the
  * phase's earlier events. The skip hint is the screen's to place (EventSkipHint).
  */
-export function EventSoloRail({ me }: { me: string }) {
+export function EventSoloRail({ me, sabotage }: { me: string; sabotage?: EventSabotageSeat | undefined }) {
   const { s, t } = useShow();
   const { seg, stage } = eventStageAt(s, t);
   const shown = seg ?? (stage === 'outro' ? (s.segments.at(-1) ?? null) : null);
   return (
     <>
-      {!shown ? <EventWaiting /> : isPlaying(shown, t) ? <EventNowPlaying seg={shown} buzz={isBuzzing(shown, t)} /> : <EventPhoneCard seg={shown} me={me} at="you" />}
-      <EventRailTail me={me} current={shown} />
+      {!shown ? <EventWaiting /> : isPlaying(shown, t) ? <EventNowPlaying seg={shown} buzz={isBuzzing(shown, t)} /> : <EventPhoneCard seg={shown} me={me} at="you" sabotage={sabotage} />}
+      <EventRailTail me={me} current={shown} sabotage={sabotage} />
     </>
   );
 }

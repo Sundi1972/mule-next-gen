@@ -224,6 +224,23 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
 const isAxis = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1;
 
 const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
+
+/** A deal card's terms: a pact, a vote for a candidate in an office's election, or a yes or no on the next law. */
+function isDealTerms(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null) return false;
+  const t = x as Record<string, unknown>;
+  if (t.kind === 'pact') return true;
+  if (t.kind !== 'vote') return false;
+  if ('office' in t) return isOffice(t.office) && typeof t.candidate === 'string';
+  return t.law === true && typeof t.yes === 'boolean';
+}
+
+/** A deal offer: who it goes to, its terms, and a pact's months as a whole number. */
+function isDealOffer(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return typeof o.to === 'string' && isDealTerms(o.terms) && (o.months === undefined || Number.isInteger(o.months));
+}
 /** The shape of a tax promise; RULE-10 in the engine checks the rest. */
 const isPromise = (x: unknown) => {
   if (typeof x !== 'object' || x === null) return false;
@@ -289,6 +306,12 @@ function isIntent(v: unknown): v is MuleIntent {
       return i.proposal === null || isProposal(i.proposal);
     case 'voteLaw':
       return typeof i.yes === 'boolean';
+    case 'offerDeal':
+      return isDealOffer(i.offer);
+    case 'withdrawDeal':
+      return typeof i.id === 'string';
+    case 'answerDeal':
+      return typeof i.id === 'string' && typeof i.accept === 'boolean';
     case 'donate': {
       const goods = i.goods as Record<string, unknown> | undefined;
       const record = typeof goods === 'object' && goods !== null && !Array.isArray(goods);

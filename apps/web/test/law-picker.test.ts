@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import { LAW_NAME, POLITICS, type LawId, type LawImpact } from '@mule/engine';
+import { LAW_NAME, lawOffered, POLITICS, type LawId, type LawImpact } from '@mule/engine';
 import type { MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
@@ -35,7 +35,8 @@ beforeAll(async () => {
 
 const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 const PLAYERS: PlayerView[] = [aPlayer({ id: 's1', name: 'Lena', slot: 0 }), aPlayer({ id: 's2', name: 'Ossa', slot: 1 }), aPlayer({ id: 's3', name: 'Kai', slot: 2 })];
-const LAW_IDS = Object.keys(POLITICS.laws) as LawId[];
+/** The laws on the book: the sabotage ban only while sabotage is on (S4-C7), so the four older laws by default. */
+const LAW_IDS = (Object.keys(POLITICS.laws) as LawId[]).filter(lawOffered);
 
 /** Each candidate's cost, distinct per key and seat, so a figure on screen can only come from its own key. */
 function candidatesFor(laws: PoliticsView['laws'] = {}): Record<string, Record<string, LawImpact>> {
@@ -153,6 +154,7 @@ describe("B-AC-46-1: the Governor's law picker", () => {
       expect(text(`law-row-${law}`)).toContain(LAW_NAME[law]);
       for (const s of POLITICS.laws[law].settings) expect(isDisabled(`law-${law}-${s}`), `${law} ${s}`).toBe(false);
     }
+    expect(findTestid('law-row-sabotageBan'), 'S4-B-AC-8: no ban row while sabotage is off').toBeUndefined();
     expect(findTestid('for-each'), 'no preview before a pick').toBeUndefined();
     expect(isDisabled('propose')).toBe(true);
   });

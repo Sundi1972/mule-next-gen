@@ -32,6 +32,7 @@ import { goodPlan, landDecision, leaderOf, shortfallHold, tradeDecision } from '
 import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../src/value.js';
 import { outlook } from '../src/outlook.js';
 import { FOOD_TO_SPARE } from './store-food.js';
+import { rulesOffInTest } from './rule-switches.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
 
@@ -274,6 +275,8 @@ describe('the draft picks a plan kind and writes its strategy', () => {
   it('FM-chain-household: a seat with no spare Food or Water never drafts Medicine as a chain; its money-maker is the rule before AM-33', () => {
     const { state, seats } = table('trader');
     const trader = seats[2]!;
+    // The premise is canFeed's block, which S2's lever B lifts for a Medicine works (medicine-despite-inputs.test.ts).
+    rulesOffInTest('medicineDespiteInputs');
     withPlans(['AI_PLANS.leaning.trader.monopolist=0.9', CHAIN_ON], () => {
       const obs = observe(state, trader.mind.me);
       expect(canFeed(obs, trader.mind.me, 'medicine'), 'Medicine is short of an input').toBe(false);

@@ -18,6 +18,10 @@ import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
 import { canFeed, unitValues, type Mind } from '../src/value.js';
+import { rulesOff } from './rule-switches.js';
+
+// These cases pin canFeed's block and the seat's other installs, which the PM's two rules override (rule-switches.ts).
+rulesOff('energyFirst', 'medicineDespiteInputs');
 
 /**
  * A factory seat keeps its factory fed (PM ruling of 6 Nov, options 3 and 1, buy side only):

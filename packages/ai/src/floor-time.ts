@@ -542,8 +542,13 @@ export function shoreStands(state: GameState, cfg: FloorConfig, me: string, plot
   });
 }
 
-/** Whether a colonist can stand where Reach offers installing on the plot: on it, or (a lake plot) at a spot on its shore. */
+/**
+ * Whether a colonist can stand where Reach offers installing on the plot: on it, where a walk from the store reaches it
+ * (a plot shut in by lake and the map's edge is no plot to walk to), or (a lake plot) at a spot on its shore, which
+ * shoreStands only offers where a walk reaches it. One rule for the plans, the hands and the gate (FM-floor-unreachable).
+ */
 export function installable(state: GameState, cfg: FloorConfig, me: string, index: number): boolean {
   const t = state.tiles[index]!;
-  return terrainShare(t.terrain, cfg) > 0 || shoreStands(state, cfg, me, t, 'install').length > 0;
+  if (terrainShare(t.terrain, cfg) > 0) return [...doorTable(state, cfg).values()].some((walks) => Number.isFinite(walks[index]!.seconds));
+  return shoreStands(state, cfg, me, t, 'install').length > 0;
 }

@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { BudgetLine, Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 import type { Strategy } from './playbook.js';
 
 /**
@@ -308,13 +308,19 @@ export const START = {
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
    * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
-   * storeStockFor adds them.
+   * storeStockFor adds them. Medicine 40, up from 4: spike S2's lever B with STRATEGIST.medicineDespiteInputs (PM
+   * ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.
    */
-  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
-  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
-  storeEnergyPerPlayer: 5,
+  /**
+   * The store's Energy at the start, for each seat: 12, so 48 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
+   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov), first to 10, then to 12 once C49 (a waiting
+   * building's missing goods count in the store's demand) put seed 1 at 16.4% (PM ruling, 8 Nov): farms then turn off
+   * for Energy in under 15% of farm-months on seeds 1, 101 and 201.
+   */
+  storeEnergyPerPlayer: 12,
 };
 
 /** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
@@ -937,9 +943,31 @@ export const POLITICS = {
     /** One extra vote per this much sales tax paid over the game, up to taxCap votes. */
     taxPerVote: 300,
     taxCap: 2,
+    /** The fewest votes a player can have, whatever their reputation (slice 3, placeholder until WS1's sim row). */
+    minVotes: 1,
   },
   /** A player's reputation stays within these bounds, in whole points (START.reputation is where it starts). */
-  reputation: { min: 0, max: 100 },
+  reputation: {
+    min: 0,
+    max: 100,
+    /** Points a deal card moves a player's reputation, signed (slice 3, placeholders until WS1's sim row). */
+    moves: {
+      kept: 3,
+      voteBroken: -10,
+      pactBroken: -20,
+      /** A caught saboteur's reputation points, before the sabotage ban's multiplier (slice 4, S4-RULE-5; placeholder until WS1's sim row). */
+      caught: -10,
+    },
+    /** Kept gains a player can earn from cards with one other party in one term. */
+    keptPerPartnerPerTerm: 1,
+  },
+  /** Deal cards between players (slice 3, placeholders until WS1's sim row). */
+  deals: {
+    /** A player's offers waiting for an answer at once. */
+    maxOpenOffers: 3,
+    /** The lengths a pact may run, in months. */
+    pactMonths: [1, 3, 6],
+  },
   /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
@@ -960,6 +988,82 @@ export const POLITICS = {
     /** Months a failed proposal waits before it may be put again. */
     retryMonths: 2,
   },
+  /**
+   * The Governor's standing budget: whole-percent shares of the fund above COLONY.reserve (slice 5, S5-RULE-1). Every
+   * number is a placeholder until the sim tunes it and Heiko OKs it.
+   */
+  budget: {
+    /** Shares are whole multiples of this, in percent. */
+    step: 5,
+    /** The shares in force while the Governor has set none: exactly the colony's funding before the budget existed. */
+    default: { projects: 100, welfare: 0, security: 0 } satisfies Record<BudgetLine, number>,
+    /** Buildings take whatever their open projects still need, so only the share is bounded. */
+    projects: { maxShare: 100 },
+    /** Welfare: cash to the player in last place. Most percent of the spare fund, and most credits a month. */
+    welfare: { maxShare: 20, maxCredits: 200 },
+    /** Security (after the first release): the same two bounds. */
+    security: { maxShare: 30, maxCredits: 300 },
+  },
+  /** The overrule vote on the Governor's tax (slice 5, S5-RULE-7). Placeholders. */
+  overrule: {
+    /** Ms the result is shown before it takes effect: a presentation clock only. */
+    revealMs: 4_000,
+    /** Passed overrules in one term that call a snap election (after the first release). */
+    snapAfter: 2,
+  },
+  /**
+   * Sabotage orders (slice 4, S4-RULE-1..4). Every number is a placeholder until WS1 tunes it (HC-25).
+   * The engine builds it OFF (AM-2); the screen PR flips `on` once WS6's mock is approved.
+   */
+  sabotage: {
+    /** The sim and test switch (not a lobby option, D-S4-2): false refuses every order and files no incident. */
+    on: false,
+    /** Salt of the order stream's seed, so its draws never move another stream's. */
+    streamSalt: 0x5ab07a6e, // literal-ok: the order stream's salt, a seed label and not a balance number
+    orders: {
+      /** Cut the power to one plot: its output is 0 that month. */
+      powerCut: {
+        /** Credits the crew costs, charged at that month's upkeep. */
+        cost: 120,
+        /** Chance, 0..1, that the cut works. */
+        success: 0.6,
+        /** Chance, 0..1, that the order is seen (caught on the spot), before the guards and Security. */
+        detect: 0.3,
+      },
+      /** Spread a rumour that moves one good's opening price at the auction. */
+      rumour: {
+        /** Credits the crew costs, charged at that month's upkeep. */
+        cost: 60,
+        /** Chance, 0..1, that the rumour takes. */
+        success: 0.8,
+        /** Chance, 0..1, that the order is seen. */
+        detect: 0.15,
+        /** Share, 0..1, of the posted price a worked rumour moves it, up or down. */
+        shift: 0.25,
+      },
+    },
+  },
+  /** The Sheriff's powers (slice 4, S4-RULE-6..8). Placeholders until WS1 tunes them (HC-25). */
+  sheriff: {
+    /** Plots the Sheriff may guard in a month, before Security. */
+    guards: 2,
+    /** Extra guards per 100 credits of Security spent that month (slice 5 supplies the figure). */
+    guardsPerHundred: 1,
+    /** Added to an order's chance of being seen, 0..1, per 100 credits of Security spent that month. */
+    securityDetect: 0.1,
+    /** Investigations the Sheriff may open in a month. */
+    investigations: 1,
+    /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3). */
+    investigateOdds: 0.5,
+    fine: {
+      /** The base fines the Sheriff may levy, in credits, before the ban's multiplier. */
+      steps: [50, 100, 150, 200, 250, 300],
+      /** The fine an unfined case pays when planning ends, in credits, before the multiplier. */
+      standard: 150,
+    },
+    /** Share, 0..1, of a paid fine the victim gets as restitution; the fund keeps the rest. */
+    victimShare: 0.5,
+  },
   /** The colony's book of laws, each with its settings. */
   laws: {
     /** Per cent of each unit a player sells to the export ship. */
@@ -970,8 +1074,39 @@ export const POLITICS = {
     pollutionTax: { settings: [10, 20, 40] },
     /** The air level above which no new mine or smelter of the listed outfits may be outfitted. */
     emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
+    /** Times a caught saboteur's fine and reputation loss are multiplied (slice 4, S4-RULE-10). */
+    sabotageBan: { settings: [2, 3] },
   } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
+    /** How AI seats order sabotage (slice 4, S4-RULE-13). Placeholders until WS1 tunes them in PR-3. */
+    sabotage: {
+      /** Chance, 0..1, per month that a persona considers an order at all. */
+      orderChance: { trader: 0, cautious: 0, aggressive: 0.2, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+      /** Credits an order must be worth, after spite, cost and expected capture, before a seat places it. */
+      minEdge: 0,
+      /** Weight on a victim who was caught sabotaging this seat, when picking a target. */
+      grudge: 2,
+    },
+    /** How an AI Sheriff fines (slice 4, S4-RULE-13); every other case pays the standard fine. */
+    sheriff: {
+      /** Base fines in credits (before the ban): on the Worth leader, and on a pact partner. */
+      fine: { leader: 300, partner: 50 },
+    },
+    /** The AI's deal cards (slice 3, placeholders until WS1's sim row). */
+    deals: {
+      /** Cards from a proposer below this reputation are declined. */
+      refuseBelow: 30,
+      /** Offers a seat makes in a month, at most. */
+      offersPerMonth: 2,
+      /** The card's worth to the seat, in credits, at or above which it accepts. */
+      acceptMin: { trader: 0, cautious: 20, aggressive: 10, saboteur: 0 } satisfies Record<AiPersonaId, number>,
+      /** How much a seat weighs its reputation against a gain before breaking a promise: higher keeps more. */
+      honesty: { trader: 1, cautious: 2, aggressive: 0.8, saboteur: 0.5 } satisfies Record<AiPersonaId, number>,
+      /** A Rookie's chance of accepting a card. */
+      rookieAccept: 0.5,
+      /** The length of the pacts a seat offers, in months: one of POLITICS.deals.pactMonths. */
+      pactMonths: 3,
+    },
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
     /** A seat decides whether to run in the first planning phase at most this many months before an election month; in month 1, at the last call. */
@@ -996,6 +1131,34 @@ export const POLITICS = {
       capPlotCost: 40,
       /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
       rookieYes: 0.5,
+    },
+    /** The AI Governor's budget split (slice 5, S5-RULE-11). Placeholders until the sim tunes them. */
+    budget: {
+      /** Where each persona's Welfare and Security shares start, in percent, before any fill. */
+      base: {
+        trader: { welfare: 5, security: 0 },
+        cautious: { welfare: 10, security: 0 },
+        aggressive: { welfare: 0, security: 0 },
+        saboteur: { welfare: 0, security: 0 },
+      } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+      /** What a persona makes of the worth a line adds when it weighs a step against Projects: 1 is neutral. */
+      tilt: {
+        trader: { welfare: 1, security: 1 },
+        cautious: { welfare: 1.5, security: 1.5 },
+        aggressive: { welfare: 0.5, security: 1 },
+        saboteur: { welfare: 0.5, security: 0.5 },
+      } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+    },
+    /** How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them. */
+    overrule: {
+      /** Credits a month a change must cost the seat before it calls an overrule. */
+      minGain: 20,
+      /** Chance a persona calls an overrule that cannot win, as a protest. */
+      longShot: { trader: 0.1, cautious: 0.05, aggressive: 0.3, saboteur: 0.2 } satisfies Record<AiPersonaId, number>,
+      /** A Rookie's chance of a yes: a coin from the overrule's own stream. */
+      rookieYes: 0.5,
+      /** Credits a month an unhappy colony makes a seat more willing to vote yes. */
+      unhappyTilt: 30,
     },
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
@@ -1072,6 +1235,10 @@ export const HAPPINESS = {
     gap: 2,
     gapUnit: 1_000,
     gapCap: 10,
+    /** Onto the target for each `welfareUnit` credits of Welfare paid this upkeep, up to `welfareCap` units (slice 5, S5-RULE-5). Placeholders. */
+    welfare: 1,
+    welfareUnit: 50,
+    welfareCap: 4,
   },
 };
 
@@ -1284,6 +1451,9 @@ export const EVENT_SHOW = {
     ratsInSilo: 'bulletin',
     crookedAccountant: 'bulletin',
     packageFromHome: 'bulletin',
+    // Slice 4's sabotage (S4-C17): every order done or caught takes the screen ("Caught!" names the culprit).
+    powerCut: 'headline',
+    marketRumour: 'headline',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1772,7 +1942,26 @@ export const STRATEGIST = {
     canDevelop: { mules: 2, factoryWeight: 1, weight: 0.3 },
     /** "Hurts the leader": what the plan that fences in the leader scores. */
     hurtsLeader: 0.7,
+    /**
+     * A plan worth under this share of the best plan's worth is not offered to the decider (T-AC-14). The shortlist's
+     * utility tolerance alone let a plan at 43% of the best through once lever B valued Medicine works (PR-5).
+     */
+    offerShare: 0.5,
   },
+  /**
+   * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
+   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 12 (PM rulings,
+   * 7 and 8 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
+   */
+  energyFirst: true as boolean,
+  /**
+   * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
+   * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
+   * START.storeStock.medicine 40 (PM ruling, 8 Nov). OFF until health is on: without sick colonists it only diverts
+   * seats from their Energy plant (seed 1's Energy gate 9.6% -> 15.8%); PR-13 switches it on with health (PM ruling,
+   * 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=true`.
+   */
+  medicineDespiteInputs: false as boolean,
   /** The development decision's considerations (developDecision), besides gainScale.develop and the cash left. */
   develop: {
     /** "Known ground": what an idle plot it hasn't analysed scores; an analysed one scores 1. */
