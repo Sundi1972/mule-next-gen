@@ -324,10 +324,11 @@ export const START = {
    * four households of 1 + 1 for their crews = 8, and four seats' first two plots at about 1.5 each (farm 2, others
    * 1; a well pays its own) = 12. Measured: the store's Water runs out in month 4 and colonists go short from month 5 on
    * seeds 1, 101 and 201. Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
-   * storeStockFor adds them. Medicine 40, up from 4: spike S2's lever B with STRATEGIST.medicineDespiteInputs (PM
-   * ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.
+   * storeStockFor adds them. Medicine 22 (Heiko, 8 Nov: Medicine A), down from S2 lever B's 40: with nobody making
+   * Medicine it carries the colonists to about month 6 (measured, the median month the store runs dry on seeds 1, 101
+   * and 201), and after that the players must make it. STRATEGIST.medicineDespiteInputs stays a switch.
    */
-  storeStock: { water: 100, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
+  storeStock: { water: 100, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 22 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
   /**

@@ -89,8 +89,8 @@ describe('createGame', () => {
     expect(newGame(n).store.stock.energy).toBe(energy);
   });
 
-  it("the store starts with 40 Medicine (S2 lever B, PM ruling 8 Nov)", () => {
-    expect(newGame(4).store.stock.medicine).toBe(40);
+  it("the store starts with 22 Medicine, enough to about month 6 when nobody makes it (Heiko, 8 Nov: Medicine A)", () => {
+    expect(newGame(4).store.stock.medicine).toBe(22);
   });
 
   describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {

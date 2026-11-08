@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>03accd8c70da</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>e18971f3538e</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -407,7 +407,7 @@
 </table></div>
 
 <h3 id="start-store-stock"><code>START.storeStock</code></h3>
-<p>Water 100: four months of the colony&#39;s opening use (Heiko, 8 Nov: &quot;the store should have enough water for 4 months, then the players need to adapt&quot;). A month&#39;s opening use is about 25: the colonists 100 / colonistsPerUnit 20 = 5, four households of 1 + 1 for their crews = 8, and four seats&#39; first two plots at about 1.5 each (farm 2, others 1; a well pays its own) = 12. Measured: the store&#39;s Water runs out in month 4 and colonists go short from month 5 on seeds 1, 101 and 201. Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer); storeStockFor adds them. Medicine 40, up from 4: spike S2&#39;s lever B with STRATEGIST.medicineDespiteInputs (PM ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.</p>
+<p>Water 100: four months of the colony&#39;s opening use (Heiko, 8 Nov: &quot;the store should have enough water for 4 months, then the players need to adapt&quot;). A month&#39;s opening use is about 25: the colonists 100 / colonistsPerUnit 20 = 5, four households of 1 + 1 for their crews = 8, and four seats&#39; first two plots at about 1.5 each (farm 2, others 1; a well pays its own) = 12. Measured: the store&#39;s Water runs out in month 4 and colonists go short from month 5 on seeds 1, 101 and 201. Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer); storeStockFor adds them. Medicine 22 (Heiko, 8 Nov: Medicine A), down from S2 lever B&#39;s 40: with nobody making Medicine it carries the colonists to about month 6 (measured, the median month the store runs dry on seeds 1, 101 and 201), and after that the players must make it. STRATEGIST.medicineDespiteInputs stays a switch.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
@@ -417,7 +417,7 @@
 <tr><td><code>START.storeStock.rareEarth</code></td><td class="n">4</td><td>See the note on <code>START.storeStock</code>.</td></tr>
 <tr><td><code>START.storeStock.alloy</code></td><td class="n">8</td><td>See the note on <code>START.storeStock</code>.</td></tr>
 <tr><td><code>START.storeStock.electronics</code></td><td class="n">0</td><td>See the note on <code>START.storeStock</code>.</td></tr>
-<tr><td><code>START.storeStock.medicine</code></td><td class="n">40</td><td>See the note on <code>START.storeStock</code>.</td></tr>
+<tr><td><code>START.storeStock.medicine</code></td><td class="n">22</td><td>See the note on <code>START.storeStock</code>.</td></tr>
 </tbody>
 </table></div>
 
