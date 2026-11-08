@@ -41,6 +41,8 @@ function newGame(species: Species[] = ['zipwing', 'bramblet', 'gearling', 'mollo
   }
   // Round prices, so the store buys at 90 and sells at 110.
   for (const g of Object.keys(state.store.posted) as Good[]) state.store.posted[g] = 100;
+  // A shelf of 20 Water, so the store still has room to buy Water (storeWants); START's 100 fills that room (Heiko, 8 Nov).
+  state.store.stock.water = 20;
   state.phase = 'auction';
   return state;
 }
@@ -393,13 +395,15 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     return state;
   }
 
-  it("FM-skip-spoilage: a Medicine factory's Water is carried too: its seat, with no farm, holding only what it drinks, keeps Water from being skipped and its row asks for 2 more", () => {
+  it("FM-skip-spoilage: a Medicine factory's Water is carried too: its seat, with no farm, holding only what it drinks, keeps Water from being skipped and its row asks for the drink and the factory's 1 past spoilage", () => {
     const state = outfitTable(['medicine'], (eat) => eat);
     const eat = needsOf(state, 'p0').water;
     startAuction(state, ['water', 'food']);
     expect(a(state).skipped, 'Water comes up: the factory would run dry').toEqual([]);
-    // The factory uses 1 at production; 1 x 0.95 floors to 0, so 2 must be held past the month end.
-    expect(a(state).status.find((r) => r.id === 'p0')!.need).toBe(eat + 2);
+    // Production keeps the drink back, then the factory uses 1 (AM-18 W2): eat + 1 must survive the month end's 5%.
+    const held = Math.ceil((eat + 1) / (1 - GOOD_CONFIG.water.spoilage));
+    expect(Math.floor(held * (1 - GOOD_CONFIG.water.spoilage)), 'held survives to cover it').toBe(eat + 1);
+    expect(a(state).status.find((r) => r.id === 'p0')!.need).toBe(eat + held);
   });
 
   it('FM-skip-spoilage: Water is carried for a Food farm, and not for a seat with neither a farm nor a factory', () => {
@@ -413,6 +417,22 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
       const state = outfitTable(outfits, (eat) => eat);
       const held = auctionNeed(state, 'p0');
       for (const g of GOODS) expect(held[g], `${g} with ${outfits.join(', ')}`).toBeGreaterThanOrEqual(Math.min(monthNeeds(state, 'p0')[g], UPKEEP.depotCapacity));
+    }
+  });
+
+  it("AM-18: a seat with plots carries its drink plus every plot's Water, as production keeps the drink back first; a Smithore mine needs Water too", () => {
+    // The least held so that floor(n x what survives the month end) still covers `want`.
+    const survives = (want: number) => {
+      let n = want;
+      while (Math.floor(n * (1 - GOOD_CONFIG.water.spoilage)) < want) n++;
+      return n;
+    };
+    for (const outfits of [['smithore'], ['food'], ['food', 'smithore', 'medicine']]) {
+      const state = outfitTable(outfits, (eat) => eat);
+      const eat = needsOf(state, 'p0').water;
+      const next = Math.min(monthNeeds(state, 'p0').water, UPKEEP.depotCapacity);
+      expect(monthNeeds(state, 'p0').water, outfits.join(', ')).toBeGreaterThan(eat);
+      expect(auctionNeed(state, 'p0').water, outfits.join(', ')).toBe(eat + survives(next));
     }
   });
 

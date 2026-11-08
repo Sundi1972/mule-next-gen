@@ -19,6 +19,8 @@ function development(): GameState {
   me.money = 5_000;
   me.stock.food = 20;
   me.stock.energy = 20;
+  // Watered too: every plot drinks (AM-18).
+  me.stock.water = 20;
   return state;
 }
 

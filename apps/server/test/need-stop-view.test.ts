@@ -18,6 +18,9 @@ function waterWalk(): { held: boolean; views: WalkerView[] }[] {
   // The game keeps its engine state private; the test reads it to know when the stop has happened.
   const engine = () => (game as unknown as { state: GameState }).state;
   game.start(seats);
+  // A shelf of 20 Water, so the store still has room to buy Water and Heiko sells down to his need (START's 100 fills
+  // that room: Heiko, 8 Nov).
+  engine().store.stock.water = 20;
   const ticks: { held: boolean; views: WalkerView[] }[] = [];
   let walking = false;
   for (let i = 0; i < 200_000; i++) {

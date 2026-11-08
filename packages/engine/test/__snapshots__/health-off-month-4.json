@@ -671,11 +671,11 @@
       "medicine": "normal",
       "rareEarth": "tight",
       "smithore": "normal",
-      "water": "tight"
+      "water": "normal"
     },
     "capital": 4699,
     "lastWalk": {
-      "water": {
+      "smithore": {
         "dryBudget": false,
         "highTrade": null,
         "soldOutHigh": null
@@ -704,7 +704,7 @@
       "medicine": 119,
       "rareEarth": 75,
       "smithore": 50,
-      "water": 31
+      "water": 25
     },
     "refPrice": {
       "alloy": 91,
@@ -721,12 +721,12 @@
       "alloy": 8,
       "crystite": 0,
       "electronics": 10,
-      "energy": 39,
+      "energy": 58,
       "food": 0,
-      "medicine": 28,
+      "medicine": 12,
       "rareEarth": 4,
       "smithore": 20,
-      "water": 2
+      "water": 79
     }
   },
   "tiles": [
