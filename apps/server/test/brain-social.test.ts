@@ -171,7 +171,7 @@ interface Screen {
 }
 
 /** A real Room hosting MuleGame on `brain`: humans join in order (the first is host), a TV connects, the host adds AI seats and starts. */
-function table(options: { humans: string[]; ais: number; brain?: MeteredBrain; maxMonths: number; recordPlaybook?: (note: PlaybookNote) => void }) {
+function table(options: { humans: string[]; ais: number; brain?: MeteredBrain; maxMonths: number; recordPlaybook?: (note: PlaybookNote) => void; moderate?: (text: string) => string }) {
   let game: MuleGame | null = null;
   const room = new Room<MuleIntent, MuleView>({
     code: 'SOCIAL',
@@ -181,6 +181,7 @@ function table(options: { humans: string[]; ais: number; brain?: MeteredBrain; m
     },
     aiNames: AI_NAMES,
     isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    ...(options.moderate ? { moderate: options.moderate } : {}),
   });
   const when = () => ({ month: game?.viewFor(null).month ?? 0, phase: game?.viewFor(null).phase ?? 'lobby' });
   const screen = (): Screen => {
@@ -220,6 +221,7 @@ function table(options: { humans: string[]; ais: number; brain?: MeteredBrain; m
   const ids = (isAi: boolean) => seats.filter((s) => s.isAi === isAi).map((s) => s.id);
   return {
     room,
+    game: () => game!,
     phones,
     tv,
     humans: ids(false),
@@ -389,6 +391,32 @@ describe('B-AC-B5: AIs hear each other (spec B C5)', () => {
     // The humans' whisper reached Mia, so it was said; and AI 1's whisper reached no human phone.
     expect(delivered(t.phones).some((m) => m.from === heiko && m.text.startsWith(HUMANS_MARK))).toBe(true);
     expect(delivered(t.phones).filter((m) => m.text.startsWith(MARK))).toEqual([]);
+    t.dispose();
+  }, GAME_MS);
+
+  it('B-AC-B5: an AI hears another AI\'s line exactly as the table received it, trimmed, capped and moderated; a line moderation drops reaches no AI', async () => {
+    const [one, two] = AI_NAMES as [string, string];
+    const MODERATED = 'MARK-moderated';
+    // The family filter as the room is given it: one word starred out, a line with another word dropped whole.
+    const moderate = (text: string) => (text.includes('DROPME') ? '' : text.replace(/GOSH/g, '****'));
+    const sdk = socialModel((b) => {
+      const aiTwo = b.others.find((o) => o.name === two);
+      return { messages: b.name === one && aiTwo && b.month === 1 ? [msg(aiTwo.id, `${MODERATED} GOSH, back me?`), msg(aiTwo.id, `${MODERATED} DROPME now`)] : [] };
+    });
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smartOn(sdk), maxMonths: 2, moderate });
+    const [aiOne, aiTwo] = t.ais as [string, string];
+    await t.runUntil(() => t.state().phase === 'development');
+    const inside = t.game() as unknown as { ai: Map<string, AiSeat>; playbooks: { options: { say: (seat: string, text: string, to?: string) => void } } };
+    const heard = () => inside.ai.get(aiTwo)!.brain.heard();
+    expect(heard()).toContainEqual({ from: one, text: `${MODERATED} ****, back me?`, to: 'me' });
+    expect(heard().some((l) => l.text.includes('GOSH') || l.text.includes('DROPME'))).toBe(false);
+
+    // A table line longer than the room's cap, padded with spaces: AI 2 hears what the TV received, no more.
+    const long = `   ${MODERATED}-long ${'word '.repeat(120)}   `;
+    inside.playbooks.options.say(aiOne, long);
+    const onTv = t.tv.chat.find((m) => m.from === aiOne && m.text.includes(`${MODERATED}-long`))!;
+    expect(onTv.text.length).toBeLessThan(long.length);
+    expect(heard().at(-1)).toEqual({ from: one, text: onTv.text });
     t.dispose();
   }, GAME_MS);
 });
