@@ -1,7 +1,6 @@
 import { document, FakeElement } from './fake-dom';
 import { ColonyGrounds, type GroundsColony } from '@mule/ui';
 import { act, createElement } from 'react';
-import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,6 +21,7 @@ let device = { reduced: false };
 
 beforeEach(() => {
   frames = new Map();
+  nextFrame = 1;
   device = { reduced: false };
   Object.assign(window, {
     matchMedia: (q: string) => ({ media: q, matches: device.reduced && q === '(prefers-reduced-motion: reduce)', addEventListener() {}, removeEventListener() {} }),
@@ -47,7 +47,7 @@ afterEach(() => {
 function frame(ms: number) {
   const due = [...frames.values()];
   frames.clear();
-  flushSync(() => due.forEach((cb) => cb(ms)));
+  act(() => due.forEach((cb) => cb(ms)));
 }
 
 /** A general strike nobody has paid: no colonist walks (RULE-3), so only the smoke can keep the clock running. */
@@ -97,11 +97,12 @@ describe('T-AC-15: the smoke on the page clock', () => {
     expect(puffs()).toEqual(start);
   });
 
-  it('T-AC-15: smoke that comes back starts its drift again, never where the last plume had got to', () => {
+  it('regression (#819 review): once the clock has stopped, smoke that comes back starts its drift again, not where the last plume had got to', () => {
     show(struck('damaged'));
     const start = puffs();
     frame(0);
     frame(1_500);
+    expect(puffs()).not.toEqual(start);
     // Repaired: nothing smokes, nobody walks, the clock stops. Damaged again: the new plume starts as the first did.
     show(struck('standing'));
     expect(puffs()).toHaveLength(0);
