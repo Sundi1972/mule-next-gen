@@ -248,14 +248,18 @@ Built in 2.1–2.2 (ws10-grounds-pr2 @ b12f388c): RULE-2 glow on every stage by 
 the light suit panels carrying the player colour (a small palette where no player owns the walker), and the helmet and trims
 varying in place of hair (option (a), relayed by the PM 8 Nov). Kenney has no walk; Astronaut B (off-tone) and the Quaternius
 human are dropped; Mixamo is not used (licence). Builds on Task 2.2c (#776): the outline ghost becomes the sprite's outline.
-**Altitude:** the live layer's rendered markup, plus T-AC-2's manifest check for the `walker` entry. **Files:** `design/art/colony/spike-colonists/walk.py`
-(brought over from `ws10-spike-colonists`; neutral suit and trim, a mask sheet), `design/art/colony/publish.sh` (tints, outline, the manifest's `walker` entry, spec §3),
+**Altitude:** the live layer's rendered markup, plus T-AC-2's manifest check for the `walker` entry. **Files:** `design/art/colony/walker/walk.py`
+(brought over from `ws10-spike-colonists`; neutral suit and trim, a mask sheet), `walker/tint.py` (tints, outline), `walker/publish.py` (WebP, the manifest's `walker` entry, spec §3), `publish.sh` (keeps that entry),
 `apps/web/public/art/colony/walker/**`, `packages/ui/src/grounds/LiveLayer.tsx` (a sprite `Colonist`), `walks.ts` (PACE),
 `packages/ui/test/grounds-walker.test.tsx`.
-- [ ] Render astroA day and dusk (`yaw0 90`, 12 frames, the clip's 1.333 s cycle) with `COLONY_WALK_TINT` neutral, plus the mask sheet (suit red, trim green).
-- [ ] Offline: tint the suit to p1–p4 (theme.css) and a palette for unowned walkers; trims from a palette of three; an outline sheet (alpha dilated minus alpha). WebP @800/@400; ≤ 40 KB per sheet @400.
-- [ ] Test first, `T-AC-14`: a walker is an `<image>` crop of the `walker` sheet whose row is the heading of its route leg and whose column advances with the cycle; its suit variant is its owner's colour; at a still frame (reduced motion) frame 0; behind a building the ghost is the outline sheet, faded on the `<image>` itself (never a group opacity, Task 5.6); no `walker` entry → today's SVG figure. Run: FAIL. Implement. Run: PASS.
-- [ ] `walks.ts` PACE 2.9 → **1.3 m/s** (walking pace, Heiko). Game shots TV and phone, day and dusk, beside the spike page; the PM checks side by side before Heiko sees them.
+- [x] Render astroA day and dusk (`yaw0 90`, 12 frames, the clip's 1.333 s cycle) with `COLONY_WALK_TINT` neutral, plus the mask sheet (suit red, trim green).
+- [x] Offline: tint the suit to p1–p4 (theme.css); trims warm white / graphite / sand (charcoal dropped: speckled the suit, vanished at dusk); an outline sheet (the mask's alpha grown 4 px, minus itself). WebP @800/@400: ~12.5 KB a sheet @400. The unowned palette waits on the PM's ruling (the colony view carries no owner per colonist).
+- [x] Test first, `T-AC-14`: a walker is an `<image>` crop of the `walker` sheet whose row is the heading of its route leg and whose column advances with the cycle; its suit variant is its owner's colour; at a still frame (reduced motion) frame 0; behind a building the ghost is the outline sheet, faded on the `<image>` itself (never a group opacity, Task 5.6); no `walker` entry → today's SVG figure. Run: FAIL. Implement. Run: PASS. Red 8ccd83c7 (6 of 7), green c2b7ae46.
+- [x] `walks.ts` PACE 2.9 → **1.3 m/s** (walking pace, Heiko). Game shots TV and phone, day and dusk, beside the spike page (`spike.html#in-the-game` @ d0374307); phone dusk 803,769 B. The PM checks side by side before Heiko sees them.
+- [x] PM ruling (b): colonists wear only the seated players' colours, the rest colony white/grey (`players` on ColonyGrounds/GroundsOpener; named edits WS4 44448751 and WS7 71ca4a90, both OK'd). Heiko approved the walking astronauts (8 Nov).
+- [x] Review round 1 (CHANGES at 71ca4a90): the sprite was √2 too big (METRE/px_per_m, not W/(12√2·px_per_m)), and a 2-unit
+  Icosphere helper in the model set the feet 35 px high and the figure 1.24 m. walk.py now bounds the skinned meshes only;
+  re-rendered. Placement and per-route heading tests added (red ca60363c, fix 0bfe5d85). Phone dusk 857,549 B.
 
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 

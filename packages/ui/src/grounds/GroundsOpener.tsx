@@ -86,7 +86,7 @@ function Caption({ changes, baseline }: { changes: GroundsChange[]; baseline: bo
  * opener leans in on the places that changed and back out; the still holds the built area. `Scene` draws the grounds
  * with the app's art manifest.
  */
-export function GroundsOpener({ opener, colony, month, Scene }: { opener: OpenerState; colony: GroundsColony; month: number; Scene: ComponentType<Omit<ColonyGroundsProps, 'manifest'>> }) {
+export function GroundsOpener({ opener, colony, month, Scene, players }: { opener: OpenerState; colony: GroundsColony; month: number; Scene: ComponentType<Omit<ColonyGroundsProps, 'manifest'>>; players?: number }) {
   const leaning = opener.kind === 'full' ? opener.changes.filter((c) => c.place) : [];
   const lean = leanAt(useSeconds(opener.playing && leaning.length > 0));
   return (
@@ -105,6 +105,7 @@ export function GroundsOpener({ opener, colony, month, Scene }: { opener: Opener
           size="tv"
           light="dusk"
           chips={false}
+          players={players}
           framing={{ aspect: CANVAS.width / CANVAS.height, leanOn: leaning.map((c) => c.place!), lean: leaning.length > 0 ? lean : 0 }}
           className="absolute inset-0 h-full w-full"
         />

@@ -13,6 +13,23 @@ export interface ManifestEntry {
   skyline?: Skyline;
 }
 
+/**
+ * The colonists' walk sheets (spec §3, AM-8): rows are the headings top to bottom, columns the frames of one walk cycle,
+ * each cell `cell` px at the full-resolution render with the feet at `feet`. `sheets` by "<suit>-<trim>": suit p1–p4.
+ */
+export interface WalkerEntry {
+  cell: { width: number; height: number; feet: [number, number] };
+  px_per_m: number;
+  frames: number;
+  seconds: number;
+  headings: Heading[];
+  sheets: Record<string, { day: string; dusk: string }>;
+  outline: string;
+}
+
+/** The four ways along the grid: +x is col rising (down-right on screen), +y row falling (up-right). */
+export type Heading = '+x' | '+y' | '-x' | '-y';
+
 /** A picture's opaque pixels by column: `column` frame px wide, each column's top and bottom row as fractions of the picture's height (empty: top 1, bottom 0). */
 export interface Skyline {
   column: number;
@@ -53,6 +70,8 @@ export interface GroundsManifest {
   sizes: number[];
   /** Without it the grounds draw their SVG ground. */
   plate?: Record<PlateExtent, PlateEntry>;
+  /** Without it the colonists are SVG figures. */
+  walker?: WalkerEntry;
 }
 
 /** A place's state, as the colony view carries it. */

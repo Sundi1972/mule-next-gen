@@ -273,7 +273,7 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
   `{ "cell": { "width": 192, "height": 224, "feet": [96, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
      "headings": ["+x", "+y", "-x", "-y"], "sheets": { "<suit>-<trim>": { "day": "walker/…@800.webp", "dusk": "…" } },
      "outline": "walker/outline@800.webp" }` — a sheet's rows are the headings top to bottom, its columns the frames;
-  `+x` is c rising (screen down-right), `+y` r falling (up-right). suit ∈ p1–p4 plus the unowned palette; trim ∈ three.
+  `+x` is c rising (screen down-right), `+y` r falling (up-right). suit ∈ p1–p4; trim ∈ white, graphite, sand.
 - **Open gap (small):** `ColonyProjectView.place` is on trunk and `plot` was removed (#605); the entry above still
   describes it as WS7's to produce. Reconcile when C6's PR is recorded here.
 
