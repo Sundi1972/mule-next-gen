@@ -41,33 +41,32 @@ describe('walking in development', () => {
   });
 
   it('T-AC-22: hunger and sickness slow the walk, and multiply', () => {
-    // Pace = 1 − (1 − DEV_WALK.hungerPaceMin) × (1 − share of the month's Food held), times DEV_WALK.sickPace when
-    // sick: the two multiply. The corral to the plot is 2 s at full pace for the Bramblet.
+    // Pace = 1 − (1 − DEV_WALK.hungerPaceMin) × (1 − share of its Food the household ate at the last month end), times
+    // DEV_WALK.sickPace when sick: the two multiply (needs C15). The corral to the plot is 2 s at full pace for the Bramblet.
     const { state, plot } = walkers();
     const bram = state.players.find((p) => p.id === 'bram')!;
-    const need = needsOf(state, 'bram').food;
     const fed = (share: number) => 1 - (1 - DEV_WALK.hungerPaceMin) * (1 - share);
     const rows: [string, number, boolean, number][] = [
-      ['fed and well', need, false, 1],
-      ['5 of 10 Food', need * 0.5, false, fed(0.5)],
-      ['2 of 10 Food', need * 0.2, false, fed(0.2)],
-      ['no Food', 0, false, DEV_WALK.hungerPaceMin],
-      ['sick and fed', need, true, DEV_WALK.sickPace],
-      ['2 of 10 Food and sick', need * 0.2, true, fed(0.2) * DEV_WALK.sickPace],
-      ['no Food and sick', 0, true, DEV_WALK.hungerPaceMin * DEV_WALK.sickPace],
+      ['fed and well', 1, false, 1],
+      ['ate 5 of 10 Food', 0.5, false, fed(0.5)],
+      ['ate 2 of 10 Food', 0.2, false, fed(0.2)],
+      ['ate no Food', 0, false, DEV_WALK.hungerPaceMin],
+      ['sick and fed', 1, true, DEV_WALK.sickPace],
+      ['ate 2 of 10 Food and sick', 0.2, true, fed(0.2) * DEV_WALK.sickPace],
+      ['ate no Food and sick', 0, true, DEV_WALK.hungerPaceMin * DEV_WALK.sickPace],
     ];
-    for (const [label, food, sick, expected] of rows) {
-      bram.stock.food = food;
+    for (const [label, ate, sick, expected] of rows) {
+      bram.householdShort = 1 - ate;
       bram.sick = sick;
       expect(pace(state, 'bram'), label).toBeCloseTo(expected, 9);
       expect(walkSeconds(state, 'bram', 'corral', plot), label).toBeCloseTo(2 / expected, 9);
     }
-    // The share of the month's Food it holds, for the screens to show the level of hunger.
-    bram.stock.food = need * 0.2;
+    // The share of its Food the household ate, for the screens to show the level of hunger.
+    bram.householdShort = 0.8;
     expect(foodShare(state, 'bram')).toBeCloseTo(0.2, 9);
     // A hungry Zipwing: both paces at once.
     const zip = state.players.find((p) => p.id === 'zip')!;
-    zip.stock.food = 0;
+    zip.householdShort = 1;
     zip.sick = false;
     expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(1.6 / DEV_WALK.hungerPaceMin, 9);
   });

@@ -40,7 +40,8 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   const shortages = new Set<Good>();
 
   // Players. Energy for plots was already paid in production. The household eats first, then the crews, from what is
-  // left; how short the crews went slows next month's production (needs C14).
+  // left; how short the household went of Food makes the player hungry next development (needs C15), how short the
+  // crews went slows next month's production (needs C14).
   for (const player of state.players) {
     const needs = needsOf(state, player.id);
     const crewShort = { food: 0, water: 0 };
@@ -50,6 +51,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
       const crews = colonistMeal(needs[good] - base, player.stock[good] - home.took);
       player.stock[good] = Math.max(0, player.stock[good] - home.took - crews.took);
       crewShort[good] = crews.short;
+      if (good === 'food') player.householdShort = home.short;
     }
     player.crewShort = crewShort;
   }

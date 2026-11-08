@@ -9,7 +9,7 @@ import { colonyPrestige, colonyWealth, keepPromise, monthLedger, newColony, payG
 import { airBand } from './pollution.js';
 import { closePlanningDeals, monthEndDeals } from './diplomacy.js';
 import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
-import { needsOf, runProduction } from './production.js';
+import { runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { applyRumours, endRumours, resolveSabotage, settleSabotage } from './sabotage.js';
 import { emptyStock } from './stock.js';
@@ -227,7 +227,7 @@ function developer(state: GameState, playerId: string): Player {
 
 /**
  * Starts development: one clock, the same full time for every player. A
- * player short of the month's Food is hungry. Each player rolls for
+ * player whose household went short of Food at the last month end is hungry (needs C15). Each player rolls for
  * sickness (events.ts, likelier in dirty air and for a big polluter); a
  * player last month's epidemic made sick is sick again. One Medicine cures
  * being sick this turn, whatever the cause, and is used up. Then
@@ -236,7 +236,7 @@ function developer(state: GameState, playerId: string): Player {
  */
 function startDevelopment(state: GameState): void {
   for (const p of state.players) {
-    p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
+    p.hungry = (p.householdShort ?? 0) > 0;
     p.sick = false;
     const rolled = rollPlayerEvent(state, 'sickness', 'development', p.id);
     if (rolled || p.sickNext) {
