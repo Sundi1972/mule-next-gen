@@ -128,7 +128,7 @@ export interface Player {
   hungry: boolean;
   /**
    * The share of their need the player's crews went without at the last month end, Food and Water, each 0 to 1 (needs
-   * C14): next production works slower by it. Absent before the first month end: nothing short.
+   * C14): next production makes less by it. Absent before the first month end: nothing short.
    */
   crewShort?: { food: number; water: number };
   /**
@@ -395,10 +395,11 @@ export interface ProductionLine {
    * Energy and made UPKEEP.offOutputShare of its output (AM-17); `waterOff` the same for want of Water (AM-18).
    * `noEnergy` and `noWater` are the halvings they replaced, kept for screens and fixtures that still name them; the
    * engine no longer files `noEnergy`, and `noWater` only with AM-18 off. `crewShort`: its crews went short at the last
-   * month end and worked slower (needs C14, RULE-12), before any turn-off.
+   * month end, so the plot made less (needs C14, RULE-12), before any turn-off. `crewSick`: the colony was sick enough to
+   * make its crews sick and its owner held no Medicine (needs RULE-15), after `crewShort`.
    */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'crewShort' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'crewShort' | 'crewSick' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -491,6 +492,10 @@ export interface Colony {
   happiness: number;
   /** The share of the colonists who are sick, 0..HEALTH.cap. Absent until colony health first plays, and read as 0. */
   sick?: number;
+  /** The sick share as the upkeep before the last left it; absent until colony health has played two upkeeps. */
+  lastSick?: number;
+  /** Upkeeps in a row the colonists took less Medicine than their need; 0 or absent when they last had it all. */
+  medicineShortRun?: number;
   /** The colony's memory of hardship, 0..HARDSHIP.memoryCap: how short it went, fading a month at a time (needs RULE-3). Absent until the first upkeep, and read as 0. */
   hardship?: number;
   /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */

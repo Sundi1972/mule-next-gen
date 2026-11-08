@@ -202,11 +202,11 @@ describe("the TV's legend names every reason the map shows", () => {
    * a reason added to ProductionReason fails to typecheck here until it is listed, then fails below until it has words.
    */
   const LEGEND: Record<Exclude<ProductionReason, 'trait' | 'floor'>, true> = {
-    cluster: true, species: true, special: true, pollution: true, crewShort: true, noWater: true, waterOff: true, noEnergy: true, energyOff: true,
+    cluster: true, species: true, special: true, pollution: true, crewShort: true, crewSick: true, noWater: true, waterOff: true, noEnergy: true, energyOff: true,
   };
   const reasons = Object.keys(LEGEND) as ProductionReason[];
 
-  it("each reason on the month's plots has its own line in the legend, the crews' cut among them (needs C14)", () => {
+  it("each reason on the month's plots has its own line in the legend, the crews' cuts among them (needs C14, C18)", () => {
     const m = month({
       lines: reasons.map((why, i) => ({ x: i % W, y: Math.floor(i / W), owner: 's1', good: 'food' as const, base: 4, made: 3, parts: [{ why, delta: -1 }] })),
     });
@@ -216,5 +216,6 @@ describe("the TV's legend names every reason the map shows", () => {
     const legend = html.slice(start, html.indexOf('</ul>', start));
     expect(legend.match(/<li /g)?.length, 'one line per reason').toBe(reasons.length);
     expect(legend).toContain('Crews short of Food or Water last month: makes less');
+    expect(legend).toContain('Crews sick and no Medicine: makes less');
   });
 });

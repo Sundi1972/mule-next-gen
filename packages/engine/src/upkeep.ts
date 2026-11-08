@@ -1,4 +1,4 @@
-import { colonistMedicineNeed, electronicsComfort, grownColonists, moodBand, severity, type ColonistMonth } from './colony.js';
+import { colonistMedicineNeed, electronicsComfort, grownColonists, moodBand, nextSickShare, severity, sickShare, type ColonistMonth } from './colony.js';
 import { GAME, GOOD_CONFIG, HAPPINESS, HARDSHIP, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
@@ -19,7 +19,7 @@ export function colonistMeal(need: number, stock: number): { took: number; short
  * The colony's growth factor this month from `short`, how short its colonists went (needs RULE-5): Collapse air drives
  * them out whatever they ate; fed or within the tolerance it grows, past it it shrinks in proportion to the share
  * missing. The mood's band adds its migration, read before this month's mood steps. Never below 0. Sickness slows it
- * further once the month's sick share is known (grownColonists).
+ * further (grownColonists).
  */
 export function growthRate(state: GameState, short: number): number {
   if (airBand(state.air).name === 'collapse') return Math.max(0, 1 - POLLUTION.collapseLeave);
@@ -88,11 +88,11 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // The month's report keeps the meal for the month-end line (C6). A what-if shares the real report: it writes nothing.
   const report = state.history.at(-1);
   if (report?.month === state.month && !state.whatIf) report.colonistMeal = meal;
-  // In Collapse colonists leave whatever they eat. Otherwise they grow as if all were well: with colony health on,
-  // runColony grows them again from the same size once the month's sick share is known.
+  // In Collapse colonists leave whatever they eat or ail. Otherwise the month's new sick share, the one runColony
+  // writes from the same meal, slows their growth here, so the export ship and the fund below read the final size.
   const rate = growthRate(state, severity(colonistMonth.short));
-  if (airBand(state.air).name !== 'collapse') colonistMonth.growth = { from: state.colonists, rate };
-  state.colonists = grownColonists(state.colonists, rate, 0);
+  const ailing = HEALTH.enabled && state.colony && airBand(state.air).name !== 'collapse';
+  state.colonists = grownColonists(state.colonists, rate, ailing ? nextSickShare(sickShare(state)!, colonistMonth.short) : 0);
 
   // Spoilage, then anything above the home depot is lost. Selling it in time
   // is the player's own decision.
