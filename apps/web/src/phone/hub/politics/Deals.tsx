@@ -4,12 +4,11 @@ import { Button, cx } from '@mule/ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useClient, useClientState } from '../../../net/react';
-import { useEscape } from '../../dialog';
 import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
 import { SeatWords } from '../../../components/SeatWords';
 import { bindsWords, lawUp, monthsWords, nameOf, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
-import { CardWho, shellOf, useDialogFocus, Who } from './parts';
+import { CardWho, shellOf, useDialog, Who } from './parts';
 
 /**
  * Deal cards on the phone (S3-C17, S3-C18): the composer over the rail, a card offered to me (in its whisper thread
@@ -305,8 +304,7 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
  * buttons sit in its footer, under the thumb.
  */
 function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: string; children: ReactNode }) {
-  useEscape(onClose);
-  const box = useDialogFocus();
+  const box = useDialog(onClose);
   const sheet = (
     <div ref={box} className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>
       <header className="flex min-h-10 items-center gap-1.5 border-b border-holo-faint px-3 py-1.5">{title}</header>

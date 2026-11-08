@@ -1,7 +1,7 @@
 import { POLITICS, SOCIAL_EVENTS, START, type DealCard } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AiMark } from '../../../chat/Chat';
 import { useEscape } from '../../dialog';
@@ -190,17 +190,28 @@ export function shellOf(el: Element | null): Element | null {
   return el?.closest('[data-testid="game-shell"]') ?? null;
 }
 
+/** The open dialogs, the newest last: Escape closes only the one on top. */
+const dialogs: object[] = [];
+
 /**
- * A dialog's focus, as the lobby's dialogs keep it: on open its button marked `data-autofocus` takes it, and on close
- * it goes back to the element that had it. Put the returned ref on the dialog's box.
+ * A dialog's keyboard, as the lobby's dialogs keep it: Escape closes it when it is on top; on open its button marked
+ * `data-autofocus` takes the focus, and on close the focus goes back to the element that had it. Put the returned ref
+ * on the dialog's box.
  */
-export function useDialogFocus(): RefObject<HTMLDivElement> {
+export function useDialog(onClose: () => void): RefObject<HTMLDivElement> {
   const box = useRef<HTMLDivElement>(null);
+  const [self] = useState(() => ({}));
+  // Both handlers see one Escape before either dialog unmounts, so the one under the top stays.
+  useEscape(useCallback(() => dialogs.at(-1) === self && onClose(), [self, onClose]));
   useEffect(() => {
+    dialogs.push(self);
     const opener = document.activeElement as HTMLElement | null;
     box.current?.querySelector?.<HTMLElement>('[data-autofocus]')?.focus?.();
-    return () => opener?.focus?.();
-  }, []);
+    return () => {
+      dialogs.splice(dialogs.indexOf(self), 1);
+      opener?.focus?.();
+    };
+  }, [self]);
   return box;
 }
 
@@ -210,8 +221,7 @@ export function useDialogFocus(): RefObject<HTMLDivElement> {
  */
 export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; id: string; me: string | null; anchor: Element | null; onClose: () => void }) {
   const hub = useHubIfAny();
-  useEscape(onClose);
-  const box = useDialogFocus();
+  const box = useDialog(onClose);
   const p = view.players.find((q) => q.id === id)!;
   const rep = reputationOf(view, id);
   const rows = reasonRows(view, id);
