@@ -231,6 +231,32 @@ describe('S4-T-AC-17 / AM-12: a guard stands down on a plot the Sheriff came to 
   });
 });
 
+describe('S4-T-AC-17 / AM-12: guardsMax counts only the tiles that stand', () => {
+  it('S4-T-AC-17: of four posted tiles, one goes to the Sheriff and two are unowned; with the cap back at 2 the fourth still stands and catches the cut', () => {
+    for (let seed = 1; seed <= 400; seed++) {
+      const { state, food, ore } = monthOf(seed);
+      const spare = state.tiles.map((t, i) => [t, i] as const).filter(([t]) => t.terrain !== 'store' && t.owner === null).map(([, i]) => i);
+      const [other, last] = spare.slice(-2) as [number, number];
+      Object.assign(state.tiles[other]!, { owner: 'kai', outfit: 'smithore' });
+      Object.assign(state.tiles[last]!, { owner: 'lena', outfit: 'food' });
+      orderSabotage(state, 'brix', { kind: 'powerCut', tile: last });
+      const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
+      rng.next();
+      if (rng.next() < POLITICS.sabotage.orders.powerCut.detect) continue; // unguarded it would be seen anyway
+      security.spend = 200; // guardsMax 4 at posting
+      setGuards(state, 'ossa', [food, ore, other, last]);
+      Object.assign(state.tiles[food]!, { owner: 'ossa' }); // bought at the land auction
+      Object.assign(state.tiles[ore]!, { owner: null, outfit: null });
+      Object.assign(state.tiles[other]!, { owner: null, outfit: null });
+      security.spend = 0; // guardsMax 2 at resolution: only the one that stands is left
+      resolveSabotage(state);
+      expect(orders(state)[0]).toMatchObject({ outcome: 'caught', culpritPublic: true, bounty: { to: 'ossa', paid: BOUNTY } });
+      return;
+    }
+    throw new Error('no seed');
+  });
+});
+
 describe('S4-T-AC-19 / S4-B-AC-12: the Sheriff\'s own plots are seen harder', () => {
   const { detect } = POLITICS.sabotage.orders.powerCut;
   const bonus = POLITICS.sheriff.ownPlotDetectBonus;

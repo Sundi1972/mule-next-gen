@@ -45,6 +45,7 @@ function ownsSheriffPlot(state: GameState, order: SabotageOrder): boolean {
 function standingGuards(state: GameState): number[] {
   const sheriff = state.politics?.sheriff ?? null;
   const listed = state.politics?.guards ?? [];
+  // No Sheriff is reached only in fixtures: guards need a sitting Sheriff and are cleared at every planning start.
   const standing = sheriff === null ? listed : listed.filter((tile) => canGuard(state, sheriff, tile) === true);
   return standing.slice(0, guardsMax(state));
 }
