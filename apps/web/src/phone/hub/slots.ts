@@ -231,7 +231,10 @@ export interface TabHubSlots {
   readyWords: ((seat: HubSeat) => ReadyBarWords | null)[];
 }
 
-/** Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, the plot pick, and the sub-tab that last asked first. */
+/**
+ * Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, the plot pick, and the sub-tab that last asked first.
+ * Replaces HubPlace (and takes its name) when SB-2 grafts the tabbed hub.
+ */
 export interface TabHubPlace {
   tab: TabId;
   sub: string;
