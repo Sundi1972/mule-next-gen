@@ -945,7 +945,13 @@ export const POLITICS = {
     min: 0,
     max: 100,
     /** Points a deal card moves a player's reputation, signed (slice 3, placeholders until WS1's sim row). */
-    moves: { kept: 3, voteBroken: -10, pactBroken: -20 },
+    moves: {
+      kept: 3,
+      voteBroken: -10,
+      pactBroken: -20,
+      /** A caught saboteur's reputation points, before the sabotage ban's multiplier (slice 4, S4-RULE-5; placeholder until WS1's sim row). */
+      caught: -10,
+    },
     /** Kept gains a player can earn from cards with one other party in one term. */
     keptPerPartnerPerTerm: 1,
   },
@@ -999,6 +1005,59 @@ export const POLITICS = {
     /** Passed overrules in one term that call a snap election (after the first release). */
     snapAfter: 2,
   },
+  /**
+   * Sabotage orders (slice 4, S4-RULE-1..4). Every number is a placeholder until WS1 tunes it (HC-25).
+   * The engine builds it OFF (AM-2); the screen PR flips `on` once WS6's mock is approved.
+   */
+  sabotage: {
+    /** The sim and test switch (not a lobby option, D-S4-2): false refuses every order and files no incident. */
+    on: false,
+    /** Salt of the order stream's seed, so its draws never move another stream's. */
+    streamSalt: 0x5ab07a6e, // literal-ok: the order stream's salt, a seed label and not a balance number
+    orders: {
+      /** Cut the power to one plot: its output is 0 that month. */
+      powerCut: {
+        /** Credits the crew costs, charged at that month's upkeep. */
+        cost: 120,
+        /** Chance, 0..1, that the cut works. */
+        success: 0.6,
+        /** Chance, 0..1, that the order is seen (caught on the spot), before the guards and Security. */
+        detect: 0.3,
+      },
+      /** Spread a rumour that moves one good's opening price at the auction. */
+      rumour: {
+        /** Credits the crew costs, charged at that month's upkeep. */
+        cost: 60,
+        /** Chance, 0..1, that the rumour takes. */
+        success: 0.8,
+        /** Chance, 0..1, that the order is seen. */
+        detect: 0.15,
+        /** Share, 0..1, of the posted price a worked rumour moves it, up or down. */
+        shift: 0.25,
+      },
+    },
+  },
+  /** The Sheriff's powers (slice 4, S4-RULE-6..8). Placeholders until WS1 tunes them (HC-25). */
+  sheriff: {
+    /** Plots the Sheriff may guard in a month, before Security. */
+    guards: 2,
+    /** Extra guards per 100 credits of Security spent that month (slice 5 supplies the figure). */
+    guardsPerHundred: 1,
+    /** Added to an order's chance of being seen, 0..1, per 100 credits of Security spent that month. */
+    securityDetect: 0.1,
+    /** Investigations the Sheriff may open in a month. */
+    investigations: 1,
+    /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3). */
+    investigateOdds: 0.5,
+    fine: {
+      /** The base fines the Sheriff may levy, in credits, before the ban's multiplier. */
+      steps: [50, 100, 150, 200, 250, 300],
+      /** The fine an unfined case pays when planning ends, in credits, before the multiplier. */
+      standard: 150,
+    },
+    /** Share, 0..1, of a paid fine the victim gets as restitution; the fund keeps the rest. */
+    victimShare: 0.5,
+  },
   /** The colony's book of laws, each with its settings. */
   laws: {
     /** Per cent of each unit a player sells to the export ship. */
@@ -1009,8 +1068,24 @@ export const POLITICS = {
     pollutionTax: { settings: [10, 20, 40] },
     /** The air level above which no new mine or smelter of the listed outfits may be outfitted. */
     emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
+    /** Times a caught saboteur's fine and reputation loss are multiplied (slice 4, S4-RULE-10). */
+    sabotageBan: { settings: [2, 3] },
   } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
+    /** How AI seats order sabotage (slice 4, S4-RULE-13). Placeholders until WS1 tunes them in PR-3. */
+    sabotage: {
+      /** Chance, 0..1, per month that a persona considers an order at all. */
+      orderChance: { trader: 0, cautious: 0, aggressive: 0.2, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+      /** Credits an order must be worth, after spite, cost and expected capture, before a seat places it. */
+      minEdge: 0,
+      /** Weight on a victim who was caught sabotaging this seat, when picking a target. */
+      grudge: 2,
+    },
+    /** How an AI Sheriff fines (slice 4, S4-RULE-13); every other case pays the standard fine. */
+    sheriff: {
+      /** Base fines in credits (before the ban): on the Worth leader, and on a pact partner. */
+      fine: { leader: 300, partner: 50 },
+    },
     /** The AI's deal cards (slice 3, placeholders until WS1's sim row). */
     deals: {
       /** Cards from a proposer below this reputation are declined. */

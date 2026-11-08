@@ -175,7 +175,7 @@ describe('politics over the wire', () => {
     }
     // Well-formed, so they reach RULE-10, which refuses them.
     const refused: [object, string][] = [
-      [{ type: 'run', office: 'sheriff', promise: HOLD }, 'Sheriff candidates make no promise yet'],
+      [{ type: 'run', office: 'sheriff', promise: HOLD }, 'Sheriff candidates make no promise'],
       [{ type: 'run', office: 'governor' }, 'Pick a promise to run for Governor'],
       [{ type: 'run', office: 'governor', promise: { kind: 'cap', percent: 16 } }, 'A tax promise is 0% to 15%'],
     ];
@@ -780,6 +780,19 @@ describe('the politics view', () => {
     }
   });
 
+  it('S4-B-AC-7 (server): with both offices on, month 1 ends with a Governor and a Sheriff on every screen, the ceremony showed both, and the views carry the Sheriff pay; never one player in both', () => {
+    const g = started({ seed: NOBODY_RUNS_SEED });
+    setMoney(g.game, { lena: 900, brix: 1_200, ossa: 1_100, ai1: 1_000 });
+    doneThrough(g);
+    expect(beatsOf(g.game).offices.map((o) => o.office)).toEqual(['governor', 'sheriff']);
+    for (const view of screens(g.game)) {
+      expect(view.politics!.governor, 'a Governor in office').toBe('brix');
+      expect(view.politics!.sheriff, 'a Sheriff in office').toBe('ossa');
+      expect(view.politics!.sheriff).not.toBe(view.politics!.governor);
+      expect(view.politics!.pay).toEqual({ governor: POLITICS.pay.governor, sheriff: POLITICS.pay.sheriff });
+    }
+  });
+
   it("B-AC-5: another phone and the board never receive Brix's ballot", () => {
     const g = started();
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
@@ -806,7 +819,7 @@ describe('the politics view', () => {
     g.game.handle('ossa', { type: 'run', office: 'sheriff' });
     const shown = { lena: CAP_8, brix: { kind: 'lower' } };
     const refused = JSON.stringify(screens(g.game));
-    expect(() => g.game.handle('ossa', { type: 'run', office: 'sheriff', promise: HOLD })).toThrow('Sheriff candidates make no promise yet');
+    expect(() => g.game.handle('ossa', { type: 'run', office: 'sheriff', promise: HOLD })).toThrow('Sheriff candidates make no promise');
     expect(JSON.stringify(screens(g.game)), 'a refused promise changes no screen').toBe(refused);
 
     // Politics' until the ballot opens, the election's after.

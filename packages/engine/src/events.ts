@@ -65,6 +65,9 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
     sign: 'good',
     line: () => `Volunteers clean up: the air gauge drops by ${SOCIAL_EVENTS.colony.volunteerCleanup.airDrop}.`,
   },
+  // Slice 4 (S4-RULE-4): a sabotage order's events. The lines carry no name; the screens name sabotage.culprit.
+  powerCut: { kind: 'sabotage', title: 'Sabotage: power cut', scope: 'personal', sign: 'bad', line: () => 'Someone cut the power to a plot: it makes nothing this month.' },
+  marketRumour: { kind: 'sabotage', title: 'Sabotage: market rumour', scope: 'colony', sign: 'bad', line: () => 'A rumour moves a good\'s opening price at the auction.' },
   loyalCrew: { kind: 'plot', title: 'Loyal crew', scope: 'personal', sign: 'good', line: () => `A loyal crew: one of your plots makes ${SOCIAL_EVENTS.player.loyalCrew.gain} more this month.` },
 };
 
@@ -117,6 +120,8 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     generalStrike: () => Math.floor(before * COLONY.strike.output),
     walkout: () => Math.floor(before * SOCIAL_EVENTS.player.walkout.output),
     loyalCrew: () => before + SOCIAL_EVENTS.player.loyalCrew.gain,
+    // The cut lands after every other event (S4-RULE-4): the plot makes nothing.
+    powerCut: () => 0,
   };
   // An event with no rule here changes no plot's output.
   return Math.max(0, rules[key]?.() ?? before);
@@ -235,18 +240,18 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
   }
   if (key === 'riot') {
     const standing = (state.colony?.projects ?? []).filter((p) => p.stage === 'standing');
-    const event = offMapAtStore(state, key, phase, player);
+    const event = storeEvent(state, key, phase, player);
     return standing.length > 0 ? { ...event, objects: [{ id: rng.pick(standing).id, becomes: 'damaged' }] } : event;
   }
   if (key === 'loyalCrew') {
     const plot = rng.pick(rawPlotsOf(state, player!));
     return toEvent(state, key, { x: plot.x, y: plot.y }, [plot], undefined, player, phase);
   }
-  return offMapAtStore(state, key, phase, player);
+  return storeEvent(state, key, phase, player);
 }
 
 /** An event off the map: it starts at the store, where every colonist starts development. */
-function offMapAtStore(state: GameState, key: EventKey, phase: Phase, player?: string): MonthEvent {
+export function storeEvent(state: GameState, key: EventKey, phase: Phase, player?: string): MonthEvent {
   const store = state.tiles.find((t) => t.terrain === 'store');
   return toEvent(state, key, store ? { x: store.x, y: store.y } : { x: 0, y: 0 }, [], undefined, player, phase);
 }
@@ -575,7 +580,7 @@ function keepOneOfEachPair(state: GameState, phase: Phase, fired: MonthEvent[]):
  */
 function rowsOf(table: Record<string, EventRow>, player?: string) {
   return Object.entries(table)
-    .filter((entry): entry is [EventKey, EventRow] => Object.hasOwn(SHAPE, entry[0]) && !entry[1].perPlot && !entry[1].afterOutput)
+    .filter((entry): entry is [Extract<EventKey, keyof typeof EVENTS.colony | PlayerEventKey>, EventRow] => Object.hasOwn(SHAPE, entry[0]) && !entry[1].perPlot && !entry[1].afterOutput)
     .map(([key, row]) => ({ key, row, player }));
 }
 
