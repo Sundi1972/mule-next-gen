@@ -35,6 +35,9 @@ import {
   GAME,
   GOODS,
   goodsMarket,
+  HEALTH,
+  healthOf,
+  sickShare,
   type AiLevelId,
   grantDone,
   grantPass,
@@ -107,7 +110,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type ColonistMealView, type EventView, type MuleIntent, type MuleView, type NewsLine, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type ColonistMealView, type ColonyHealthView, type EventView, type MuleIntent, type MuleView, type NewsLine, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
@@ -231,6 +234,14 @@ function colonistMealAt(state: GameState): ColonistMealView | null {
   if (!meal) return null;
   const whole = ({ need, took }: { need: number; took: number }) => ({ took: took >= need ? Math.ceil(need) : Math.floor(took), need: Math.ceil(need) });
   return { colonists: meal.colonists, food: whole(meal.food), water: whole(meal.water) };
+}
+
+/** The colony's health as the gauge reads it (needs §3): null while colony health is off or there is no colony. */
+function colonyHealthAt(state: GameState): ColonyHealthView | null {
+  const sick = sickShare(state);
+  if (!HEALTH.enabled || sick === null) return null;
+  const { lastSick, medicineShortRun = 0 } = state.colony!;
+  return { health: healthOf(sick), medicineShort: medicineShortRun > 0, shortMonths: medicineShortRun, lastHealth: lastSick === undefined ? null : healthOf(lastSick) };
 }
 
 /** This month's report at the month end (upkeep, or game over after the last); null otherwise. */
@@ -1777,6 +1788,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       lastAir: lastEnd?.air ?? null,
       colonistsFed: colonistsFedAt(state),
       colonistMeal: colonistMealAt(state),
+      colonyHealth: colonyHealthAt(state),
       ship: {
         arrives: state.ship.arrives,
         inPort: shipInPort(state),

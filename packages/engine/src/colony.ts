@@ -323,7 +323,8 @@ export function electronicsComfort(colonists: number, stock: number): { took: nu
 /**
  * At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is
  * funded, oldest first (G-5 RULE-21). Then, with colony health on, the sick share moves by how the colonists fared at
- * this upkeep's meal and slows the month's growth; the memory of hardship takes the month's bite, and the mood steps.
+ * this upkeep's meal (the last one kept for the gauge, and the run of Medicine-short upkeeps counted) and slows the
+ * month's growth; the memory of hardship takes the month's bite, and the mood steps.
  */
 export function runColony(state: GameState, month: ColonistMonth = WELL_MONTH): void {
   if (!state.colony) return;
@@ -350,7 +351,9 @@ export function runColony(state: GameState, month: ColonistMonth = WELL_MONTH): 
   let limit = credits.projects;
   for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) limit -= fund(state, colony, p, limit);
   if (HEALTH.enabled) {
+    if (colony.sick !== undefined) colony.lastSick = colony.sick;
     colony.sick = nextSickShare(colony.sick ?? 0, month.short);
+    colony.medicineShortRun = month.short.medicine > 0 ? (colony.medicineShortRun ?? 0) + 1 : 0;
     // Upkeep grew the colony as if all were well; it grows again from the same size, slowed by the new share.
     if (month.growth) state.colonists = grownColonists(month.growth.from, month.growth.rate, colony.sick);
   }

@@ -491,6 +491,10 @@ export interface Colony {
   happiness: number;
   /** The share of the colonists who are sick, 0..HEALTH.cap. Absent until colony health first plays, and read as 0. */
   sick?: number;
+  /** The sick share as the upkeep before the last left it; absent until colony health has played two upkeeps. */
+  lastSick?: number;
+  /** Upkeeps in a row the colonists took less Medicine than their need; 0 or absent when they last had it all. */
+  medicineShortRun?: number;
   /** The colony's memory of hardship, 0..HARDSHIP.memoryCap: how short it went, fading a month at a time (needs RULE-3). Absent until the first upkeep, and read as 0. */
   hardship?: number;
   /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
