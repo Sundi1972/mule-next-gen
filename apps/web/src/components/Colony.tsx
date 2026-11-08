@@ -60,12 +60,16 @@ export function healthBand(health: number): HealthBand {
   return { label: 'At the limit', tone: 'text-alert', bar: 'bg-alert' };
 }
 
+/** The month's move in the Happiness note's own words: "↓ 14 this month", "↑ 6 this month", "± 0". */
+const moveWords = (move: number) => (move === 0 ? '± 0' : `${move > 0 ? '↑' : '↓'} ${Math.abs(move)} this month`);
+
 /**
- * The Health gauge's note: at the limit, how many are sick in ten ("4 in 10 sick"). The mock's other note, the month's
- * move, needs last month's health, which ColonyHealthView does not carry: no note until it does (as the mock's month 1).
+ * The Health gauge's note: at the limit, how many are sick in ten ("4 in 10 sick"); otherwise the month's move from
+ * lastHealth; nothing in health's first month (lastHealth null or absent).
  */
 export function healthNote(h: ColonyHealthView): string | null {
-  return h.health <= HEALTH_LOOK.floor ? `${Math.round((100 - h.health) / 10)} in 10 sick` : null;
+  if (h.health <= HEALTH_LOOK.floor) return `${Math.round((100 - h.health) / 10)} in 10 sick`;
+  return h.lastHealth == null ? null : moveWords(h.health - h.lastHealth);
 }
 
 // --- The gauges ---------------------------------------------------------------------------------------
@@ -285,7 +289,7 @@ export function ColonyGauges({ colony, size, className, landing, paidOut, health
   );
 }
 
-/** Health as its own gauge: the well share, its band word under the bar, and "4 in 10 sick" at the limit. */
+/** Health as its own gauge: the well share, its band word under the bar, and the month's move (or "4 in 10 sick" at the limit). */
 function HealthGauge({ size, health }: { size: Size; health: ColonyHealthView }) {
   const b = healthBand(health.health);
   const note = healthNote(health);

@@ -169,10 +169,32 @@ describe('PR-11: Health, a fifth gauge after Happiness (option A)', () => {
     expect(said(header(game({ colonyHealth: LIMIT })), 'health-note')).toBe('4 in 10 sick');
   });
 
-  it('above the limit there is no note: the view carries no last month’s health to give the month’s move from (gap)', () => {
-    const html = header(game({ colonyHealth: SICK }));
-    expect(element(html, 'health-note')).toBeNull();
-    expect(said(html, 'gauge-health')).toBe('Health 78% Sick spell');
+  it('above the limit the note is the month’s move, from lastHealth: “↓ 14 this month”, “↑ 6 this month”', () => {
+    expect(said(header(game({ colonyHealth: { ...SICK, lastHealth: 92 } })), 'health-note')).toBe('↓ 14 this month');
+    expect(said(header(game({ colonyHealth: { ...WELL, lastHealth: 89 } })), 'health-note')).toBe('↑ 6 this month');
+  });
+
+  it('no move this month reads “± 0”, as the Happiness gauge does', () => {
+    expect(said(header(game({ colonyHealth: { ...SICK, lastHealth: 78 } })), 'health-note')).toBe('± 0');
+  });
+
+  it('month 1 (lastHealth null or absent): no note, the band word alone', () => {
+    for (const h of [{ ...SICK, lastHealth: null }, SICK]) {
+      const html = header(game({ colonyHealth: h }));
+      expect(element(html, 'health-note')).toBeNull();
+      expect(said(html, 'gauge-health')).toBe('Health 78% Sick spell');
+    }
+  });
+
+  it('at the limit “4 in 10 sick” wins over the move', () => {
+    expect(said(header(game({ colonyHealth: { ...LIMIT, lastHealth: 63 } })), 'health-note')).toBe('4 in 10 sick');
+  });
+
+  it('the move shares the band word’s line, so the cell is no taller: three lines, as every gauge', () => {
+    const cell = element(header(game({ colonyHealth: { ...SICK, lastHealth: 92 } })), 'gauge-health')!;
+    const bottom = cell.match(/<span class="flex items-baseline justify-between gap-2 whitespace-nowrap[^"]*">(.*?)<\/span><\/div>$/)?.[1] ?? '';
+    expect(text(bottom)).toBe('Sick spell ↓ 14 this month');
+    expect(said(cell, 'gauge-health')).toBe('Health 78% Sick spell ↓ 14 this month');
   });
 });
 
