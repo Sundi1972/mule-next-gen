@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, createGame, GROWN_BASE, monthNeeds, needsOf, observe, runProduction, runUpkeep, type GameState, type Outfit, type Tile } from '@mule/engine';
-import { canFeed, keptUnits, unfedInputs, wholeNextMonth } from '../src/value.js';
+import { AiSeat } from '../src/seat.js';
+import { canFeed, keptUnits, unfedInputs, unitNeed, wholeNextMonth } from '../src/value.js';
 
 /**
  * AM-18 for the AI: canFeed counts every plot's Water, as the engine takes it at production, so it predicts the turn-off
@@ -13,8 +14,11 @@ import { canFeed, keptUnits, unfedInputs, wholeNextMonth } from '../src/value.js
 const ME = 'ai0';
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
 
-/** Development, ai0's farm on column 0, its well (making `well`) on column 2, an idle plot on column 4; others hold nothing. */
-function colony(well: number): GameState {
+/**
+ * Development, ai0's farm on column 0, its well (making `well`) on column 2, an idle plot on column 4, and with `works` an
+ * existing factory of that outfit on column 6; others hold nothing.
+ */
+function colony(well: number, works: Outfit | null = null): GameState {
   const state = createGame({ seed: 7, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true, species: 'zipwing' as const })) });
   while (state.phase !== 'development') advancePhase(state);
   for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
@@ -22,6 +26,7 @@ function colony(well: number): GameState {
     [0, 'food', { food: 5 - GROWN_BASE }],
     [2, 'water', { water: well - GROWN_BASE }],
     [4, null, {}],
+    ...(works ? [[6, works, {}] as [number, Outfit | null, Partial<Tile['ground']>]] : []),
   ];
   const me = state.players.find((p) => p.id === ME)!;
   for (const [x, outfit, ground] of plots) {
@@ -31,7 +36,7 @@ function colony(well: number): GameState {
     me.analysed.push(x);
   }
   me.money = 5000;
-  Object.assign(me.stock, { food: 10, energy: 30, smithore: 20, water: 0 });
+  Object.assign(me.stock, { food: 10, energy: 30, smithore: 20, rareEarth: 10, alloy: 10, water: 0 });
   // Only the drink, counted with the works' crew in: the plots' Water must come from the well.
   state.tiles[4]!.outfit = 'alloy';
   me.stock.water = needsOf(state, ME).water;
@@ -40,8 +45,8 @@ function colony(well: number): GameState {
 }
 
 /** The engine's answer: the works installed, two productions with the month end between; the farm's second line. */
-function farmInMonthTwo(well: number): string[] {
-  const state = colony(well);
+function farmInMonthTwo(well: number, works: Outfit | null = null): string[] {
+  const state = colony(well, works);
   state.tiles[4]!.outfit = 'alloy';
   runProduction(state);
   runUpkeep(state);
@@ -77,5 +82,24 @@ describe('AM-18: a seat with no farm still needs Water for its plots', () => {
     expect(monthNeeds(obs, ME).water, 'next production: the drink kept back and the mine\'s 1').toBe(drink + 1);
 
     expect(wholeNextMonth(obs, ME, 'water')).toBe(drink + keptUnits('water', drink + 1));
+  });
+});
+
+describe("AM-18: an existing works' Water counts as the engine takes it (factoryWaterUse), whatever its recipe says (review of #723)", () => {
+  for (const works of ['alloy', 'medicine'] as const) {
+    it(`with an existing ${works} works, a well making 6 can't water a new Alloy works too: the engine turns the farm off, and canFeed says no`, () => {
+      expect(farmInMonthTwo(6, works), 'the engine, month 2').toContain('waterOff');
+
+      const obs = observe(colony(6, works), ME);
+      expect(canFeed(obs, ME, 'alloy')).toBe(false);
+      expect(unfedInputs(obs, ME, 'alloy')).toContain('water');
+    });
+  }
+
+  it("a seat's Water target counts a Medicine works' Water once: the same as an Alloy works', which uses as much", () => {
+    const mind = new AiSeat({ id: ME, name: ME, persona: 'trader', level: 'trader', seed: 70 }).mind;
+    const [lab, smelter] = (['medicine', 'alloy'] as const).map((works) => observe(colony(5, works), ME));
+    expect(monthNeeds(lab!, ME).water, 'the case: both works use 1 Water a month').toBe(monthNeeds(smelter!, ME).water);
+    expect(unitNeed(lab!, mind, 'water').target).toBe(unitNeed(smelter!, mind, 'water').target);
   });
 });
