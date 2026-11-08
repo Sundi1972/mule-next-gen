@@ -67,8 +67,8 @@ export const TV_NOTE: Record<TvFocus, string> = {
   waiting: `TV: up to ${TV_WAITING_BOX_MAX_SEATS} seats, “Waiting for …” with each name, the ready list under it with every reputation chip; from ${TV_WAITING_BOX_MAX_SEATS + 1} seats, the ready list alone. The host’s “can continue” line is the list’s foot.`,
   'month-end': 'TV: the month end: the league with chips and the breaker’s “✗ −N” (a stand-in for WS4’s mark), “fund … · paid out …” in the Wealth note; no broken-cards box (TV-FIT).',
   'production-caught': 'TV: production’s show; in “This month on Irata” the guard’s shield lights the victim’s plot, then “Caught!” with the saboteur’s creature and name (WS8’s P10 layer, proposed); the power stays on.',
-  'fine-set': 'TV: planning; the fine’s news line first in the news (“… was fined … for sabotage; half to …”). No moment: a fine is news, not an event.',
-  'month-end-fine': 'TV: the month end as P15 rules it: the fund’s paid-out total in the Wealth note (the victim’s half inside it); the full fine and restitution lines are on the phones.',
+  'fine-set': 'TV: planning; when the Sheriff fines, the fine’s line is the first news line (“Lena was fined 150 for sabotage; half to Brix”): the one place the TV says it. No moment and no incidents list. The victim’s “+75 cr” is on his phone.',
+  'month-end-fine': 'TV: the plain month end, unchanged: the fund’s paid-out total in the Wealth note, the victim’s half inside it; no news line. The fine’s line was planning’s (fine-set); “Fines … in”, “To victims … out” and the victim’s “+75 cr” are on the phones.',
   'production-dark': 'TV: production’s show; an unguarded cut works unseen: the plot flickers and goes dark, “someone” in the event’s line, no name.',
   investigation: `TV: the investigation’s result over the map for ${TV_EVENT_HOLD_S} s, “Solved by the Sheriff: it was …” or “The trail went cold” (proposed; WS8 may restyle), then its news line.`,
 };

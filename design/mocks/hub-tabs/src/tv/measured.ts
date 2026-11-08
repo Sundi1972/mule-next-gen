@@ -62,3 +62,14 @@ export const TV_FIT_A: Record<string, { fixture: number; market: number }> = {
   'overrule-called': { fixture: 0.544, market: 0.381 },
   waiting: { fixture: 0.516, market: 0.359 },
 };
+
+/**
+ * Considered, not taken (lead's ruling, 9 Nov): the fine month's news line on the TV month end, which has no news.
+ * 9.1's world, the real market, 2 / 4 / 6 seats; the month end stays trunk's (0.780 / 0.708 / 0.768).
+ */
+export const TV_MONTH_END_NEWS_CONSIDERED = {
+  /** A: a one-line news strip under the header. */
+  stripUnderHeader: { 2: 0.753, 4: 0.646, 6: 0.677 },
+  /** B: the news line in the Worth footnote's row (free, but it changes WS4's TvMonthEnd). */
+  inFootnoteRow: { 2: 0.78, 4: 0.708, 6: 0.768 },
+} as const;
