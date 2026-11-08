@@ -307,6 +307,29 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('my-cards');
   });
 
+  it.each<[string, Partial<DealCard>, boolean]>([
+    ['Brix broke a card made with me at the last month end', { brokenBy: 's2', settled: 4 }, true],
+    ['I broke it myself', { brokenBy: 's1', settled: 4 }, false],
+    ['it was broken two month ends ago', { brokenBy: 's2', settled: 3 }, false],
+  ])('B-AC-14 (D3, D11): the Talk tab and My cards carry "!" while a card made with me was broken at the last month end: %s', (_, broke, alert) => {
+    const broken: DealCard = { id: 'deal-b', from: 's1', to: 's2', terms: { kind: 'pact' }, offered: 2, until: 4, status: 'broken', brokenBy: null, settled: null, ...broke };
+    mount(game({ deals: [broken] }));
+    expect(findTestid('talk-badge-broken')?.textContent ?? null).toBe(alert ? '!A card made with you was broken' : null);
+    tap('tab-talk');
+    expect(findTestid('talk-cards-broken')?.textContent ?? null).toBe(alert ? '!A card was broken' : null);
+  });
+
+  it("C17 (the scaffold's Talk doors): answer:<id> opens that card's sender's thread with its answer sheet over Talk; a card that is not there opens nothing", () => {
+    const offer: DealCard = { id: 'deal-3', from: 's3', to: 's1', terms: { kind: 'pact' }, offered: 5, until: 7, status: 'offered', brokenBy: null, settled: null };
+    mount(game({ deals: [offer] }));
+    go((n) => n.openDesk('talk', 'answer:deal-nope'));
+    expect(selected('tab-talk')).toBe(true);
+    expect(findTestid('incoming-sheet'), 'no such card: no sheet').toBeUndefined();
+    go((n) => n.openDesk('talk', 'answer:deal-3'));
+    byTestid('incoming-sheet');
+    expect(byTestid('whisper-line').textContent, "Kai's thread").toContain('Kai');
+  });
+
   it("C17 (DESK_DOORS, interim until SB-4): the Sheriff's Guard door turns Overview's one map to Guard, and Done goes back to the Sheriff's sub-tab", () => {
     mount(game({ self: 's3', pol: politics({ sheriff: 's3' }), sheriff: true }));
     go((n) => n.open({ tab: 'politics', sub: 'sheriff' }));
