@@ -609,6 +609,21 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(text('my-deal-deal-kp1-line'), 'no figure').not.toMatch(/\+\d/);
   });
 
+  it('S3-B-AC-1: no kept card shows a figure (the gain is capped per partner and term): my vote card says keeping it builds my name, and a kept vote reads "Kept"', () => {
+    const keptVote = card({ id: 'deal-kv1', from: BRIX, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 1, until: 1, status: 'kept', settled: 1 });
+    mount(brixGame([...BRIX_CARDS, keptVote]), hub);
+    tap('desk-talk');
+    tap(`chat-to-${KAI}`);
+    tap('add-deal');
+    tap('composer-a-kind-vote');
+    tap(`composer-a-choice-gov:${OSSA}`);
+    expect(text('composer-a-stakes')).toBe(`Kept: it builds your name. Broken: −${-POLITICS.reputation.moves.voteBroken}, and the table sees it.`);
+    tap('composer-a-close');
+    tap('talk-cards');
+    expect(text('my-deal-deal-kv1-line')).toContain('Kept');
+    expect(text('my-deal-deal-kv1-line'), 'no figure').not.toMatch(/\+\d/);
+  });
+
   it("S3-B-AC-1: Brix's whisper thread and agenda show Lena's card with both reputations and Accept / Decline; My cards lists offered (Withdraw), incoming, active (what it binds, until when) and settled cards", () => {
     mount(brixGame(), hub);
     expect(text('agenda-deals')).toContain('1 deal offer');
