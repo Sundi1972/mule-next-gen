@@ -1,5 +1,6 @@
 import { GAME, POLITICS } from '@mule/engine';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
+import { useState } from 'react';
 import { fmt } from '../../game/derive';
 import { collapseCutWords, inCollapse, league, yourLines } from '../../game/month-end';
 import { useEscape } from '../dialog';
@@ -24,6 +25,8 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
   const { view, me, self } = usePhoneGame();
   const hub = useHubIfAny();
   useEscape(onClose);
+  // The door that opened the standings: + Deal closes them, and the composer it opens gives the focus back here.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
   const { rows } = league(view);
   const mine = rows.find((r) => r.player.id === self.id);
   const p = view.me ? yourLines(view) : null;
@@ -82,6 +85,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                             variant="ghost"
                             className="h-8 whitespace-nowrap px-1.5 text-xs text-holo"
                             onClick={() => {
+                              opener?.focus?.();
                               onClose();
                               hub!.openDesk('talk', `compose:${r.player.id}`);
                             }}
