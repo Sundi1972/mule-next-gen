@@ -34,6 +34,7 @@ import {
   type ShowPlayer,
   type Slot,
 } from '@mule/ui';
+import { withSabotageDetail } from '../events/sabotage';
 import { mapTiles, seatSpecies, slotOf } from '../game/derive';
 import { useServerNow } from '../net/react';
 import { connectedIn } from '../phone/hub/ready';
@@ -48,7 +49,8 @@ import { TvBody } from './TvFit';
 export function TvProduction({ table, game, production }: { table?: TableView<MuleView>; game: MuleView; production: ProductionView }) {
   // Who is still at the table: a seat the room doesn't list (no table given) counts as connected.
   const connected = connectedIn(table?.seats ?? []);
-  const show: ShowData = production;
+  // WS8's named edit (S4-C17): a rumour's good and direction, joined from the public incidents.
+  const show: ShowData = useMemo(() => ({ ...production, events: withSabotageDetail(production.events, game.politics?.sabotage?.incidents) }), [production, game.politics]);
   const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const tiles = useMemo(() => mapTiles(game), [game]);
   const slots = Object.fromEntries(game.players.map((p) => [p.id, (slotOf(game, p.id) ?? 0) as Slot]));
