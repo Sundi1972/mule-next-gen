@@ -13,6 +13,7 @@ import {
   RuleError,
   runColony,
   storeQuotes,
+  stillToPay,
   UPKEEP,
   type GameState,
   type PrestigeId,
@@ -229,5 +230,34 @@ describe('C49: a waiting building pulls on the store (G-5 AM-17)', () => {
     expect(off.colony).toBeFalsy();
     // Without a colony, Electronics' buyers are the colonists' want (the lane's needs AM-2) and the export ship: no building adds to them.
     expect(monthlyDemand(off).electronics).toBe(off.colonists / UPKEEP.colonistsPerElectronics + exportDemand(off).electronics);
+  });
+});
+
+describe('AM-15: stillToPay is what the fund would spend', () => {
+  /** A commissioned Park with `paid` credits funded and the fund at 1e6, so neither reserve nor limit binds. */
+  function parked(paid: number, buys: boolean) {
+    const state = governedGame(1_000_000);
+    commission(state, 'lena', 'park');
+    project(state, 'park').funded.credits = paid;
+    COLONY.fundBuysGoods = buys;
+    return state;
+  }
+
+  it('S5-T-AC-13: AM-15: stillToPay equals the project spend runColony makes, goods and credits, in each starting state', () => {
+    const saved = COLONY.fundBuysGoods;
+    try {
+      for (const [paid, buys] of [[0, true], [PRESTIGE.park.credits, true], [0, false], [PRESTIGE.park.credits, false]] as const) {
+        const state = parked(paid, buys);
+        const want = stillToPay(state, project(state, 'park'));
+        runColony(state, []);
+        expect(state.colony!.ledger.out.project ?? 0, `paid ${paid}, buys ${buys}`).toBe(want);
+      }
+      const goodsOnly = parked(PRESTIGE.park.credits, true);
+      expect(stillToPay(goodsOnly, project(goodsOnly, 'park')), 'goods alone are not 0').toBeGreaterThan(0);
+      const notBought = parked(PRESTIGE.park.credits, false);
+      expect(stillToPay(notBought, project(notBought, 'park')), 'goods not bought: nothing to pay').toBe(0);
+    } finally {
+      COLONY.fundBuysGoods = saved;
+    }
   });
 });

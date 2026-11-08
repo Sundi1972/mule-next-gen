@@ -100,6 +100,18 @@ export function stillNeeds(project: Project): { credits: number; goods: Partial<
   return { credits: row.credits - project.funded.credits, goods };
 }
 
+/**
+ * The credits the fund would spend to finish this project with no reserve and no limit (AM-15): the credits still needed, plus,
+ * while the fund buys goods, each missing good as far as the store sells it, at the store's sell price. fund() spends the same.
+ */
+export function stillToPay(state: GameState, project: Project): number {
+  const needs = stillNeeds(project);
+  const goods = COLONY.fundBuysGoods
+    ? (Object.entries(needs.goods) as [Good, number][]).reduce((sum, [good, missing]) => sum + Math.min(missing, storeForSale(state, good)) * (storeQuotes(state, good).sell ?? 0), 0)
+    : 0;
+  return Math.max(0, needs.credits) + goods;
+}
+
 const OPEN: readonly Project['stage'][] = ['commissioned', 'building'];
 
 /** The Governor's acts for the colony: planning only, once no vote is open. */
