@@ -57,11 +57,11 @@ export interface GameContext {
   frame(payload: unknown): void;
   /**
    * Posts a chat line as seat `from`. The line follows a player's trim, cap, moderation and whisper rules, but the
-   * game's `heard` never receives it.
+   * game's `heard` never receives it. Returns the text as delivered, or null when moderation dropped the line.
    * Throws TableError for an unknown `from` or `to`. It runs outside the room's error handling, so the caller must
    * not let it throw: from a timer, a throw is unhandled.
    */
-  say?(from: string, text: string, to?: string): void;
+  say?(from: string, text: string, to?: string): string | null;
   /**
    * The seat that hosts the table: the first connected human, passing to the next while the host is disconnected and
    * back when they return; the first human seat if none is connected; null with no human seated.
@@ -227,7 +227,7 @@ export class Room<Intent, View> {
       },
       changed: () => this.broadcast(),
       frame: (payload) => this.frame(payload),
-      say: (from, text, to) => void this.deliver(from, text, to),
+      say: (from, text, to) => this.deliver(from, text, to)?.text ?? null,
       hostId: () => this.hostId,
     });
   }

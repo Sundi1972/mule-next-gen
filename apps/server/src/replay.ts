@@ -66,7 +66,7 @@ class Script {
       },
       changed: () => {},
       frame: () => {},
-      say: () => {},
+      say: () => null,
     };
     const smart = new Set(record.seats.filter((s) => s.smart).map((s) => s.id));
     this.brain = {

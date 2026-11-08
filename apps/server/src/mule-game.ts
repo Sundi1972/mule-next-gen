@@ -862,18 +862,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * An AI seat's message: said through the room, and handed to the other AI seats it reaches as `heard` hands a
-   * player's, since the room hands the game no line the game says itself. It opens no step and no timer: the record
+   * An AI seat's message: said through the room, and handed as delivered to the other AI seats it reaches, as `heard`
+   * hands a player's, since the room hands the game no line the game says itself. It opens no step and no timer: the record
    * keeps no message, so a replay must play the same without it. Never throws.
    */
   private aiSays(from: string, text: string, to?: string): void {
+    let delivered: string | null;
     try {
-      this.ctx.say?.(from, text, to);
+      delivered = this.ctx.say?.(from, text, to) ?? null;
     } catch (err) {
       console.error(`AI seat ${from}'s message could not be said: ${err instanceof Error ? err.message : String(err)}`);
       return;
     }
-    this.reachAi(from, text, to);
+    // The AIs hear what the table heard: trimmed, capped and moderated by the room, or nothing when it was dropped.
+    if (delivered !== null) this.reachAi(from, delivered, to);
   }
 
   connectionChanged(seatId: string, connected: boolean): void {
