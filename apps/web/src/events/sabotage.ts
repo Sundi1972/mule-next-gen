@@ -1,6 +1,6 @@
 import { POLITICS } from '@mule/engine';
 import type { IncidentView, MuleView } from '@mule/protocol';
-import { GOOD_NAME, type EventSabotageSeat } from '@mule/ui';
+import { GOOD_NAME, type EventSabotageSeat, type ShowEventView } from '@mule/ui';
 
 /**
  * Sabotage's words off the show (slice 4, S4-C17), the approved mock's: design/mocks/politics-p2 @ d6977e1a,
@@ -39,4 +39,18 @@ export function sabotageNewsLine(view: MuleView, incident: IncidentView): string
 /** The month end's sabotage news: one line per incident this month, in the order the view lists them. */
 export function sabotageNews(view: MuleView): string[] {
   return (view.politics?.sabotage?.incidents ?? []).filter((i) => i.month === view.month).map((i) => sabotageNewsLine(view, i));
+}
+
+/**
+ * A rumour's good and direction, for the show's whisper and price tag: the event does not carry them (the contract is
+ * frozen), the public incident does, and its id is the event's order. Joined by id; every other event, and a rumour
+ * with no incident yet, is left as it is. With no incidents the very same array comes back, so a memo holds.
+ */
+export function withSabotageDetail<E extends ShowEventView>(events: E[], incidents: readonly IncidentView[] | undefined): E[] {
+  if (!incidents?.length || !events.some((e) => e.key === 'marketRumour' && e.sabotage)) return events;
+  const byId = new Map(incidents.filter((i) => i.kind === 'rumour').map((i) => [i.id, i]));
+  return events.map((e) => {
+    const i = e.key === 'marketRumour' && e.sabotage ? byId.get(e.sabotage.order) : undefined;
+    return i ? { ...e, good: i.good, ...(i.dir ? { dir: i.dir } : {}) } : e;
+  });
 }

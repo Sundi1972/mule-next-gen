@@ -1,11 +1,12 @@
 import type { IncidentView, MuleView, MyView, PoliticsView } from '@mule/protocol';
+import type { ShowEventView } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { TvMonthEnd } from '../src/table/TableApp';
-import { sabotageNews, sabotageNewsLine, sabotageSeat } from '../src/events/sabotage';
+import { sabotageNews, sabotageNewsLine, sabotageSeat, withSabotageDetail } from '../src/events/sabotage';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
@@ -108,5 +109,40 @@ describe('S4-C17 · the TV’s month end says each sabotage of the month (WS4 na
   it('a month with no sabotage draws no sabotage line', () => {
     const html = onTv(atMonthEnd([]));
     expect(html).not.toContain('data-testid="sabotage-news"');
+  });
+});
+
+describe('S4-C17 · a rumour’s good and direction, joined from the public incidents (withSabotageDetail)', () => {
+  const ev = (key: 'marketRumour' | 'powerCut' | 'dustStorm', order?: string): ShowEventView => ({
+    key,
+    kind: key === 'dustStorm' ? 'storm' : 'sabotage',
+    title: '',
+    line: '',
+    sign: 'bad',
+    scope: 'colony',
+    origin: { x: 0, y: 0 },
+    hits: [],
+    phase: 'production',
+    weight: 'headline',
+    playMs: 7000,
+    ...(order ? { sabotage: { order, culprit: null, worked: true, guarded: false } } : {}),
+  });
+
+  it('a rumour takes its incident’s good and dir, matched by the order id', () => {
+    const [out] = withSabotageDetail([ev('marketRumour', 'sab-d')], [rumour({ id: 'sab-x', good: 'energy' }), rumour({ id: 'sab-d', good: 'food', dir: 'down' })]);
+    expect(out).toMatchObject({ good: 'food', dir: 'down' });
+  });
+
+  it('a rumour with no matching incident, a cut, and a colony event are left as they are', () => {
+    const events = [ev('marketRumour', 'sab-z'), ev('powerCut', 'sab-a'), ev('dustStorm')];
+    const out = withSabotageDetail(events, [incident({ id: 'sab-a' }), rumour({ id: 'sab-d' })]);
+    expect(out).toEqual(events);
+    expect(out[0]).not.toHaveProperty('good');
+  });
+
+  it('no incidents (sabotage off, or before the server serves them): the very same events', () => {
+    const events = [ev('marketRumour', 'sab-d')];
+    expect(withSabotageDetail(events, undefined)).toBe(events);
+    expect(withSabotageDetail(events, [])).toBe(events);
   });
 });
