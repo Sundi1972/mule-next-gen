@@ -2254,4 +2254,24 @@ export const BRAIN = {
   },
   /** Longest reason the playbook writer accepts on a strategy or an edit, in characters. */
   writeReasonChars: 140,
+  /**
+   * A Smart seat's monthly social reasoning: what its land brief shows of the other players, and how many of the
+   * messages its reply carries are sent. Each part of the brief's social section is capped so the prompt stays bounded.
+   */
+  social: {
+    /** Heard lines the social section quotes, to the seat or the table, newest last; a seat keeps at most talkLines. */
+    heardLines: 6,
+    /** Counted facts named per other player, newest first; the rest are counted. */
+    factsPerPlayer: 4,
+    /** The seat's own notes on a player, quoted back from its last recorded playbook. */
+    readsPerPlayer: 3,
+    /** Candidates named per office under the politics. */
+    candidatesPerOffice: 5,
+    /** Plots at the top of the seat's land ranking it counts as wanted: a player who claims one took a plot it wanted. */
+    wantedPlots: 3,
+    /** Most messages one AI sends a month, whispers and table lines together. */
+    messagesPerMonth: 3,
+    /** Most whispers one AI sends one player a month. */
+    whispersPerPlayerMonth: 2,
+  },
 } as const;
