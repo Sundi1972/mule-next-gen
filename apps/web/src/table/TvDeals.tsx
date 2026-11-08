@@ -7,9 +7,8 @@ import { brokenIn, brokenMove, brokenWho, brokenWords } from '../phone/hub/polit
 import { RepChip } from '../phone/hub/politics/parts';
 
 /*
- * P5 (S3-C20), from the approved politics-deals mock's TvBreakBanner: when a card turns broken the TV says so, in the
- * news's words, with the drop beside the breaker's chip, for the rest of that month. WS4 places it under the planning
- * header; the month end lists the same cards itself.
+ * The banner of this month's broken cards on the TV (S3-C20): the cards in the news's words, and the drop beside each
+ * breaker's chip. Its caller decides where and how long it shows.
  */
 
 /** This month's broken cards, one line per breaker in the order they broke: their cards, and the drops summed. */
@@ -29,8 +28,8 @@ function byBreaker(cards: DealCard[]): { breaker: string; cards: DealCard[]; dro
 const labelOf = (cards: DealCard[]) => (cards.length > 1 ? `${cards.length} cards were broken` : cards[0]!.terms.kind === 'pact' ? 'A pact was broken' : 'A promise was broken');
 
 /**
- * The banner of this month's broken cards on the TV; nothing when none broke. Beside the breaker's chip, which shows
- * the number now, only the drop: a "before" worked back from it is wrong once a breaker has two cards in a month.
+ * This month's broken cards, or nothing when none broke. Beside the breaker's chip, which shows the number now, only
+ * the drop: a "before" worked back from it is wrong once a breaker has two cards in a month.
  */
 export function TvDeals({ game }: { game: MuleView }) {
   const lines = byBreaker(brokenIn(game, game.month));
