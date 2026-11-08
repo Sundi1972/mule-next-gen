@@ -152,28 +152,42 @@ describe("the TV's break banner (S3-C20)", () => {
   const banner = (g: MuleView) => renderToStaticMarkup(createElement(TvDeals, { game: g })).replaceAll('<!-- -->', '');
   const marks = (html: string) => html.match(/data-testid="ai-mark"/g)?.length ?? 0;
 
+  /** The test ids in the banner, in order, that start with `prefix`. */
+  const ids = (html: string, prefix: string) => [...html.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1]!).filter((id) => id.startsWith(prefix));
+  const { voteBroken, pactBroken } = POLITICS.reputation.moves;
+
   it('S3-B-AC-2: when a card in politics.brokenDeals is new, TvDeals shows a banner naming who broke a promise to whom, what was promised and the drop', () => {
     const html = banner(atMonth([LENA_VOTE]));
     expect(html).toContain('data-testid="tv-break-banner"');
-    expect(textOf(html, 'tv-break-deal-b3x8re')).toContain('A promise was broken');
+    expect(textOf(html, 'tv-break-lena')).toContain('A promise was broken');
     expect(textOf(html, 'tv-break-deal-b3x8re-words')).toBe('Lena broke a promise to Brix: a vote for Brix');
-    // The breaker's name now, and what it was before the break: the move POLITICS gives a broken vote card.
-    expect(textOf(html, 'tv-break-deal-b3x8re-drop')).toMatch(new RegExp(`^${40 - POLITICS.reputation.moves.voteBroken}→40`));
+    // The drop alone, beside the breaker's chip with the number now: no "before" worked back from it.
+    expect(textOf(html, 'tv-break-lena-drop')).toBe(`−${-voteBroken}`);
+    expect(textOf(html, 'tv-break-lena-rep')).toBe('40');
+    expect(textOf(html, 'tv-break-lena')).not.toContain('→');
     expect(marks(html), 'Lena is a person: no AI mark').toBe(0);
   });
 
-  it("S3-B-AC-2: the drop is the view's reputation and POLITICS' move, never a typed number: a pact's, and a retuned move", () => {
-    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9-drop')).toMatch(new RegExp(`^${40 - POLITICS.reputation.moves.pactBroken}→40`));
-    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9')).toContain('A pact was broken');
+  it("S3-B-AC-2: the drop is POLITICS' move, never a typed number: a pact's, and a retuned move", () => {
+    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-lena-drop')).toBe(`−${-pactBroken}`);
+    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-lena')).toContain('A pact was broken');
     expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9-words')).toBe('Lena broke a pact with Brix');
     const moves = POLITICS.reputation.moves as { voteBroken: number };
     const was = moves.voteBroken;
     try {
       moves.voteBroken = -7;
-      expect(textOf(banner(atMonth([LENA_VOTE])), 'tv-break-deal-b3x8re-drop')).toMatch(/^47→40/);
+      expect(textOf(banner(atMonth([LENA_VOTE])), 'tv-break-lena-drop')).toBe('−7');
     } finally {
       moves.voteBroken = was;
     }
+  });
+
+  it("S3-B-AC-2: one breaker's cards broken in the month make one line with the drops summed; another breaker has a line of its own", () => {
+    const html = banner(atMonth([LENA_VOTE, OSSA_LAW, LENA_PACT]));
+    expect(ids(html, 'tv-break-').filter((id) => !/-(words|drop|rep)$/.test(id) && id !== 'tv-break-banner')).toEqual(['tv-break-lena', 'tv-break-ossa']);
+    expect(textOf(html, 'tv-break-lena-drop')).toBe(`−${-(voteBroken + pactBroken)}`);
+    expect(textOf(html, 'tv-break-ossa-drop')).toBe(`−${-voteBroken}`);
+    expect(ids(html, 'tv-break-deal-').filter((id) => id.endsWith('-words'))).toEqual(['tv-break-deal-b3x8re-words', 'tv-break-deal-q7k2m9-words', 'tv-break-deal-z5n1yq-words']);
   });
 
   it('S3-B-AC-2: a computer seat that breaks a promise is named "Ossa · AI" on the banner, from players[].isAi; a person\'s name has no mark', () => {
