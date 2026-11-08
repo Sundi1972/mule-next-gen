@@ -565,6 +565,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.dealsSeen = this.state.politics?.deals ?? [];
     this.sabotageSeen = this.state.politics?.sabotage ?? [];
+    this.voided = [];
     this.ai.clear();
     this.chats.clear();
     this.monthEnds.clear();
