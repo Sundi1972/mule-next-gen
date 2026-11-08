@@ -10,7 +10,7 @@ import { TvHeader } from '../../../../../apps/web/src/table/TableApp';
 import { FitHeight } from '../../../../../apps/web/src/table/TvFit';
 import { brokenMove, brokenWho, brokenWords } from './copied/deals-words';
 import { RepChip } from './copied/RepChip';
-import { seatWordsText } from './copied/SeatWords';
+import { SeatWords, seatWordsText } from './copied/SeatWords';
 import { brokenThisMonth } from './world';
 
 /*
@@ -19,9 +19,11 @@ import { brokenThisMonth } from './world';
  *   1. the paid-out total in the Wealth gauge's note, "fund 236 cr · paid out 499": trunk already draws it
  *      (ColonyGauges' paidOut, #tv-month-end-paid-out); unchanged here, fed by the world's upkeep (world.ts);
  *   2. the reputation chip after each name in the league (WS4's TV rep chips, the politics-deals mock's CHANGE);
- *   3. the breaker's row marked "✗ −10" after the chip, the full words in its accessible label, at no extra height
- *      (PM ruling A, 8 Nov 03:12Z: the broken-cards box measured 0.560 under TV-FIT's 0.7 floor, so the TV draws none;
- *      the full words stay in the planning banner and the news; the phone's month end lists them).
+ *   3. P15's breaker row (D19), for WS4 to build into trunk's TvMonthEnd: on each breaker's own league row, after the
+ *      chip, "✗ −10": the drop is brokenMove's (POLITICS.reputation.moves, several cards sum), the full words in its
+ *      accessible label, no reason text (the phone's month end carries the reasons), nothing in a month without a break,
+ *      and no height of its own. A strip under the league was measured too and not taken: TV_FIT_BREAKERS (measured.ts).
+ *   4. the league's names through SeatWords, " · AI" on a computer seat, so the breaker's row reads "Ossa · AI".
  * Left out, as the mock has no clock: the gauges' month-end drift and the grounds opener before this screen.
  */
 export function TvMonthEnd({ game }: { game: MuleView }) {
@@ -61,9 +63,9 @@ export function TvMonthEnd({ game }: { game: MuleView }) {
 }
 
 /**
- * CHANGE 3, a STAND-IN for WS4's real mark (being built, 8 Nov): what this month's broken cards cost a player, "✗ −10",
- * in the reputation chip's shape and the break's alert tone, so it reads as the chip's sibling. Several breaks by one
- * player sum. The label carries the full words, " · AI" on a computer seat by its id (SeatWords' rule).
+ * CHANGE 3, P15's breaker row (D19): what this month's broken cards cost a player, "✗ −10", in the reputation chip's
+ * shape and the break's alert tone, so it reads as the chip's sibling. Several breaks by one player sum. The label
+ * carries the full words, " · AI" on a computer seat by its id (SeatWords' rule).
  */
 function BrokeMark({ view, id }: { view: MuleView; id: string }) {
   const cards = brokenThisMonth(view).filter((c) => (c.brokenBy ?? c.from) === id);
@@ -78,7 +80,7 @@ function BrokeMark({ view, id }: { view: MuleView; id: string }) {
   );
 }
 
-// ---- LeagueTable, copied from MonthEnd.tsx with CHANGE 2 and 3 ----------------------------------------------------
+// ---- LeagueTable, copied from MonthEnd.tsx with CHANGE 2, 3 and 4 ----------------------------------------------------
 
 type Size = { pad: string; head: string; rank: string; mark: number; name: string; worth: string; side: string; cell: string; callMark: number; call: string; cols: Cols };
 /**
@@ -182,7 +184,8 @@ function LeagueTable({ view, density, selfId, final = false }: { view: MuleView;
                     <PlayerMark slot={r.slot} species={r.player.species} size={s.mark} label={r.player.name} />
                     <span className={cx('truncate font-display font-semibold', s.name)} data-testid={`name-${r.player.id}`}>
                       {!mine ? (
-                        r.player.name
+                        // CHANGE 4: the name through SeatWords, " · AI" on a computer seat (Heiko, 7 Nov), as P15's row names the breaker.
+                        <SeatWords text={r.player.name} who={[r.player.id]} players={view.players} />
                       ) : final && !tv ? (
                         // The rail's final standings are narrow on a phone: your row's highlight and creature say who it is.
                         <>
