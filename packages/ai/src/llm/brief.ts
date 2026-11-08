@@ -47,7 +47,7 @@ import type { Feedback } from './writer.js';
 import { GRANTED } from './granted.js';
 import { energyAt, energyToKeep, useRule } from './energy.js';
 import { cutOffAs, noWalkTo } from './reach.js';
-import type { HandsDevelopment } from './kept.js';
+import { withArticle, type HandsDevelopment } from './kept.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -530,9 +530,10 @@ function refusalLines(feedback: Feedback | null | undefined): string[] {
 function handsLines(hands: HandsDevelopment | null | undefined): string[] {
   if (!hands) return [];
   const parts = [hands.bought === 0 ? 'bought no MULE' : `bought ${plural(hands.bought, 'MULE')}`];
-  if (hands.installed.length > 0) parts.push(`installed ${hands.installed.map((i) => `a ${i.outfit ? outfitName(i.outfit) : 'MULE'} on plot ${i.plot}`).join(', ')}`);
+  if (hands.installed.length > 0) parts.push(`installed ${hands.installed.map((i) => `${withArticle(i.outfit ? outfitName(i.outfit) : 'MULE')} on plot ${i.plot}`).join(', ')}`);
   parts.push(...hands.unfinished);
   for (const why of hands.refused) parts.push(`a buy refused: ${why}`);
+  if (hands.stopped) parts.push(hands.stopped);
   return [`Last time (month ${hands.month}) you kept the draft development, so your hands developed on their own: ${parts.join('; ')}.`, ''];
 }
 
@@ -540,6 +541,13 @@ function handsLines(hands: HandsDevelopment | null | undefined): string[] {
  * Under the land brief's draft development, for a seat whose kept draft plays today's path (keptDevelopmentPlaysToday):
  * the draft is shown, but only an edit makes it play (unbought-mules fix, deep4: 26 of 29 Sonnet unbought MULEs).
  */
+/**
+ * Under the auction brief's draft, for a seat whose kept draft plays today's path (keptPlaysToday): one accepted edit
+ * adopts the whole validated draft, so every good left alone plays it; none adopts nothing (hands-why fix, deep4).
+ */
+const KEPT_AUCTION =
+  'Kept as is, with no edit to any good, this plan does not play: on the day your hands trade each good themselves. One accepted edit to any good makes the whole plan play.';
+
 const KEPT_DRAFT =
   'Kept as is, this route does not play: on the day your hands pick each MULE themselves, and may keep the cash or run short of time. To have it played, send it as /development/route.';
 
@@ -707,7 +715,17 @@ function auctionLines(a: Playbook['auction']): string[] {
  * strategy and last outcome, and the draft part for that phase with the paths it may edit. No strategy: that is the
  * land brief's, which plans the month. From the seat's observation only, deterministic for a given state and draft.
  */
-export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft: Playbook, phase: EditPhase, talk: readonly TableTalk[], last: LastPhase = {}): WriterBrief {
+export function phaseBrief(
+  state: GameState,
+  mind: Mind,
+  persona: Persona,
+  draft: Playbook,
+  phase: EditPhase,
+  talk: readonly TableTalk[],
+  last: LastPhase = {},
+  /** Whether the auction's draft, kept with no accepted edit, plays today's path instead (keptPlaysToday): the brief says so. */
+  keptPlaysToday = false,
+): WriterBrief {
   const obs = observe(state, mind.me);
   const me = obs.players.find((p) => p.id === mind.me)!;
   const corners = mind.level.corners;
@@ -738,7 +756,7 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
     `Your draft ${phase}:`,
-    ...(phase === 'development' ? developmentLines(obs, draft.development) : auctionLines(draft.auction)),
+    ...(phase === 'development' ? developmentLines(obs, draft.development) : [...auctionLines(draft.auction), ...(keptPlaysToday ? [KEPT_AUCTION] : [])]),
     '',
     'What you may change:',
     ...(phase === 'development'

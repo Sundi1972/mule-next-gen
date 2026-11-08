@@ -208,6 +208,9 @@ function draftTarget(brief: string): { good: string; plot: number } {
   return { good: m[1]!, plot: Number(m[2]) };
 }
 
+/** `text` as a regular expression matching it literally. */
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** The outfit named `good` in the brief, by its key. */
 const outfitOf = (good: string) => GOODS.find((g) => GOOD_NAME[g] === good)!;
 
@@ -220,7 +223,7 @@ describe('hands-why fix: the next land brief says why the hands stopped', { time
     const { good, plot } = draftTarget(t.landBriefs()[0]!);
     expect(t.state.tiles[plot]!.outfit).toBeNull();
     const next = t.landBriefs()[1]!;
-    expect(next).toMatch(new RegExp(`${HANDS_HEAD} bought no MULE; then an? ${good} (MULE|works) on plot ${plot} was ruled out: the walk takes \\d+ s, \\d+ s left\\.`));
+    expect(next).toMatch(new RegExp(`${escaped(HANDS_HEAD)} bought no MULE; then an? ${good} (MULE|works) on plot ${plot} was ruled out: the walk takes \\d+ s, \\d+ s left\\.`));
   });
 
   it("hands-why fix: FM-dev-stop-reason (keep the cash): a cautious seat with little cash keeps it over the draft's MULE, and the next brief says it kept the cash over that MULE", async () => {
@@ -245,7 +248,7 @@ describe('hands-why fix: the next land brief says why the hands stopped', { time
 
     const { good, plot } = draftTarget(t.landBriefs()[0]!);
     expect(t.state.tiles[plot]!.outfit).toBeNull();
-    expect(t.landBriefs()[1]!).toMatch(new RegExp(`${HANDS_HEAD} bought no MULE; then an? ${good} (MULE|works) on plot ${plot} was ruled out: the walk takes \\d+ s, \\d+ s left\\.`));
+    expect(t.landBriefs()[1]!).toMatch(new RegExp(`${escaped(HANDS_HEAD)} bought no MULE; then an? ${good} (MULE|works) on plot ${plot} was ruled out: the walk takes \\d+ s, \\d+ s left\\.`));
   });
 });
 
