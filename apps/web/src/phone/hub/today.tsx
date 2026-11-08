@@ -1,4 +1,5 @@
 import { DEVELOPMENT } from '@mule/engine';
+import { SeatWords } from '../../components/SeatWords';
 import { STRIKE_ALERT, STRIKE_PAY_LINE, strikeNow } from '../../components/Strike';
 import { MarketDesk, MarketStrip, TalkBadge, TalkDesk } from './desks';
 import { ColonyWithFacts } from './politics/Colony';
@@ -18,8 +19,9 @@ const DEALS_AGENDA: AgendaSlot = {
     return `${n} deal ${n === 1 ? 'offer' : 'offers'}`;
   },
   sub: ({ view, me }) => {
-    const from = [...new Set(incomingOf(me).map((c) => view.players.find((p) => p.id === c.from)?.name ?? ''))];
-    return `From ${from.join(', ')} · answer before Ready`;
+    const from = [...new Set(incomingOf(me).map((c) => c.from))];
+    const names = from.map((id) => view.players.find((p) => p.id === id)?.name ?? '');
+    return <SeatWords text={`From ${names.join(', ')} · answer before Ready`} who={from} players={view.players} />;
   },
   locked: true,
   lead: () => true,
