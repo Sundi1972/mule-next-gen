@@ -133,7 +133,7 @@ describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)',
 
   // S5-PR-3's merge gate (S5-C9): the overrule flow on both sides, where an AI seat really calls. With minGain at 0 a
   // seat calls on any gain; seed 3's month 1 then holds a tax overrule voted to the end, in the sim as on the server.
-  it('S5-C9: seed 3, politics on, an AI seat calls a tax overrule and it is voted to the end: the server ends every development as the sim', { timeout: 120_000 }, () => {
+  it('S5-B-AC-6 (S5-C9, the merge gate): seed 3, politics on, an AI seat calls a tax overrule and it is voted to the end: the server ends every development as the sim', { timeout: 120_000 }, () => {
     const saved = POLITICS.ai.overrule.minGain;
     POLITICS.ai.overrule.minGain = 0;
     try {

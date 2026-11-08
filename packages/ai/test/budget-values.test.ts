@@ -32,7 +32,7 @@ function point(obs: GameState, me: string): number {
   return moodPoint * (obs.politics?.governor === me ? governorMood : 1);
 }
 
-describe('S5-C9: lineWorth, welfare', () => {
+describe('S5-B-AC-6 (S5-C9\'s values): lineWorth, welfare', () => {
   it('the recipient gains the credits and the mood they buy; anyone else only the mood; past welfareCap units it buys no more mood', () => {
     const obs = observe(table(), 'ai1');
     expect(welfareRecipient(obs), 'the case: the poorest gets it').toBe('ai3');
@@ -52,7 +52,7 @@ describe('S5-C9: lineWorth, welfare', () => {
   });
 });
 
-describe('S5-C9: lineWorth, projects', () => {
+describe('S5-B-AC-6 (S5-C9\'s values): lineWorth, projects', () => {
   it('0 with no building commissioned, and 0 when the one commissioned waits only for goods', () => {
     const state = table();
     expect(lineWorth(observe(state, 'ai1'), 'ai1', 'projects', 300)).toBe(0);
@@ -77,7 +77,7 @@ describe('S5-C9: lineWorth, projects', () => {
   });
 });
 
-describe('S5-C9: overruleWorth, the tax', () => {
+describe('S5-B-AC-6 (S5-C9\'s values): overruleWorth, the tax', () => {
   /** ai1 holds 20 Smithore it needn't keep; ai0 raised the tax from 5% to 10% this planning. */
   function raised(): GameState {
     const state = table();
