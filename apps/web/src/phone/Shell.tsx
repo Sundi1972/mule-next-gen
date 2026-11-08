@@ -185,8 +185,9 @@ export function PhoneShell({
   const move = useContext(MoveToPhoneOpener);
   // A head that is nothing (null, false: `cond && <X />`) is no head: the header keeps its month.
   const hasHead = head !== undefined && head !== null && head !== false;
-  // The tabbed hub's rail packs as its mock does (hub-tabs proposed/Shell.tsx), at every phone height: the mock was
-  // measured whole at 667 and 844 with these. Every other phase keeps its packing, so their fits don't move.
+  // The tabbed hub's rail packs as its mock does (hub-tabs proposed/Shell.tsx); a short screen (667×375) packs tighter
+  // still, as every phase does there, so its rail keeps at least the room it has at 844. Every other phase keeps its
+  // packing, so their fits don't move.
   const hub = !!tabs && tabs.length > 0;
   return (
     <Wide.Provider value={wide}>
@@ -207,7 +208,8 @@ export function PhoneShell({
               data-testid="rail-head"
               className={cx(
                 'flex flex-col border-b border-holo-faint px-3 pb-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]',
-                hub ? 'gap-1.5 pt-[max(0.375rem,env(safe-area-inset-top))]' : 'gap-1 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))]',
+                'short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))]',
+                hub ? 'gap-1.5 pt-[max(0.375rem,env(safe-area-inset-top))]' : 'gap-1 pt-[max(0.5rem,env(safe-area-inset-top))]',
               )}
             >
               {hasHead ? (
@@ -292,9 +294,8 @@ export function PhoneShell({
               <div
                 className={cx(
                   'flex flex-col border-t border-holo-faint bg-void/60 px-3 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4',
-                  hub
-                    ? 'gap-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5'
-                    : 'gap-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 short:gap-1.5 short:pb-[max(0.375rem,env(safe-area-inset-bottom))] short:pt-1.5',
+                  'short:gap-1.5 short:pb-[max(0.375rem,env(safe-area-inset-bottom))] short:pt-1.5',
+                  hub ? 'gap-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] pt-1.5' : 'gap-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5',
                 )}
                 data-testid="actions"
               >

@@ -115,15 +115,16 @@ describe('the tabbed hub shell (SB-1b)', () => {
     expect(words(element(element(header, 'phase-line'), 'month'))).toBe('Month 3/12');
   });
 
-  it("with tabs the rail packs as the hub-tabs mock does, at every phone height: head 6/12/8, body 8/12, actions 6/12; without them as before", () => {
+  it("with tabs the rail packs as the hub-tabs mock does: head 6/12/8, body 8/12, actions 6/12, and a short screen tighter still; without them as before", () => {
     const classes = (html: string, testid: string) => html.match(new RegExp(`<[a-z]+[^>]*data-testid="${testid}"[^>]*class="([^"]*)"|<[a-z]+[^>]*class="([^"]*)"[^>]*data-testid="${testid}"`))!.slice(1).find(Boolean)!.split(' ');
     const body = (html: string) => element(html, 'guide').match(/<\/header><div class="([^"]*)"/)![1]!.split(' ');
     const hub = draw({ tabs: tabs(), head: createElement(Shell.PhaseLine), footer: createElement('button', null, 'Ready') });
     expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pb-2', 'pt-[max(0.375rem,env(safe-area-inset-top))]']));
     expect(body(hub)).toEqual(expect.arrayContaining(['gap-2', 'px-3', 'py-2']));
     expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pt-1.5', 'pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
-    // The mock's numbers hold at 667 too: no short-screen packing on top of them.
-    for (const c of [...classes(hub, 'rail-head'), ...body(hub), ...classes(hub, 'actions')]) expect(c).not.toMatch(/^short:/);
+    // At 667×375 the head and actions pack as every phase does there, so the hub's rail keeps the room it has at 844.
+    expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['short:gap-0.5', 'short:pb-1', 'short:pt-[max(0.25rem,env(safe-area-inset-top))]']));
+    expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['short:pt-1.5', 'short:pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
     // Every other phase keeps its packing, short screens included, so the arcade's and the auction's fits don't move.
     const other = draw({ footer: createElement('button', null, 'Ready') });
     expect(classes(other, 'rail-head')).toEqual(expect.arrayContaining(['gap-1', 'pt-[max(0.5rem,env(safe-area-inset-top))]', 'short:gap-0.5', 'short:pb-1']));
