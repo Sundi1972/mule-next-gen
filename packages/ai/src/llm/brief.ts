@@ -48,6 +48,7 @@ import { GRANTED } from './granted.js';
 import { energyAt, energyToKeep, useRule } from './energy.js';
 import { cutOffAs, noWalkTo } from './reach.js';
 import { withArticle, type HandsDevelopment } from './kept.js';
+import { socialSection, STANCES, type SocialInput } from '../social/section.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -76,6 +77,8 @@ export interface WriterBrief {
   offers: readonly EditOffer[];
   /** Whether it may also set the strategy: the land brief only, which plans the month. */
   strategyOffered: boolean;
+  /** Who its reply's messages may go to besides the table: the land brief with a social section only. */
+  messageTo?: readonly PlayerId[];
 }
 
 /** The land brief: the month's plan, its strategy and land-grant edits. */
@@ -599,6 +602,8 @@ export function landBrief(
   granted: number | null = null,
   /** Whether the draft development, kept, plays today's path instead (keptPlaysToday): the brief says so. */
   keptPlaysToday = false,
+  /** The seat's memory and last reads: with them the brief carries the social section, its edits and messages. */
+  social: SocialInput | null = null,
 ): LandBrief {
   const obs = observe(state, mind.me);
   const me = obs.players.find((p) => p.id === mind.me)!;
@@ -649,12 +654,22 @@ export function landBrief(
     AIM,
     characterLine(persona),
     '',
-    tableTalkBlock(talk.slice(-BRAIN.talkLines)),
+    // The social section quotes what the seat heard, so the table talk is not quoted twice.
+    ...(social ? socialSection(obs, mind.me, worthNow(state), talk, social) : [tableTalkBlock(talk.slice(-BRAIN.talkLines))]),
     '',
-    'Write your strategy and your edits, and reply with the JSON.',
+    social ? 'Write your strategy, your edits and your messages, and reply with the JSON.' : 'Write your strategy and your edits, and reply with the JSON.',
   ].join('\n');
-  return { text, plans, corners, strategy: draft.strategy, offers: development ? [...LAND_OFFERS, ...DEVELOPMENT_OFFERS] : LAND_OFFERS, strategyOffered: true };
+  const offers = [...LAND_OFFERS, ...(development ? DEVELOPMENT_OFFERS : [])];
+  if (!social) return { text, plans, corners, strategy: draft.strategy, offers: development ? offers : LAND_OFFERS, strategyOffered: true };
+  const others = obs.players.filter((p) => p.id !== mind.me).map((p) => p.id);
+  return { text, plans, corners, strategy: draft.strategy, offers: [...offers, ...socialOffers(others)], strategyOffered: true, messageTo: others };
 }
+
+/** The paths the social section offers: a stance and the notes for each other player. */
+const socialOffers = (others: readonly PlayerId[]): EditOffer[] => [
+  ...others.map((p) => ({ path: `/strategy/stances/${p}`, to: { type: 'string', enum: [...STANCES] } })),
+  ...others.map((p) => ({ path: `/rivalReads/${p}`, to: { type: 'array', items: { type: 'string' } } })),
+];
 
 /** What a brief that offers the development paths says of them. */
 const DEV_CHANGES = [

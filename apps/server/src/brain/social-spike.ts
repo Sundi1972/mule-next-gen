@@ -6,8 +6,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { allPrices, BRAIN, GOODS, nextElectionMonth, type GameState, type Office, type TaxPromise } from '@mule/engine';
-import { GOOD_NAME, PERSONAS, situation } from '@mule/ai';
+import { allPrices, BRAIN, GOODS, type GameState } from '@mule/engine';
+import { GOOD_NAME, PERSONAS, politicsLines, positionText, situation } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk } from './client.js';
 import { API_KEY_ENV, apiKeyFrom } from './index.js';
@@ -101,47 +101,16 @@ const STRATEGY_LINES: readonly string[] = [
   "politician: win the Governor's office, each term adds points.",
 ];
 
-const pctOf = (share: number) => `${Math.round(share * 100)}%`; // literal-ok: a share as a whole percentage
 const at = <T>(list: readonly T[], i: number): T => list[i % list.length]!;
 
 const indexOf = (view: GameState, seat: string) => view.players.findIndex((p) => p.id === seat);
 /** The player `offset` seats after `seat`. */
 const after = (view: GameState, seat: string, offset: number) => view.players[(indexOf(view, seat) + offset) % view.players.length]!;
-const nameOf = (view: GameState, id: string | null) => (id === null ? 'nobody' : (view.players.find((p) => p.id === id)?.name ?? 'nobody'));
-
-function officeOf(view: GameState, id: string): Office | null {
-  if (view.politics?.governor === id) return 'governor';
-  if (view.politics?.sheriff === id) return 'sheriff';
-  return null;
-}
 
 /** A player's public position: plots, worth as every phone shows it, and office. Never their goods. */
-function positionLine(point: BriefPoint, id: string): string {
-  const { view, worth } = point;
-  const plots = view.tiles.filter((t) => t.owner === id).length;
-  const office = officeOf(view, id);
-  const parts = [`${plots} plots`, ...(id in worth ? [`worth ${worth[id]}`] : []), ...(office ? [office === 'governor' ? 'Governor' : 'Sheriff'] : [])];
-  return `${nameOf(view, id)}: ${parts.join(', ')}.`;
-}
+const positionLine = (point: BriefPoint, id: string): string => positionText(point.view, point.worth, id);
 
 const relationsOf = (offset: number) => at(RELATIONS, offset - 1);
-
-const promiseText = (p: TaxPromise | undefined): string =>
-  p === undefined ? 'no tax promise' : p.kind === 'cap' ? `promises to cap the sales tax at ${p.percent}%` : p.kind === 'lower' ? 'promises to lower the sales tax' : 'promises to hold the sales tax';
-
-function politicsLines(view: GameState): string[] {
-  const pol = view.politics;
-  if (pol === null) return ['Politics is off in this game: no offices, no elections, no tax changes.'];
-  const next = nextElectionMonth(view);
-  const election = next === null ? 'No election is left this game.' : next === view.month + 1 ? `The next election is next month (month ${next}).` : `No election next month; the next is in month ${next}.`;
-  const candidates = OFFICES.map((office) => {
-    const ids = pol.candidates[office] ?? [];
-    const label = office === 'governor' ? 'Governor' : 'Sheriff';
-    if (ids.length === 0) return `Candidates for ${label}: none declared.`;
-    return `Candidates for ${label}: ${ids.map((id) => (office === 'governor' ? `${nameOf(view, id)} (${promiseText(pol.promises[id])})` : nameOf(view, id))).join(', ')}.`;
-  });
-  return [`Governor: ${nameOf(view, pol.governor)}. Sheriff: ${nameOf(view, pol.sheriff)}. Sales tax: ${pctOf(view.treasury.salesTax)}.`, election, ...candidates];
-}
 
 /** The social section: the other players, the politics, the chat the seat heard, and the ask. Public facts only. */
 export function socialSection(point: BriefPoint): string {

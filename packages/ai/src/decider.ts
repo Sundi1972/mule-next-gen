@@ -17,6 +17,8 @@ export interface ShortOption {
 export interface TableTalk {
   from: string;
   text: string;
+  /** Set when the line was a whisper to this seat; absent for a line to the table. */
+  to?: 'me';
 }
 
 export interface DecisionContext {
