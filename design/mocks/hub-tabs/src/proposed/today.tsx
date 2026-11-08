@@ -3,14 +3,14 @@ import { mapTiles, plotName, tileAt } from '../../../../../apps/web/src/game/der
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { MarketDesk } from '../../../../../apps/web/src/phone/hub/desks';
 import { needRows } from '../../../../../apps/web/src/phone/hub/needs';
-import { ELECTION_AGENDA, GOVERNOR_AGENDA, LAW_AGENDA, OFFICES_BANNER } from '../../../../../apps/web/src/phone/hub/politics/slots';
+import { COUNCIL_STAGE, ELECTION_AGENDA, ELECTION_DAY_STAGE, GOVERNOR_AGENDA, LAW_AGENDA, OFFICES_BANNER } from '../../../../../apps/web/src/phone/hub/politics/slots';
 import type { AgendaSlot } from '../../../../../apps/web/src/phone/hub/slots';
 import { useToday } from '../../../../../apps/web/src/phone/hub/state';
 import { HUB_SLOTS } from '../../../../../apps/web/src/phone/hub/today';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { DEALS_AGENDA } from '../copied/deals/today';
 import { OVERRULE_CALL_LINE } from '../copied/budget/OverruleCall';
-import { overruleNow, overruleReadyWords } from '../copied/budget/OverruleBallot';
+import { OVERRULE_STAGE, overruleNow, overruleReadyWords } from '../copied/budget/OverruleBallot';
 import { POLITICS_TABS, PoliticsBadge, PoliticsTab } from './tabs/Politics';
 import { ColonyTab } from './tabs/Colony';
 import { TalkBadge, TalkTab } from './tabs/Talk';
@@ -71,15 +71,10 @@ function GuardPanel() {
     <section className="flex flex-col gap-0.5 rounded-control border border-warn/60 bg-panel p-2 text-xs" data-testid="guard-panel">
       <span className="label-caps text-[10px]!">Guard · WS8</span>
       {tile ? <span>Plot {plotName(tile.x, tile.y)}: guarded this month. A saboteur here is caught.</span> : <span className="text-ink-2">Tap a plot on the map.</span>}
+      <Button size="md" variant="outline" className="mt-1 w-full" disabled={!tile} data-testid="guard-confirm">
+        Guard this plot
+      </Button>
     </section>
-  );
-}
-function GuardAction() {
-  const { looked } = useToday();
-  return (
-    <Button size="md" variant="outline" className="w-full" disabled={!looked} data-testid="guard-confirm">
-      Guard this plot
-    </Button>
   );
 }
 
@@ -90,7 +85,6 @@ const GUARD_PICK: PlotPickSlot = {
   back: { tab: 'politics', sub: 'sheriff', label: 'Sheriff' },
   Map: GuardMap,
   Panel: GuardPanel,
-  Action: GuardAction,
   show: ({ view, self }) => view.politics?.sheriff === self.id,
 };
 
@@ -120,8 +114,13 @@ export const TAB_SLOTS: TabHubSlots = {
   picks: [GUARD_PICK],
   nows: [overruleNow, ...HUB_SLOTS.nows],
   underNow: [...(HUB_SLOTS.underNow ?? []), OVERRULE_CALL_LINE],
-  // Ceremonies only. Election day's announce and ballot, the law ballot and the overrule ballot are sub-tabs now.
-  stage: [],
+  // Ceremonies only: the reveals, which the table watches together, still take the whole stage, tabs and all. Election
+  // day's announce and ballot, the law ballot and the overrule ballot are sub-tabs now (Laws, Elections).
+  stage: [
+    { ...ELECTION_DAY_STAGE, show: ({ view }) => view.politics?.election?.stage === 'ceremony' },
+    { ...COUNCIL_STAGE, show: ({ view }) => view.politics?.council?.stage === 'reveal' },
+    { ...OVERRULE_STAGE, show: ({ view }) => view.politics?.overrule?.stage === 'reveal' },
+  ],
   readyWords: [...(HUB_SLOTS.readyWords ?? []), overruleReadyWords],
 };
 

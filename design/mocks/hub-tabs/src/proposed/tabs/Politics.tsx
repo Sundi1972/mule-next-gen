@@ -37,9 +37,9 @@ const electionOpen = ({ view }: Pick<HubSeat, 'view'>) => {
 /** MOCK PLUMBING: which P3 budget variant the Budget sub-tab draws; the index and the sub-tab's switch set it. */
 export const BudgetVariant = createContext<{ variant: Variant; set(v: Variant): void }>({ variant: 'a', set: () => {} });
 
-function VoteBadge({ testid }: { testid: string }) {
+function VoteBadge({ testid, inline = false }: { testid: string; inline?: boolean }) {
   return (
-    <TabBadge tone="warn" label="A ballot is open: vote here" testid={testid}>
+    <TabBadge tone="warn" label="A ballot is open: vote here" testid={testid} inline={inline}>
       VOTE
     </TabBadge>
   );
@@ -182,10 +182,10 @@ export const POLITICS_TABS: SubTabSlot[] = [
 
 function SubBadge({ on, id }: { on(s: Pick<HubSeat, 'view'>): boolean; id: string }) {
   const { view } = usePhoneGame();
-  return on({ view }) ? <VoteBadge testid={`sub-badge-${id}`} /> : null;
+  return on({ view }) ? <VoteBadge testid={`sub-badge-${id}`} inline /> : null;
 }
 
-/** The Governor / Council tab: its sub-tabs in a row, the open one's body under them, scrolling on its own. */
+/** The Governor / Council tab: its sub-tabs in a row, the open one's body under them, scrolling on its own. DS-GAP: no Tabs component. */
 export function PoliticsTab() {
   const { subs, seat } = useDrawn();
   const nav = useHub();
@@ -201,10 +201,10 @@ export function PoliticsTab() {
             role="tab"
             aria-selected={s.id === sub.id}
             onClick={() => nav.open({ tab: 'politics', sub: s.id })}
-            className={cx('relative h-9 min-w-0 flex-1 truncate rounded-control border px-1 text-xs font-semibold', s.id === sub.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2 hover:text-ink')}
+            className={cx('flex h-9 min-w-0 flex-1 items-center justify-center rounded-control border px-1 text-xs font-semibold', s.id === sub.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2 hover:text-ink')}
             data-testid={`sub-${s.id}`}
           >
-            {s.label(seat)}
+            <span className="truncate">{s.label(seat)}</span>
             {s.Badge && <s.Badge />}
           </button>
         ))}

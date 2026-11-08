@@ -5,6 +5,9 @@ import type { TvFocus } from './world';
  * The floor is 0.7 (rulebook #tv-fit). `fixture`: the phone side's world as it is, whose view has no market (aMuleView's
  * empty one). `market`: the same with a full six-row market, as the game draws it (solo's &market=1): the honest number
  * for the build. A and B: the planning placements (variant.tsx). The overrule reveal and the month end have no B.
+ * These are solo's stand-in worlds (?focus=), which hold a card Ossa · AI broke this month from 'deal-broken' on, as the
+ * brief's path has it. The guided path's own worlds (steps.ts, 8 Nov 03:31Z: ?beat=) hold no break this month: every
+ * planning beat there measures 0.768 (A), the overrule ballot 0.894, the reveal 0.953, the month end 0.708.
  */
 export const TV_FLOOR = 0.7;
 

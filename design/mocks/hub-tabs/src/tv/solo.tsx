@@ -7,6 +7,7 @@ import { brokenWords } from './copied/deals-words';
 import type { Good } from '@mule/engine';
 import type { MarketRow } from '@mule/protocol';
 import { TV_NOTE, TvFor, TvScreenView, type TvFocus } from './TvFor';
+import { beatOf, BEATS } from '../steps';
 import { TvVariantProvider } from './variant';
 import { tvScreen } from './world';
 
@@ -31,6 +32,7 @@ function withBreak(w: World): World {
 function worldFor(focus: TvFocus): World {
   const opened = baseWorld({ budget: { shares: DEFAULT_SHARES, setBy: null }, cards: [PROMISED_BRIX, BROKEN_BY_KAI] });
   const set = { ...opened, budget: baseWorld().budget };
+  const ballots = { lena: true, kai: true, brix: false, ossa: false };
   switch (focus) {
     case 'planning':
       return opened;
@@ -42,16 +44,14 @@ function worldFor(focus: TvFocus): World {
       return withBreak(set);
     case 'overrule-called':
       return { ...withBreak(set), call: SHERIFF };
-    case 'overrule-reveal': {
-      const ballots = { lena: true, kai: true, brix: false, ossa: false };
-      return { ...withBreak(set), call: SHERIFF, stage: 'overrule', overruleBallots: ballots, overruleDone: Object.keys(ballots) };
-    }
+    case 'overrule-reveal':
+      return { ...withBreak(set), call: SHERIFF, stage: 'overruleReveal', overruleBallots: ballots, overruleDone: Object.keys(ballots) };
     case 'guarding':
       return { ...withBreak(set), call: SHERIFF };
     case 'waiting':
       return { ...withBreak(set), call: SHERIFF, ready: ['lena', GOVERNOR] };
     case 'month-end':
-      return withBreak(set);
+      return { ...withBreak(set), stage: 'monthEnd' };
   }
 }
 
@@ -79,14 +79,37 @@ function FitReadout() {
 }
 
 function WithMarket({ focus }: { focus: TvFocus }) {
-  const s = tvScreen(worldFor(focus), focus);
+  const s = tvScreen(worldFor(focus));
   const game = { ...s.game, market: MARKET, storeMules: 5, mulePrice: 148 };
   return <TvScreenView screen={{ ...s, game, table: { ...s.table, game } }} focus={focus} />;
 }
 
 const Q = new URLSearchParams(location.search);
 
+/** ?beat=<id>: the guided path's own world for that beat, as the prototype hands it to the TV. */
+function Beat({ id }: { id: string }) {
+  const beat = beatOf(id);
+  return (
+    <div className="flex flex-col gap-2 bg-table text-ink">
+      <div className="flex items-center gap-4 px-2">
+        <a className="text-holo underline" href="?" data-testid="solo-back">
+          All steps
+        </a>
+        <span className="font-mono text-sm">
+          {beat.id} · {beat.tv}
+        </span>
+        <FitReadout />
+      </div>
+      <TvVariantProvider initial={Q.get('variant') === 'b' ? 'b' : 'a'}>
+        <TvFor world={beat.world()} focus={beat.tv} />
+      </TvVariantProvider>
+    </div>
+  );
+}
+
 function Solo() {
+  const beat = Q.get('beat');
+  if (beat) return <Beat id={beat} />;
   const focus = Q.get('focus') as TvFocus | null;
   if (!focus || !FOCI.includes(focus))
     return (
@@ -97,6 +120,14 @@ function Solo() {
               {f}
             </a>{' '}
             <span className="text-ink-2">{TV_NOTE[f]}</span>
+          </li>
+        ))}
+        {BEATS.map((b) => (
+          <li key={b.id}>
+            <a className="text-holo underline" href={`?beat=${b.id}`} data-testid={`solo-beat-${b.id}`}>
+              beat {b.id}
+            </a>{' '}
+            <span className="text-ink-2">{b.tv}</span>
           </li>
         ))}
       </ul>

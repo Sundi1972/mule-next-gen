@@ -1,5 +1,5 @@
 import { Button } from '@mule/ui';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { PHASE_NAME } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { useHub as useRealHub, type HubNav as RealHubNav } from '../../../../../apps/web/src/phone/hub/Hub';
@@ -201,10 +201,10 @@ export function TabHub({ slots, variant, start }: { slots: TabHubSlots; variant:
           }
           rail={
             <>
-              {/* On Overview the rail says what a tap on the map does, then the tool's (or the pick's) panel. */}
-              {!ceremony && place.tab === 'overview' && (pick ?? tool)?.hint(seat) ? (
+              {/* On Overview the rail says what a tap on the map does (a pick's bar says it itself), then the tool's or the pick's panel. */}
+              {!ceremony && place.tab === 'overview' && !pick && tool?.hint(seat) ? (
                 <p className="text-[11px] leading-snug text-ink-2" data-testid="tool-hint">
-                  {(pick ?? tool)!.hint(seat)}
+                  {tool.hint(seat)}
                 </p>
               ) : null}
               {RailPart && <RailPart />}
@@ -236,15 +236,17 @@ export function TabHub({ slots, variant, start }: { slots: TabHubSlots; variant:
 /**
  * The "?" sheet: the old stage-top card in full (the month's steps, Now and Next, the offices line), the Now's own
  * detail, and what you need this month. Over the whole phone; Close and Escape shut it.
+ * DS-GAP: no Sheet or Dialog component; this copies StandingsSheet's overlay, its 600 px width included.
  */
 function HelpSheet({ now, slots, onClose, onOpenColony }: { now: Now; slots: TabHubSlots; onClose(): void; onOpenColony(): void }) {
   const { view } = usePhoneGame();
   useEscape(onClose);
+  const sheet = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    document.querySelector<HTMLElement>('[data-testid="help-close"]')?.focus();
+    sheet.current?.querySelector<HTMLElement>('[data-testid="help-close"]')?.focus();
   }, []);
   return (
-    <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="help-title" data-testid="help-sheet">
+    <div ref={sheet} className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="help-title" data-testid="help-sheet">
       <div className="flex max-h-full w-full max-w-[600px] flex-col gap-2 overflow-y-auto rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow">
         <header className="flex items-center justify-between gap-2">
           <h2 id="help-title" className="font-display text-lg font-semibold">

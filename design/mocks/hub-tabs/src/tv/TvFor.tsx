@@ -17,7 +17,7 @@ export type { TvFocus } from './world';
  * leave it as it was (TV_NOTE says so on the index).
  */
 export function TvFor({ world, focus }: { world: MockWorld; focus: TvFocus }): JSX.Element {
-  const screen = useMemo(() => tvScreen(world, focus), [world, focus]);
+  const screen = useMemo(() => tvScreen(world), [world]);
   return <TvScreenView screen={screen} focus={focus} />;
 }
 
@@ -48,7 +48,7 @@ export const TV_NOTE: Record<TvFocus, string> = {
   'deal-offered': 'TV: unchanged. The TV shows nothing of a private offer: a card is private to its two players.',
   'deal-broken': 'TV: the break banner under the header, in the news’s words (“· AI” after a computer seat’s name), the drop beside the breaker’s chip.',
   'budget-set': 'TV: the header’s budget line: Projects, Welfare → whom, kept; a share the Governor moved in holo, with what it was.',
-  'overrule-called': 'TV: the call at the head of the side, above who we wait for: who called it, the tax start → now, what it needs.',
+  'overrule-called': 'TV: while planning runs, the call at the head of the side (who called it, the tax start → now, what it needs); once the ballot opens, the ballot: who has voted, never how.',
   'overrule-reveal': 'TV: the overrule’s reveal: yes and no out of all the table’s votes, the needed mark, the stamp; the budget line at its foot.',
   guarding: 'TV: unchanged. Guards are secret: the TV shows nothing of the Sheriff’s guard.',
   waiting: 'TV: the ready list and “Waiting for …”, each name with its reputation chip.',

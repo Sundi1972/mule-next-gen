@@ -1,5 +1,5 @@
 import { COLONY, GOODS, POLITICS, PRESTIGE, type BudgetLine, type DealCard, type DealOffer, type LawProposal, type Office, type OverruleTarget, type OverruleWhy, type PrestigeId, type Terrain } from '@mule/engine';
-import type { BudgetView, ChatMessage, ColonyView, CouncilView, ElectionView, MuleIntent, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { BudgetView, ChatMessage, ColonyView, CouncilView, ElectionView, ListingView, MuleIntent, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import type { TableClient } from '../../../../apps/web/src/net/client';
 import { aMuleView, aPlayer } from '../../../../apps/web/test/fixtures/views';
@@ -100,9 +100,10 @@ export const NEEDED = Math.floor(TOTAL_VOTES / 2) + 1;
 
 /**
  * planning: the month's hub. election: month 8's Governor ballot (Brix against Ossa · AI). lawBallot: Brix's land tax
- * up for the Council's vote. overrule: Kai's call on the tax, its ballot open as planning ends.
+ * up for the Council's vote. overrule: Kai's call on the tax, its ballot open as planning ends. overruleReveal: that
+ * ballot's result, on every screen. monthEnd: the month's end (upkeep), with what the fund paid out and the cards broken.
  */
-export type Stage = 'planning' | 'election' | 'lawBallot' | 'overrule';
+export type Stage = 'planning' | 'election' | 'lawBallot' | 'overrule' | 'overruleReveal' | 'monthEnd';
 
 export interface World {
   month: number;
@@ -124,7 +125,22 @@ export interface World {
   overruleDone: string[];
   /** Food, Energy, Water this seat needs this month: Lena is short one Energy. */
   short: boolean;
+  /** Who pressed Continue in the overrule's reveal. */
+  continued: string[];
+  /** Buildings the Governor commissioned this month (the Commission intent), beyond the fixture's Observatory. */
+  commissioned: PrestigeId[];
+  /** Tile indices (y * W + x) the Sheriff guards this month: the `guard {tiles}` intent, MyPoliticsView.sheriff.guards. Never on the TV. */
+  guards: number[];
+  /** Plots and MULEs listed for the auction after planning (the list / unlist intents). */
+  listings: ListingView[];
 }
+
+/**
+ * The mock table's world, as the TV pane (src/tv/**, mock-hub-tv) receives it. STABLE: its name and shape stay as
+ * they are from 8 Nov 03:40Z; fields may be added, never renamed or removed. Build a screen's view with viewFor
+ * (a phone) or boardViewFor (the TV).
+ */
+export type MockWorld = World;
 
 const LAND_TAX: LawProposal = { kind: 'enact', law: 'landTax', setting: 10 };
 const IMPACT = { lena: { cost: 70 }, ossa: { cost: 80 }, brix: { cost: 70 }, kai: { cost: 50 } };
@@ -159,6 +175,10 @@ export function baseWorld(over: Partial<World> = {}): World {
     overruleBallots: {},
     overruleDone: [],
     short: true,
+    continued: [],
+    commissioned: [],
+    guards: [6 + 5 * 15],
+    listings: [],
     ...over,
   };
 }
@@ -169,8 +189,8 @@ export function card(c: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to' 
 export const PACT = { kind: 'pact' } as const;
 export const VOTE_BRIX = { kind: 'vote', office: 'governor', candidate: 'brix' } as const;
 
-/** Brix offers Lena a vote card; Ossa · AI offers her a pact. Both wait for Lena. */
-export const OFFER_FROM_BRIX = card({ id: 'deal-q7k2m9', from: 'brix', to: 'lena', terms: VOTE_BRIX, until: 8 });
+/** Brix offers Lena a one-month pact; Ossa · AI offers her a three-month pact. Both wait for Lena. */
+export const OFFER_FROM_BRIX = card({ id: 'deal-q7k2m9', from: 'brix', to: 'lena', terms: PACT, until: 5 });
 export const OFFER_FROM_OSSA = card({ id: 'deal-b3x8re', from: 'ossa', to: 'lena', terms: PACT, until: 7 });
 /** Lena's promise, active: her vote for Brix in month 8. */
 export const PROMISED_BRIX = card({ id: 'deal-m1v0tz', from: 'lena', to: 'brix', terms: VOTE_BRIX, offered: 4, until: 8, status: 'active' });
@@ -270,7 +290,16 @@ export function mockTable(start: World): MockTable {
           return !world.call && seat !== GOVERNOR && world.tax !== TAX_START ? set({ ...world, call: seat }) : undefined;
         case 'voteOverrule':
           return world.stage === 'overrule' ? set({ ...world, overruleBallots: { ...world.overruleBallots, [seat]: intent.yes } }) : undefined;
+        case 'commission':
+          return seat === GOVERNOR && !world.commissioned.includes(intent.id) ? set({ ...world, commissioned: [...world.commissioned, intent.id] }) : undefined;
+        case 'list':
+          return set({ ...world, listings: [...world.listings, { id: `lot-${world.listings.length + 1}`, seller: seat, item: intent.item.kind === 'plot' ? { kind: 'plot', x: intent.item.x, y: intent.item.y } : { kind: 'mule', x: intent.item.x, y: intent.item.y, outfit: 'food' }, minimum: intent.minimum, unsold: intent.unsold, storePays: Math.floor(intent.minimum / 2) }] });
+        case 'unlist':
+          return set({ ...world, listings: world.listings.filter((l) => l.id !== intent.id || l.seller !== seat) });
+        case 'guard':
+          return seat === SHERIFF ? set({ ...world, guards: intent.tiles }) : undefined;
         case 'ready':
+          if (world.stage === 'overruleReveal') return set({ ...world, continued: world.continued.includes(seat) ? world.continued : [...world.continued, seat] });
           if (world.stage === 'overrule') return set({ ...world, overruleDone: world.overruleDone.includes(seat) ? world.overruleDone : [...world.overruleDone, seat] });
           return set({ ...world, ready: world.ready.includes(seat) ? world.ready : [...world.ready, seat] });
         default:
@@ -351,16 +380,16 @@ function tally(w: World): { passed: boolean; yes: number; no: number } {
 }
 
 function overruleView(w: World): OverruleView | null {
-  if (!w.call) return null;
-  const stage = w.stage === 'overrule' ? 'ballot' : 'called';
+  if (!w.call || w.stage === 'monthEnd') return null;
+  const stage = w.stage === 'overrule' ? 'ballot' : w.stage === 'overruleReveal' ? 'reveal' : 'called';
   const players = BASE_PLAYERS.map((p) => p.id);
   return {
     target: 'tax', caller: w.call, stage,
     restores: { tax: TAX_START }, stands: { tax: w.tax },
     voted: Object.keys(w.overruleBallots), done: w.overruleDone,
     waitingFor: stage === 'ballot' ? players.filter((id) => !w.overruleDone.includes(id)) : [],
-    clockMs: 0, revealMs: REVEAL_MS, total: TOTAL_VOTES, needed: NEEDED,
-    result: null,
+    clockMs: stage === 'reveal' ? REVEAL_MS : 0, revealMs: REVEAL_MS, total: TOTAL_VOTES, needed: NEEDED,
+    result: stage === 'reveal' ? tally(w) : null,
   } satisfies OverruleView;
 }
 export { tally };
@@ -370,32 +399,53 @@ function canOverrule(w: World, id: string): Record<OverruleTarget, true | Overru
   return { tax, budget: 'notYet', confidence: 'sheriffOnly' };
 }
 
-function colonyView(): ColonyView {
+/**
+ * Month 5's upkeep, by S5-RULE-3 on the budget spec's worked example (copied from design/mocks/politics-budget's
+ * fixture): the fund holds 640, so 540 spare. Welfare 10% pays 54 to Kai; Projects 80% is a ceiling of 432, of which
+ * the Observatory takes the 350 cr it still needs.
+ */
+export function upkeepOf(w: World) {
+  const officePay = 80;
+  const parkUpkeep = PRESTIGE.park.upkeep;
+  const welfare = creditsOf('welfare', w.budget.shares.welfare);
+  const limit = creditsOf('projects', w.budget.shares.projects);
+  const project = Math.min(limit, PRESTIGE.observatory.credits);
+  return { in: { grant: 200 }, out: { officePay, upkeep: parkUpkeep, welfare, project }, limit, balance: FUND - welfare - project };
+}
+
+function colonyView(w: World): ColonyView {
+  const open = new Set<PrestigeId>(['park', 'observatory', ...w.commissioned]);
   const catalogue = (Object.keys(PRESTIGE) as PrestigeId[]).map((id) => {
     const p = PRESTIGE[id];
-    const open = id === 'park' || id === 'observatory';
-    return { id, name: p.name, credits: p.credits, goods: p.goods, buildMonths: p.buildMonths, prestige: p.prestige, upkeep: p.upkeep, commissionable: !open, why: open ? 'Already commissioned' : null };
+    return { id, name: p.name, credits: p.credits, goods: p.goods, buildMonths: p.buildMonths, prestige: p.prestige, upkeep: p.upkeep, commissionable: !open.has(id), why: open.has(id) ? 'Already commissioned' : null };
   });
   const obs = PRESTIGE.observatory;
+  const monthEnd = w.stage === 'monthEnd';
+  const up = upkeepOf(w);
+  const commissioned = w.commissioned.map((id) => {
+    const p = PRESTIGE[id];
+    return { id, name: p.name, stage: 'commissioned' as const, cost: { credits: p.credits, goods: p.goods }, funded: { credits: 0, goods: {} }, buildMonths: p.buildMonths, monthsLeft: null, place: null, prestige: p.prestige, upkeep: p.upkeep, repairCost: null, plaque: [] };
+  });
   return {
     gauges: { wealth: 18_400, environment: 31, prestige: 2, happiness: 58, band: 'content' },
     lastGauges: { wealth: 17_900, prestige: 2, happiness: 55 },
-    fund: FUND,
-    ledger: null,
+    fund: monthEnd ? up.balance : FUND,
+    ledger: monthEnd ? { month: w.month, in: up.in, out: up.out } : null,
     projects: [
       {
         id: 'park', name: 'Park', stage: 'standing', cost: { credits: 210, goods: { alloy: 1 } }, funded: { credits: 210, goods: { alloy: 1 } }, buildMonths: 1, monthsLeft: null,
         place: { x: 1, y: 2, w: 1, h: 1 }, prestige: 2, upkeep: 15, repairCost: null, plaque: [{ playerId: 'lena', value: 120 }],
       },
       {
-        id: 'observatory', name: obs.name, stage: 'commissioned', cost: { credits: obs.credits, goods: obs.goods }, funded: { credits: 0, goods: {} }, buildMonths: obs.buildMonths, monthsLeft: null,
+        id: 'observatory', name: obs.name, stage: 'commissioned', cost: { credits: obs.credits, goods: obs.goods }, funded: { credits: monthEnd ? up.out.project : 0, goods: {} }, buildMonths: obs.buildMonths, monthsLeft: null,
         place: null, prestige: obs.prestige, upkeep: obs.upkeep, repairCost: null, plaque: [{ playerId: 'brix', value: 70 }],
       },
-    ],
+      ...commissioned,
+    ] as ColonyView['projects'],
     catalogue,
     score: { wealth: 18_400, environment: -310, prestige: 1_200, factor: 1, total: 19_290 },
     lastScore: 18_950,
-    welfare: null,
+    welfare: monthEnd ? { month: w.month, to: welfareTo(GOVERNOR) ?? 'kai', paid: up.out.welfare } : null,
   };
 }
 
@@ -407,17 +457,22 @@ export interface SeatView {
   slot: Slot;
 }
 
-/** What the server sends this seat for this world: partyTo decides every card (S3-RULE-7). */
-export function viewFor(seat: Seat, w: World): SeatView {
-  const id = seat;
-  const ready = (p: PlayerView) => p.isAi || (w.stage === 'overrule' ? w.overruleDone.includes(p.id) : w.ready.includes(p.id));
-  const players = BASE_PLAYERS.map((p) => ({ ...p, reputation: w.rep[p.id] ?? 50, ready: ready(p) }));
-  const mine = w.cards.filter((c) => c.from === seat || c.to === seat);
-  const open = mine.filter((c) => c.from === seat && c.status === 'offered').length;
+/** Whether a seat has nothing left to do in this moment: Ready in planning, Done in the ballot, Continue in the reveal. */
+function readyIn(w: World, p: PlayerView): boolean {
+  if (p.isAi) return true;
+  if (w.stage === 'overrule') return w.overruleDone.includes(p.id);
+  if (w.stage === 'overruleReveal') return w.continued.includes(p.id);
+  return w.ready.includes(p.id);
+}
+
+/** The public half of every view: what the server sends everyone, the TV included. */
+function gameOf(w: World, me: MyView | null): MuleView {
+  const players = BASE_PLAYERS.map((p) => ({ ...p, reputation: w.rep[p.id] ?? 50, ready: readyIn(w, p) }));
   const votesOpen = w.stage === 'election' || w.stage === 'lawBallot';
+  const monthEnd = w.stage === 'monthEnd';
   const politics: PoliticsView = {
     governor: GOVERNOR, sheriff: SHERIFF, term: [4, 7], next: 8, baron: BARON,
-    tax: { percent: w.tax, start: TAX_START, low: 0, high: 10 }, fund: FUND, pay: { governor: 50, sheriff: 30 },
+    tax: { percent: w.tax, start: TAX_START, low: 0, high: 10 }, fund: monthEnd ? upkeepOf(w).balance : FUND, pay: { governor: 50, sheriff: 30 },
     weights: players.map((p) => ({ id: p.id, votes: VOTES[p.id] ?? 1, parts: { base: 1, land: 0, reputation: 0, baron: p.id === BARON ? 1 : 0, taxes: (VOTES[p.id] ?? 1) - 1 - (p.id === BARON ? 1 : 0) } })),
     candidates: w.stage === 'election' ? {} : { governor: ['brix', 'ossa'] },
     promises: { brix: { kind: 'cap', percent: 10 }, ossa: { kind: 'cap', percent: 5 } },
@@ -432,6 +487,22 @@ export function viewFor(seat: Seat, w: World): SeatView {
     budget: budgetView(w),
     overrule: overruleView(w),
   };
+  return aMuleView({
+    players, me: me as MyView, politics, news: w.news,
+    month: w.month, phase: monthEnd ? 'upkeep' : 'planning', width: W, height: H, tiles: TILES,
+    colony: colonyView(w),
+    treasury: { money: politics.fund, salesTax: w.tax / 100 },
+    colonists: 1_240, air: { level: 31, band: 'clean' }, lastAir: { level: 33, band: 'clean' }, colonistsFed: true,
+    ship: { inPort: false, arrives: 6 } as MuleView['ship'],
+    listings: w.listings,
+  });
+}
+
+/** What the server sends this seat for this world: partyTo decides every card (S3-RULE-7). */
+export function viewFor(seat: Seat, w: World): SeatView {
+  const id = seat;
+  const mine = w.cards.filter((c) => c.from === seat || c.to === seat);
+  const open = mine.filter((c) => c.from === seat && c.status === 'offered').length;
   const mineBallot = w.overruleBallots[id];
   const me = {
     id,
@@ -441,23 +512,23 @@ export function viewFor(seat: Seat, w: World): SeatView {
     politics: {
       running: id === 'brix' ? 'governor' : null, ballot: w.ballots[id] ?? {}, canRun: { governor: id === 'brix' ? 'running' : true }, paid: 320,
       reputation: w.rep[id] ?? 50, lawBallot: w.lawBallots[id] ?? null, promised: promised(w, id),
-      overruleBallot: w.stage === 'overrule' ? (mineBallot ?? null) : null,
+      overruleBallot: w.stage === 'overrule' || w.stage === 'overruleReveal' ? (mineBallot ?? null) : null,
       canOverrule: canOverrule(w, id),
     },
     deals: { cards: mine, offersLeft: DEALS.maxOpenOffers - open, pactMonths: [...DEALS.pactMonths] },
     worthParts: { money: 640, goods: 180, plots: 7, land: 3500, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
   } as unknown as MyView;
-  const view = aMuleView({
-    players, me, politics, news: w.news,
-    month: w.month, phase: 'planning', width: W, height: H, tiles: TILES,
-    colony: colonyView(),
-    treasury: { money: FUND, salesTax: w.tax / 100 },
-    colonists: 1_240, air: { level: 31, band: 'clean' }, lastAir: { level: 33, band: 'clean' }, colonistsFed: true,
-    ship: { inPort: false, arrives: 6 } as MuleView['ship'],
-  });
-  const self = players.find((p) => p.id === id)!;
+  const view = gameOf(w, me);
+  const self = view.players.find((p) => p.id === id)!;
   const table = { code: 'MULE', status: 'playing', hostId: 'lena', boards: 1, seats: [], game: view } as unknown as TableView<MuleView>;
   return { view, me, self, table, slot: self.slot as Slot };
+}
+
+/** What the TV (a board, no seat) receives for this world: the public view, no `me`, no card but the broken ones. */
+export function boardViewFor(w: World): { view: MuleView; table: TableView<MuleView> } {
+  const view = gameOf(w, null);
+  const table = { code: 'MULE', status: 'playing', hostId: 'lena', boards: 1, seats: [], game: view } as unknown as TableView<MuleView>;
+  return { view, table };
 }
 
 /** A phone's client on the mock table: its chat (whispers to it only), its refusals, and the intents it sends. */

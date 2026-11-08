@@ -12,7 +12,7 @@ import { StageTitle } from '../parts';
  * GRAFT TARGET: new apps/web/src/phone/hub/tabs/Colony.tsx, from the Colony desk (politics/Colony.tsx::ColonyWithFacts:
  * the fund, the colony card with its gauges and projects, the build site, what you need, the news, the ship, the facts)
  * and the standings sheet's league with the reputation chips (the deals mock, P4). Two columns once the stage is wide
- * enough for them (844), one under the other at 667. What changed: Commission leaves for Governor › Budget, under
+ * enough for them (844), one under the other at 667; the standings span the stage above them. What changed: Commission leaves for Governor › Budget, under
  * Projects (the budget mock, P12); the standings are on the page, not only behind "2nd of 4".
  */
 
@@ -48,7 +48,10 @@ function Standings() {
                   + Deal
                 </Button>
               ) : (
-                <span className="w-12 shrink-0" />
+                // Keeps the Worth column straight on your own row.
+                <Button size="md" variant="ghost" className="invisible h-8! shrink-0 px-1.5 text-xs" tabIndex={-1} aria-hidden disabled>
+                  + Deal
+                </Button>
               )}
             </li>
           );
@@ -61,15 +64,12 @@ function Standings() {
 
 export function ColonyTab() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto @container/colony" data-testid="colony-tab">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto @container/colony" data-testid="colony-tab">
+      <Standings />
+      {/* The colony desk's sections flow in two columns once the stage is wide enough (844), one under the other at 667. */}
       {/* MOCK: hides ColonyWithFacts' own Commission, which moves under Governor › Budget's Projects line (P12). */}
-      <div className="grid grid-cols-1 items-start gap-2 [&_[data-testid=commission-open]]:hidden @min-[480px]/colony:grid-cols-2" data-testid="colony-grid">
-        <div className="flex min-w-0 flex-col gap-2">
-          <Standings />
-        </div>
-        <div className="flex min-w-0 flex-col gap-2 @min-[480px]/colony:row-span-2">
-          <ColonyWithFacts />
-        </div>
+      <div className="gap-2 [&_[data-testid=commission-open]]:hidden [&>*]:mb-2 [&>*]:break-inside-avoid @min-[480px]/colony:columns-2" data-testid="colony-columns">
+        <ColonyWithFacts />
       </div>
     </div>
   );
