@@ -512,6 +512,17 @@ const brixGame = (cards: DealCard[] = BRIX_CARDS) => gameFor(myView(BRIX, cards)
 const lenasAnswer = (status: DealCard['status']) => ({ ...LENAS, status, settled: status === 'active' ? null : 2 });
 
 describe('the incoming card and My cards (S3-C18)', () => {
+  it('S3-B-AC-1: a pact says "Kept" with no figure, on the card offered and on its settled line', () => {
+    const keptPact = card({ id: 'deal-kp1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
+    mount(brixGame([...BRIX_CARDS, keptPact]), hub);
+    tap('desk-talk');
+    tap(`chat-to-${LENA}`);
+    expect(text(`incoming-${LENAS.id}-stakes`)).toMatch(/^Kept\. Broken: −\d+ to whoever breaks it/);
+    tap('talk-cards');
+    expect(text('my-deal-deal-kp1-line')).toContain('Pact kept');
+    expect(text('my-deal-deal-kp1-line'), 'no figure').not.toMatch(/\+\d/);
+  });
+
   it("S3-B-AC-1: Brix's whisper thread and agenda show Lena's card with both reputations and Accept / Decline; My cards lists offered (Withdraw), incoming, active (what it binds, until when) and settled cards", () => {
     mount(brixGame(), hub);
     expect(text('agenda-deals')).toContain('1 deal offer');
