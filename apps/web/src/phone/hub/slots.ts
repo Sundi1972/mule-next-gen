@@ -206,6 +206,9 @@ export interface HubNav {
 }
 
 /** The place after a door: its tab, its sub-tab and tool where it names them, and only its focus. A door away from Overview ends a pick. */
+/** SB-1a.2's name for HubNav, kept while WS8's Sheriff slots (SB-4) still import it; SB-2 grafted it as HubNav. */
+export type TabHubNav = HubNav;
+
 export function goTo(place: HubPlace, door: Door): HubPlace {
   return { ...place, tab: door.tab, sub: door.sub ?? place.sub, tool: door.tool ?? place.tool, focus: door.focus ?? null, pick: door.tab === 'overview' ? place.pick : null };
 }

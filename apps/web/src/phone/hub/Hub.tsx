@@ -8,6 +8,7 @@ import { usePhoneGame } from '../game';
 import { PhoneShell, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { NeedsStrip } from './NeedsStrip';
+import { PickNavProvider } from './politics/Sheriff';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
 import { Roadmap } from './Roadmap';
@@ -143,6 +144,8 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
 
   return (
     <Nav.Provider value={nav}>
+      {/* WS8's Sheriff sub-tab and Guard pick (SB-4) read the hub's navigation through their own provider. */}
+      <PickNavProvider value={nav}>
       <DrawnCtx.Provider value={{ slots: { ...slots, tools, agenda: shown(slots.agenda, seat), banners: shown(slots.banners, seat) }, seat, tabs, subs, pick }}>
         <Head.Provider value={{ now, onHelp: () => setSheet('help'), onGo: goAsk }}>
           <PhoneShell
@@ -181,6 +184,7 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
           </PhoneShell>
         </Head.Provider>
       </DrawnCtx.Provider>
+      </PickNavProvider>
     </Nav.Provider>
   );
 }

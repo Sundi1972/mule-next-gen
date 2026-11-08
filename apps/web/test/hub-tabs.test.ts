@@ -257,6 +257,22 @@ describe('the tabbed planning hub (SB-2)', () => {
     expect(selected('sub-sheriff')).toBe(true);
   });
 
+  it("C17 (D6, SB-4 ready): WS8's Sheriff sub-tab and Guard pick, registered in one line each, run in the hub: Guard a plot hands Overview's map the pick, and Done goes back to the Sheriff", async () => {
+    const { GUARD_PICK, SHERIFF_SUB } = await import('../src/phone/hub/politics/Sheriff');
+    const slots: TabHubSlots = { ...TAB_SLOTS, politicsTabs: TAB_SLOTS.politicsTabs.map((t) => (t.id === SHERIFF_SUB.id ? SHERIFF_SUB : t)), picks: [GUARD_PICK] };
+    mount(game({ self: 's3', pol: politics({ sheriff: 's3' }), sheriff: true }), slots);
+    go((n) => n.open({ tab: 'politics', sub: 'sheriff' }));
+    tap('guard-open-map');
+    expect(selected('tab-overview')).toBe(true);
+    expect(nav!.pick).toBe('guard');
+    byTestid('guard-map', byTestid('hub-map'));
+    expect(findTestid('map-tools'), 'the pick draws its own bar').toBeUndefined();
+    tap('guard-back');
+    expect(nav!.pick).toBeNull();
+    expect(selected('tab-politics')).toBe(true);
+    expect(selected('sub-sheriff')).toBe(true);
+  });
+
   it("C17 (D6): startPick hands Overview's one map to the pick, its bar in place of the tool row; Back returns to its door, and endPick ends it", () => {
     const Map = () => createElement('div', { 'data-testid': 'test-pick-map' });
     const pick: PlotPickSlot = { id: 'test', label: 'Picking', hint: () => 'tap a plot', back: { tab: 'colony', label: 'Colony' }, Map };

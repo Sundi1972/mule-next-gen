@@ -606,7 +606,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
 
   it('S4-C14: a void order says the crew found nothing to cut and that you pay nothing; it names the plot, never an owner', () => {
     mount(viewOf({ sabotage: { ...NO_ORDER, mine: [voided('smithore')] } }));
-    tap('desk-market');
+    tap('tool-list');
     const row = text('my-order-sab-v0id01');
     expect(row).toBe('Month 5: power cut on plot 2·1Your crew found nothing to cut; you pay nothing.Void');
     expect(row, "the plot's owner now may be a new one after a sale").not.toContain('Ossa');
@@ -617,7 +617,7 @@ describe('S4-C14, P6: the rumour at the market, and your orders', () => {
 
   it('S4-C14: a void order with no crop (good null) has no icon', () => {
     mount(viewOf({ sabotage: { ...NO_ORDER, mine: [voided(null)] } }));
-    tap('desk-market');
+    tap('tool-list');
     expect(text('my-order-sab-v0id01')).toBe('Month 5: power cut on plot 2·1Your crew found nothing to cut; you pay nothing.Void');
     expect(byTestid('my-order-sab-v0id01').findAll('svg')).toHaveLength(0);
   });
