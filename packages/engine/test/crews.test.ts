@@ -5,6 +5,7 @@ import {
   advancePhase,
   createGame,
   crewFactor,
+  FACTORY,
   GROWN_BASE,
   hardship,
   isFactory,
@@ -38,16 +39,20 @@ function toPhase(state: GameState, phase: GameState['phase']): void {
   expect(state.phase).toBe(phase);
 }
 
-/** Lays p0's plots two tiles apart (no cluster, no feeder), skipping the store; a raw plot's ground set so it makes `out`. */
-function lay(state: GameState, plots: { good: Outfit; out?: number }[]): Tile[] {
+/**
+ * Lays p0's plots two tiles apart (no cluster, no feeder), skipping the store; a raw plot's ground set so it makes `out`.
+ * A plot is on plains unless it names its `terrain`, and new unless it names its `runMonths`.
+ */
+type PlotSpec = { good: Outfit; out?: number; terrain?: Tile['terrain']; runMonths?: number };
+function lay(state: GameState, plots: PlotSpec[]): Tile[] {
   const free = state.tiles.filter((t) => t.terrain !== 'store' && t.x % 2 === 0 && t.y % 2 === 0);
   expect(free.length, 'the premise: room for every plot').toBeGreaterThanOrEqual(plots.length);
-  return plots.map(({ good, out = 0 }, k) => {
+  return plots.map(({ good, out = 0, terrain = 'plains', runMonths = 0 }, k) => {
     const tile = free[k]!;
     const ground = { ...flatGround };
     if (good === 'food' || good === 'water' || good === 'energy') ground[good] = out - GROWN_BASE;
     else if (!isFactory(good)) ground[good as 'smithore'] = out;
-    Object.assign(tile, { terrain: 'plains', traits: [], peaks: 0, ground, owner: 'p0', outfit: good, pollution: 0, filter: false, runMonths: 0 });
+    Object.assign(tile, { terrain, traits: [], peaks: 0, ground, owner: 'p0', outfit: good, pollution: 0, filter: false, runMonths });
     return tile;
   });
 }
@@ -61,7 +66,7 @@ const household = UPKEEP.baseFood;
  * then fills p0's stock so nothing is short at production, and plays month 2 to its production. Returns p0's lines from
  * the month report.
  */
-function monthAfter(plots: { good: Outfit; out?: number }[], food: (state: GameState) => number) {
+function monthAfter(plots: PlotSpec[], food: (state: GameState) => number) {
   const state = newGame();
   toPhase(state, 'auction');
   const tiles = lay(state, plots);
@@ -82,12 +87,13 @@ function monthAfter(plots: { good: Outfit; out?: number }[], food: (state: GameS
 const crewPart = (line: ProductionLine) => line.parts.find((p) => p.why === 'crewShort');
 
 describe('needs C14: a crew left short works slower next month (RULE-12)', () => {
-  // A farm making 3, a well 10, a Smithore mine 3, an Alloy works (2) and an Energy plant 4: 6 crew, who need 2 Food.
-  const ESTATE: { good: Outfit; out?: number }[] = [
+  // A farm making 3, a well 10, a Smithore mine 3, an Alloy works making 4 (2, +1 on volcanic ground, +1 for three
+  // months' experience) and an Energy plant 4: 6 crew, who need 2 Food.
+  const ESTATE: PlotSpec[] = [
     { good: 'food', out: 3 },
     { good: 'water', out: 10 },
     { good: 'smithore', out: 3 },
-    { good: 'alloy' },
+    { good: 'alloy', terrain: 'volcanic', runMonths: FACTORY.experienceMonths },
     { good: 'energy', out: 4 },
   ];
 
@@ -97,8 +103,9 @@ describe('needs C14: a crew left short works slower next month (RULE-12)', () =>
     expect(needsOf(fed.state, 'p0').food - household, 'the premise: the crews need 2 Food, so half is 1').toBe(2);
 
     const made = (run: typeof fed) => run.lines.map((l) => l.made);
-    expect(made(fed), 'the premise: fed, each plot makes its full output').toEqual([3, 10, 3, 2, 4]);
-    expect(made(half), "85% rounded half up: 2.55 → 3, 8.5 → 9, 1.7 → 2; the Energy plant's 4 unchanged").toEqual([3, 9, 3, 2, 4]);
+    expect(made(fed), 'the premise: fed, each plot makes its full output').toEqual([3, 10, 3, 4, 4]);
+    // f = 1 − 0.5 × g(0.5) ≈ 0.852: 3 → 2.56 → 3, 10 → 8.52 → 9, the works' 4 → 3.41 → 3; the Energy plant's 4 unchanged.
+    expect(made(half), 'about 85%, rounded half up, the works too').toEqual([3, 9, 3, 3, 4]);
     fed.lines.forEach((line, i) => {
       const cut = half.lines[i]!;
       const energy = ESTATE[i]!.good === 'energy';
@@ -147,30 +154,55 @@ describe('needs C14: a crew left short works slower next month (RULE-12)', () =>
 
   it('needs T-AC-24: Energy plants are never cut; every other plot is, before the Energy turn-off', () => {
     const state = newGame();
-    const [plant, farm, mine] = lay(state, [
+    const [plant, farm, mine, works] = lay(state, [
       { good: 'energy', out: 2 },
       { good: 'food', out: 5 },
       { good: 'smithore', out: 5 },
+      { good: 'alloy', terrain: 'volcanic' },
     ]);
-    // Wholly short crews (f 0.25). The plant keeps 1 of its 2 after its own use: the farm's 1 but not the mine's 2, so
-    // the mine is turned off.
-    p0(state).crewShort = { food: 1, water: 1 };
-    Object.assign(p0(state).stock, { food: 20, water: 50, energy: 0 });
+    // Crews with no Food (f 0.5), Water in full. The plant keeps 1 of its 2 after its own use: the farm's 1 but not the
+    // mine's 2 or the works' 2, so the mine and the works are turned off.
+    p0(state).crewShort = { food: 1, water: 0 };
+    Object.assign(p0(state).stock, { food: 20, water: 50, energy: 0, smithore: 10 });
     const run = runProduction(state);
     const lineOf = (tile: Tile) => run.lines.find((l) => l.tile === state.tiles.indexOf(tile))!;
 
     expect(lineOf(plant!).made, 'the plant makes its 2').toBe(2);
     expect(crewPart(lineOf(plant!))).toBeUndefined();
-    expect(lineOf(farm!).made, '5 × 0.25 = 1.25 → 1').toBe(1);
+    expect(lineOf(farm!).made, '5 × 0.5 = 2.5, an exact half, rounds up to 3').toBe(3);
     expect(lineOf(mine!).parts.map((p) => p.why), 'the crew cut comes before the turn-off').toEqual(['ground', 'crewShort', 'energyOff']);
+    // The works makes 3; cut to 2, the turned-off share of 2 rounds to 0: it makes nothing and spends none of its inputs.
+    expect(lineOf(works!).parts.map((p) => [p.why, p.delta])).toEqual([['factory', 3], ['crewShort', -1], ['energyOff', -2]]);
+    expect(p0(state).stock.smithore, "nothing spent for nothing: only the mine's Smithore comes in").toBe(10 + lineOf(mine!).made);
+
+    // Wholly short crews (f 0.25), Energy for all: an Alloy works that runs makes 2 × 0.25 = 0.5 → 1, a plant its full 4.
+    const whole = newGame();
+    const [wholePlant, wholeWorks] = lay(whole, [{ good: 'energy', out: 4 }, { good: 'alloy' }]);
+    p0(whole).crewShort = { food: 1, water: 1 };
+    Object.assign(p0(whole).stock, { food: 20, water: 50, energy: 20, smithore: 10 });
+    const wholeRun = runProduction(whole);
+    const wholeLine = (tile: Tile) => wholeRun.lines.find((l) => l.tile === whole.tiles.indexOf(tile))!;
+    expect([wholeLine(wholePlant!).made, wholeLine(wholeWorks!).made], 'the plant 4, the works 2 → 1').toEqual([4, 1]);
   });
 
-  it('needs T-AC-24 (AM-4): the farm halving does not run while AM-18 is on', () => {
-    const state = newGame();
-    const [farm] = lay(state, [{ good: 'food', out: 4 }]);
-    Object.assign(p0(state).stock, { energy: 20, water: 0 });
-    const run = runProduction(state);
-    const line = run.lines.find((l) => l.tile === state.tiles.indexOf(farm!))!;
-    expect(line.parts.map((p) => p.why), 'turned off for want of Water, never halved').not.toContain('noWater');
+  it('needs T-AC-24 (AM-4): the farm halving does not run while AM-18 is on; with it off (farm Water 0) it is the fallback', () => {
+    const dryFarm = () => {
+      const state = newGame();
+      const [farm] = lay(state, [{ good: 'food', out: 4 }]);
+      Object.assign(p0(state).stock, { energy: 20, water: 0 });
+      const run = runProduction(state);
+      return run.lines.find((l) => l.tile === state.tiles.indexOf(farm!))!;
+    };
+    expect(dryFarm().parts.map((p) => p.why), 'turned off for want of Water, never halved').not.toContain('noWater');
+
+    const was = UPKEEP.waterUse.food;
+    UPKEEP.waterUse.food = 0;
+    try {
+      const line = dryFarm();
+      expect(line.parts.map((p) => p.why), 'AM-18 off: halved for want of Water').toContain('noWater');
+      expect(line.made, 'half of 4').toBe(2);
+    } finally {
+      UPKEEP.waterUse.food = was;
+    }
   });
 });

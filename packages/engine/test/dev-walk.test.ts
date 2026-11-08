@@ -73,12 +73,16 @@ describe('walking in development', () => {
 });
 
 describe('needs C15: a player is hungry when their household went short at the last month end', () => {
-  /** Month 1 played to its auction; bram holds `food` for the month end, which runs, then month 2's development starts. */
-  function developAfter(food: number): GameState {
+  /**
+   * Month 1 played to its auction; bram works `farms` farms (none: the household alone) and holds `food` for the month
+   * end, which runs, then month 2's development starts.
+   */
+  function developAfter(food: number, farms = 0): GameState {
     const { state } = walkers();
     for (let steps = 0; state.phase !== 'auction' && steps < 10; steps++) advancePhase(state);
     const bram = state.players.find((p) => p.id === 'bram')!;
-    expect(needsOf(state, 'bram').food, 'the premise: no plots, the household alone').toBe(UPKEEP.baseFood);
+    for (const t of state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null).slice(0, farms)) Object.assign(t, { owner: 'bram', outfit: 'food' });
+    expect(needsOf(state, 'bram').food > UPKEEP.baseFood, 'the premise: crews eat beside the household only with farms').toBe(farms > 0);
     bram.stock.food = food;
     for (let steps = 0; state.phase !== 'development' && steps < 10; steps++) advancePhase(state);
     expect(state.month, "the premise: month 2's development").toBe(2);
@@ -95,6 +99,22 @@ describe('needs C15: a player is hungry when their household went short at the l
 
     expect(hungerShare(state)).toBe(1);
     expect(bram.hungry).toBe(false);
+
+    // With 8 farms the crews need 2 more: given the household's 2 alone, the household eats in full and the crews go
+    // without. Their hunger slows the plots, not the walk.
+    const crewed = developAfter(UPKEEP.baseFood, 8);
+    expect(needsOf(crewed, 'bram').food, 'the premise: crews who need 2').toBe(UPKEEP.baseFood + 2);
+    expect(hungerShare(crewed), 'crews short, household fed: full pace').toBe(1);
+    expect(crewed.players.find((p) => p.id === 'bram')!.hungry).toBe(false);
+
+    // Month 1 has had no month end, so no meal is recorded: nobody is hungry, whatever they hold.
+    const { state: first } = walkers();
+    for (const p of first.players) p.stock.food = 0;
+    for (let steps = 0; first.phase !== 'development' && steps < 10; steps++) advancePhase(first);
+    expect(first.month, "the premise: month 1's development").toBe(1);
+    expect(first.players.map((p) => p.householdShort), 'the premise: no meal recorded yet').toEqual([undefined, undefined]);
+    expect(first.players.map((p) => p.hungry)).toEqual([false, false]);
+    expect(hungerShare(first)).toBe(1);
   });
 
   it('needs B-AC-14 (negative): a household short at upkeep is hungry: 1 of its 2 Food walks at the half-fed pace', () => {

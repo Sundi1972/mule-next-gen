@@ -205,13 +205,13 @@ function carried(good: Good, use: number): number {
 
 /**
  * What a player must hold at the auction to be short of nothing before the next one (PM ruling B, 6 Nov): what upkeep
- * eats and drinks now, plus enough of what is used next month to survive the month end's spoilage. Food carries next
- * month's ration (development reads it); Water carries, with AM-18 on, the drink plus every plot's Water for a seat with
- * plots, as production keeps the drink back before any plot drinks (W2), and with it off the larger of the drink, for a
- * seat with a farm to water, and a factory's Water; Energy, a factory's inputs and Medicine carry what next month's
- * production and sickness use. Food carries the larger of the ration and a factory's inputs, not their sum:
- * development's hunger reads stock before a factory takes its inputs. Never below monthNeeds up to the depot cap; monthNeeds stays the need
- * at production that the AI grosses up for itself.
+ * eats and drinks now, plus enough of what is used next month to survive the month end's spoilage. Food carries only a
+ * factory's Food inputs (PM ruling (a), 8 Nov): hunger is the household's last meal (needs C15) and the next auction
+ * comes before the next upkeep, so next month's ration is bought then. Water carries, with AM-18 on, the drink plus every
+ * plot's Water for a seat with plots, as production keeps the drink back before any plot drinks (W2), and with it off the
+ * larger of the drink, for a seat with a farm to water, and a factory's Water; Energy, a factory's inputs and Medicine
+ * carry what next month's production and sickness use. Never below monthNeeds up to the depot cap; monthNeeds stays the
+ * need at production that the AI grosses up for itself.
  */
 export function auctionNeed(state: GameState, playerId: string): Stock {
   const use = monthNeeds(state, playerId);
@@ -224,7 +224,7 @@ export function auctionNeed(state: GameState, playerId: string): Stock {
   const need = emptyStock();
   for (const good of GOODS) {
     const eaten = good === 'food' ? eat.food : good === 'water' ? eat.water : 0;
-    const next = good === 'food' ? Math.max(eat.food, factoryFood) : good === 'water' ? nextWater : use[good];
+    const next = good === 'food' ? factoryFood : good === 'water' ? nextWater : use[good];
     need[good] = eaten + carried(good, next);
   }
   return need;
