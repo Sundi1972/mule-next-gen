@@ -17,6 +17,7 @@ import { NewsWords } from './copied/SeatWords';
 import { TvBudgetLine, TvOverruleCall } from './copied/TvBudgetLine';
 import { TvDeals } from './copied/TvDeals';
 import { WaitingFor } from './copied/WaitingFor';
+import { useTvVariant } from './variant';
 
 /*
  * GRAFT TARGET: apps/web/src/table/TableApp.tsx, TvGame's planning branch (WS4), which TableApp.tsx does not export:
@@ -28,6 +29,7 @@ import { WaitingFor } from './copied/WaitingFor';
  *   4. the reputation chip after each name in the waiting box and the ready list (politics-deals S3-C19, CHANGE 2;
  *      WaitingFor's `view` as on ws7-s3-phone-pr);
  *   5. the news through NewsWords, so a computer seat reads "Ossa · AI" by its id (ws7-s3-phone-pr's News).
+ * Placement B (variant.tsx) moves CHANGE 1 onto the promise's row and CHANGE 2 to the side's head, for TV-FIT.
  * Left out, as the mock has no clock or events: TvEventLayer, and the grounds opener before the month end.
  */
 export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
@@ -39,16 +41,32 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
   const host = game.players.find((p) => p.id === table.hostId);
   const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
   const places = placesOf(game);
+  const b = useTvVariant().variant === 'b';
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink" data-phase="planning" data-testid="tv-planning">
         <div className="flex flex-col gap-3">
           <TvHeader game={game} title={PHASE_NAME.planning} seconds={secondsUntil(game.phaseEndsAt, now)} ready={<ReadyCount players={game.players} tv />} />
-          <TvGovernorPromise game={game} />
-          {/* CHANGE 1 */}
-          <TvBudgetLine game={game} />
-          {/* CHANGE 2 */}
-          <TvDeals game={game} />
+          {b ? (
+            // B: one row, the promise whole on the left (its own top margin is the row's), the budget wrapping in the rest.
+            <div className="mt-2 flex items-center gap-6" data-testid="tv-promise-row">
+              <div className="shrink-0 [&>p]:mt-0">
+                <TvGovernorPromise game={game} />
+              </div>
+              <div className="min-w-0 flex-1">
+                {/* CHANGE 1 */}
+                <TvBudgetLine game={game} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <TvGovernorPromise game={game} />
+              {/* CHANGE 1 */}
+              <TvBudgetLine game={game} />
+              {/* CHANGE 2 */}
+              <TvDeals game={game} />
+            </>
+          )}
         </div>
         <TvBody>
           <div className="flex min-h-0 flex-1 gap-6">
@@ -67,6 +85,8 @@ export function TvPlanning({ table, game }: { table: TableView<MuleView>; game: 
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4" data-testid="tv-side">
               {/* CHANGE 3 */}
               <TvOverruleCall game={game} />
+              {/* CHANGE 2, placement B */}
+              {b && <TvDeals game={game} />}
               {waiting.length > 0 ? (
                 <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
                   {/* CHANGE 4 */}

@@ -7,6 +7,7 @@ import { brokenWords } from './copied/deals-words';
 import type { Good } from '@mule/engine';
 import type { MarketRow } from '@mule/protocol';
 import { TV_NOTE, TvFor, TvScreenView, type TvFocus } from './TvFor';
+import { TvVariantProvider } from './variant';
 import { tvScreen } from './world';
 
 /*
@@ -109,7 +110,9 @@ function Solo() {
         <span className="text-sm">{TV_NOTE[focus]}</span>
         <FitReadout />
       </div>
-      {Q.get('market') === '1' ? <WithMarket focus={focus} /> : <TvFor world={worldFor(focus)} focus={focus} />}
+      <TvVariantProvider initial={Q.get('variant') === 'b' ? 'b' : 'a'}>
+        {Q.get('market') === '1' ? <WithMarket focus={focus} /> : <TvFor world={worldFor(focus)} focus={focus} />}
+      </TvVariantProvider>
     </div>
   );
 }
