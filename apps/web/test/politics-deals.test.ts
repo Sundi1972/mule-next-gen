@@ -322,6 +322,44 @@ describe('the deal composer (S3-C17)', () => {
   });
 });
 
+/** The document's keydown listeners: the fake DOM keeps none, so a key press is delivered here. */
+const keydown = new Set<(e: { key: string }) => void>();
+function listenForKeys(): void {
+  const doc = document as unknown as { addEventListener(t: string, l: unknown): void; removeEventListener(t: string, l: unknown): void };
+  const [add, remove] = [doc.addEventListener.bind(doc), doc.removeEventListener.bind(doc)];
+  doc.addEventListener = (t, l) => (t === 'keydown' ? void keydown.add(l as never) : add(t, l));
+  doc.removeEventListener = (t, l) => (t === 'keydown' ? void keydown.delete(l as never) : remove(t, l));
+  (FakeElement.prototype as unknown as { focus(): void }).focus = function (this: FakeElement) {
+    (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
+  };
+}
+const press = (key: string) => act(() => [...keydown].forEach((l) => l({ key })));
+/** A tap as a browser gives it: the button takes the focus, then its handler runs. */
+const tapFocused = (testid: string) => {
+  (byTestid(testid) as unknown as { focus(): void }).focus();
+  tap(testid);
+};
+
+describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
+  it('S3-B-AC-1: Escape closes the composer and the incoming sheet, and the focus goes back to the door that opened each', () => {
+    listenForKeys();
+    mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
+    tap('desk-talk');
+    tap(`chat-to-${OSSA}`);
+    tapFocused('add-deal');
+    expect(findTestid('composer-a')).toBeDefined();
+    press('Escape');
+    expect(findTestid('composer-a'), 'Escape closes the composer').toBeUndefined();
+    expect(document.activeElement, 'the focus is back on + Deal').toBe(byTestid('add-deal'));
+
+    tapFocused('agenda-deals');
+    expect(findTestid('incoming-sheet')).toBeDefined();
+    press('Escape');
+    expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
+    expect(document.activeElement, 'the focus is back on the agenda door').toBe(byTestid('agenda-deals'));
+  });
+});
+
 describe('the standings door (S3-C17)', () => {
   it('S3-B-AC-1: with one card to Ossa unanswered, the standings row offers Ossa no second card and says why; Brix still gets one', () => {
     const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
