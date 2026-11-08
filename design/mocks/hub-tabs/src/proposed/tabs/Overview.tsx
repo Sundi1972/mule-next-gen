@@ -29,8 +29,8 @@ export function OverviewTab() {
       {slots.banners.filter((b) => b.show?.(seat) ?? true).map(({ id, Body }) => (
         <Body key={id} />
       ))}
-      {pick ? <PickBar pick={pick} seat={seat} onBack={() => { nav.endPick(); nav.open(pick.back); }} /> : <ToolRow tools={slots.tools} active={tool?.id ?? ''} onPick={nav.pickTool} />}
-      <div className={cx('flex min-h-0 flex-1 flex-col', pick && 'rounded-control ring-2 ring-warn')} data-testid="hub-map">
+      {pick ? !pick.ownBar && <PickBar pick={pick} seat={seat} onBack={() => { nav.endPick(); nav.open(pick.back); }} /> : <ToolRow tools={slots.tools} active={tool?.id ?? ''} onPick={nav.pickTool} />}
+      <div className={cx('flex min-h-0 flex-1 flex-col', pick && !pick.ownBar && 'rounded-control ring-2 ring-warn')} data-testid="hub-map">
         {ToolMap && <ToolMap />}
       </div>
       {!pick && <AgendaRows items={slots.agenda} seat={seat} onOpen={nav.open} />}

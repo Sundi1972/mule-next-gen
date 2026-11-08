@@ -4,7 +4,10 @@
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
 const base = process.argv[2];
-const states = execFileSync('node', [new URL('./states.mjs', import.meta.url).pathname], { encoding: 'utf8' }).trim().split('\n');
+const list = (script) => execFileSync('node', [new URL(script, import.meta.url).pathname], { encoding: 'utf8' }).trim().split('\n');
+// Every state, alone, in both tab positions; and every beat of the prototype (a desktop page).
+const states = list('./states.mjs').flatMap((q) => [q, `${q}&tabs=bottom`]);
+const beats = list('./beats.mjs');
 const browser = await chromium.launch();
 // A state's page is a wide page of boxed phones: give it a desktop window.
 const sizeFor = (q, w, h) => (q.includes('solo=1') ? { width: w, height: h } : { width: 1500, height: 1000 });
@@ -12,7 +15,7 @@ let bad = 0;
 let pages = 0;
 for (const [w, h] of [[667, 375], [844, 390]]) {
   // The index and every state's page (the boxed phones) once; every state alone at both sizes.
-  for (const q of [...(w === 667 ? ['', ...states] : []), ...states.map((s) => `${s}&solo=1`)]) {
+  for (const q of [...(w === 667 ? ['', '?notes=1', ...states, ...beats, ...beats.map((b) => `${b}&tabs=bottom&w=844`)] : []), ...states.map((s) => `${s}&solo=1`)]) {
     const page = await browser.newPage({ viewport: sizeFor(q, w, h) });
     const errors = [];
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

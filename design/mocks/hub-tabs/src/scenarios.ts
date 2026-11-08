@@ -1,5 +1,6 @@
 import { baseWorld, BROKEN_BY_KAI, OFFER_FROM_BRIX, OFFER_FROM_OSSA, PROMISED_BRIX, TAX_START, type Seat, type World } from './fixture';
 import type { Start } from './proposed/Hub';
+import { monthEnd } from './steps';
 import type { ShellVariant } from './proposed/Shell';
 
 /** One reachable state: whose phone, the table's world, where the phone opens, and in which shell. */
@@ -94,9 +95,15 @@ export const SCREENS: Screen[] = [
     title: 'The map-mode hand-off: Sheriff › Guard a plot → Overview',
     graft: 'slots.ts (PlotPickSlot), Hub.tsx (startPick / endPick), tabs/Overview.tsx (PickBar)',
     states: [
-      { id: 'sheriff', label: 'Kai’s Council › Sheriff (stub)', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'politics', sub: 'sheriff' }, note: 'Tap “Guard a plot…”.' },
-      { id: 'guarding', label: 'Overview: “Guarding · back to Sheriff”', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'overview', pick: 'guard' }, note: 'The one map in the pick; back returns to the Sheriff sub-tab.' },
+      { id: 'sheriff', label: 'Kai’s Council › Sheriff: WS8’s case file (B)', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'politics', sub: 'sheriff' }, note: 'WS8’s design B: the guard line, then the cases newest first. Tap “Post a guard on the map”.' },
+      { id: 'guarding', label: 'Overview: “Guarding · back to Sheriff”', seat: 'kai', world: month({ tax: TAX_START }), start: { tab: 'overview', pick: 'guard' }, note: 'WS8’s GuardMap on Overview’s one map; a guarded plot wears the proposed GUARD flag. Done returns to the Sheriff sub-tab.' },
     ],
+  },
+  {
+    id: 'monthend',
+    title: 'The month end (outside the tabs, as every other phase)',
+    graft: 'phone/Results.tsx, components/MonthEnd.tsx (the deals mock’s BrokenCards at “phone”, the budget mock’s FundLines)',
+    states: [{ id: 'phone', label: 'The phone: the league, the broken list, what the fund paid out', seat: 'lena', world: monthEnd, note: 'Kai broke a pact with Lena; Ossa · AI broke a promise to Kai. Under them, the full paid-out line.' }],
   },
   {
     id: 'help',

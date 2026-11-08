@@ -5,7 +5,7 @@ import { cx, PlayerMark } from '@mule/ui';
 import { fmt, toSlot } from '../../../../../../apps/web/src/game/derive';
 import { inCollapse, league, leaderWords } from '../../../../../../apps/web/src/game/month-end';
 import { ChangeTag, type Density } from '../../../../../../apps/web/src/components/MonthEnd';
-import { Marked, RepChip } from './parts';
+import { AiMark, Marked, RepChip } from './parts';
 import { brokenMove, brokenWords } from './words';
 
 /*
@@ -80,7 +80,10 @@ export function LeagueTable({ view, density, selfId }: { view: MuleView; density
       {top && (
         <div className={cx('relative flex items-center', tv ? cx('gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 shadow-glow', full ? 'py-1.5' : 'py-2.5') : 'gap-2')} data-testid="leader">
           <PlayerMark slot={top.slot} species={top.player.species} size={s.callMark} label={top.player.name} />
-          <span className={cx('min-w-0 font-display font-semibold leading-tight', s.call)}>{words.lead}</span>
+          <span className={cx('min-w-0 font-display font-semibold leading-tight', s.call)}>
+            {/* TABS: the leader's line marks a computer seat too. */}
+            <Marked text={words.lead} view={view} />
+          </span>
         </div>
       )}
       <table className="w-full table-fixed border-collapse text-left" data-testid="league-table">
@@ -106,6 +109,8 @@ export function LeagueTable({ view, density, selfId }: { view: MuleView; density
                     <PlayerMark slot={r.slot} species={r.player.species} size={s.mark} label={r.player.name} />
                     <span className={cx('truncate font-display font-semibold', s.name)} data-testid={`name-${r.player.id}`}>
                       {mine ? `You (${r.player.name})` : r.player.name}
+                      {/* TABS: a computer seat's name always carries "· AI" (Heiko's ruling, #684). */}
+                      {r.player.isAi && <AiMark />}
                     </span>
                     {/* CHANGE: the reputation chip, not at 'compact'. */}
                     {density !== 'compact' && <RepChip view={view} id={r.player.id} tv={tv} testid={`league-rep-${r.player.id}`} />}

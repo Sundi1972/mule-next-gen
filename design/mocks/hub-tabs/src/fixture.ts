@@ -1,8 +1,9 @@
 import { COLONY, GOODS, POLITICS, PRESTIGE, type BudgetLine, type DealCard, type DealOffer, type LawProposal, type Office, type OverruleTarget, type OverruleWhy, type PrestigeId, type Terrain } from '@mule/engine';
-import type { BudgetView, ChatMessage, ColonyView, CouncilView, ElectionView, ListingView, MuleIntent, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { BudgetView, ChatMessage, MarketRow, ColonyView, CouncilView, ElectionView, ListingView, MuleIntent, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import type { TableClient } from '../../../../apps/web/src/net/client';
 import { aMuleView, aPlayer } from '../../../../apps/web/test/fixtures/views';
+import { SABOTAGE, sheriffOf } from './copied/sheriff/fixture';
 
 /**
  * The hub-tabs mock's one table. Merged from the two mocks it re-hosts, so every tab draws from the same month:
@@ -194,6 +195,8 @@ export const OFFER_FROM_BRIX = card({ id: 'deal-q7k2m9', from: 'brix', to: 'lena
 export const OFFER_FROM_OSSA = card({ id: 'deal-b3x8re', from: 'ossa', to: 'lena', terms: PACT, until: 7 });
 /** Lena's promise, active: her vote for Brix in month 8. */
 export const PROMISED_BRIX = card({ id: 'deal-m1v0tz', from: 'lena', to: 'brix', terms: VOTE_BRIX, offered: 4, until: 8, status: 'active' });
+/** Ossa · AI's vote card to Kai (its vote for Brix), broken by Ossa this month: the TV's break moment and the month end's "✗ −10". */
+export const OSSA_BROKE = card({ id: 'deal-e4r7lb', from: 'ossa', to: 'kai', terms: VOTE_BRIX, offered: 4, until: 5, status: 'broken', brokenBy: 'ossa', settled: 5 });
 /** Kai's pact with Lena, broken by Kai at month 4's end (Kai's plot outbid Lena's at the auction it promised to leave). */
 export const BROKEN_BY_KAI = card({ id: 'deal-k9p4wd', from: 'lena', to: 'kai', terms: PACT, offered: 3, until: 5, status: 'broken', brokenBy: 'kai', settled: 4 });
 
@@ -318,6 +321,13 @@ export function mockTable(start: World): MockTable {
 // ---- The views the server would send each seat ----
 
 const NONE = Object.fromEntries(GOODS.map((g) => [g, 0])) as MyView['stock'];
+
+/** The store's month-5 prices and stock, as the real game draws them (the ws6-ux fixture's rows, plus Alloy). */
+const row = (good: MarketRow['good'], price: number, storeStock: number, cover: number): MarketRow =>
+  ({ good, price, storeBuys: Math.floor(price * 0.9), storeSells: storeStock > 0 ? Math.ceil(price * 1.1) : null, storeStock, cover, demand: 10, shipPays: null }) as MarketRow;
+export const MARKET: MarketRow[] = [row('food', 31, 12, 2.1), row('water', 27, 9, 2.6), row('energy', 26, 7, 1.4), row('smithore', 60, 2, 0.6), row('crystite', 96, 0, 4), row('alloy', 140, 1, 1.2)];
+export const STORE_MULES = 5;
+export const MULE_PRICE = 148;
 
 function reasons(w: World): PoliticsView['reputationReasons'] {
   const out: NonNullable<PoliticsView['reputationReasons']> = {};
@@ -486,7 +496,9 @@ function gameOf(w: World, me: MyView | null): MuleView {
     reputationReasons: reasons(w),
     budget: budgetView(w),
     overrule: overruleView(w),
-  };
+    // Slice 4 (WS8's P2 fixture): the colony's sabotage cases, public; the Sheriff's own desk is on the Sheriff's MyView.
+    sabotage: SABOTAGE,
+  } as PoliticsView;
   return aMuleView({
     players, me: me as MyView, politics, news: w.news,
     month: w.month, phase: monthEnd ? 'upkeep' : 'planning', width: W, height: H, tiles: TILES,
@@ -495,6 +507,9 @@ function gameOf(w: World, me: MyView | null): MuleView {
     colonists: 1_240, air: { level: 31, band: 'clean' }, lastAir: { level: 33, band: 'clean' }, colonistsFed: true,
     ship: { inPort: false, arrives: 6 } as MuleView['ship'],
     listings: w.listings,
+    market: MARKET,
+    storeMules: STORE_MULES,
+    mulePrice: MULE_PRICE,
   });
 }
 
@@ -514,6 +529,8 @@ export function viewFor(seat: Seat, w: World): SeatView {
       reputation: w.rep[id] ?? 50, lawBallot: w.lawBallots[id] ?? null, promised: promised(w, id),
       overruleBallot: w.stage === 'overrule' || w.stage === 'overruleReveal' ? (mineBallot ?? null) : null,
       canOverrule: canOverrule(w, id),
+      sheriff: id === SHERIFF ? { ...sheriffOf(w.guards), canAct: w.stage === 'planning' ? true : 'notPlanning' } : null,
+      sabotage: { order: null, canOrder: true, owed: 0, mine: [] },
     },
     deals: { cards: mine, offersLeft: DEALS.maxOpenOffers - open, pactMonths: [...DEALS.pactMonths] },
     worthParts: { money: 640, goods: 180, plots: 7, land: 3500, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },

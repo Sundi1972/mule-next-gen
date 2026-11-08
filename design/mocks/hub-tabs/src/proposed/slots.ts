@@ -73,6 +73,8 @@ export interface PlotPickSlot extends Shown {
   /** One line under it: what a tap does. */
   hint(seat: HubSeat): string;
   back: Door & { label: string };
+  /** The pick draws its own bar inside Map (WS8's Guard: "Guarding · 1 of 2 · Done · back to Sheriff"). */
+  ownBar?: boolean;
   Map: ComponentType;
   Panel?: ComponentType;
   Action?: ComponentType;
