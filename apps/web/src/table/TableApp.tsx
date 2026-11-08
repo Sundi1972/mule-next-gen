@@ -47,6 +47,7 @@ import { TvElection } from './TvElection';
 import { FitHeight, TvBody } from './TvFit';
 import { brokenIn } from '../phone/hub/politics/deals-words';
 import { TvDeals } from './TvDeals';
+import { useMoment } from './moments';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
 import { TvProduction } from './TvProduction';
@@ -241,6 +242,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   const opener = useGroundsOpener(game, overlayShowAt(game, now) !== null);
   // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
   const drift = useMonthEndDrift(game, opener === null);
+  // A card broken this month is a moment (SB-5b, PM ruling 8 Nov): its banner folds after TV_MOMENT_MS; the news keeps its
+  // line. A new break while it shows is a new moment, and the banner leads with the newest breaks (it names two).
+  const broken = game.phase === 'planning' ? brokenIn(game, game.month) : [];
+  const breaking = useMoment(broken.length > 0 ? `break:${game.month}:${broken.map((c) => c.id).sort().join(',')}` : null, now);
+  const newest = useHeldNewestFirst(broken.map((c) => c.id));
+  const breakView = breaking && game.politics ? { ...game, politics: { ...game.politics, brokenDeals: newest.map((id) => broken.find((c) => c.id === id)!) } } : game;
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -450,9 +457,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                 </StrikeMap>
                 {/* SB-5a (WS6 ruling 8 Nov): a broken card is a moment over the map's top, out of flow like the event show's
                     cards, so the body's scale never moves for it; the news column keeps the server's line for it. */}
-                {phase === 'planning' && brokenIn(game, game.month).length > 0 && (
+                {phase === 'planning' && breaking && (
                   <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex flex-col gap-3 p-3 empty:hidden" data-testid="tv-moment">
-                    <TvDeals game={game} />
+                    <TvDeals game={breakView} />
                   </div>
                 )}
               </div>
