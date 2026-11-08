@@ -3,7 +3,7 @@ import { Brain } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { callOverrule, ceremonyBeats, openOverrule, openPlanning, POLITICS, RuleError, setSalesTax, voteOverrule, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
+import { callOverrule, ceremonyBeats, COLONY, openOverrule, openPlanning, POLITICS, RuleError, setSalesTax, voteOverrule, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { overruleNews } from '../src/politics-view.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
@@ -1100,6 +1100,16 @@ describe('T-AC-62 (server): Governor only, the default POLITICS.offices', () => 
 const keysOf = (o: object) => Object.keys(o).sort();
 const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay off the TV)';
 
+/** S5-T-AC-11: the budget is public money; the overrule holds no ballot, only who has cast. Called with an overrule open by the S5 test. */
+function expectBudgetKeys(politics: NonNullable<MuleView['politics']>) {
+  expect(keysOf(politics.budget!), NEW_FIELD).toEqual(['frozen', 'kept', 'lines', 'setBy', 'welfareTo']);
+  for (const line of politics.budget!.lines) expect(keysOf(line), NEW_FIELD).toEqual(['credits', 'line', 'maxCredits', 'maxShare', 'share', 'start', 'step']);
+  if (politics.overrule) {
+    expect(keysOf(politics.overrule), NEW_FIELD).toEqual(['caller', 'clockMs', 'done', 'needed', 'restores', 'result', 'revealMs', 'stage', 'stands', 'target', 'total', 'voted', 'waitingFor']);
+    if (politics.overrule.result) expect(keysOf(politics.overrule.result), NEW_FIELD).toEqual(['no', 'passed', 'yes']);
+  }
+}
+
 /** Every politics field the board carries is one of these, so a ballot can't ride along. */
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
@@ -1111,10 +1121,7 @@ function expectBoardKeys(board: MuleView) {
     expect(keysOf(politics.sabotage.sheriff), NEW_FIELD).toEqual(['guards', 'investigations', 'investigationsLeft']);
     expect(typeof politics.sabotage.sheriff.guards, 'the count he may post, never the tiles').toBe('number');
   }
-  // S5-T-AC-11: the budget is public money; the overrule holds no ballot, only who has cast.
-  expect(keysOf(politics.budget!), NEW_FIELD).toEqual(['frozen', 'kept', 'lines', 'setBy', 'welfareTo']);
-  for (const line of politics.budget!.lines) expect(keysOf(line), NEW_FIELD).toEqual(['credits', 'line', 'maxCredits', 'maxShare', 'share', 'start', 'step']);
-  if (politics.overrule) expect(keysOf(politics.overrule), NEW_FIELD).toEqual(['caller', 'clockMs', 'done', 'needed', 'restores', 'result', 'revealMs', 'stage', 'stands', 'target', 'total', 'voted', 'waitingFor']);
+  expectBudgetKeys(politics);
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {
@@ -1229,6 +1236,8 @@ describe('S5-C8 (server): the budget, the overrule and Welfare reach every scree
     callOverrule(state, 's2', 'tax');
     openOverrule(state);
     voteOverrule(state, 's3', thirdVotes);
+    // Mia is last on Worth, so Welfare would go to her.
+    state.players.find((p) => p.id === 's2')!.money = 0;
     return { game, state };
   }
   const VIEWERS = [null, 's1', 's2', 's3'];
@@ -1238,7 +1247,8 @@ describe('S5-C8 (server): the budget, the overrule and Welfare reach every scree
     const board = game.viewFor(null);
     expect(board.politics!.budget).toMatchObject({ kept: 100 - POLITICS.budget.default.projects - POLITICS.budget.default.welfare, frozen: false, setBy: null });
     expect(board.politics!.budget!.lines.map((l) => l.line)).toEqual(['projects', 'welfare']);
-    expect(board.politics!.budget!.welfareTo, 'named at every share').not.toBeNull();
+    expect(board.politics!.budget!.welfareTo, 'the non-Governor with the lowest Worth, named at every share').toBe('s2');
+    expectBudgetKeys(board.politics!);
     for (const viewer of VIEWERS) {
       const view = game.viewFor(viewer);
       expect(view.politics, 'the politics view is public: the same JSON for every screen').toEqual(board.politics);
@@ -1276,19 +1286,36 @@ describe('S5-C8 (server): the budget, the overrule and Welfare reach every scree
     expect(overruleNews(state), 'a result line with totals, no voter named').toBe('The overrule vote on the tax passes, 5 votes to 2. The tax is back at 5%.');
     for (const viewer of VIEWERS) {
       expect(game.viewFor(viewer).politics!.overrule!.result).toEqual({ passed: true, yes: 5, no: 2 });
-      expect(JSON.stringify(game.viewFor(viewer).politics)).not.toMatch(/"total":9,"needed":5,"ballots/);
+      // Whole-JSON, whatever the key order: no ballot rides in any public part of any view at the reveal either.
+      expect(JSON.stringify({ ...game.viewFor(viewer), me: null }), `the ${viewer ?? 'board'} view at the reveal`).not.toMatch(/overruleBallot|"ballots"/);
+      expectBudgetKeys(game.viewFor(viewer).politics!);
     }
+    // RULE-10: the voter's own ballot stays theirs before and after the reveal, and nobody else's view holds it.
+    expect(game.viewFor('s1').me!.politics!.overruleBallot, 'Heiko at the reveal').toBe(false);
+    expect(game.viewFor('s2').me!.politics!.overruleBallot, 'Mia at the reveal').toBe(true);
+    expect(game.viewFor(null).me).toBeNull();
+    state.politics!.overrule = { ...state.politics!.overrule!, stage: 'over' };
+    expect(game.viewFor('s3').me!.politics!.overruleBallot, 'and once over').toBe(true);
+    state.month = 3;
+    expect(game.viewFor('s3').me!.politics!.overruleBallot, "a past month's vote is nobody's ballot").toBeNull();
   });
 
-  it('S5-T-AC-11: restores and stands name the setting each target would undo, with no vote open before the call', () => {
+  it('S5-T-AC-11: restores and stands name the setting each target would undo, and the budget\'s money figures follow the fund', () => {
     const { game, state } = onTheOverrule(true);
     const shares = { projects: 70, welfare: 20, security: 0 };
+    state.treasury.money = COLONY.reserve + 540;
     state.politics!.budgetAtStart = { month: 2, setBy: null, shares: { projects: 80, welfare: 10, security: 0 } };
     state.politics!.budget = { month: 2, setBy: 's1', shares };
     state.politics!.overrule = { ...state.politics!.overrule!, target: 'budget' };
     const view = game.viewFor('s2').politics!;
     expect(view.budget).toMatchObject({ setBy: 's1', kept: 10 });
     expect(view.budget!.lines.find((l) => l.line === 'welfare')).toMatchObject({ share: 20, start: 10, maxShare: POLITICS.budget.welfare.maxShare, step: POLITICS.budget.step });
+    // 540 spare: Projects 70% is up to 378, Welfare 20% pays 108 (under its cap); Projects has no cap but the buildings' needs.
+    expect(view.budget!.lines.find((l) => l.line === 'projects')).toMatchObject({ share: 70, start: 80, credits: 378, maxCredits: null });
+    expect(view.budget!.lines.find((l) => l.line === 'welfare')).toMatchObject({ credits: 108, maxCredits: POLITICS.budget.welfare.maxCredits });
+    state.treasury.money = COLONY.reserve + 6_000;
+    expect(game.viewFor(null).politics!.budget!.lines.find((l) => l.line === 'welfare')!.credits, 'a big fund: Welfare pays its cap').toBe(POLITICS.budget.welfare.maxCredits);
+    state.treasury.money = COLONY.reserve + 540;
     expect(view.overrule).toMatchObject({ restores: { shares: { projects: 80, welfare: 10, security: 0 } }, stands: { shares } });
     state.politics!.overrule = { ...state.politics!.overrule!, target: 'confidence' };
     expect(game.viewFor(null).politics!.overrule).toMatchObject({ restores: { governor: 's1' }, stands: { governor: 's1' } });
@@ -1299,6 +1326,8 @@ describe('S5-C8 (server): the budget, the overrule and Welfare reach every scree
     expect(game.viewFor(null).colony!.welfare ?? null).toBeNull();
     state.colony!.welfare = { month: 2, to: 's3', paid: 54 };
     for (const viewer of VIEWERS) expect(game.viewFor(viewer).colony!.welfare).toEqual({ month: 2, to: 's3', paid: 54 });
+    state.colony!.welfare = { month: 1, to: 's3', paid: 54 };
+    for (const viewer of VIEWERS) expect(game.viewFor(viewer).colony!.welfare, "last month's payment is not this month's").toBeNull();
   });
 
   it('S5-T-AC-11: with politics off every view is as before — no budget, no overrule, no welfare', () => {
