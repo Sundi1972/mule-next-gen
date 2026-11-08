@@ -122,9 +122,9 @@ function Probe() {
 }
 const withProbe = (slots: TabHubSlots): TabHubSlots => ({ ...slots, underNow: [...slots.underNow, { id: 'probe', Body: Probe }] });
 
-const onPhone = (view: MuleView, slots: TabHubSlots) => {
+const onPhone = (view: MuleView, slots: TabHubSlots, boards = 1) => {
   const self = view.players.find((p) => p.id === view.me!.id)!;
-  const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
+  const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
   return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(TodayState, { children: createElement(Hub, { slots: withProbe(slots) }) }) }) });
 };
 
@@ -491,12 +491,15 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     for (const gone of RUN_ACTIONS) expect(findTestid(gone), `${gone} on Overview`).toBeUndefined();
     openElections();
     for (const gone of RUN_ACTIONS) expect(findTestid(gone), `${gone} in Elections`).toBeUndefined();
+    expect(findTestid(stage === 'announce' ? 'announce' : 'ballot-governor', byTestid('sub-body-elections')), 'the election card is in Elections').toBeDefined();
   });
 
   it('SB-3 (E-1): while an election is open the "Throw your hat in the ring" row is gone from This month; the Elections Now door carries it', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     mount(game({ pol: announce('announce'), month: 1, mine: { running: 'governor', canRun: { governor: true } } }));
     expect(findTestid('agenda-run')).toBeUndefined();
     rerender(game({ pol: politics({ next: 7 }), month: 1, mine: { canRun: { governor: true } } }));
+    byTestid('agenda-run');
+    rerender(game({ pol: politics({ next: 7, election: { stage: 'over', ceremony: null, candidates: {}, promises: {}, voted: [], done: [], waitingFor: [], result: {} } }), month: 1, mine: { canRun: { governor: true } } }));
     byTestid('agenda-run');
   });
 
@@ -525,6 +528,26 @@ describe('SB-3 part 2: the real hub reaches every politics action', () => {
     expect(nav!.tab).toBe('politics');
     expect(selected('sub-laws')).toBe(true);
     byTestid('gov-tax');
+  });
+
+  it('SB-3 (M18a): the summary’s "To your Governor’s desk" link, on a phone with no TV, opens Laws', () => {
+    const result: ElectionResult = { governor: { winner: 's1', how: 'votes', tallies: [{ id: 's1', votes: 2 }, { id: 's2', votes: 1 }] } };
+    const beats = ceremonyBeats(['s1', 's2', 's3'], result);
+    const total = beats.total / 1000;
+    const reached: Record<string, { beat: string; at: number }> = {};
+    for (const { office, at } of beats.offices) reached[office] = { beat: 'end', at: at.end / 1000 };
+    const ceremony = { seconds: total, total, reached } as unknown as ElectionView['ceremony'];
+    const pol = politics({ governor: 's2', election: { stage: 'ceremony', ceremony, candidates: { governor: ['s1', 's2'] }, promises: {}, voted: [], done: [], waitingFor: [], result }, next: 7 });
+    act(() => {
+      host = document.createElement('div');
+      document.body.appendChild(host);
+      root = createRoot(host as unknown as HTMLElement);
+      root.render(onPhone(game({ self: 's1', pol }), TAB_SLOTS, 0));
+    });
+    tap('to-governor');
+    rerender(game({ self: 's1', pol: politics({ governor: 's1', election: null, next: 7 }) }));
+    expect(nav!.tab).toBe('politics');
+    expect(selected('sub-laws')).toBe(true);
   });
 
   it('SB-3 (M15): the overrule call line opens Laws', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock

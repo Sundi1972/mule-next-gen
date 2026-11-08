@@ -9,7 +9,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
-import { POLITICS_TABS } from '../src/phone/hub/politics/slots';
+import { COUNCIL_STAGE, OVERRULE_STAGE, POLITICS_TABS } from '../src/phone/hub/politics/slots';
 import type { HubSeat } from '../src/phone/hub/slots';
 
 /* Only the open desk's focus is read from the hub, so the hub's navigation is a stub: these bodies are drawn outside a Hub. */
@@ -36,6 +36,7 @@ const mine = (): MyView =>
 
 const election = (stage: ElectionView['stage']): ElectionView => ({ stage, ceremony: null, candidates: { governor: ['s1', 's2'], sheriff: [] }, promises: {}, voted: [], done: [], waitingFor: [], result: {} });
 const council = (): CouncilView => ({ stage: 'ballot', proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 's2', impact: {}, voted: [], done: [], waitingFor: ['s1'], clockMs: 0, revealMs: 4000, result: null });
+const overrule = (stage: string) => ({ target: 'tax', caller: 's3', stage, restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: ['s1'], clockMs: 0, revealMs: 4000, total: 3, needed: 2, result: null }) as unknown as NonNullable<PoliticsView['overrule']>;
 const pending = { by: 's2', month: 4, proposal: { kind: 'enact', law: 'landTax', setting: 10 } as const, impact: { s1: { cost: 30 }, s2: { cost: 50 }, s3: { cost: 0 } } };
 
 const politics = (extra: Partial<PoliticsView> = {}): PoliticsView =>
@@ -179,6 +180,12 @@ describe('SB-3: the politics sub-tabs', () => {
     expect(badge('laws', view(politics()))).not.toContain('sub-badge-laws');
     expect(badge('elections', view(politics({ election: election('ceremony') })))).not.toContain('sub-badge-elections');
   });
+
+  it('SB-3: an open overrule ballot badges Laws, and an election at its announce badges Elections', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+    expect(badge('laws', view(politics({ overrule: overrule('ballot') })))).toContain('sub-badge-laws');
+    expect(badge('laws', view(politics({ overrule: overrule('called') })))).not.toContain('sub-badge-laws');
+    expect(badge('elections', view(politics({ election: election('announce') })))).toContain('sub-badge-elections');
+  });
   });
 
   describe('an open law ballot', () => {
@@ -221,6 +228,18 @@ describe('SB-3: the politics sub-tabs', () => {
       const game = view(politics({ election: election('over') }));
       expect(sub('elections').first?.(seatOf(game))).toBeFalsy();
       expect(draw('elections', game)).toContain('data-testid="council-result"');
+    });
+  });
+
+  describe('the reveals take the stage with their rails', () => {
+    const drawn = (Part: ComponentType, game: MuleView) => {
+      const value = { table: { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>, view: game, me: game.me!, self: game.players[0]!, slot: 0 as Slot };
+      return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(Part) }) }));
+    };
+
+    it('SB-3: the law reveal stage draws council-rail and the overrule reveal stage draws overrule-rail', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+      expect(drawn(COUNCIL_STAGE.Rail!, view(politics({ council: { ...council(), stage: 'reveal' } })))).toContain('data-testid="council-rail"');
+      expect(drawn(OVERRULE_STAGE.Rail!, view(politics({ overrule: overrule('reveal') })))).toContain('data-testid="overrule-rail"');
     });
   });
 });
