@@ -2,7 +2,7 @@ import { EVENT_SHOW, productionShowMs } from '@mule/engine';
 import type { EventView, MuleView, NewsLine, PlayerView, TableView } from '@mule/protocol';
 import type { TableClient } from '../../../../../apps/web/src/net/client';
 import { aPlayer } from '../../../../../apps/web/test/fixtures/views';
-import { BROKEN_BY_KAI, boardViewFor, card, OSSA_BROKE, showEventsOf, type MockWorld } from '../fixture';
+import { boardViewFor, showEventsOf, type MockWorld } from '../fixture';
 import { brokenIn, brokenWho, brokenWords } from './copied/deals-words';
 
 /*
@@ -46,23 +46,6 @@ export function tvScreen(world: MockWorld, { seats = 4 }: { seats?: Seats } = {}
   const game = world.stage === 'production' ? productionOf(seated, showEventsOf(world) as unknown as EventView[]) : seated;
   const investigation = world.investigation ?? null;
   return { table: { ...table, game }, game, chat: world.chat.filter((m) => !m.to), investigation };
-}
-
-/**
- * MEASURING ONLY (solo.html &breakers=0..3), a STAND-IN until the fixture has a month end with more breakers: the world
- * with exactly `n` cards broken this month, in this order. 1: Ossa · AI breaks its vote card to Kai (the guided path's
- * own break). 2: and Brix a law promise to Lena. 3: and Kai the pact with Lena. Cards broken in other months stay. The
- * reputations are left as they are: a breaker's −N is the card's (brokenMove, POLITICS.reputation.moves).
- */
-export function withBreakers(world: MockWorld, n: number): MockWorld {
-  const m = world.month;
-  const breaks = [
-    { ...OSSA_BROKE, settled: m },
-    card({ id: 'deal-q2b7ln', from: 'brix', to: 'lena', terms: { kind: 'vote', law: true, yes: false }, offered: m - 1, until: m, status: 'broken', brokenBy: 'brix', settled: m }),
-    { ...BROKEN_BY_KAI, settled: m },
-  ].slice(0, n);
-  const ids = new Set([OSSA_BROKE.id, BROKEN_BY_KAI.id, 'deal-q2b7ln']);
-  return { ...world, cards: [...breaks, ...world.cards.filter((c) => !ids.has(c.id) && !(c.status === 'broken' && c.settled === m))] };
 }
 
 /**

@@ -65,7 +65,7 @@ export const TV_NOTE: Record<TvFocus, string> = {
   'overrule-reveal': 'TV: the overrule’s reveal: yes and no out of all the table’s votes, the needed mark, the stamp; the budget line at its foot.',
   guarding: 'TV: unchanged. Guards are secret: the TV shows nothing of the Sheriff’s guard.',
   waiting: `TV: up to ${TV_WAITING_BOX_MAX_SEATS} seats, “Waiting for …” with each name, the ready list under it with every reputation chip; from ${TV_WAITING_BOX_MAX_SEATS + 1} seats, the ready list alone. The host’s “can continue” line is the list’s foot.`,
-  'month-end': 'TV: the month end: the league with chips, names with “ · AI”, and P15’s breaker row: “✗ −N” on each breaker’s own row, the total only, no reasons (the phone lists them), a change to WS4’s TvMonthEnd (D19). “fund … · paid out …” in the Wealth note; no broken-cards box (TV-FIT).',
+  'month-end': 'TV: the month end: the league with chips and the breaker’s “✗ −N” (a stand-in for WS4’s mark), “fund … · paid out …” in the Wealth note; no broken-cards box (TV-FIT).',
   'production-caught': 'TV: production’s show; in “This month on Irata” the guard’s shield lights the victim’s plot, then “Caught!” with the saboteur’s creature and name (WS8’s P10 layer, proposed); the power stays on.',
   'fine-set': 'TV: planning; when the Sheriff fines, the fine’s line is the first news line (“Lena was fined 150 for sabotage; half to Brix”): the one place the TV says it. No moment and no incidents list. The victim’s “+75 cr” is on his phone.',
   'month-end-fine': 'TV: the plain month end, unchanged: the fund’s paid-out total in the Wealth note, the victim’s half inside it; no news line. The fine’s line was planning’s (fine-set); “Fines … in”, “To victims … out” and the victim’s “+75 cr” are on the phones.',

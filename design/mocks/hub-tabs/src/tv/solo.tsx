@@ -5,7 +5,7 @@ import '../../review-loop/select-client';
 import { BEATS } from '../steps';
 import { TV_NOTE, TvScreenView, type TvFocus } from './TvFor';
 import { SHERIFF_BEATS } from '../sheriff-path';
-import { tvScreen, withBreakers, type Seats } from './world';
+import { tvScreen, type Seats } from './world';
 
 /*
  * MOCK PLUMBING: the TV alone, for this builder's own checks (TV-FIT, page errors); the prototype itself is the phone
@@ -14,7 +14,6 @@ import { tvScreen, withBreakers, type Seats } from './world';
  *   &seats=2|6  the table at another size (world.ts);
  *   &call=1     a seat has called the overrule (what the store does on the Call tap), opened as the
  *               'overrule-called' moment: the call's moment and, after TV_EVENT_HOLD_S, its folded line.
- *   &breakers=0..3  this month's broken cards, by world.ts' withBreakers (a stand-in): the month end's breaker row.
  */
 
 const Q = new URLSearchParams(location.search);
@@ -43,16 +42,15 @@ function Beat({ id }: { id: string }) {
   const beat = ALL.find((b) => b.id === id) ?? BEATS[0]!;
   const seats = (Number(Q.get('seats')) || 4) as Seats;
   const call = Q.get('call') === '1';
-  const breakers = Q.get('breakers');
   const focus: TvFocus = call ? 'overrule-called' : ((beat.tvWanted ?? beat.tv) as TvFocus);
   const screen = useMemo(() => {
-    const w = breakers === null ? beat.world() : withBreakers(beat.world(), Number(breakers));
+    const w = beat.world();
     if (!call) return tvScreen(w, { seats });
     // The caller: the beat's seat if it sits at this table size, else the first seat that is not the Governor.
     const { game } = tvScreen(w, { seats });
     const at = game.players.filter((p) => p.id !== game.politics?.governor);
     return tvScreen({ ...w, call: (at.find((p) => p.id === beat.seat) ?? at[0])?.id ?? beat.seat }, { seats });
-  }, [beat, seats, call, breakers]);
+  }, [beat, seats, call]);
   const opensOn = focus === 'deal-broken' ? 'break' : focus === 'overrule-called' ? 'call' : focus === 'investigation' ? 'investigation' : null;
   return (
     <div className="flex flex-col gap-2 bg-table text-ink">
