@@ -90,8 +90,13 @@ async function main(): Promise<void> {
       // Up to three seats in the waiting box, from four on the host's row (PM ruling 8 Nov).
       const goesOn = seats <= 3 ? tv.getByText('the host, can continue without them', { exact: false }) : tv.getByTestId('tv-state-s1').filter({ hasText: 'READY · CAN CONTINUE' });
       await goesOn.waitFor({ timeout: PRESS_MS });
+      // The host's whole name still shows beside the row's longer word.
+      const host = await tv.getByTestId('tv-ready-s1').getByTestId('tv-ready-name').evaluate((el) => ({ shown: el.clientWidth, needs: el.scrollWidth }));
+      check(host.needs <= host.shown + 1, `TV-FIT (${seats} people): the ready host's name shows whole, got ${host.shown} of ${host.needs} px`);
       await at('the host ready');
       for (const phone of phones.slice(1, -1)) await ready(phone);
+      // Read once the TV has every press: a click returns before the server has it.
+      await tv.getByTestId('ready-count').filter({ hasText: `${seats - 1} / ${seats} READY` }).first().waitFor({ timeout: PRESS_MS });
       await at('all but one ready');
       console.log(`  ${seats} people: ${reads.filter((r) => r.table === seats).map((r) => `${r.state} ${r.scale.toFixed(3)} (${r.room} px; ${r.tallest})`).join('; ')}`);
       await tv.context().close();
