@@ -337,7 +337,9 @@ describe('T-AC-B3 (writer): the social reply (spec B C3)', () => {
     expect(playbook.by).toBe('llm');
     expect(playbook.strategy.stances.p1).toBe('ally');
     expect(playbook.rivalReads?.p1).toEqual(['sells Food', 'wants Governor']);
-    expect(playbook.rejected).toEqual([]);
+    // This test's hand-made draft has fields of its own the clamps bound; neither social edit is among them.
+    expect(playbook.rejected?.map((r) => r.path)).not.toEqual(expect.arrayContaining(['/strategy/stances/p1']));
+    expect(playbook.rejected?.map((r) => r.path)).not.toEqual(expect.arrayContaining(['/rivalReads/p1']));
     expect(JSON.stringify(playbook)).not.toContain(MARK);
   });
 

@@ -1,9 +1,10 @@
-import { BRAIN, GAME, GOODS, type GameState, type Playbook, type PlayerId, type RecordedWrite, type Strategy } from '@mule/engine';
+import { BRAIN, GAME, GOODS, type GameState, type Good, type Playbook, type PlayerId, type RecordedWrite, type Strategy } from '@mule/engine';
 import { OPTION_IDS } from '../decider.js';
 import { LAND_OFFERS, LAND_PATHS, type EditOffer, type WriterBrief } from './brief.js';
 import { cleanLine } from './reply.js';
 import { capCodePoints } from '../text.js';
 import type { PlanEdit, ValidatePlan } from '../playbook/index.js';
+import type { Fact, Message } from '../social/index.js';
 
 /**
  * Why a reply, or one of its edits, cannot be used: a code only, never reply text. refused and cut_off come from the
@@ -60,6 +61,7 @@ export interface WriterSchema {
     };
     edits: { type: 'array'; items: { anyOf: object[] } };
     line: { type: 'string' };
+    messages?: { type: 'array'; items: object };
   };
   required: string[];
   additionalProperties: false;
@@ -81,13 +83,38 @@ function byValueType(offers: readonly EditOffer[]): { paths: string[]; to: objec
   return [...branches.values()];
 }
 
+const integer = { type: 'integer' };
+const str = { type: 'string' };
+const factBranch = (properties: Record<string, object>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+/** The facts a message may declare, one branch per kind. */
+const FACT_BRANCHES = [
+  factBranch({ price: { type: 'string', enum: [...GOODS] }, value: integer }),
+  factBranch({ owner: integer, player: { anyOf: [str, { type: 'null' }] } }),
+  factBranch({ score: str, value: integer }),
+  factBranch({ holding: { type: 'string', enum: [...GOODS] }, value: integer }),
+  factBranch({ rule: str }),
+];
+const MESSAGE_KEYS = ['to', 'purpose', 'text', 'facts'] as const;
+
+/** A message's schema: to an offered player or the table, its purpose, its text and its declared facts. */
+const messagesSchema = (to: readonly PlayerId[]) => ({
+  type: 'array' as const,
+  items: {
+    type: 'object',
+    properties: { to: { type: 'string', enum: [...to, 'table'] }, purpose: str, text: str, facts: { type: 'array', items: { anyOf: FACT_BRANCHES } } },
+    required: [...MESSAGE_KEYS],
+    additionalProperties: false,
+  },
+});
+
 /**
  * The reply's JSON schema for a brief: one per level's corners flag and offered paths, so the request stays
  * byte-stable (the land brief's, by default). A seat that never corners is not offered 'monopolist'; a brief that
- * offers no strategy has none in its schema. Plan letters are any option letter; the writer checks them against the
- * brief, and checks each reason's length (structured outputs take no string-length constraint).
+ * offers no strategy has none in its schema; one that offers messages (`messageTo`) requires them. Plan letters are
+ * any option letter; the writer checks them against the brief, and checks each reason's length (structured outputs
+ * take no string-length constraint).
  */
-export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAND_OFFERS, strategyOffered = true): WriterSchema {
+export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAND_OFFERS, strategyOffered = true, messageTo?: readonly PlayerId[]): WriterSchema {
   const field: Record<StrategyField, object> = {
     kind: { type: 'string', enum: corners ? [...STRATEGY_KINDS] : STRATEGY_KINDS.filter((k) => k !== 'monopolist') },
     moneyMaker: goodOrNull,
@@ -115,8 +142,9 @@ export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAN
         },
       },
       line: { type: 'string' },
+      ...(messageTo ? { messages: messagesSchema(messageTo) } : {}),
     },
-    required: ['edits', 'line'],
+    required: messageTo ? ['edits', 'line', 'messages'] : ['edits', 'line'],
     additionalProperties: false,
   };
 }
@@ -144,10 +172,14 @@ export interface Refusal {
   cause: Cause;
 }
 
-/** The writer's checked reply, as recorded, and beside it the edits it refused, which are never recorded. */
+/**
+ * The writer's checked reply, as recorded, and beside it the edits it refused and the messages it asks to send, which
+ * are never recorded. No messages: a brief that offered none, or a reply the record replays.
+ */
 export interface WriterReply {
   reply: RecordedWrite;
   refused: Refusal[];
+  messages?: Message[];
 }
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -166,8 +198,33 @@ interface Proposed extends PlanEdit {
  */
 const whyOf = (reason: string) => capCodePoints(reason, BRAIN.writeReasonChars);
 
-/** The reply's parts, or the first cause that makes the whole reply unusable. */
-function readReply(text: string, stopReason: string | null): { edits: Proposed[]; line: string } | { cause: Cause } {
+const isInt = (x: unknown): x is number => Number.isInteger(x);
+const isGood = (x: unknown) => (GOODS as readonly unknown[]).includes(x);
+
+/** A declared fact as its schema branch gives it, or null. */
+function factOf(f: unknown): Fact | null {
+  if (!isObject(f)) return null;
+  const keys = Object.keys(f).sort().join(',');
+  if (keys === 'price,value' && isGood(f.price) && isInt(f.value)) return { price: f.price as Good, value: f.value };
+  if (keys === 'owner,player' && isInt(f.owner) && (f.player === null || typeof f.player === 'string')) return { owner: f.owner, player: f.player };
+  if (keys === 'score,value' && typeof f.score === 'string' && isInt(f.value)) return { score: f.score, value: f.value };
+  if (keys === 'holding,value' && isGood(f.holding) && isInt(f.value)) return { holding: f.holding as Good, value: f.value };
+  if (keys === 'rule' && typeof f.rule === 'string') return { rule: f.rule };
+  return null;
+}
+
+/** One message as the schema gives it, to a player the brief offered or the table, with a line to say; else null. */
+function messageOf(m: unknown, to: readonly PlayerId[]): Message | null {
+  if (!isObject(m) || !onlyKeys(m, MESSAGE_KEYS, MESSAGE_KEYS)) return null;
+  if (typeof m.to !== 'string' || !(m.to === 'table' || to.includes(m.to)) || typeof m.purpose !== 'string' || !Array.isArray(m.facts)) return null;
+  const text = cleanLine(m.text);
+  const facts = m.facts.map(factOf);
+  if (text === null || facts.some((f) => f === null)) return null;
+  return { to: m.to, purpose: m.purpose, text, facts: facts as Fact[] };
+}
+
+/** The reply's parts, or the first cause that makes the whole reply unusable. Messages are read only when offered. */
+function readReply(text: string, stopReason: string | null, messageTo?: readonly PlayerId[]): { edits: Proposed[]; line: string; messages: Message[] } | { cause: Cause } {
   if (stopReason === 'refusal') return { cause: 'refused' };
   if (stopReason === 'max_tokens') return { cause: 'cut_off' };
   let reply: unknown;
@@ -176,7 +233,10 @@ function readReply(text: string, stopReason: string | null): { edits: Proposed[]
   } catch {
     return { cause: 'not_json' };
   }
-  if (!isObject(reply) || !onlyKeys(reply, ['strategy', 'edits', 'line'], ['edits', 'line'])) return { cause: 'bad_shape' };
+  if (!isObject(reply) || !onlyKeys(reply, messageTo ? ['strategy', 'edits', 'line', 'messages'] : ['strategy', 'edits', 'line'], ['edits', 'line'])) return { cause: 'bad_shape' };
+  // A Claude Code seat's plan comes with no messages: they are read when sent, and dropped one by one when not their shape.
+  if ('messages' in reply && !Array.isArray(reply.messages)) return { cause: 'bad_shape' };
+  const messages = messageTo && Array.isArray(reply.messages) ? reply.messages.flatMap((m) => messageOf(m, messageTo) ?? []) : [];
   const { strategy, edits, line } = reply;
   const wellFormed = (e: unknown): e is PlanEdit =>
     isObject(e) && onlyKeys(e, ['path', 'to', 'reason'], ['path', 'to', 'reason']) && typeof e.path === 'string' && typeof e.reason === 'string';
@@ -191,7 +251,7 @@ function readReply(text: string, stopReason: string | null): { edits: Proposed[]
   }
   if (typeof line !== 'string') return { cause: 'bad_line' };
   for (const e of edits) proposed.push({ path: e.path, to: e.to, reason: whyOf(e.reason), fromStrategy: false });
-  return { edits: proposed, line };
+  return { edits: proposed, line, messages };
 }
 
 /** One proposed edit: accepted, with its `to` resolved, or refused with its cause. */
@@ -233,11 +293,11 @@ export async function writeReply(complete: WriteComplete, ask: WriteAsk): Promis
   const { brief } = ask;
   let answer: Awaited<ReturnType<WriteComplete>>;
   try {
-    answer = await complete({ system: ask.system, user: brief.text, schema: replySchema(brief.corners, brief.offers, brief.strategyOffered) }, ask.waitMs);
+    answer = await complete({ system: ask.system, user: brief.text, schema: replySchema(brief.corners, brief.offers, brief.strategyOffered, brief.messageTo) }, ask.waitMs);
   } catch {
     return unusableReply('no_reply');
   }
-  const read = readReply(answer.text, answer.stopReason ?? null);
+  const read = readReply(answer.text, answer.stopReason ?? null, brief.messageTo);
   if ('cause' in read) return unusableReply(read.cause);
 
   const seen = new Set<string>();
@@ -255,7 +315,8 @@ export async function writeReply(complete: WriteComplete, ask: WriteAsk): Promis
     if (f) set[f] = e.to;
   }
   const strategy = Object.keys(set).length === 0 ? undefined : ({ ...structuredClone(brief.strategy), ...set } as Strategy);
-  return { reply: { ...(strategy ? { strategy } : {}), edits: accepted, line: cleanLine(read.line) }, refused };
+  const reply: RecordedWrite = { ...(strategy ? { strategy } : {}), edits: accepted, line: cleanLine(read.line) };
+  return brief.messageTo ? { reply, refused, messages: read.messages } : { reply, refused };
 }
 
 /** What a seat's reply had refused or rejected: kept for its next brief, never played. */
