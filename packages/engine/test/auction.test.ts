@@ -41,6 +41,8 @@ function newGame(species: Species[] = ['zipwing', 'bramblet', 'gearling', 'mollo
   }
   // Round prices, so the store buys at 90 and sells at 110.
   for (const g of Object.keys(state.store.posted) as Good[]) state.store.posted[g] = 100;
+  // A shelf of 20 Water, so the store still has room to buy Water (storeWants); START's 100 fills that room (Heiko, 8 Nov).
+  state.store.stock.water = 20;
   state.phase = 'auction';
   return state;
 }

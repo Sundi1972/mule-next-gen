@@ -38,6 +38,8 @@ function newGame(): GameState {
   // Round prices: the store buys at 90 and sells at 110. No ship in port.
   for (const g of Object.keys(state.store.posted) as Good[]) state.store.posted[g] = 100;
   state.ship.arrives = state.month + 1;
+  // A shelf of 20 Water, so the store still has room to buy Water (storeWants); START's 100 fills that room (Heiko, 8 Nov).
+  state.store.stock.water = 20;
   const plot = state.tiles.find((t) => !t.owner)!;
   plot.owner = 'p0';
   plot.outfit = 'medicine';
