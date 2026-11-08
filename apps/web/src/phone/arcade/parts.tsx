@@ -86,7 +86,7 @@ export function OverCard({ seat, installs, className }: { seat: ArcadeSeat; inst
 // --- V-6 · your pace, and why ---------------------------------------------------------------------
 
 /**
- * Your household's last meal as the server judged it (needs C15): hungry, and "ate n of m" as the month end says it.
+ * Your household's last meal as the server judged it: hungry, and "ate n of m" as the month end says it.
  * With no condition in the view it claims no hunger, and the need it names is the view's needs.
  */
 export function mealOf(seat: ArcadeSeat): { hungry: boolean; food: FoodEaten } {
@@ -106,7 +106,8 @@ export function paceWords(seat: ArcadeSeat): { pct: number; line: string; short:
   const andSick = hungry && sick ? ', and you are sick' : '';
   // What makes Food for you already: a Food MULE on a plot of yours.
   const foodMule = view.tiles.find((t) => t.owner === me.id && t.outfit === 'food');
-  const next = hungry ? (foodMule ? `Next month: your Food MULE on ${plotName(foodMule.x, foodMule.y)} should feed you` : `Next month: buy ${need} Food at the auction, or put a Food MULE on a plot`) : null;
+  // The advice feeds household and crews, not only the meal: a crew left short makes less.
+  const next = hungry ? (foodMule ? `Next month: your Food MULE on ${plotName(foodMule.x, foodMule.y)} should feed you` : `Next month: buy ${me.needs.food} Food at the auction, or put a Food MULE on a plot`) : null;
   return { pct, line: `Your pace ${pct}%: ${why}${andSick}`, short: hungry ? `Pace ${pct}%: ate ${food} of ${need} Food` : sick ? `Pace ${pct}%: sick` : `Pace ${pct}%`, next, slow: pct < 100 };
 }
 
