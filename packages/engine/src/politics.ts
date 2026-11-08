@@ -357,6 +357,7 @@ function takeOffice(state: GameState, politics: Politics): void {
   const result = election.result!;
   Object.assign(election, { stage: 'over', ceremony: null });
   politics.termStart = state.month;
+  politics.overruled = 0; // every election starts a term, a re-elected Governor's included (AM-10)
   for (const office of POLITICS.offices) {
     const winner = result[office]?.winner;
     if (winner === undefined) continue;
@@ -947,7 +948,10 @@ export function taxAsPlanningEnds(state: GameState): number {
 function overruleTakesEffect(state: GameState, politics: Politics): void {
   const overrule = politics.overrule!;
   overrule.stage = 'over';
-  if (overrule.result!.passed && overrule.target === 'tax') state.treasury.salesTax = politics.taxAtStart;
+  if (overrule.result!.passed && overrule.target === 'tax') {
+    state.treasury.salesTax = politics.taxAtStart;
+    politics.overruled += 1; // AM-10: the term's count, which the Governor's AI reads to hold
+  }
 }
 
 /** The overrule's part of a step: tallies once every player is Done, then runs the reveal's clock. */
