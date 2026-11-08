@@ -65,22 +65,32 @@ export function Steps({ at, tv = false }: { at: 1 | 2 | 3; tv?: boolean }) {
   );
 }
 
-/** E-3: what the Governor is for, in one card. */
+/** E-3: what the elected offices are for, in one card; the Sheriff's line only while the Sheriff is elected (S4-C16). */
 export function OfficesCard({ tv = false }: { tv?: boolean }) {
+  const sheriff = POLITICS.offices.includes('sheriff');
+  const { guards, investigations } = POLITICS.sheriff;
   return (
     <section
       className={cx('relative flex min-w-0 flex-col rounded-panel border border-holo-line bg-panel', tv ? 'gap-2 px-6 py-4' : 'gap-1 p-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:p-4')}
       data-testid="offices-card"
     >
-      <span className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]! @min-[1100px]/shell:text-xs!')}>What the Governor does</span>
+      <span className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]! @min-[1100px]/shell:text-xs!')}>{sheriff ? 'What the offices do' : 'What the Governor does'}</span>
       <dl className={cx('grid grid-cols-[auto_1fr] gap-x-2 leading-snug', tv ? 'gap-y-1 text-xl' : 'gap-y-0.5 text-xs @min-[1100px]/shell:gap-y-1 @min-[1100px]/shell:text-sm')}>
         <dt className="font-semibold">Governor</dt>
         <dd data-testid="job-governor">
           Sets the sales tax each month; the tax fills the colony fund. Paid {POLITICS.pay.governor} cr a month.
         </dd>
+        {sheriff && (
+          <>
+            <dt className="font-semibold">Sheriff</dt>
+            <dd data-testid="job-sheriff">
+              Posts at least {guards} secret guards a month, investigates {investigations === 1 ? 'one' : investigations} sabotage{investigations === 1 ? '' : 's'}, and fines the culprits. Paid {POLITICS.pay.sheriff} cr a month.
+            </dd>
+          </>
+        )}
       </dl>
       <span className={cx('text-ink-2', tv ? 'text-lg' : 'text-[11px] @min-[1100px]/shell:text-sm')} data-testid="job-term">
-        A term lasts until the next election and adds {POLITICS.termScore} to your final score.
+        {sheriff && 'Nobody holds both. '}A term lasts until the next election and adds {POLITICS.termScore} to your final score.
       </span>
     </section>
   );

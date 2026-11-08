@@ -264,7 +264,7 @@ describe('the Council desk (C66, E-1, E-6)', () => {
     expect(textOf(html, 'change-promise')).toBe('Change promise');
     expect(tagOf(html, 'run-governor')).toBeUndefined();
     expect(textOf(html, 'job-governor')).toBe('Sets the sales tax each month; the tax fills the colony fund. Paid 50 cr a month.');
-    expect(textOf(html, 'job-term')).toBe(`A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
+    expect(textOf(html, 'job-term')).toBe(`Nobody holds both. A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
   });
 
   it("C66, E-1: the agenda's door opens the desk on its focus: the promise sheet when you don't run, your candidacy when you do", () => {
