@@ -83,7 +83,7 @@ export function Look() {
           <p className="text-base text-ink-2">
             <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital and Observatory on one place each; the
             Stadium and the Spaceport on 2×2 places, as WS7 ruled. The rocket stands 37 m, four times the Hospital, the tallest thing on the grounds.
-            Four places are free to grow into. Pre-rendered in Blender (C). Every building is our own Blender build, as you ruled; the game shows each
+            Four places are free to grow into. Pre-rendered in Blender (C). Every building is our own Blender build, dressed with KitBash3D props (trees, shrubs, building-site gear), as you ruled; the game shows each
             one as its own picture of 50–80 kB.
           </p>
           <LightToggle light={light} set={setLight} />
@@ -229,7 +229,7 @@ export function Look() {
         <ol className="max-w-5xl list-decimal space-y-2 pl-6 text-base leading-snug">
           <li><strong>Decided (Heiko, 6 Nov):</strong> direction C: rendered pictures with the live layer, the map’s painter for the ground, live 3D on the TV later from the same models.</li>
           <li><strong>Decided (Heiko, 6 Nov):</strong> our own Blender builds for every building and the rocket, dressed with KitBash3D props; no purchases.</li>
-          <li><strong>Yours now:</strong> each building at TV size (the table above), and the licence answer that lets the kit props ship.</li>
+          <li><strong>Done (7 Nov, AM-7):</strong> the licence was confirmed on 6 Nov, and every building and stage the game ships is dressed with kit props: the table above shows exactly those pictures.</li>
           <li><strong>Next from WS10:</strong> the Observatory, then the grounds on the TV month end once WS7's places land in the game.</li>
         </ol>
       </Section>

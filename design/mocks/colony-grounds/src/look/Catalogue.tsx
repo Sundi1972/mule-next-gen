@@ -45,7 +45,8 @@ function Cell({ entry, view, alt, root }: { entry: Entry; view: View; alt: strin
 export function Catalogue() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [view, setView] = useState<View>('day');
-  const [source, setSource] = useState<Source>('ours');
+  // The game's own pictures only: they are kit-dressed since AM-7 (7 Nov), so the old local kit preview is retired.
+  const source: Source = 'ours';
   useEffect(() => {
     setManifest(null);
     fetch(`${ROOT[source]}/manifest.json`)
@@ -55,14 +56,10 @@ export function Catalogue() {
   }, [source]);
   return (
     <div className="flex flex-col gap-3" data-testid="catalogue">
-      <div className="flex items-center gap-2">
-        <span className="label-caps">Pictures</span>
-        {(['ours', 'kit'] as const).map((v) => (
-          <Button key={v} size="md" variant={v === source ? 'holo' : 'outline'} onClick={() => setSource(v)} data-testid={`src-${v}`}>
-            {v === 'ours' ? 'Ours (ships today)' : 'With kit props (only on this Mac)'}
-          </Button>
-        ))}
-      </div>
+      <p className="text-sm text-ink-2" data-testid="src-note">
+        The game's own pictures, as shipped: our Blender buildings, dressed with KitBash3D props (trees, shrubs, building-site gear, rubble, the
+        Spaceport's tanks), licence confirmed 6 Nov.
+      </p>
       <div className="flex items-center gap-2">
         <span className="label-caps">Light</span>
         {(['day', 'dusk', 'lit'] as const).map((v) => (
