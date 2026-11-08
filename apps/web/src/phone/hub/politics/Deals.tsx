@@ -189,7 +189,7 @@ function ComposerFields({ c, testid }: { c: Composer; testid: string }) {
               ))}
             </div>
             <p className="text-xs leading-snug" data-testid={`${testid}-binds`}>
-              Neither of you sabotages the other, {monthsWords(c.view.month, c.view.month + draft.months - 1)}.
+              Neither of you sabotages the other, {monthsWords(c.view.month, Math.min(c.view.maxMonths, c.view.month + draft.months - 1))}.
             </p>
           </>
         )
