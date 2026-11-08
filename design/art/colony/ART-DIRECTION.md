@@ -40,6 +40,12 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
   globes and signs are on, and a warm shadowless fill lifts each layer's own ground; the lamps' light pools and the
   brighter lit share of the windows stay in the glow layer, as wealth's extra. Empty, closed and damaged glass stays
   dark. Calibrated against look.html's colony at the page's glow opacity for wealth 2000 (0.625).
+- **Light pools on the paving** (art3, 8 Nov): each layer's glow pass lights the paving round its own base with
+  point lights at the footprint's corners (`lib/frame.py` `pools`, `POOL` 70 W, env `COLONY_LAYER_POOL`); for that pass
+  the shadow catcher becomes a paving material that fades out 2.5 m beyond the footprint (`paving`, `POOL_REACH`), so a
+  pool rises with wealth and never shows a hard edge.
+- **Dusk grass is a hue, not a brightness** (art3): the plate's dusk-only tint `COLONY_DUSK_GRASS` "1.9,0.92,0.25"
+  (`plate.py`, through `core.DUSK`) takes red/green 0.54 → 0.91 and blue/green 1.01 → 0.82 against look.html's 0.77/0.77.
 
 ## 4. Palette and materials
 
@@ -56,6 +62,8 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 | Stadium | teal stands, white floodlights | `--color-g-alloy` |
 | Spaceport | safety orange gantry | `--color-g-electronics` |
 
+- **Glazing reads as windows, not a sheet** (art3): the Hospital's panes sit 0.12 m inside the facade (`hospital.py`
+  `INSET`) in mid-grey frames (`FRAME`, 0.40/0.41/0.42), so each window catches its own reveal shadow by day.
 - **Ground:** paving and lawns come from the map painter (§6), so the grounds and the planet map read as one place.
 - **Textures:** CC0 (Poly Haven, ambientCG), ≤ 1k in renders' source, ≤ 512 px in the real-time glb.
 - **Mission to Minerva props** (Heiko's ruling, 6 Nov): Spaceport apron (landing pads, control tower, cranes, tanks,
@@ -98,6 +106,13 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 | Weather | events | Rain / dust overlays (later) |
 
 The layer never redraws a building. If something needs a new shape, it is a new picture.
+
+**Colonists are sprite sheets** (Heiko's pick, 8 Nov: Astronaut A, CC0, poly.pizza 3hC2i0CTuO). `spike-colonists/walk.py`
+renders a rigged walk in the shared camera and light (§2, §3) on a shadow catcher: 4 headings (+x, +y, −x, −y) × 12
+frames, a 192 × 224 cell with the feet at (96, 197), 1.75 m tall. `COLONY_WALK_TINT="<suit>,<trim>"` renders those two
+materials neutral grey and adds a mask sheet (suit red, trim green, once with the day light); the player colours (the
+suit) and a palette of three (the helmet and trims, in place of hair) are laid through the mask offline, with an outline
+sheet (alpha dilated minus alpha) for the ghost behind a building. They walk at 1.3 m/s.
 
 ## 8. Stages — one model, derived variants
 
