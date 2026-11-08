@@ -25,6 +25,7 @@ import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, paidOutThisMonth, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
+import { NewsWords } from '../components/SeatWords';
 import { Chip, claudeChip, ClaudeCountdownWord, foldedClaudeWords, isClaude, playsBuiltIn, STATUS_CHIP } from '../components/ClaudeSeat';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -474,42 +475,11 @@ function News({ game }: { game: MuleView }) {
       {game.news.map((n, i) => (
         // The newest stays whole when the column runs short: older ones give way (FitHeight's data-fit-keep).
         <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
-          <NewsWords text={n} who={game.newsLines?.[i]?.text === n ? game.newsLines[i]!.who : []} players={game.players} />
+          <NewsWords view={game} i={i} />
         </li>
       ))}
     </ul>
   );
-}
-
-/**
- * A news line with " · AI" after each computer seat's name (Heiko, 7 Nov: in every ticker). `who` names the seats in the
- * words' order, so each is found after the one before; a name matches only as a whole word ("Al", never "Also").
- */
-function NewsWords({ text, who, players }: { text: string; who: readonly string[]; players: MuleView['players'] }) {
-  const parts: ReactNode[] = [];
-  let from = 0;
-  for (const id of who) {
-    const p = players.find((q) => q.id === id);
-    if (!p) continue;
-    const at = wholeWordAt(text, p.name, from);
-    if (at < 0) continue;
-    const end = at + p.name.length;
-    // A person's name is passed over unmarked, so a computer seat of the same name is found in its own place.
-    if (p.isAi) parts.push(text.slice(from, end), <AiMark key={end} />);
-    else parts.push(text.slice(from, end));
-    from = end;
-  }
-  parts.push(text.slice(from));
-  return <>{parts}</>;
-}
-
-const WORD = /[\p{L}\p{N}]/u;
-function wholeWordAt(text: string, name: string, from: number): number {
-  if (name === '') return -1;
-  for (let at = text.indexOf(name, from); at >= 0; at = text.indexOf(name, at + 1)) {
-    if (!WORD.test(text[at - 1] ?? '') && !WORD.test(text[at + name.length] ?? '')) return at;
-  }
-  return -1;
 }
 
 function MarketTiles({ game }: { game: MuleView }) {
