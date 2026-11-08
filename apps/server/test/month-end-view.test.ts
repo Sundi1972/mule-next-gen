@@ -12,6 +12,8 @@ const DEAR_FOOD = 10_000;
 const AIR_IN: Record<number, number> = { 1: band('smoggy'), 2: band('toxic') };
 /** Ten minutes: far longer than any phase clock, so a phase still up after it has none. */
 const LONG_WAIT_MS = 600_000;
+/** Farms that give a crew of 8: 2 Food for the crews beside the household's 2. */
+const CREW_FARMS = 8;
 
 function band(name: string): number {
   return POLLUTION.bands.find((b) => b.name === name)!.from;
@@ -41,11 +43,17 @@ interface MonthEnd {
  * meal), and s2 is given its need, so it is fed. At month 2's auction s1 is given its need, so month 2's own meal is
  * full and a condition re-read after it would say fed.
  */
-function playThreeMonths(options: { emptyIn?: number; stockedIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
+function playThreeMonths(options: { emptyIn?: number; stockedIn?: number; crewed?: boolean } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
   const state = stateOf(game);
+  // `crewed`: s1 and s2 each work CREW_FARMS farms from the start, so their crews eat beside the household, and s2 is
+  // left only the household's Food at month 1's auction: its household eats in full, its crews go short.
+  if (options.crewed) {
+    const free = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null);
+    for (const [k, t] of free.slice(0, 2 * CREW_FARMS).entries()) Object.assign(t, { owner: k < CREW_FARMS ? 's1' : 's2', outfit: 'food' });
+  }
   const ends: MonthEnd[] = [];
   let developed: MonthEnd['developed'] = {};
   let claimedIn = 0;
@@ -55,7 +63,7 @@ function playThreeMonths(options: { emptyIn?: number; stockedIn?: number } = {})
     if (state.phase === 'auction' && state.month === 1 && starvedIn !== 1) {
       player(state, 's1').stock.food = 1;
       // And s2 its month's Food, so the fed row has someone fed under the 5 Nov start values (2 Food a seat).
-      player(state, 's2').stock.food = Math.max(player(state, 's2').stock.food, needsOf(state, 's2').food);
+      player(state, 's2').stock.food = options.crewed ? UPKEEP.baseFood : Math.max(player(state, 's2').stock.food, needsOf(state, 's2').food);
       starvedIn = 1;
     }
     if (state.phase === 'auction' && state.month === 2 && starvedIn === 1) {
@@ -126,15 +134,29 @@ describe('Month end: last month against this one (C20)', () => {
     expect(s1, "s1's condition in month 2's development").not.toBeNull();
     expect(s1.foodShare, 's1 went hungry in month 2').toBeLessThan(1);
     expect(second.liveShare, "the engine's food share after upkeep has eaten the Food: a re-read would differ").not.toBe(s1.foodShare);
-    // Each condition carries the month's Food need, so every screen can say "ate n of m".
+    // Each condition carries the household's Food need, so every screen can say "ate n of m" of its meal (needs C15).
     for (const end of ends) {
       for (const viewer of VIEWERS) {
-        for (const p of end.views.get(viewer)!.players) expect(p.condition?.foodNeed, `${p.id}'s need at month ${end.month}'s end, ${viewer ?? 'the board'}`).toBe(end.needs[p.id]);
+        for (const p of end.views.get(viewer)!.players) expect(p.condition?.foodNeed, `${p.id}'s need at month ${end.month}'s end, ${viewer ?? 'the board'}`).toBe(UPKEEP.baseFood);
       }
     }
-    expect(second.needs['s1'], "s1's need is more than the one Food it held").toBeGreaterThan(1);
+    expect(second.needs['s1'], "s1's household needs more than the one Food it held").toBeGreaterThan(1);
     const s2 = second.developed['s2']!;
     expect(s2.foodShare, 's2 was fed').toBe(1);
+  });
+
+  it("T-AC-15: the month end's \"ate n of m\" is the household's meal, never a figure with the crews in it (needs C15)", () => {
+    const { ends } = playThreeMonths({ crewed: true });
+    const second = ends[1]!;
+    expect(second.needs['s1'], 'the premise: the crews eat 2 beside the household').toBe(UPKEEP.baseFood + 2);
+    const ate = (c: PlayerView['condition']) => Math.round(c!.foodShare * c!.foodNeed);
+    for (const viewer of VIEWERS) {
+      const shown = conditionsIn(second.views.get(viewer)!);
+      // s1 held 1 Food: its household ate 1 of its 2, whatever its crews needed (crews included it read 2 of 4).
+      expect([ate(shown['s1']), shown['s1']!.foodNeed], `s1, ${viewer ?? 'the board'}`).toEqual([1, UPKEEP.baseFood]);
+      // s2 held the household's 2: its crews went short, its household ate 2 of 2 and is fed (not 2 of 4).
+      expect([ate(shown['s2']), shown['s2']!.foodNeed, shown['s2']!.foodShare], `s2, ${viewer ?? 'the board'}`).toEqual([UPKEEP.baseFood, UPKEEP.baseFood, 1]);
+    }
   });
 
   it("T-AC-15 (negative, HC-4): at a month end no view carries another player's parts, and the board carries none", () => {
