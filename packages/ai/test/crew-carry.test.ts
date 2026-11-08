@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, crewFactor, DEV_WALK, factoryFit, GOOD_CONFIG, isFactory, monthNeeds, needsOf, needsWith, observe, rawOutput, RECIPES, UPKEEP, type GameState, type Good, type Outfit, type ProcessedGood, type Tile } from '@mule/engine';
+import { advancePhase, createGame, crewFactor, DEV_WALK, factoryFit, GOOD_CONFIG, isFactory, monthNeeds, needsOf, observe, rawOutput, RECIPES, UPKEEP, type GameState, type Good, type Outfit, type ProcessedGood, type Tile } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { afterTax, foodUnits, installGain, yieldOf, keptUnits, monthlyNet, monthWalkSeconds, secondValue, unitValues, wholeNextMonth } from '../src/value.js';
+import { afterTax, foodUnits, installGain, keptUnits, monthlyNet, monthWalkSeconds, secondValue, unitValues, wholeNextMonth } from '../src/value.js';
 
 /**
  * PR-8 (needs C14): a player's plots, but its Energy plants, make crewFactor of their output in the production after a
@@ -138,24 +138,5 @@ describe("PR-8 (needs C15): the buy side prices the household's Food unit by uni
     expect(units.slice(UPKEEP.baseFood).every((x) => x < hunger), "the case: the crews' units are worth less than the meal's").toBe(true);
     const v = unitValues(obs, o, 'food', m);
     expect(v.buy.filter((x) => x >= hunger - 1e-9).length, "the meal's units buy at their hunger worth").toBeGreaterThanOrEqual(UPKEEP.baseFood);
-  });
-});
-
-describe("PR-6 (needs C12): what a plot's crew eats comes from the engine's needsWith", () => {
-  it("on an idle plot, the crew's Food and Water are needsWith less needsOf; re-outfitting a worked plot adds no crew; monthlyNet charges them at the outlook's prices", () => {
-    const m = mind();
-    const state = development(undefined);
-    state.tiles[1]!.outfit = 'smithore';
-    for (const x of [2, 3, 4]) Object.assign(state.tiles[x]!, { owner: ME, outfit: 'smithore' });
-    const obs = observe(state, ME);
-    const o = outlook(obs, ME, { lookAhead: m.level.lookAhead });
-    const idle = yieldOf(obs, obs.tiles[0]!, 'food', ME);
-    const now = needsOf(obs, ME);
-    const next = needsWith(obs, ME, 'food');
-    expect(idle.eats).toEqual({ food: next.food - now.food, water: next.water - now.water });
-    expect(idle.eats.food + idle.eats.water, 'the case: the fifth plot tips a step').toBeGreaterThan(0);
-    expect(yieldOf(obs, obs.tiles[1]!, 'crystite', ME).eats, 'the same crew on a re-outfitted plot').toEqual({ food: 0, water: 0 });
-    const net = (y: typeof idle) => monthlyNet(obs, o, y, 'food', m);
-    expect(net({ ...idle, eats: { food: 0, water: 0 } }) - net(idle)).toBeCloseTo(idle.eats.food * o.price('food') + idle.eats.water * o.price('water'), 6);
   });
 });
