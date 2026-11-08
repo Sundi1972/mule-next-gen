@@ -406,7 +406,16 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
     expect(sab).toContainEqual({ kind: 'sabotage', order: ossa!.id, target: 'rumour', victim: null, outcome: 'failed', culprit: 'ossa', parties: ['ossa'], month: 1, phase: 'production' });
     const voided = sab.find((n) => n.kind === 'sabotage' && n.outcome === 'void')!;
     expect(voided).toMatchObject({ target: 'powerCut', victim: null, culprit: 'brix', parties: ['brix'] });
-    for (const viewer of VIEWERS) expect(wire(w.game, viewer), String(viewer)).not.toContain((voided as { order: string }).order);
+    // The void is on the orderer's own list and nowhere else: not the public incidents, no other phone, not the board.
+    const voidId = (voided as { order: string }).order;
+    for (const viewer of VIEWERS) {
+      expect(where(w.game.viewFor(viewer), voidId), String(viewer)).toEqual(viewer === 'brix' ? ['.me.politics.sabotage.mine.*.id'] : []);
+    }
+    const { x, y } = { x: w.ossaPlot % w.state.width, y: Math.floor(w.ossaPlot / w.state.width) };
+    expect(w.game.viewFor('brix').me!.politics!.sabotage!.mine).toContainEqual({
+      id: voidId, month: 1, kind: 'powerCut', victim: null, at: { x, y }, good: null, worked: false, culprit: 'brix', how: null, investigated: false, fine: null, public: false, outcome: 'void',
+    });
+    expect(w.game.viewFor('brix').me!.politics!.sabotage!.owed, 'a void order is not charged').toBe(0);
     for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news.join(' '), String(viewer)).not.toMatch(/Ossa's .* plot\.$|void/);
   });
 
@@ -544,6 +553,21 @@ describe('S4-RULE-12 (the record): orders and guards are in the record and repla
         send(seat, intent);
       };
 
+      // A theft or a swap in development takes the MULE off a plot after the order is given: the same fixture in the game and
+      // in its replay (the replay plays the intents, not this), so the order is void at production in both.
+      const realHandle = MuleGame.prototype.handle;
+      vi.spyOn(MuleGame.prototype, 'handle').mockImplementation(function (this: MuleGame, seat: string, intent: MuleIntent) {
+        realHandle.call(this, seat, intent);
+        if (seat === 's1' && intent.type === 'sabotage' && intent.target?.kind === 'powerCut') (this as unknown as { state: GameState }).state.tiles[intent.target.tile]!.outfit = null;
+      });
+      // The replayed game's view of Heiko at its end: the replay disposes the game it ran, and the spy reads it first.
+      let replayedMine: unknown = null;
+      const realDispose = MuleGame.prototype.dispose;
+      vi.spyOn(MuleGame.prototype, 'dispose').mockImplementation(function (this: MuleGame) {
+        if (inReplay) replayedMine = this.viewFor('s1').me!.politics!.sabotage!.mine;
+        return realDispose.call(this);
+      });
+      let inReplay = false;
       game.start(seats);
       for (let i = 0; i < 200_000 && !final; i++) {
         const view = game.viewFor(null);
@@ -565,6 +589,11 @@ describe('S4-RULE-12 (the record): orders and guards are in the record and repla
           const lit = game.viewFor('s1').lit;
           if (lit) once('claim', 's1', { type: 'claim', ...lit });
         }
+        // Month 2's planning: Heiko orders a power cut on a worked plot of another seat, which loses its MULE before production.
+        if (view.phase === 'planning' && view.month === 2 && votesOver) {
+          const target = state().tiles.findIndex((t) => t.owner !== null && t.owner !== 's1' && ['food', 'energy', 'smithore', 'crystite'].includes(t.outfit ?? ''));
+          if (target >= 0) once('cut', 's1', { type: 'sabotage', target: { kind: 'powerCut', tile: target } });
+        }
         // Month 2's planning: if Mia is the Sheriff she guards that plot and fines the caught order.
         if (view.phase === 'planning' && view.month === 2 && votesOver && view.politics?.sheriff === 's2') {
           const plot = state().tiles.findIndex((t) => t.owner === 's1');
@@ -585,13 +614,21 @@ describe('S4-RULE-12 (the record): orders and guards are in the record and repla
       const record = JSON.parse(JSON.stringify(recorder.finished)) as NonNullable<typeof recorder.finished>;
 
       const accepted = (type: string) => record.events.filter((e) => e.type === 'intent' && e.intent.type === type && e.refused === undefined);
-      expect(accepted('sabotage'), 'the order is in the record').toHaveLength(1);
+      expect(accepted('sabotage'), 'the rumour and the cut are in the record').toHaveLength(2);
       expect(accepted('guard'), 'the guard is in the record').toHaveLength(1);
       expect(accepted('fine'), 'the fine is in the record').toHaveLength(1);
       const order = (final! as GameState).politics!.sabotage[0]!;
       expect(order).toMatchObject({ by: 's1', outcome: 'caught', culpritPublic: true, fine: { by: 'sheriff', base: 100 } });
 
+      // Heiko's void order (month 2) is on his own list at the end, and nowhere else.
+      const voidedOrder = (inner.viewFor('s1').me!.politics!.sabotage!.mine).find((o) => o.outcome === 'void');
+      expect(voidedOrder, 'the void order is on his list').toMatchObject({ month: 2, kind: 'powerCut', culprit: 's1', public: false, how: null });
+      for (const viewer of ['s2', 's3', null]) expect(JSON.stringify(inner.viewFor(viewer)), String(viewer)).not.toContain(voidedOrder!.id);
+
+      inReplay = true;
       const result = await replay(record);
+      inReplay = false;
+      expect(replayedMine, 'the replayed game tells Heiko the same list').toEqual(inner.viewFor('s1').me!.politics!.sabotage!.mine);
       expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);
       expect(result.identical).toBe(true);
     } finally {
