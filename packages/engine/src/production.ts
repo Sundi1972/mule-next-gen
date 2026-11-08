@@ -188,6 +188,15 @@ const QUARTER_SLACK = 1e-9; // literal-ok: a float tolerance (RULE-10's ε), not
 export type Needs = { food: number; water: number; medicine: number };
 
 /**
+ * The Food and Water one plot's crew adds to its owner's need a month, before the estate's one round-up (needs C12,
+ * RULE-10): the rate the computer players weigh a plot by. needsWith minus needsOf is the stepped marginal instead,
+ * which jumps with how many plots the owner already works. Water is none: a plot takes its Water as it produces (AM-3).
+ */
+export function crewUpkeep(outfit: Outfit): { food: number; water: number } {
+  return { food: CONSUMPTION[outfit].food, water: 0 };
+}
+
+/**
  * Food and Water a household working plots of these outfits needs, and the Medicine that keeps its crews well (needs
  * RULE-10, AM-3): the crews' Food summed over the plots and rounded up once; Water the household's alone.
  */
