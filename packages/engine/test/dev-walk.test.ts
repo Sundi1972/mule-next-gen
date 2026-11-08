@@ -106,6 +106,15 @@ describe('needs C15: a player is hungry when their household went short at the l
     expect(needsOf(crewed, 'bram').food, 'the premise: crews who need 2').toBe(UPKEEP.baseFood + 2);
     expect(hungerShare(crewed), 'crews short, household fed: full pace').toBe(1);
     expect(crewed.players.find((p) => p.id === 'bram')!.hungry).toBe(false);
+
+    // Month 1 has had no month end, so no meal is recorded: nobody is hungry, whatever they hold.
+    const { state: first } = walkers();
+    for (const p of first.players) p.stock.food = 0;
+    for (let steps = 0; first.phase !== 'development' && steps < 10; steps++) advancePhase(first);
+    expect(first.month, "the premise: month 1's development").toBe(1);
+    expect(first.players.map((p) => p.householdShort), 'the premise: no meal recorded yet').toEqual([undefined, undefined]);
+    expect(first.players.map((p) => p.hungry)).toEqual([false, false]);
+    expect(hungerShare(first)).toBe(1);
   });
 
   it('needs B-AC-14 (negative): a household short at upkeep is hungry: 1 of its 2 Food walks at the half-fed pace', () => {
