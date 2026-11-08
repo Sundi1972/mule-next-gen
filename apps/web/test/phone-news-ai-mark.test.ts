@@ -2,6 +2,8 @@ import type { MuleView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
+import { News } from '../src/phone/hub/desks';
 import { NewsPanel } from '../src/phone/parts';
 import { aMuleView, aPlayer } from './fixtures/views';
 
@@ -19,6 +21,7 @@ const items = (html: string) => [...html.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map(
 
 const SCREENS: [string, (view: MuleView) => string][] = [
   ['the results screen', (view) => renderToStaticMarkup(createElement(NewsPanel, { view }))],
+  ['the colony desk', (view) => renderToStaticMarkup(createElement(PhoneGameProvider, { value: { view } as unknown as PhoneGame, children: createElement(News) }))],
 ];
 
 describe.each(SCREENS)("%s's news marks a computer seat (Heiko, 7 Nov)", (_, render) => {
