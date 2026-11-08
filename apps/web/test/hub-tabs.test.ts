@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { ColonyView, ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { ChatMessage, ColonyView, ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { DealCard } from '@mule/engine';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
@@ -111,7 +111,7 @@ function game({ self = 's1', pol = politics(), sheriff = false, deals, colony }:
   return aMuleView({ month: 5, width: 4, height: 1, tiles: TILES, players: PLAYERS, me, politics: pol, ...(colony ? { colony } : {}) });
 }
 
-const STATE = { status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+const STATE = { status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: null, chat: [] as ChatMessage[], emotes: [], toasts: [], clockOffset: 0 };
 const client = { subscribe: () => () => {}, getState: () => STATE, serverNow: () => 0, intent: () => {} } as unknown as TableClient;
 
 let root: Root | null = null;
@@ -252,7 +252,7 @@ describe('the tabbed planning hub (SB-2)', () => {
     ["openDesk('talk', 'whisper:s2')", (n) => n.openDesk('talk', 'whisper:s2'), 's1', { tab: 'talk', shows: 'whisper-line' }],
     // On the Governor's phone, where Council is not the only sub-tab. The Council desk takes the focus as it opens; what the door promised is the promise sheet, open.
     ["openDesk('council', 'run')", (n) => n.openDesk('council', 'run'), 's2', { tab: 'politics', sub: 'council', shows: 'promise-sheet' }],
-    ["openDesk('governor') on the Governor's phone", (n) => n.openDesk('governor'), 's2', { tab: 'politics', sub: 'governor' }],
+    ["openDesk('governor', 'tax') on the Governor's phone", (n) => n.openDesk('governor', 'tax'), 's2', { tab: 'politics', sub: 'governor', focus: 'tax' }],
     ["openDesk('market')", (n) => n.openDesk('market'), 's1', { tab: 'overview', tool: 'list' }],
     // No Laws, Elections or Budget sub-tab is drawn yet: their doors land on the first sub-tab shown, with their focus.
     ["openDesk('laws'), its sub-tab not drawn", (n) => n.openDesk('laws'), 's2', { tab: 'politics', sub: 'council' }],
@@ -303,6 +303,14 @@ describe('the tabbed planning hub (SB-2)', () => {
     const offer: DealCard = { id: 'deal-2', from: 's2', to: 's1', terms: { kind: 'pact' }, offered: 5, until: 7, status: 'offered', brokenBy: null, settled: null };
     mount(game({ deals: [offer] }));
     expect(text('talk-badge')).toBe('11 deal offer waiting');
+    // A line said at the table, not yet read: it counts into the number too.
+    STATE.chat.push({ id: 1, from: 's3', text: 'Anyone selling Food?', at: 0 });
+    try {
+      rerender(game({ deals: [offer] }));
+      expect(text('talk-badge'), 'the count, then its spoken words').toBe('21 deal offer waiting, 1 unread');
+    } finally {
+      STATE.chat.length = 0;
+    }
     tap('tab-talk');
     expect(findTestid('talk-badge'), 'the open tab carries no count').toBeUndefined();
     expect(text('talk-cards-badge')).toBe('11 deal offer waiting');
@@ -476,13 +484,6 @@ describe('the tabbed planning hub (SB-2)', () => {
     byTestid('now-go');
     tap('tab-colony');
     byTestid('now-go');
-  });
-
-  it('C66 (frame, until SB-3 moves the ballots): a ballot stage takes the whole stage, the tabs hidden', () => {
-    const ballot: ElectionView = { stage: 'ballot', ceremony: null, candidates: { governor: ['s2', 's3'] }, promises: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], result: {} };
-    mount(game({ pol: politics({ election: ballot, next: 5 }) }));
-    byTestid('hub-situation');
-    expect(findTestid('tabs')).toBeUndefined();
   });
 
   it("C66 (frame): the first stage shown takes the stage in place of the tabs, the tool row, the map and This month; its Rail sits under Now; the shell's phase and the ready bar's words are its own", () => {
