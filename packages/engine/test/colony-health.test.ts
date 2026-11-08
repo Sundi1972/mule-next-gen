@@ -141,7 +141,7 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
     });
   });
 
-  it("FM-medicine-shortage: an upkeep the colonists go short of Medicine reports Medicine short, as Food and Water, and the mood still counts only Food and Water", () => {
+  it("FM-medicine-shortage: an upkeep the colonists go short of Medicine reports Medicine short, as Food and Water, and the mood does not count it", () => {
     withHealth(() => {
       const state = stockedAtAuction();
       state.store.stock.medicine = 0;

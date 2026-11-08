@@ -55,6 +55,8 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     const medicine = colonistMeal(colonistMedicineNeed(state), state.store.stock.medicine);
     state.store.stock.medicine -= medicine.took;
     colonistMonth.short.medicine = medicine.short;
+    // Reported like Food and Water, so the store's price and the computer players' outlook see it; not `fed`.
+    if (medicine.short > 0) shortages.add('medicine');
     const electronics = electronicsComfort(state.colonists, state.store.stock.electronics);
     state.store.stock.electronics -= electronics.took;
     colonistMonth.comfort = electronics.met;

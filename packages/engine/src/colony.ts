@@ -467,7 +467,8 @@ export interface HealthMood {
 export function moodInputs(state: GameState, shortages: readonly Good[], comfort = 0): MoodInputs & Partial<HealthMood> {
   const brokeNow = state.colony?.promises.some((p) => p.month === state.month && !p.kept) ?? false;
   return {
-    short: shortages.length,
+    // Missing Medicine reaches the mood through sickness alone, so it is not one of the goods short here.
+    short: shortages.filter((g) => g !== 'medicine').length,
     air: state.air,
     tax: Math.round(state.treasury.salesTax * PERCENT),
     broken: brokeNow ? 1 : 0,
