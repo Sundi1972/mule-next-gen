@@ -96,20 +96,27 @@ describe('the tabbed hub shell (SB-1b)', () => {
       const tab = element(list, `tab-${id}`);
       expect(tab).toMatch(new RegExp(`^<button[^>]*role="tab"[^>]*aria-selected="${on}"`));
       expect(words(tab)).toContain(label);
+      // Every letter of the label shows (E-11): it is never cut to an ellipsis.
+      expect(tab).not.toMatch(/\bmax-w-full\b/);
       expect(tab).toContain(`<path d="${ICON}"`);
     }
     expect(element(list, 'tab-talk')).toContain('data-testid="badge-talk"');
-    // 44 px targets at least: the column's tabs are 56 px square.
+    // 44 px targets at least: the column's tabs are 56 px tall and its 48 px wide.
     expect(element(list, 'tab-overview')).toMatch(/class="[^"]*\bh-14\b[^"]*\bw-full\b/);
   });
 
-  it('the head: in the rail\'s header under the money, the phase on one line with the ready count, the month moved out', () => {
-    const html = draw({ tabs: tabs(), head: createElement('div', { 'data-testid': 'the-head' }) });
+  it('the head: in the rail\'s header under the money, the phase on one line with the ready count, the month on the phase line', () => {
+    const html = draw({ tabs: tabs(), head: createElement(Shell.PhaseLine) });
     const header = element(html, 'rail-head');
-    expect(header.indexOf('data-testid="money"')).toBeLessThan(header.indexOf('data-testid="the-head"'));
+    expect(header.indexOf('data-testid="money"')).toBeLessThan(header.indexOf('data-testid="phase-line"'));
     expect(words(element(header, 'phase-title-row'))).toBe('Planning 1 / 4 READY');
-    // The month is the phase line's now (PhaseLine): the header draws none of its own.
-    expect(header).not.toContain('data-testid="month"');
+    // One month in the header, and it is the phase line's.
+    expect(header.match(/data-testid="month"/g)).toHaveLength(1);
+    expect(words(element(element(header, 'phase-line'), 'month'))).toBe('Month 3/12');
+  });
+
+  it('a head that is nothing (null or false) draws the shell as without one, the month included', () => {
+    for (const head of [null, false]) expect(words(element(draw({ head }), 'month'))).toBe('Month 3 / 12');
   });
 
   it('PhaseLine: a bar per step of the month, this one lit; the month and the next step by name', () => {
@@ -131,6 +138,7 @@ describe('the tabbed hub shell (SB-1b)', () => {
     expect(element(html, 'now')).toMatch(/^<section[^>]*aria-live="polite"/);
     expect(element(html, 'now-title')).toMatch(/class="[^"]*\bline-clamp-2\b/);
     expect(words(element(html, 'now-steps'))).toBe('1/3');
+    expect(element(html, 'now-steps')).toMatch(/^<span[^>]*role="img"[^>]*aria-label="Step 1 of 3"/);
     expect(element(html, 'now-go')).toContain('Vote for Governor');
     expect(element(html, 'help-open')).toMatch(/aria-haspopup="dialog"/);
     // No door: the title is plain words; amber when the Now warns.

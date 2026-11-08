@@ -183,6 +183,8 @@ export function PhoneShell({
   const [root, wide] = useWideRef<HTMLDivElement>();
   const layer = useContext(ShellLayer);
   const move = useContext(MoveToPhoneOpener);
+  // A head that is nothing (null, false: `cond && <X />`) is no head: the header keeps its month.
+  const hasHead = head !== undefined && head !== null && head !== false;
   return (
     <Wide.Provider value={wide}>
       <div ref={root} className="h-full @container/shell">
@@ -199,7 +201,7 @@ export function PhoneShell({
           </main>
           <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
             <header data-testid="rail-head" className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
-              {head !== undefined ? (
+              {hasHead ? (
                 // The hub's head: the phase on one line with the ready count; the month is the phase line's (PhaseLine).
                 <div className="flex items-center justify-between gap-1.5 @min-[1100px]/shell:gap-2" data-testid="phase-title-row">
                   <span className="truncate font-display text-base font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
@@ -263,7 +265,7 @@ export function PhoneShell({
                   </span>
                 )}
               </div>
-              {head}
+              {hasHead && head}
               {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
               {wide ? <TableChat /> : <FallbackBubble />}
             </header>
@@ -310,7 +312,8 @@ function Glyph({ d, size, className }: { d: string; size: number; className?: st
 
 /**
  * The hub's tabs as a column at the stage's left (Heiko, 8 Nov: the mock's variant A; on a sideways phone height is
- * scarce, so the tabs take the stage's width, not its height). Real tabs, each a 56 px target.
+ * scarce, so the tabs take the stage's width, not its height). Real tabs, each 56 px tall and 48 px wide; every letter
+ * of a label shows (E-11). Like today's DeskTabs they are reached with Tab and opened with Enter or Space: no arrow keys yet.
  */
 function ShellTabs({ tabs }: { tabs: readonly TabButton[] }) {
   return (
@@ -332,7 +335,7 @@ function ShellTabs({ tabs }: { tabs: readonly TabButton[] }) {
           data-testid={`tab-${t.id}`}
         >
           <Glyph d={t.icon} size={18} />
-          <span className="max-w-full truncate">{t.label}</span>
+          <span className="whitespace-nowrap">{t.label}</span>
           {t.Badge && <t.Badge />}
         </button>
       ))}
@@ -353,7 +356,7 @@ export function PhaseLine() {
         ))}
       </span>
       <span className="shrink-0 whitespace-nowrap text-[10px] leading-none text-ink-2" aria-hidden data-testid="phase-next">
-        <span className="label-caps text-[10px]!">
+        <span className="label-caps text-[10px]!" data-testid="month">
           Month {view.month}/{view.maxMonths}
         </span>
         {next && <> · next {next.label}</>}
@@ -376,7 +379,7 @@ export function NowLine({ now, onHelp, onGo }: { now: Now; onHelp(): void; onGo?
     <section className={cx('flex min-h-10 items-center gap-1.5 rounded-panel border-2 py-0.5 pl-2 pr-0.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')} aria-live="polite" data-testid="now">
       <span className="label-caps shrink-0 text-[10px]!">Now</span>
       {now.step !== undefined && now.of !== undefined && (
-        <span className="shrink-0 font-mono text-[10px] text-ink-2" aria-label={`Step ${now.step} of ${now.of}`} data-testid="now-steps">
+        <span className="shrink-0 font-mono text-[10px] text-ink-2" role="img" aria-label={`Step ${now.step} of ${now.of}`} data-testid="now-steps">
           {now.step}/{now.of}
         </span>
       )}
