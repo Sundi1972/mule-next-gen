@@ -140,7 +140,7 @@ describe('Month end: last month against this one (C20)', () => {
         for (const p of end.views.get(viewer)!.players) expect(p.condition?.foodNeed, `${p.id}'s need at month ${end.month}'s end, ${viewer ?? 'the board'}`).toBe(UPKEEP.baseFood);
       }
     }
-    expect(second.needs['s1'], "s1's household needs more than the one Food it held").toBeGreaterThan(1);
+    expect(second.needs['s1'], "s1's need, crews included, is more than the one Food it held").toBeGreaterThan(1);
     const s2 = second.developed['s2']!;
     expect(s2.foodShare, 's2 was fed').toBe(1);
   });
