@@ -70,10 +70,10 @@ function force(kind: 'powerCut' | 'rumour', works: boolean, seen: boolean): void
 const stateOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
 /** Month 1's planning, the votes over: Brix is the Sheriff, Ossa the Governor; Ossa and Brix each own a Food plot. */
-function world() {
+function world(maxMonths?: number) {
   const notices: Notice[] = [];
   const fake = fakeContext({ table: TABLE });
-  const game = new MuleGame(fake.ctx, 10, { politics: true, notice: (n) => notices.push(n) });
+  const game = new MuleGame(fake.ctx, 10, { politics: true, ...(maxMonths ? { maxMonths } : {}), notice: (n) => notices.push(n) });
   game.start(TABLE);
   const state = stateOf(game);
   state.politics = { ...state.politics!, election: null, council: null, governor: 'ossa', sheriff: 'brix' };
@@ -101,6 +101,13 @@ const cut = (tile: number) => ({ type: 'sabotage' as const, target: { kind: 'pow
 const wire = (game: MuleGame, viewer: string | null) => JSON.stringify(game.viewFor(viewer));
 const money = (game: MuleGame, id: string) => game.viewFor(null).players.find((p) => p.id === id)!.money;
 const reputation = (game: MuleGame, viewer: string | null, id: string) => game.viewFor(viewer).players.find((p) => p.id === id)!.reputation!;
+/** Every JSON path where `value` appears as a value or a key. */
+function where(view: unknown, value: string, path = ''): string[] {
+  if (typeof view === 'string') return view === value ? [path] : [];
+  if (typeof view !== 'object' || view === null) return [];
+  return Object.entries(view).flatMap(([key, v]) => [...(key === value ? [`${path}.${key}`] : []), ...where(v, value, `${path}.${Array.isArray(view) ? '*' : key}`)]);
+}
+const SEAT_LISTS = ['.players.*.id', '.politics.weights.*.id', '.politics.reputationReasons.lena'];
 const orders = (w: World): SabotageOrder[] => w.state.politics!.sabotage;
 
 describe('S4-B-AC-6: a pending order and the guards reach nobody but their party', () => {
@@ -132,6 +139,10 @@ describe('S4-B-AC-6: a pending order and the guards reach nobody but their party
     expect(w.game.viewFor('lena').me!.politics!.sabotage).toMatchObject({ order: { kind: 'powerCut', tile: w.ossaPlot }, canOrder: true, owed: POLITICS.sabotage.orders.powerCut.cost });
     expect(w.game.viewFor('lena').me!.politics!.sabotage!.mine.map((o) => [o.id, o.public, o.outcome, o.culprit])).toEqual([[id, false, 'pending', 'lena']]);
     expect(money(w.game, 'lena'), 'no crew charged in planning').toBe(before);
+    // A pending order's plot loses its MULE: building any view still must not throw.
+    w.state.tiles[w.ossaPlot]!.outfit = null;
+    for (const viewer of VIEWERS) expect(() => wire(w.game, viewer), String(viewer)).not.toThrow();
+    w.state.tiles[w.ossaPlot]!.outfit = 'food';
 
     // Production resolves it; the crew is still owed, not paid, until upkeep.
     until(w, 'production');
@@ -208,8 +219,11 @@ describe('S4-B-AC-2 (server): an unseen cut names nobody but its orderer', () =>
       expect(view.news, String(viewer)).toContain("Sabotage: someone cut the power to Ossa's Food plot.");
       expect(view.news.join(' '), String(viewer)).not.toMatch(/Caught|tried to cut|Lena (cut|was)/);
       const text = JSON.stringify(view);
+      // The news line goes to every phone: it names the victim's seat and never the orderer's.
+      expect(view.newsLines!.find((l) => l.text.startsWith('Sabotage: someone'))!.who, String(viewer)).toEqual(['ossa']);
       if (viewer !== 'lena') {
         expect(text, `${viewer}: no culprit anywhere`).not.toContain('"culprit":"lena"');
+        expect(where(view, 'lena'), `${viewer}: Lena only where a seat is listed`).toEqual(SEAT_LISTS);
         expect(view.politics!.sabotage!.incidents[0], String(viewer)).toMatchObject({ id, victim: 'ossa', worked: true, culprit: null, how: null });
       }
     }
@@ -272,10 +286,14 @@ describe('S4-B-AC-4: an investigation is public at once, and once only', () => {
   it('S4-B-AC-4: a cold trail shows on every screen at once and names nobody; a second investigation that month is refused', () => {
     const { w, id } = unsolved(0);
     const rep = reputation(w.game, null, 'lena');
-    w.game.handle('brix', { type: 'investigate', order: id });
+    // The MULE comes off Ossa's plot (a theft, a sale, a swap) before the Sheriff looks: no line or view may throw.
+    w.state.tiles[w.ossaPlot]!.outfit = null;
+    expect(() => w.game.handle('brix', { type: 'investigate', order: id })).not.toThrow();
+    expect(() => w.game.handle('lena', { type: 'ready' }), 'the next intent still lands').not.toThrow();
+    expect(w.game.viewFor(null).players.find((p) => p.id === 'lena')!.ready).toBe(true);
     for (const viewer of VIEWERS) {
       const view = w.game.viewFor(viewer);
-      expect(view.politics!.sabotage!.incidents, String(viewer)).toMatchObject([{ id, culprit: null, how: null, investigated: true }]);
+      expect(view.politics!.sabotage!.incidents, String(viewer)).toMatchObject([{ id, good: 'food', culprit: null, how: null, investigated: true }]);
       expect(view.news[0], String(viewer)).toBe("The trail went cold on the power cut on Ossa's Food plot.");
       expect(reputation(w.game, viewer, 'lena'), String(viewer)).toBe(rep);
       if (viewer !== 'lena') expect(JSON.stringify(view), String(viewer)).not.toContain('"culprit":"lena"');
@@ -356,20 +374,54 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
     expect(w.notices.find((n) => n.kind === 'fine')).not.toHaveProperty('parties');
   });
 
-  it('S4-T-AC-8: the notices of a month: a done order is public with culprit null, a caught one names her, a failed one is private to its orderer; none is made for an order placed or a guard posted', () => {
+  it('S4-T-AC-8: the notices of a month: a done order is public with culprit null, a failed one is private to its orderer, a void one is private and says nothing; none is made for an order placed, withdrawn or a guard posted', () => {
     const w = world();
     force('powerCut', true, false);
     force('rumour', false, false);
-    w.game.handle('lena', cut(w.ossaPlot));
+    w.game.handle('lena', cut(w.brixPlot));
+    // Ossa places an order and takes it back in planning: nobody's business.
+    w.game.handle('ossa', cut(w.brixPlot));
+    w.game.handle('ossa', { type: 'sabotage', target: null });
     w.game.handle('ossa', { type: 'sabotage', target: { kind: 'rumour', good: 'food', dir: 'down' } });
-    w.game.handle('brix', { type: 'guard', tiles: [w.brixPlot] });
-    expect(w.notices.filter((n) => ['sabotage', 'investigation', 'fine'].includes(n.kind)), 'nothing yet').toEqual([]);
+    w.game.handle('brix', cut(w.ossaPlot));
+    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot] });
+    expect(w.notices.filter((n) => ['sabotage', 'investigation', 'fine'].includes(n.kind)), 'nothing yet, not even a withdrawal').toEqual([]);
+    // Ossa's plot loses its MULE before production: Brix's cut on it is void.
+    w.state.tiles[w.ossaPlot]!.outfit = null;
     until(w, 'production');
+    expect(orders(w), 'the void order is gone').toHaveLength(2);
     const [lena, ossa] = orders(w);
     const sab = w.notices.filter((n) => n.kind === 'sabotage');
-    expect(sab).toContainEqual({ kind: 'sabotage', order: lena!.id, target: 'powerCut', victim: 'ossa', outcome: 'done', culprit: null, month: 1, phase: 'production' });
+    expect(sab).toHaveLength(3);
+    expect(sab).toContainEqual({ kind: 'sabotage', order: lena!.id, target: 'powerCut', victim: 'brix', outcome: 'done', culprit: null, month: 1, phase: 'production' });
     expect(sab).toContainEqual({ kind: 'sabotage', order: ossa!.id, target: 'rumour', victim: null, outcome: 'failed', culprit: 'ossa', parties: ['ossa'], month: 1, phase: 'production' });
-    expect(sab).toHaveLength(2);
+    const voided = sab.find((n) => n.kind === 'sabotage' && n.outcome === 'void')!;
+    expect(voided).toMatchObject({ target: 'powerCut', victim: null, culprit: 'brix', parties: ['brix'] });
+    for (const viewer of VIEWERS) expect(wire(w.game, viewer), String(viewer)).not.toContain((voided as { order: string }).order);
+    for (const viewer of VIEWERS) expect(w.game.viewFor(viewer).news.join(' '), String(viewer)).not.toMatch(/Ossa's .* plot\.$|void/);
+  });
+
+  it('S4-T-AC-8: the news is a ring of three with the phase headline first: three caught cases never push out the harvest line, and three fines at the last upkeep never push out the game-over line', () => {
+    const w = world(1);
+    force('powerCut', true, true);
+    force('rumour', true, true);
+    w.game.handle('lena', cut(w.ossaPlot));
+    w.game.handle('brix', { type: 'sabotage', target: { kind: 'rumour', good: 'food', dir: 'up' } });
+    w.game.handle('ossa', cut(w.brixPlot));
+    until(w, 'production');
+    for (const viewer of VIEWERS) {
+      const news = w.game.viewFor(viewer).news;
+      expect(news, String(viewer)).toHaveLength(3);
+      expect(news[0], String(viewer)).toMatch(/^Harvest is in/);
+      expect(news.slice(1).every((line) => line.startsWith('Caught!')), String(viewer)).toBe(true);
+    }
+    until(w, 'gameOver');
+    expect(w.state.politics!.sabotage.filter((o) => o.fine)).toHaveLength(3);
+    for (const viewer of VIEWERS) {
+      const news = w.game.viewFor(viewer).news;
+      expect(news[0], String(viewer)).toMatch(/^Game over\./);
+      expect(news.slice(1).every((line) => /was fined \d+ for sabotage/.test(line)), String(viewer)).toBe(true);
+    }
   });
 });
 
