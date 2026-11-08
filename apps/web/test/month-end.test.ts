@@ -485,7 +485,7 @@ describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep t
   });
 });
 
-describe('needs C6: the month-end line says how much the colonists got', () => {
+describe('needs C6: the month-end line says how much the colonists got, red past the tolerance', () => {
   /** A month end whose colonists, 400 before the meal and 380 after it, got `food` and `water` of their 20 each. */
   const meal = (food: number, water: number) =>
     view({ colonists: 380, colonistsFed: food === 20 && water === 20, colonistMeal: { colonists: 400, food: { took: food, need: 20 }, water: { took: water, need: 20 } } });
@@ -494,10 +494,15 @@ describe('needs C6: the month-end line says how much the colonists got', () => {
     const short = meal(19, 20);
     for (const html of [onTv(short, TvMonthEnd), onPhone(short, Results, 0)]) {
       expect(said(html, 'colonists')).toBe('The store fed the colony’s 400 colonists 19 of 20 Food and all their Water');
-      expect(element(html, 'colonists'), 'short, the line is red').toContain('text-alert');
+      expect(element(html, 'colonists'), 'a 5% miss is within the tolerance: the line is not red').not.toContain('text-alert');
     }
-    expect(said(onTv(meal(20, 12), TvMonthEnd), 'colonists')).toBe('The store fed the colony’s 400 colonists all their Food and 12 of 20 Water');
-    expect(said(onTv(meal(7, 0), TvMonthEnd), 'colonists')).toBe('The store fed the colony’s 400 colonists 7 of 20 Food and 0 of 20 Water');
+    const thirsty = onTv(meal(20, 12), TvMonthEnd);
+    expect(said(thirsty, 'colonists')).toBe('The store fed the colony’s 400 colonists all their Food and 12 of 20 Water');
+    expect(element(thirsty, 'colonists'), '40% short of Water, past the tolerance: red').toContain('text-alert');
+    expect(element(onTv(meal(18, 20), TvMonthEnd), 'colonists'), '10% short, at the tolerance: not red').not.toContain('text-alert');
+    const starving = onTv(meal(7, 0), TvMonthEnd);
+    expect(said(starving, 'colonists')).toBe('The store fed the colony’s 400 colonists 7 of 20 Food and 0 of 20 Water');
+    expect(element(starving, 'colonists')).toContain('text-alert');
     // Negative case: nothing missing, the plain line, not red.
     const fed = onTv(meal(20, 20), TvMonthEnd);
     expect(said(fed, 'colonists')).toBe('The store fed the colony’s 400 colonists');
