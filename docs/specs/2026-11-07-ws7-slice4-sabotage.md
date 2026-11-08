@@ -432,7 +432,7 @@ tomorrow     MUST filter, per the frozen HC-4 rule: keep the seat's own orders w
              order only when its effect or its culprit is public (outcome 'done' or 'caught', or
              culpritPublic), with `by` set to null unless culpritPublic, and `cost` 0; drop every other
              order (pending, or failed unseen). Keep politics.guards only for the sitting Sheriff (else []).
-             Keep politics.rumoured (public: the posted prices before the auction's shift).
+             Keep politics.rumoured (public: the goods rumoured), without the price before the shift (AM-9).
 logic        → §2 S4-RULE-12
 seam         observe.ts (WS1 named edit), beside the ballot hiding
 mechanism    in_place
@@ -1066,7 +1066,7 @@ Security after that. It returns 0 in RC.
 export interface IncidentView {
   id: string; month: number; kind: SabotageTarget['kind'];
   victim: string | null; at: { x: number; y: number } | null;
-  good: Good | null;                      // null only for a pending cut on a plot with no MULE (AM-7)
+  good: Good | null;                      // null only for a pending or void cut on a plot with no MULE (AM-7, AM-9)
   dir?: 'up' | 'down';
   worked: boolean;
   culprit: string | null;                 // only when culpritPublic (or on the orderer's own list)
@@ -1086,7 +1086,7 @@ sabotage?: {
   order: SabotageTarget | null;            // this month's pending order
   canOrder: true | 'off' | 'notPlanning';
   owed: number;                            // crew cost due at this month's upkeep
-  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];  // culprit = them
+  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] | 'void' })[];  // culprit = them; 'void' (AM-9)
 } | null;
 sheriff?: {                                 // only on the sitting Sheriff's view
   canAct: true | 'off' | 'notPlanning' | 'votesOpen';
