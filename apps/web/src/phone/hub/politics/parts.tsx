@@ -211,15 +211,18 @@ export function shellOf(el: Element | null): Element | null {
   return el?.closest('[data-testid="game-shell"]') ?? null;
 }
 
+/** The first control in a dialog that can take the focus. */
+export const FIRST_CONTROL = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]';
+
 /** The open dialogs, the newest last: Escape closes only the one on top. */
 const dialogs: object[] = [];
 
 /**
- * A dialog's keyboard, as the lobby's dialogs keep it: Escape closes it when it is on top; on open its button marked
- * `data-autofocus` takes the focus, and on close the focus goes back to the element that had it. Put the returned ref
- * on the dialog's box.
+ * A dialog's keyboard, as the lobby's dialogs keep it: Escape closes it when it is on top; on open the element `first`
+ * finds takes the focus (by default its button marked `data-autofocus`), and on close the focus goes back to the element
+ * that had it. Put the returned ref on the dialog's box.
  */
-export function useDialog(onClose: () => void): RefObject<HTMLDivElement> {
+export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefObject<HTMLDivElement> {
   const box = useRef<HTMLDivElement>(null);
   const [self] = useState(() => ({}));
   // Both handlers see one Escape before either dialog unmounts, so the one under the top stays.
@@ -227,12 +230,12 @@ export function useDialog(onClose: () => void): RefObject<HTMLDivElement> {
   useEffect(() => {
     dialogs.push(self);
     const opener = document.activeElement as HTMLElement | null;
-    box.current?.querySelector?.<HTMLElement>('[data-autofocus]')?.focus?.();
+    box.current?.querySelector?.<HTMLElement>(first)?.focus?.();
     return () => {
       dialogs.splice(dialogs.indexOf(self), 1);
       opener?.focus?.();
     };
-  }, [self]);
+  }, [self, first]);
   return box;
 }
 

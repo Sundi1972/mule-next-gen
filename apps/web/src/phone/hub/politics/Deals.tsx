@@ -8,7 +8,7 @@ import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
 import { SeatWords } from '../../../components/SeatWords';
 import { bindsWords, lawUp, monthsWords, nameOf, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
-import { CardWho, shellOf, useDialog, Who } from './parts';
+import { CardWho, FIRST_CONTROL, shellOf, useDialog, Who } from './parts';
 
 /**
  * Deal cards on the phone (S3-C17, S3-C18): the composer over the rail, a card offered to me (in its whisper thread
@@ -311,7 +311,7 @@ export function DealComposerSheet({ to, kind, onClose, anchor }: { to: string; k
  * buttons sit in its footer, under the thumb.
  */
 function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close', action, note, children }: { label: string; title: ReactNode; testid: string; anchor: Element | null; onClose: () => void; closeWord?: string; action?: ReactNode; note?: ReactNode; children: ReactNode }) {
-  const box = useDialog(onClose);
+  const box = useDialog(onClose, FIRST_CONTROL);
   const sheet = (
     <div ref={box} className="absolute inset-y-0 right-0 z-40 flex w-(--rail) flex-col border-l-2 border-holo bg-panel shadow-glow" role="dialog" aria-modal aria-label={label} data-testid={testid}>
       <header className="flex min-h-10 items-center gap-1.5 border-b border-holo-faint px-3 py-1.5">{title}</header>
@@ -320,7 +320,7 @@ function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close',
       </div>
       <footer className="flex flex-col gap-1 border-t border-holo-faint px-3 py-2">
         <span className={cx('grid gap-1.5', action ? 'grid-cols-[auto_1fr]' : 'grid-cols-1')}>
-          <Button size="md" variant={action ? 'ghost' : 'outline'} className="px-3" onClick={onClose} data-autofocus data-testid={`${testid}-close`}>
+          <Button size="md" variant={action ? 'ghost' : 'outline'} className="px-3" onClick={onClose} data-testid={`${testid}-close`}>
             {closeWord}
           </Button>
           {action}

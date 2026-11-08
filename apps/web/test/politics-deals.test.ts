@@ -475,7 +475,7 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
 
     tapFocused('agenda-deals');
     expect(findTestid('incoming-sheet')).toBeDefined();
-    expect(focused(), 'the incoming sheet takes the focus, on its first control').toBe('sheet-card-deal-in9-from-rep');
+    expect(focused(), 'the incoming sheet takes the focus, on its first control').toBe('sheet-card-deal-in9-from-open');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
     expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
