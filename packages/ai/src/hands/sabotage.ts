@@ -13,7 +13,7 @@ export function handStream(mind: Mind, month: number, handSalt: number): Rng {
   return createRng((Math.imul(mind.salt ^ handSalt, 1_000_003) ^ Math.imul(month, 7_919)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per seat, hand and month
 }
 
-const ORDER_SALT = 0x5ab07a6e; // literal-ok: this hand's salt, a stream label and not a balance number
+const ORDER_SALT = 0x5ab0c1e5; // literal-ok: this hand (not POLITICS.sabotage.streamSalt, the order-id stream's)'s salt, a stream label and not a balance number
 const WEIGHT_OF_ONE = 1; // literal-ok: no grudge weighs a victim as 1, a definition
 
 /**
