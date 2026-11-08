@@ -2,8 +2,9 @@ import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../mock.css';
 import '../../review-loop/select-client';
-import { beatOf, BEATS } from '../steps';
-import { TV_NOTE, TvScreenView } from './TvFor';
+import { BEATS } from '../steps';
+import { TV_NOTE, TvScreenView, type TvFocus } from './TvFor';
+import { SHERIFF_BEATS } from '../sheriff-path';
 import { tvScreen, type Seats } from './world';
 
 /*
@@ -16,6 +17,8 @@ import { tvScreen, type Seats } from './world';
  */
 
 const Q = new URLSearchParams(location.search);
+/** The planning path's beats and the Sheriff month's (?path=sheriff on the guided page). */
+const ALL = [...BEATS, ...SHERIFF_BEATS];
 
 /** Every TvBody / FitHeight scale on the page, as data-fit says (the real TvFit's own readout), and a moment if one shows. */
 function FitReadout() {
@@ -36,10 +39,10 @@ function FitReadout() {
 }
 
 function Beat({ id }: { id: string }) {
-  const beat = beatOf(id);
+  const beat = ALL.find((b) => b.id === id) ?? BEATS[0]!;
   const seats = (Number(Q.get('seats')) || 4) as Seats;
   const call = Q.get('call') === '1';
-  const focus = call ? 'overrule-called' : beat.tv;
+  const focus: TvFocus = call ? 'overrule-called' : ((beat.tvWanted ?? beat.tv) as TvFocus);
   const screen = useMemo(() => {
     const w = beat.world();
     if (!call) return tvScreen(w, { seats });
@@ -48,7 +51,7 @@ function Beat({ id }: { id: string }) {
     const at = game.players.filter((p) => p.id !== game.politics?.governor);
     return tvScreen({ ...w, call: (at.find((p) => p.id === beat.seat) ?? at[0])?.id ?? beat.seat }, { seats });
   }, [beat, seats, call]);
-  const opensOn = focus === 'deal-broken' ? 'break' : focus === 'overrule-called' ? 'call' : null;
+  const opensOn = focus === 'deal-broken' ? 'break' : focus === 'overrule-called' ? 'call' : focus === 'investigation' ? 'investigation' : null;
   return (
     <div className="flex flex-col gap-2 bg-table text-ink">
       <div className="flex items-center gap-4 px-2">
@@ -71,13 +74,13 @@ function Solo() {
   if (beat) return <Beat id={beat} />;
   return (
     <ul className="flex flex-col gap-2 p-6 text-ink" data-testid="solo-index">
-      {BEATS.map((b) => (
+      {ALL.map((b) => (
         <li key={b.id}>
           <a className="text-holo underline" href={`?beat=${b.id}`} data-testid={`solo-beat-${b.id}`}>
             beat {b.id}
           </a>{' '}
           <span className="text-ink-2">
-            {b.tv}: {TV_NOTE[b.tv]}
+            {b.tvWanted ?? b.tv}: {TV_NOTE[(b.tvWanted ?? b.tv) as TvFocus]}
           </span>
         </li>
       ))}
