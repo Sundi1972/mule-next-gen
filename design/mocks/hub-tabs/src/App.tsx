@@ -45,6 +45,7 @@ const DECISIONS: [string, string][] = [
   ['D14', 'The table chat (C20) keeps its place in the rail on every tab: the seat row and the ticker under the rail’s content, the bubble in the head. Talk is where the threads and whispers are.'],
   ['D15', 'The cast: Brix is the human Governor (runs again in month 8), Kai the Sheriff and the caller, Ossa the AI seat and Land Baron, Lena the phone with no office. One table gives every state.'],
   ['D16', 'The colony picture is WS10’s rendered grounds, mounted exactly as the phone colony desk does: <Grounds colony={view.colony} size="phone" light={view.phase === \'upkeep\' ? \'dusk\' : \'day\'} /> (apps/web/src/components/Grounds.tsx; PM ruling 8 Nov, per WS10). The real buildings at their stage on their plate, lit by wealth; screens never draw buildings. It leads the Colony tab in the desk’s 212 px box, letterboxed on wider stages; Overview shows no colony picture (its map is the land, not the grounds).'],
+  ['D17', '“This month” under Overview’s map is a fixed box, two lines of two, so the map is the same size whatever the needs or the month say (PM height check, 8 Nov; scripts/measure-needs.mjs). The figures never moved it (the Short row is one truncated line, 1 or 120); the row count did, through the box’s height: at 844 (A) 506 × 304 with nothing waiting, 312 × 187 with five rows. Now: nothing waiting is a quiet line; past four, three rows and “+N more” naming what waits behind it, which turns the box’s page.'],
 ];
 
 /**

@@ -31,6 +31,36 @@ const month = (over: Partial<World> = {}) => () => baseWorld(over);
 /** Two offers wait for Lena: Brix's vote card, and Ossa · AI's pact. */
 const offers = () => baseWorld({ cards: [OFFER_FROM_OSSA, OFFER_FROM_BRIX] });
 
+/**
+ * The Overview height check (PM, 8 Nov): Lena’s needs at one-, two- and three-digit figures, met and short, on a busy
+ * table (two offers), a quiet one (no offers), a bare one (no law, no election: the Short row alone) and a crowded one (offers
+ * and a called overrule: five rows with the Short row). Measured by
+ * scripts/measure-needs.mjs: the map must not move.
+ */
+const NEEDS_FIGURES: [string, string, World['needs']][] = [
+  ['met-1', 'Water 3 of 3', { need: { food: 3, energy: 3, water: 3 }, have: { food: 3, energy: 3, water: 3 } }],
+  ['met-2', 'Water 20 of 20', { need: { food: 20, energy: 20, water: 20 }, have: { food: 20, energy: 20, water: 20 } }],
+  ['met-3', 'Water 120 of 120', { need: { food: 120, energy: 120, water: 120 }, have: { food: 120, energy: 120, water: 120 } }],
+  ['short-1', 'Short 1 Energy', { need: { food: 3, energy: 4, water: 3 }, have: { food: 3, energy: 3, water: 3 } }],
+  ['short-2', 'Short 20 Water', { need: { food: 20, energy: 20, water: 20 }, have: { food: 20, energy: 20, water: 0 } }],
+  ['short-3', 'Short 120 of all three', { need: { food: 120, energy: 120, water: 120 }, have: { food: 0, energy: 0, water: 0 } }],
+];
+const NEEDS_TABLES = {
+  busy: { words: 'two offers wait', over: { cards: [OFFER_FROM_OSSA, OFFER_FROM_BRIX] } },
+  quiet: { words: 'no offers', over: {} },
+  bare: { words: 'no offers, no law pending, no election to come', over: { bare: true } },
+  crowded: { words: 'two offers and a called overrule', over: { cards: [OFFER_FROM_OSSA, OFFER_FROM_BRIX], call: 'kai' } },
+} satisfies Record<string, { words: string; over: Partial<World> }>;
+const NEEDS_STATES: State[] = (Object.keys(NEEDS_TABLES) as (keyof typeof NEEDS_TABLES)[]).flatMap((table) =>
+  NEEDS_FIGURES.map(([id, label, needs]): State => ({
+    id: `${table}-${id}`,
+    label: `${label} · ${NEEDS_TABLES[table].words}`,
+    seat: 'lena',
+    world: () => baseWorld({ ...NEEDS_TABLES[table].over, needs }),
+    note: `Lena’s needs: ${label}; ${NEEDS_TABLES[table].words}.`,
+  })),
+);
+
 export const SCREENS: Screen[] = [
   {
     id: 'shell',
@@ -104,6 +134,12 @@ export const SCREENS: Screen[] = [
     title: 'The month end (outside the tabs, as every other phase)',
     graft: 'phone/Results.tsx, components/MonthEnd.tsx (the deals mock’s BrokenCards at “phone”, the budget mock’s FundLines)',
     states: [{ id: 'phone', label: 'The phone: the league, the broken list, what the fund paid out', seat: 'lena', world: monthEnd, note: 'Kai broke a pact with Lena; Ossa · AI broke a promise to Kai. Under them, the full paid-out line.' }],
+  },
+  {
+    id: 'needs',
+    title: 'The Overview height check: the map whatever the needs say',
+    graft: 'tabs/Overview.tsx (AgendaRows), today.tsx (NEEDS_AGENDA)',
+    states: NEEDS_STATES,
   },
   {
     id: 'help',

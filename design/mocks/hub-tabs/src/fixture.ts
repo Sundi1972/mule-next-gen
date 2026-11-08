@@ -126,6 +126,10 @@ export interface World {
   overruleDone: string[];
   /** Food, Energy, Water this seat needs this month: Lena is short one Energy. */
   short: boolean;
+  /** Lena’s needs and holdings set outright (the Overview height check); when set, it wins over `short`. */
+  needs?: { need: Partial<MyView['stock']>; have: Partial<MyView['stock']> };
+  /** No law pending and no election to come (the Overview height check's bare table): This month loses both rows. */
+  bare?: boolean;
   /** Who pressed Continue in the overrule's reveal. */
   continued: string[];
   /** Buildings the Governor commissioned this month (the Commission intent), beyond the fixture's Observatory. */
@@ -481,14 +485,14 @@ function gameOf(w: World, me: MyView | null): MuleView {
   const votesOpen = w.stage === 'election' || w.stage === 'lawBallot';
   const monthEnd = w.stage === 'monthEnd';
   const politics: PoliticsView = {
-    governor: GOVERNOR, sheriff: SHERIFF, term: [4, 7], next: 8, baron: BARON,
+    governor: GOVERNOR, sheriff: SHERIFF, term: [4, 7], next: w.bare ? null : 8, baron: BARON,
     tax: { percent: w.tax, start: TAX_START, low: 0, high: 10 }, fund: monthEnd ? upkeepOf(w).balance : FUND, pay: { governor: 50, sheriff: 30 },
     weights: players.map((p) => ({ id: p.id, votes: VOTES[p.id] ?? 1, parts: { base: 1, land: 0, reputation: 0, baron: p.id === BARON ? 1 : 0, taxes: (VOTES[p.id] ?? 1) - 1 - (p.id === BARON ? 1 : 0) } })),
     candidates: w.stage === 'election' ? {} : { governor: ['brix', 'ossa'] },
     promises: { brix: { kind: 'cap', percent: 10 }, ossa: { kind: 'cap', percent: 5 } },
     promise: { kind: 'cap', percent: 10 }, promiseFrom: TAX_START,
     election: election(w),
-    proposal: w.stage === 'planning' && !votesOpen ? { by: GOVERNOR, month: w.month, proposal: LAND_TAX, impact: IMPACT } : null,
+    proposal: w.stage === 'planning' && !votesOpen && !w.bare ? { by: GOVERNOR, month: w.month, proposal: LAND_TAX, impact: IMPACT } : null,
     council: council(w),
     laws: { exportTax: { setting: 10, since: 3 } } as PoliticsView['laws'],
     retry: {},
@@ -521,8 +525,8 @@ export function viewFor(seat: Seat, w: World): SeatView {
   const mineBallot = w.overruleBallots[id];
   const me = {
     id,
-    monthNeeds: w.short && id === 'lena' ? { ...NONE, food: 4, energy: 4, water: 2 } : NONE,
-    stock: { ...NONE, food: 4, energy: 3, water: 2 },
+    monthNeeds: w.needs && id === 'lena' ? { ...NONE, ...w.needs.need } : w.short && id === 'lena' ? { ...NONE, food: 4, energy: 4, water: 2 } : NONE,
+    stock: w.needs && id === 'lena' ? { ...NONE, ...w.needs.have } : { ...NONE, food: 4, energy: 3, water: 2 },
     droneOrder: [], analysed: [], droneFound: [],
     politics: {
       running: id === 'brix' ? 'governor' : null, ballot: w.ballots[id] ?? {}, canRun: { governor: id === 'brix' ? 'running' : true }, paid: 320,
