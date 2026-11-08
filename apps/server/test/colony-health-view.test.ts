@@ -90,3 +90,33 @@ describe('needs C19: the view carries colony health and the run of Medicine-shor
     });
   });
 });
+
+describe("the month end's news line (WS3's named edit)", () => {
+  /** The month end's first news line, as the server writes it after the upkeep. */
+  const upkeepNews = (game: MuleGame) => {
+    (game as unknown as { reportUpkeep(): void }).reportUpkeep();
+    return game.viewFor(null).news[0];
+  };
+
+  it('a Medicine-only shortage with the colony fed says the store ran out of Medicine, never that colonists are leaving', () => {
+    withHealth(() => {
+      const { game, state } = table();
+      for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
+      Object.assign(state.store.stock, { food: 500, water: 500, medicine: 0 });
+      advancePhase(state);
+      const report = state.history.at(-1)!;
+      expect(report.shortages, 'the premise: Medicine alone ran out').toEqual(['medicine']);
+      expect(report.colonistsHungry, 'the premise: the colony is fed').toBe(false);
+      expect(upkeepNews(game)).toBe('The store ran out of medicine.');
+    });
+  });
+
+  it('a Food shortage that leaves the colonists hungry still says they are leaving', () => {
+    const { game, state } = table();
+    for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
+    Object.assign(state.store.stock, { food: 0, water: 500 });
+    advancePhase(state);
+    expect(state.history.at(-1)!.colonistsHungry).toBe(true);
+    expect(upkeepNews(game)).toBe('The store ran out of food! Colonists are leaving.');
+  });
+});
