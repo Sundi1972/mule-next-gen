@@ -13,7 +13,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
+import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, PHONE_SMALL, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
@@ -378,6 +378,29 @@ main().then(
 );
 
 const PACT_MONTHS = 3;
+/** The whisper's input at its narrowest still takes a sentence; + Deal, on the whisper line, is a thumb's target. */
+const WHISPER_INPUT_MIN = 120;
+const TAP_MIN = 32;
+
+/**
+ * S3-B-AC-1, on the real page in planning: at the small phone and the base one, + Deal sits on the whisper line beside
+ * the chip, at least TAP_MIN square, and leaves the whisper's input at least WHISPER_INPUT_MIN wide.
+ */
+async function whisperFits(page: Page): Promise<void> {
+  const base = page.viewportSize()!;
+  for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
+    await page.setViewportSize(size);
+    const input = (await page.getByTestId('chat-input').boundingBox())!;
+    const deal = (await page.getByTestId('add-deal').boundingBox())!;
+    const onLine = await page.getByTestId('whisper-line').getByTestId('add-deal').count();
+    const at = `${size.width}×${size.height}`;
+    console.log(`  whisper at ${at}: input ${input.width.toFixed(1)} px, + Deal ${deal.width.toFixed(1)}×${deal.height.toFixed(1)}`);
+    check(onLine === 1, `S3-B-AC-1: at ${at} + Deal sits on the whisper line`);
+    check(input.width >= WHISPER_INPUT_MIN, `S3-B-AC-1: at ${at} the whisper input is at least ${WHISPER_INPUT_MIN} px wide, got ${input.width.toFixed(1)}`);
+    check(deal.width >= TAP_MIN && deal.height >= TAP_MIN, `S3-B-AC-1: at ${at} + Deal is at least ${TAP_MIN}×${TAP_MIN}, got ${deal.width.toFixed(1)}×${deal.height.toFixed(1)}`);
+  }
+  await page.setViewportSize(base);
+}
 
 /**
  * S3-B-AC-1 (UBER-AC-3 leg A) on two phones and the real server: `from` whispers `to` and offers a pact from the
@@ -394,6 +417,7 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
     await from.page.getByTestId(`chat-to-${toId}`).click({ timeout: PRESS_MS });
     await from.page.getByTestId('chat-input').fill(`A pact, ${PACT_MONTHS} months?`);
     await from.page.getByTestId('chat-send').click({ timeout: PRESS_MS });
+    await whisperFits(from.page);
     await from.page.getByTestId('add-deal').click({ timeout: PRESS_MS });
     // The lengths offered are the config's, and the pact sent runs the length tapped: maxMonths cuts `until`, not this.
     const lengths = await from.page.locator('[data-testid^=composer-a-months-]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-testid')!.split('-').pop())));
