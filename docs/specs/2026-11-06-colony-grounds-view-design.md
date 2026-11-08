@@ -262,6 +262,8 @@ RULE-8 · What smokes (C4; Task 2.2b)                                     shape:
                         (the mock's smoke A, light puffs; PM 8 Nov: B, a dark column, read as fire and is not built)
   2  anything else      no smoke (closed is dark and still; a site is bare)
 motion   each puff rises, widens, drifts with the wind and fades over its period; reduced motion → the plume shown still
+order    the plume is drawn just after its own building (col + row): a building or colonist nearer the camera covers it;
+         during the opener's lean-in it fades with its building (T-AC-12)
 examples Hospital damaged → one plume over the Hospital · all standing → none · reduced motion → the same plume, not moving
 ```
 
@@ -329,7 +331,7 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-14 (serves C4, AM-8) | a walker is drawn from the `walker` sheet: the row is its route leg's heading, the column advances with the cycle (frame 0 at reduced motion), the suit variant is its owner's colour; behind a building its ghost is the outline sheet faded on the image itself; with no `walker` entry, today's SVG figure | C4 |
 | T-AC-12 (serves C5, B-AC-6) | during the opener's lean-in, a building nearer the camera than a place the caption names and across it on screen fades to 1 − ⅔ × lean (a third at full lean); the named place, a level or off-to-the-side building, and a view that leans on nothing do not fade (PM, 8 Nov, from the visibility spike: a new site is up to ⅔ covered) | C5 |
 
-| T-AC-15 (serves C4, PM 8 Nov) | RULE-7's and RULE-8's examples at the rendered SVG: a clean colony (environment < 30) draws no haze; the haze's opacity rises with the gauge; smoke over a damaged place only; at reduced motion the plume stands still | C4 |
+| T-AC-15 (serves C4, PM 8 Nov) | RULE-7's and RULE-8's examples at the rendered SVG: a clean colony (environment < 30) draws no haze; the haze's opacity rises with the gauge; smoke over a damaged place only, drawn just after its building and under nearer ones; at reduced motion the plume stands still | C4 |
 
 Invariant: the grounds never write state (HC-1).
 
