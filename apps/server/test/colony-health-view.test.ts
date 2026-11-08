@@ -142,4 +142,14 @@ describe("the month end's news line (WS3's named edit)", () => {
     expect(state.colonists, 'the premise: Collapse air shrank the colony').toBeLessThan(400);
     expect(upkeepNews(game)).toBe('Colonists are leaving.');
   });
+
+  it('FM-news-leaving: a colony that held its size is not leaving, even short of Food', () => {
+    const { game, state } = table();
+    for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
+    state.colonists = 0;
+    Object.assign(state.store.stock, { food: 0, water: 500, energy: 500, medicine: 500 });
+    advancePhase(state);
+    expect(state.colonists, 'the premise: an empty colony stays empty').toBe(0);
+    expect(upkeepNews(game)).not.toMatch(/leaving/);
+  });
 });
