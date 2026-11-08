@@ -313,8 +313,9 @@ function inHexagon(x: number, y: number, badge: Rect): boolean {
 /** Whether two boxes overlap by more than SLACK_PX. */
 const covers = (a: Rect, b: Rect) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
 
-/** The supported phone (the iPhone SE, 568×320) whose planning plots fall under 24 px, the size the small-plot rules are for. */
-const SMALL_PLOTS = { width: 568, height: 320 } as const;
+
+/** The iPhone SE in landscape, the smallest phone the game supports; its planning plots fall under 24 px, the size the small-plot rules are for. */
+const PHONE_SE = { width: 568, height: 320 };
 
 /**
  * T-AC-3 and B-AC-9 (WS4; PM ruling X on #562), on the hub's Look map at the phone's 844×390, where a 3-seat plot is
@@ -322,7 +323,7 @@ const SMALL_PLOTS = { width: 568, height: 320 } as const;
  * the third dot's centre lies outside the plot's own badge and its box clears the badge's; (b) on an owned plot with a
  * gem, the owner's tab and the gem are clear of the dots; (c) a plot Look-selected under a plot showing its dots draws no
  * pin, and its ring's painted band keeps off those dots, and its glow at half strength stays clear of them, at 844×390
- * and at SMALL_PLOTS, where planning's plots fall under 24 px. There (WS6 ruling, 7 Nov): (d) every analysed plot's dots chip
+ * and at PHONE_SE, where planning's plots fall under 24 px. There (WS6 ruling, 7 Nov): (d) every analysed plot's dots chip
  * lies inside its plot and (e) no two chips overlap, on the plots above and staged around the selection. Each "clear" is
  * within SLACK_PX, the glow's within 0. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and
  * undone inside the hold, before anything due runs.
@@ -472,13 +473,13 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
 
         const phone = await selectionUnderDots(map, x, y, id);
         const sign = await storeSignClearOfTheDots(map, besideStore, id);
-        await ctx.phone.setViewportSize(SMALL_PLOTS);
+        await ctx.phone.setViewportSize(PHONE_SE);
         let small: Awaited<ReturnType<typeof selectionUnderDots>>;
         let fit: Awaited<ReturnType<typeof dotsFitTheirPlots>>;
         let strip: Awaited<ReturnType<typeof marksClearOfTheChips>>;
         let flag: string;
         try {
-          const where = `${id}, ${SMALL_PLOTS.width}×${SMALL_PLOTS.height}`;
+          const where = `${id}, ${PHONE_SE.width}×${PHONE_SE.height}`;
           small = await selectionUnderDots(map, x, y, where);
           fit = await dotsFitTheirPlots(map, [...specials, owned, ...neighbours].map((t) => `${t.x}-${t.y}`), where);
           strip = await marksClearOfTheChips(map, where);
@@ -499,7 +500,7 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         const third = (sp: (typeof marks.specials)[number]) => `${sp.at} ${px(Math.max(sp.badge!.left - sp.third!.right, sp.badge!.top - sp.third!.bottom))}`;
         const gap = (over: number) => (over > 0 ? `${px(over)} into` : `${px(-over)} under`);
         const c = (r: typeof phone) => `on a ${px(r.plot)} plot no pin, the ring's band ${gap(r.bandOver)} the dots, the glow's half-strength edge ${gap(r.glowOver)}`;
-        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${SMALL_PLOTS.width}×${SMALL_PLOTS.height} ${c(small)}; at ${SMALL_PLOTS.width}×${SMALL_PLOTS.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}; (f) no mark of ${strip.marks} meets any of the ${fit.chips} chips, (g) the ${strip.strip} tabs, gems and badges in the small strip at least ${px(strip.smallest)}; (h) ${flag}; (i) at ${PHONE.viewport.width}×${PHONE.viewport.height} ${sign}, at ${SMALL_PLOTS.width}×${SMALL_PLOTS.height} no STORE sign`;
+        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${PHONE_SE.width}×${PHONE_SE.height} ${c(small)}; at ${PHONE_SE.width}×${PHONE_SE.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}; (f) no mark of ${strip.marks} meets any of the ${fit.chips} chips, (g) the ${strip.strip} tabs, gems and badges in the small strip at least ${px(strip.smallest)}; (h) ${flag}; (i) at ${PHONE.viewport.width}×${PHONE.viewport.height} ${sign}, at ${PHONE_SE.width}×${PHONE_SE.height} no STORE sign`;
       } finally {
         for (const step of undo.reverse()) step();
       }
@@ -508,9 +509,6 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
     room.broadcast();
   }
 }
-
-/** The iPhone SE in landscape, the smallest phone the game supports. */
-const PHONE_SE = { width: 568, height: 320 };
 
 /**
  * B-AC-9 (MG-2) at the land grant on the iPhone SE: its plots, about 24 px, are the smallest that draw the full dots
