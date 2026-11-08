@@ -72,6 +72,11 @@ FADE = {"centre": FC, "ru": (U1 - U0) * 0.47, "rv": FC[1] - V0}
 # where the earth shows through the lawn: the noise band the mix ramps over (ring.py's 0.47..0.6 read browner and
 # patchier on these larger grounds than look.html's mostly green lawn). COLONY_PLATE_DIRT="lo,hi" for calibration only
 DIRT = tuple(float(v) for v in os.environ.get("COLONY_PLATE_DIRT", "0.58,0.68").split(","))
+# the dusk grass's tint, dusk pass only: under the blue-hour sky the lawn read teal (rgb ~0.07 / 0.135 / 0.135) where
+# look.html's reads green (~0.10 / 0.13 / 0.10) at the same luminance (game shots, 8 Nov). More red, much less blue
+# (AgX compresses the shift): measured on plate 3 at 25 %, luminance +1 %, red/green 0.42 -> 0.82, blue/green
+# 1.07 -> 0.89. COLONY_DUSK_GRASS="r,g,b" for calibration runs only
+DUSK_GRASS = tuple(float(v) for v in os.environ.get("COLONY_DUSK_GRASS", "1.9,0.92,0.25").split(",")) + (1.0,)
 
 
 def ground_mat(fade):
@@ -104,6 +109,10 @@ def ground_mat(fade):
     peb = img_at(os.path.join(core.T, "clean_pebbles", "clean_pebbles_diff_1k.jpg"), 1.6)
     grass = mix(nt, nz(0.08, 0.4, 0.6), mix(nt, 1.0, g4, (0.72, 0.78, 0.55, 1), "MULTIPLY"), mix(nt, 1.0, g1, (0.95, 0.95, 0.85, 1), "MULTIPLY"))
     c = mix(nt, nz(0.12, *DIRT), grass, mix(nt, 1.0, peb, (0.62, 0.5, 0.38, 1), "MULTIPLY"))
+    dusk = node(nt, "ShaderNodeValue")
+    dusk.outputs[0].default_value = 0.0
+    core.DUSK.append((dusk.outputs[0], 1.0))  # light.apply: 1 in the dusk (and lit) pass, 0 in day and glow
+    c = mix(nt, dusk.outputs[0], c, mix(nt, 1.0, c, DUSK_GRASS, "MULTIPLY"))
     link(nt, c, b.inputs["Base Color"])
     b.inputs["Roughness"].default_value = 0.92
     if not fade:
