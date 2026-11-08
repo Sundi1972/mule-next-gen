@@ -163,6 +163,21 @@ export function Chat({ focus }: { focus?: ChatFocus }) {
         <p className="flex items-center gap-1.5 font-mono text-xs text-ink-3" data-testid="whisper-line">
           <span className="min-w-0 truncate">WHISPER · ONLY YOU AND {target.name.toUpperCase()}</span>
           {view.politics && <RepChip view={view} id={target.id} onOpen={() => setCard(true)} testid="whisper-rep" />}
+          {planning && (
+            <Button
+              size="md"
+              variant="outline"
+              type="button"
+              className="ml-auto h-9! min-w-9 shrink-0 px-2.5! text-xs!"
+              disabled={!!waiting}
+              title={waiting ?? undefined}
+              aria-label={`Offer ${target.name} a deal card`}
+              onClick={() => setComposing({ to: target.id })}
+              data-testid="add-deal"
+            >
+              + Deal
+            </Button>
+          )}
         </p>
       )}
       <ul className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto rounded-control border border-holo-faint bg-panel/50 p-2.5" data-testid="chat-lines">
@@ -198,21 +213,6 @@ export function Chat({ focus }: { focus?: ChatFocus }) {
           className="h-11 min-w-0 flex-1 rounded-control border border-holo-line bg-panel px-3 text-ink outline-none placeholder:text-ink-3 focus:border-holo"
           data-testid="chat-input"
         />
-        {target && planning && (
-          <Button
-            size="md"
-            variant="outline"
-            type="button"
-            className="shrink-0 px-2.5"
-            disabled={!!waiting}
-            title={waiting ?? undefined}
-            aria-label={`Offer ${target.name} a deal card`}
-            onClick={() => setComposing({ to: target.id })}
-            data-testid="add-deal"
-          >
-            + Deal
-          </Button>
-        )}
         <Button size="md" type="submit" className="shrink-0 px-3" disabled={!text.trim()} data-testid="chat-send">
           Send
         </Button>
