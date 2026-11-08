@@ -56,6 +56,17 @@ export interface ShowEventView {
   player?: string;
   /** The colony's objects it damaged (a riot), by ObjectKind (types.ts stays free of .tsx imports). */
   objects?: { id: 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport'; becomes: 'damaged' }[];
+  /**
+   * A sabotage order's effect (slice 4, the protocol's EventView.sabotage): the order's opaque id, its culprit only when
+   * public (else null: the show names nobody), whether it worked, and whether a guard stood on the plot.
+   */
+  sabotage?: { order: string; culprit: string | null; worked: boolean; guarded: boolean };
+  /**
+   * A market rumour's good and which way it moves the price (the approved mock's fixture shape). The protocol's EventView
+   * does not carry them yet: without them the whisper draws no good and no price tag.
+   */
+  good?: Good;
+  dir?: 'up' | 'down';
 }
 
 /** One change an event made off the map: whose (a player's id, 'store' or 'colony'), of what, by how much. */
@@ -74,6 +85,26 @@ export interface ShowPlayer {
   id: string;
   name: string;
   slot: Slot;
+}
+
+/**
+ * What a phone knows of sabotage beyond the public event (slice 4): the ids of its own orders (MyView.politics.sabotage
+ * .mine), and whether its player is the Sheriff. The phone's rail uses it for that player's private line after the show.
+ */
+export interface EventSabotageSeat {
+  mine: readonly string[];
+  sheriff: boolean;
+  /**
+   * What a caught order costs this player's reputation, as the engine's reveal takes it: the sabotage ban's setting in
+   * force (1 with no ban), and the players this player held a pact with this month (each pact breaks: pactBroken more).
+   * Absent when the phone's view cannot say: its line then gives no number, never a smaller one.
+   */
+  reputation?: {
+    ban: number;
+    pacts: readonly string[];
+    /** Of those, the pacts whose break the view cannot place on this catch rather than an earlier reveal this month: no number. */
+    unsure?: readonly string[];
+  };
 }
 
 /** 'tv' runs at the TV's pace; 'solo' is a phone with no TV in the room, its motion quicker inside the same length. */
