@@ -191,8 +191,11 @@ export function HelpSheet({ now, slots, seat, onClose, onOpenColony }: { now: No
   const { view } = usePhoneGame();
   useEscape(onClose);
   const sheet = useRef<HTMLDivElement>(null);
+  // Close takes the focus on open; on close it goes back to what had it, the "?".
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     sheet.current?.querySelector?.<HTMLElement>('[data-testid="help-close"]')?.focus?.();
+    return () => opener?.focus?.();
   }, []);
   return (
     <div ref={sheet} className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="help-title" data-testid="help-sheet">

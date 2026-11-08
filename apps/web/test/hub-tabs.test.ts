@@ -446,11 +446,11 @@ describe('the tabbed planning hub (SB-2)', () => {
       (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
     };
     try {
-      byTestid('help-open').focus();
+      (byTestid('help-open') as unknown as { focus(): void }).focus();
       tap('help-open');
       const sheet = byTestid('help-sheet');
       for (const part of ['roadmap', 'help-now', 'needs-strip']) byTestid(part, sheet);
-      byTestid('help-close').focus();
+      (byTestid('help-close') as unknown as { focus(): void }).focus();
       tap('help-close');
       expect(findTestid('help-sheet')).toBeUndefined();
       expect((document.activeElement as unknown as FakeElement | null)?.getAttribute('data-testid'), 'the focus is back on the "?"').toBe('help-open');
