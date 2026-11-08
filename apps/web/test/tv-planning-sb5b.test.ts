@@ -159,5 +159,21 @@ describe('SB-5b: a TV moment (moments.ts)', () => {
       show('call:5:tax:s1', 1000 + TV_MOMENT_MS);
       expect(seen).toEqual([false, true, true, false]);
     });
+
+    it('a call withdrawn and called again by the same player that month is not a moment twice (PM ruling 8 Nov)', () => {
+      root = createRoot(host as unknown as Element);
+      seen.length = 0;
+      show(null, 0);
+      show('call:4:tax:s1', 1000);
+      show(null, 2000);
+      // Called again inside the first call's time, and again after it: neither is a moment.
+      show('call:4:tax:s1', 3000);
+      show(null, 4000);
+      show('call:4:tax:s1', 20_000);
+      // Another player's call is a moment of its own.
+      show(null, 21_000);
+      show('call:4:tax:s2', 22_000);
+      expect(seen).toEqual([false, true, false, false, false, false, false, true]);
+    });
   });
 });
