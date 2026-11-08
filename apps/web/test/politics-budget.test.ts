@@ -23,12 +23,13 @@ vi.mock('../src/phone/hub/Hub', async (importOriginal) => ({
 let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let POLITICS_TABS: typeof import('../src/phone/hub/politics/slots').POLITICS_TABS;
+let OVERRULE_STAGE: typeof import('../src/phone/hub/politics/slots').OVERRULE_STAGE;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
-  ({ POLITICS_TABS } = await import('../src/phone/hub/politics/slots'));
+  ({ POLITICS_TABS, OVERRULE_STAGE } = await import('../src/phone/hub/politics/slots'));
   (document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement }).createElementNS ??= (_ns, tag) => document.createElement(tag);
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
   (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame ??= () => 0;
@@ -107,10 +108,10 @@ const client = { subscribe: () => () => {}, getState: () => ({ status: 'open', r
 let root: Root | null = null;
 let host: FakeElement;
 
-function mount(subId: string, game: MuleView): void {
+function mount(subId: string | ComponentType, game: MuleView): void {
   const self = game.players.find((p) => p.id === game.me!.id)!;
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: false, connected: true, color: p.slot })) };
-  const Body: ComponentType = POLITICS_TABS.find((t) => t.id === subId)!.Body;
+  const Body: ComponentType = typeof subId === 'string' ? POLITICS_TABS.find((t) => t.id === subId)!.Body : subId;
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
@@ -145,7 +146,11 @@ function props(el: FakeElement): Record<string, unknown> {
 const tap = (testid: string) => act(() => (props(byTestid(testid)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(testid) }));
 const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' ').trim();
 const isDisabled = (testid: string) => props(byTestid(testid)).disabled === true;
-const order = (a: string, b: string) => host.textContent.length >= 0 && (find(a) ? 1 : -1) + (find(b) ? 1 : -1);
+/** The test ids under the host, in the order they are drawn. */
+function drawn(node: FakeElement = host): string[] {
+  const own = node.getAttribute('data-testid');
+  return [...(own ? [own] : []), ...node.childNodes.flatMap((c) => (c instanceof FakeElement ? drawn(c) : []))];
+}
 
 describe('S5-B-AC-1 (component): the Governor sets the budget on the Budget sub-tab', () => {
   const standing = { projects: 60, welfare: 10 };
@@ -283,7 +288,9 @@ describe('S5-B-AC-3 (component): the overrule ballot and its reveal', () => {
     expect(tab.first?.({ view: game, me: game.me!, self: game.players[2]! })).toBe(true);
     mount('laws', game);
     expect(find('overrule-ballot')).toBeDefined();
-    expect(order('overrule-ballot', 'council-tax')).toBe(2);
+    const ids = drawn();
+    expect(ids.indexOf('overrule-ballot')).toBeGreaterThan(-1);
+    expect(ids.indexOf('overrule-ballot')).toBeLessThan(ids.indexOf('council-tax'));
   });
 
   it('S5-B-AC-3: start against now, what it needs, who has voted but never how, and Yes and No send voteOverrule', () => {
@@ -315,7 +322,8 @@ describe('S5-B-AC-3 (component): the overrule ballot and its reveal', () => {
     [true, 'Overruled', 'the tax goes back to 5%'],
     [false, 'It stands', 'tax stands at 9%'],
   ])('S5-B-AC-3: at the reveal (passed %s) the totals and the verdict show: %s', (passed, stamp, words) => {
-    mount('laws', viewFor('s3', ballot({ stage: 'reveal', result: { passed, yes: passed ? 2 : 1, no: passed ? 1 : 2 } })));
+    // The reveal takes the hub's stage, as the law vote's does; the sub-tab holds the open ballot only.
+    mount(OVERRULE_STAGE.Body, viewFor('s3', ballot({ stage: 'reveal', result: { passed, yes: passed ? 2 : 1, no: passed ? 1 : 2 } })));
     expect(text('overrule-stamp')).toBe(stamp);
     expect(text('overrule-verdict')).toContain(words);
     expect(text('overrule-verdict')).toContain(`Yes ${passed ? 2 : 1} · needed 2`);

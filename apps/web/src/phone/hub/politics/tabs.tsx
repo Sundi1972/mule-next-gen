@@ -3,6 +3,10 @@ import { Commission } from '../../../components/ColonyActions';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
 import type { HubSeat } from '../slots';
+import { GovernorBudget } from './budget/GovernorBudget';
+import { CouncilBudget } from './budget/CouncilBudget';
+import { OverruleBallot } from './budget/OverruleBallot';
+import { OverruleCall } from './budget/OverruleCall';
 import { CouncilBody, PendingLaw } from './Council';
 import { ElectionDay } from './ElectionDay';
 import { GovernorDesk } from './Governor';
@@ -13,12 +17,13 @@ import { Who } from './parts';
 
 export const isGovernor = ({ view, self }: Pick<HubSeat, 'view' | 'self'>) => view.politics !== null && view.politics.governor === self.id;
 export const lawVoting = ({ view }: Pick<HubSeat, 'view'>) => view.politics?.council?.stage === 'ballot';
+export const overruleVoting = ({ view }: Pick<HubSeat, 'view'>) => view.politics?.overrule?.stage === 'ballot';
 export const electionVoting = ({ view }: Pick<HubSeat, 'view'>) => {
   const stage = view.politics?.election?.stage;
   return stage === 'announce' || stage === 'ballot';
 };
 
-/** The tax as everyone but the Governor sees it. */
+/** The tax as everyone but the Governor sees it, with the overrule call under it. */
 function TaxLine() {
   const { view, self } = usePhoneGame();
   const politics = view.politics!;
@@ -33,15 +38,18 @@ function TaxLine() {
           </>
         )}
       </span>
+      <OverruleCall />
     </section>
   );
 }
 
+/** Laws: an open overrule ballot, then the law ballot; then, for the Governor, the tax (frozen while a call stands, in the desk) and the law to propose; for the Council, the tax and the call. */
 export function LawsSub() {
   const { view, self } = usePhoneGame();
   const gov = isGovernor({ view, self });
   return (
     <>
+      {overruleVoting({ view }) && <OverruleBallot />}
       {lawVoting({ view }) && <CouncilBallot />}
       {gov ? <GovernorDesk /> : <TaxLine />}
       {view.politics && <LawsInForce laws={view.politics.laws ?? {}} />}
@@ -50,9 +58,12 @@ export function LawsSub() {
   );
 }
 
-/** Budget: the Governor's Commission. */
+/** Budget: the Governor sets it, with the Commission under Projects; everyone else sees it as set. */
 export function BudgetSub() {
-  return <Commission />;
+  const { view, self } = usePhoneGame();
+  if (!isGovernor({ view, self })) return <CouncilBudget />;
+  // A view without a budget (an older server) keeps the Commission on its own.
+  return view.politics?.budget ? <GovernorBudget /> : <Commission />;
 }
 
 /** Elections: an open election's day, else running for office and who holds which. */

@@ -124,8 +124,9 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(html).not.toMatch(/overrule/i);
     });
 
-    it('SB-3: Budget is not shown until S5-PR-6 gives it a body', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
-      expect(sub('budget').show?.(seatOf(game))).toBe(false);
+    it('SB-3: Budget is shown on every phone, and holds no Commission button for a seat that is not the Governor', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
+      expect(sub('budget').show?.(seatOf(game))).toBe(true);
+      expect(draw('budget', game)).not.toContain('data-testid="commission-open"');
     });
 
     it('SB-3: Elections shows the offices and running for office', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
