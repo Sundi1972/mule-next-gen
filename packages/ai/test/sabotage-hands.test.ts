@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  AI_LEVELS,
   AI_PERSONAS,
   createGame,
   castVote,
@@ -255,12 +256,14 @@ describe('S4-T-AC-9: SheriffHand per S4-RULE-13 (guard, investigate, fine)', () 
 
   it("S4-T-AC-9 guard: a Rookie posts a seeded pick among the players' working plots, asking no value", () => {
     const { state, plots } = table();
-    const sent = guards(run(state, mindOf('ai1', 'cautious', 'rookie')));
-    expect(sent).toHaveLength(1);
-    const posted = sent[0]!.type === 'guard' ? sent[0]!.tiles : [];
-    expect(posted).toHaveLength(POLITICS.sheriff.guards);
-    expect(new Set(posted).size).toBe(posted.length);
-    for (const tile of posted) expect(Object.values(plots)).toContain(tile);
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const sent = guards(run(state, mindOf('ai1', 'cautious', 'rookie', seed)));
+      expect(sent).toHaveLength(1);
+      const posted = sent[0]!.type === 'guard' ? sent[0]!.tiles : [];
+      expect(posted).toHaveLength(POLITICS.sheriff.guards);
+      expect(new Set(posted).size, `seed ${seed} posts distinct plots`).toBe(posted.length);
+      for (const tile of posted) expect(Object.values(plots)).toContain(tile);
+    }
     expect(guardWorth).not.toHaveBeenCalled();
   });
 
