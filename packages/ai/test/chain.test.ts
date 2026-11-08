@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, monthlyDemand, MULE, observe, OFF_WORLD, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, HEALTH, monthlyDemand, MULE, observe, OFF_WORLD, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
@@ -17,11 +17,16 @@ const WORKS: Outfit[] = ['alloy', 'electronics'];
 // reference, and a forecast with it (pricing §3). It holds within the month only: a real month opening still clamps it
 // to the walk's band.
 const savedPhi = OFF_WORLD.others.phi;
+// This file tests the chain's logic at a price pricedAt holds, not prices under colony health: with health on the
+// colonists take Electronics and the price climbs, so health is off here and back to what it was after each test.
+const savedHealth = HEALTH.enabled;
 beforeEach(() => {
   OFF_WORLD.others.phi = 1;
+  HEALTH.enabled = false;
 });
 afterEach(() => {
   OFF_WORLD.others.phi = savedPhi;
+  HEALTH.enabled = savedHealth;
 });
 
 /**
