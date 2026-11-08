@@ -6,14 +6,20 @@ import { createPortal } from 'react-dom';
 import { useClient, useClientState } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { OnlyYou } from '../OnlyYou';
-import { bindsWords, lawUp, monthsWords, nameOf, plain, stakesWords, statusWords, titleWords, who } from './deals-words';
-import { CardWho, Marked, shellOf, Who } from './parts';
+import { SeatWords } from '../../../components/SeatWords';
+import { bindsWords, lawUp, monthsWords, nameOf, plain, stakesWords, statusWords, titleWords, who, whoOf, type Said } from './deals-words';
+import { CardWho, shellOf, Who } from './parts';
 
 /**
  * Deal cards on the phone (S3-C17, S3-C18): the composer over the rail, a card offered to me (in its whisper thread
  * and behind the agenda's door), and My cards, one section of the Talk desk. Reads me.deals and the public politics view;
  * sends only offerDeal, withdrawDeal and answerDeal, and shows a refusal as the server words it.
  */
+
+/** A card's words, with each computer seat they name marked by SeatWords. */
+function Words({ said, view }: { said: Said; view: Pick<MuleView, 'players'> }) {
+  return <SeatWords text={plain(said)} who={whoOf(said, view.players)} players={view.players} />;
+}
 
 export type DraftKind = 'pact' | 'vote';
 /** `choice` is a pick on a ballot: `gov:<candidate>`, or `law:yes` / `law:no`. */
@@ -349,7 +355,7 @@ function DealFace({ c, tone = 'solid', expiry = false, pair = true, testid, chil
     <section className={cx('flex shrink-0 flex-col gap-1 rounded-panel border-2 p-2', tone === 'solid' ? 'border-holo bg-holo-soft' : 'border-holo-line bg-panel')} data-testid={testid} data-status={c.status}>
       <span className="flex items-center justify-between gap-1">
         <span className="label-caps truncate text-[10px]!" data-testid={`${testid}-label`}>
-          <Marked said={c.from === me.id ? ['Card to ', who(view, c.to, me.id)] : ['Card from ', who(view, c.from, me.id)]} view={view} />
+          <Words said={c.from === me.id ? ['Card to ', who(view, c.to, me.id)] : ['Card from ', who(view, c.from, me.id)]} view={view} />
         </span>
         {/* In the rail sheet its header says Only you, and the label keeps the room. */}
         {pair && (
@@ -359,17 +365,17 @@ function DealFace({ c, tone = 'solid', expiry = false, pair = true, testid, chil
         )}
       </span>
       <span className="font-display text-base font-semibold leading-tight" data-testid={`${testid}-title`}>
-        <Marked said={titleWords(view, c, me.id)} view={view} />
+        <Words said={titleWords(view, c, me.id)} view={view} />
       </span>
       <span className="text-xs leading-snug" data-testid={`${testid}-binds`}>
-        <Marked said={bindsWords(view, c, me.id)} view={view} />
+        <Words said={bindsWords(view, c, me.id)} view={view} />
       </span>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" data-testid={`${testid}-names`}>
         <CardWho view={view} id={c.from} me={me.id} size={14} rep open testid={`${testid}-from`} />
         <CardWho view={view} id={c.to} me={me.id} size={14} rep open testid={`${testid}-to`} />
       </span>
       <span className="text-[11px] leading-snug text-ink-2" data-testid={`${testid}-stakes`}>
-        <Marked said={stakesWords(view, c, me.id)} view={view} />
+        <Words said={stakesWords(view, c, me.id)} view={view} />
         {expiry && <> Unanswered, it expires when planning ends.</>}
       </span>
       {children}
@@ -405,7 +411,7 @@ export function OutgoingDeal({ c }: { c: DealCard }) {
       <span className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-sm font-semibold text-holo" data-testid={`outgoing-${c.id}-waiting`}>
           <span aria-hidden className="size-2 animate-pulse rounded-full bg-holo" />
-          <Marked said={statusWords(view, c, me.id)} view={view} />
+          <Words said={statusWords(view, c, me.id)} view={view} />
         </span>
         <Button size="md" variant="ghost" className="-mr-2" onClick={() => client.intent({ type: 'withdrawDeal', id: c.id })} data-testid={`outgoing-${c.id}-withdraw`}>
           Withdraw
@@ -428,11 +434,11 @@ export function DealLine({ c, testid }: { c: DealCard; testid?: string }) {
       </span>
       <span className="min-w-0">
         <strong className="font-semibold">
-          <Marked said={titleWords(view, c, me.id)} view={view} />
+          <Words said={titleWords(view, c, me.id)} view={view} />
         </strong>
         <span className="text-ink-2">
           {' '}
-          · <Marked said={statusWords(view, c, me.id)} view={view} />
+          · <Words said={statusWords(view, c, me.id)} view={view} />
         </span>
       </span>
     </span>
@@ -484,7 +490,7 @@ function MyDealRow({ c }: { c: DealCard }) {
         with <CardWho view={view} id={other} me={me.id} size={12} rep open testid={`my-deal-${c.id}-with`} />
         {c.status === 'active' && (
           <span data-testid={`my-deal-${c.id}-binds`}>
-            · <Marked said={bindsWords(view, c, me.id)} view={view} />
+            · <Words said={bindsWords(view, c, me.id)} view={view} />
           </span>
         )}
         {c.settled !== null && <span className="font-mono text-[10px] text-ink-3">· month {c.settled}</span>}

@@ -12,16 +12,25 @@ const MOVES = POLITICS.reputation.moves;
 export const nameOf = (view: Pick<MuleView, 'players'>, id: string, me: string | null, you = 'you') => (id === me ? you : (view.players.find((p) => p.id === id)?.name ?? 'someone'));
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** A player named in a line of words: their id, and their name as the line says it. */
+/** A player named in a line of words: their id, and their name as the line says it ("Ossa", or "Ossa’s"). */
 export interface Named {
   id: string;
   text: string;
+  possessive?: true;
 }
-/** A line of words that keeps each named player by id, so a screen marks a computer seat from its data, never its name. */
+/** A line of words that keeps each named player by id, for SeatWords' `who`. */
 export type Said = (string | Named)[];
 
 /** The words alone. */
 export const plain = (said: Said): string => said.map((part) => (typeof part === 'string' ? part : part.text)).join('');
+
+/**
+ * The seats the words name, in order, for SeatWords. A computer seat's possessive is left out, so it carries no mark
+ * ("Ossa’s vote"): the card's label names the seat. A person's possessive stays in, so SeatWords passes over it.
+ */
+export function whoOf(said: Said, players: Pick<MuleView, 'players'>['players']): string[] {
+  return said.flatMap((part) => (typeof part === 'string' || (part.possessive && players.find((p) => p.id === part.id)?.isAi) ? [] : [part.id]));
+}
 
 /** A player in a line: by id, or the plain `you` for `me`. */
 export const who = (view: Pick<MuleView, 'players'>, id: string, me: string | null, you = 'you'): string | Named => (id === me ? you : { id, text: nameOf(view, id, null) });
@@ -45,9 +54,9 @@ export function titleWords(view: V, c: DealCard, me: string | null): Said {
     return [`Pact · ${n} ${n === 1 ? 'month' : 'months'}`];
   }
   // A possessive carries no mark: the card's label names its seat.
-  const whose = c.from === me ? 'Your' : `${nameOf(view, c.from, me)}’s`;
-  if ('law' in t) return [`${whose} ${t.yes ? 'yes' : 'no'} on the next law`];
-  return [`${whose} vote for `, who(view, t.candidate, me)];
+  const whose: Said = c.from === me ? ['Your'] : [{ id: c.from, text: `${nameOf(view, c.from, me)}’s`, possessive: true }];
+  if ('law' in t) return [...whose, ` ${t.yes ? 'yes' : 'no'} on the next law`];
+  return [...whose, ' vote for ', who(view, t.candidate, me)];
 }
 
 /** What it binds, in one sentence. */
@@ -70,19 +79,31 @@ export function stakesWords(view: V, c: Pick<DealCard, 'from' | 'to' | 'terms'>,
   return ['You promise nothing. If ', from, ` breaks it: −${-MOVES.voteBroken} to `, from, ', in public.'];
 }
 
-/** The public line for a broken card (S3-RULE-11's words), each name by id. `named`: the breaker's name first (news, TV, month end). */
-export function brokenSaid(view: V, c: DealCard, named = true): Said {
-  const breaker = c.brokenBy ?? c.from;
-  const other = breaker === c.from ? c.to : c.from;
-  const lead: Said = named ? [who(view, breaker, null), ' broke'] : ['Broke'];
+/** The public line for a broken card (S3-RULE-11's words). `named`: with the breaker's name first (news, TV, month end). */
+export function brokenWords(view: V, c: DealCard, named = true): string {
+  const name = (id: string) => nameOf(view, id, null);
+  const [breaker, other] = brokenPair(c);
+  const lead = named ? `${name(breaker)} broke` : 'Broke';
   const t = c.terms;
-  if (t.kind === 'pact') return [...lead, ' a pact with ', who(view, other, null)];
-  if ('law' in t) return [...lead, ' a promise to ', who(view, c.to, null), `: a ${t.yes ? 'yes' : 'no'} on the law`];
-  return [...lead, ' a promise to ', who(view, c.to, null), ': a vote for ', who(view, t.candidate, null)];
+  if (t.kind === 'pact') return `${lead} a pact with ${name(other)}`;
+  if ('law' in t) return `${lead} a promise to ${name(c.to)}: a ${t.yes ? 'yes' : 'no'} on the law`;
+  return `${lead} a promise to ${name(c.to)}: a vote for ${name(t.candidate)}`;
 }
 
-/** brokenSaid as one string, for a label or a comparison. */
-export const brokenWords = (view: V, c: DealCard, named = true): string => plain(brokenSaid(view, c, named));
+/** The seats brokenWords names, in its words' order, for SeatWords' `who`: breaker (when named), the other party, the candidate. */
+export function brokenWho(c: DealCard, named = true): string[] {
+  const [breaker, other] = brokenPair(c);
+  const lead = named ? [breaker] : [];
+  const t = c.terms;
+  if (t.kind === 'pact') return [...lead, other];
+  if ('law' in t) return [...lead, c.to];
+  return [...lead, c.to, t.candidate];
+}
+
+const brokenPair = (c: DealCard): [string, string] => {
+  const breaker = c.brokenBy ?? c.from;
+  return [breaker, breaker === c.from ? c.to : c.from];
+};
 
 /** The cards broken in `month`: the one rule for "this month's broken cards" on the TV and at the month end. */
 export const brokenIn = (view: Pick<MuleView, 'politics'>, month: number): DealCard[] => (view.politics?.brokenDeals ?? []).filter((c) => c.settled === month);
