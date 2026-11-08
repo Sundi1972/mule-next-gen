@@ -436,7 +436,7 @@ describe('factories', () => {
 });
 
 describe('shortage foresight', () => {
-  it('T-AC-5: a seat prices Water at what the store posts after its colonists went short, once its outlook shows Water running short', () => {
+  it('T-AC-5: a seat prices Water at what the store posts after its colonists went short, once its outlook shows Water short by the month it reads', () => {
     // Colonists pay no wages since needs C2: the shortage's price is the store's own, the severe band it posts the
     // month after its colonists went short of Water (pricing RULE-6 row 2).
     const dry = developmentWithWater(0);
@@ -446,12 +446,18 @@ describe('shortage foresight', () => {
     const ceiling = nextPostedPrice(posting, 'water', undefined, ['water']);
     const short = outlook(observe(dry, 'ai0'), 'ai0', { lookAhead: true });
     expect(short.later('water')).toBeGreaterThanOrEqual(ceiling);
-    // The shortage comes later than the month the forecast reads: 20 Water on the shelf posts normal now and next
-    // month, and runs out inside the horizon. The forecast still reaches the store's price after its colonists went
-    // short (outlook's rollForward raises it to that posting); the rollout's own postings alone read 50.
+    // The shortage comes after the month the forecast reads: 20 Water on the shelf posts normal now and in that month,
+    // and runs out later, inside the horizon. The forecast is the price posted in its month (STRATEGIST.outlookMonths
+    // on), so it is the rollout's own posting there, not the price after a shortage the status quo shows only later:
+    // with nobody building, the status quo runs dry where play does not, and read so, Water sat at 100 against a real
+    // 25-31 (forecast calibration, WS1 C, 8 Nov).
     const later = outlook(observe(developmentWithWater(20), 'ai0'), 'ai0', { lookAhead: true });
     expect(later.price('water'), 'the premise: Water is posted normal now').toBeLessThan(ceiling / 2);
-    expect(later.later('water')).toBeGreaterThanOrEqual(ceiling);
+    expect(later.later('water')).toBeLessThan(ceiling);
+    // The colonists go short of 17 Water in the forecast month's own upkeep, which runs after the auction it reads: that
+    // shortage moves only the next month's posting, so it doesn't raise this one (review of #743).
+    const after = outlook(observe(developmentWithWater(17), 'ai0'), 'ai0', { lookAhead: true });
+    expect(after.later('water')).toBeLessThan(ceiling);
     // Negative case: with Water to spare the forecast stays a market price, far under the ceiling.
     const plenty = outlook(observe(developmentWithWater(300), 'ai0'), 'ai0', { lookAhead: true });
     expect(plenty.later('water')).toBeLessThan(ceiling / 2);

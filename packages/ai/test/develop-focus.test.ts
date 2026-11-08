@@ -33,8 +33,10 @@ describe('development focus', () => {
     const today = developDecision(obs, mind, 0);
     const live = today.all.filter((c) => !c.veto);
     const top = outfitOf(live[0]!);
-    // The runner-up good: the best live outfit that is not the top pick's.
-    const focus = live.map(outfitOf).find((o): o is Good => o !== null && o !== 'greenBelt' && o !== top)!;
+    // A good with another good ranked between it and the top pick's, so a lean has a rank to climb: the good right
+    // behind the top pick's can only climb past the top pick itself.
+    const goods = [...new Set(live.map(outfitOf).filter((o): o is Good => o !== null && o !== 'greenBelt' && o !== top))];
+    const focus = goods[1]!;
     expect(rankOf(today.all, focus)).toBeGreaterThan(0);
 
     const leaning = developDecision(obs, mind, 0, undefined, focus);

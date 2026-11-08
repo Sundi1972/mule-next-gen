@@ -235,11 +235,11 @@ describe('an adopted playbook\'s land-grant press share (LandGrantPlay.pressShar
   });
 
   it('B-AC-14: a share falling from start to end refuses an early plot it would take at end, and takes a later one it would refuse at start', () => {
-    // Seed 7 (seed 10 until AM-18 moved the plots' worths): at a steady 0.7 the seat claims early, at a steady 1 late;
-    // falling from 1 to 0.7, in between.
-    const atEnd = firstClaim({ start: 0.7, end: 0.7 }, 7);
-    const atStart = firstClaim({ start: 1, end: 1 }, 7);
-    const falling = firstClaim({ start: 1, end: 0.7 }, 7);
+    // Seed 25: at a steady 0.7 the seat claims early, at a steady 1 late; falling from 1 to 0.7, in between. (Seed 10
+    // until the forecast stopped counting shortages after its own month, WS1 C: its plots' values moved.)
+    const atEnd = firstClaim({ start: 0.7, end: 0.7 }, 25);
+    const atStart = firstClaim({ start: 1, end: 1 }, 25);
+    const falling = firstClaim({ start: 1, end: 0.7 }, 25);
     expect(atEnd).not.toBeNull();
     expect(atStart).not.toBeNull();
     expect(falling).not.toBeNull();
