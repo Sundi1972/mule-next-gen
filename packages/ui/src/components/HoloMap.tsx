@@ -16,8 +16,8 @@ export interface MapTile {
   /** Units produced last month, floated above the plot. */
   output?: number;
   peaks?: number;
-  /** Marks a plot: being surveyed, hit by sabotage, or up for sale. */
-  flag?: 'survey' | 'sabotage' | 'sale';
+  /** Marks a plot: being surveyed, hit by sabotage, up for sale, or guarded (the Sheriff's own map only, slice 4). */
+  flag?: MapFlag;
   /** What a geo analysis found here, only on the map of the player who ran it: each raw good's dots, 0 to 3. */
   ground?: Partial<Record<Good, number>>;
   /** Local pollution, 0 clean to 3 toxic. Drawn as a brown haze over the land. */
@@ -25,6 +25,8 @@ export interface MapTile {
   /** The plot's special field, public on every map: drawn as a badge on the plot's lower-right corner. */
   special?: MapSpecial;
 }
+
+export type MapFlag = 'survey' | 'sabotage' | 'sale' | 'guard';
 
 export interface MapAvatar {
   slot: Slot;
@@ -378,6 +380,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   className={cx('absolute left-1/2 z-[4] grid size-[7px] -translate-x-1/2 place-items-center rounded-[1.5px] shadow-chip', FLAG_TONE[t.flag], fade)}
                   style={{ bottom: SMALL_STRIP.chipFoot }}
                   data-testid={`map-flag-${at}`}
+                  data-flag={t.flag}
                 >
                   <FlagGlyph flag={t.flag} />
                 </span>
@@ -392,8 +395,9 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                     fade,
                   )}
                   data-testid={`map-flag-${at}`}
+                  data-flag={t.flag}
                 >
-                  {t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
+                  {t.flag === 'guard' ? <GuardShield size={tv ? 14 : 10} /> : t.flag === 'sabotage' ? 'OFF' : t.flag === 'sale' ? 'SALE' : 'SCAN'}
                 </span>
               )}
               {/* Under 16 px a MULE's plot draws no badge: the MULE wins, as the strip drops the badge first (WS6, SA-1372). */}
@@ -495,14 +499,24 @@ function bestGoods(dots: Dots, count: number): [Good, number][] {
 }
 
 /** A plot's flag: its chip's colours, and the words its plot's label says it with (WS6, SA-1372). */
-const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo' } as const;
-const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan' } as const;
+const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo', guard: 'bg-void text-holo ring-1 ring-holo' } as const;
+const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan', guard: 'guarded' } as const;
+
+/** The Sheriff's guard: a shield (WS8's politics-p2 mock, GuardGlyph), where the other flags print a word. */
+function GuardShield({ size }: { size: number }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className="block" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z" />
+    </svg>
+  );
+}
 
 /**
  * A flag's glyph on a small plot, 7×7 in the chip's text colour (WS6's paths, Jira SA-1372 comment 15290): OFF a cross,
- * SCAN a ring with a centre dot, SALE a gavel drawn as an upright T. They differ by shape, so they read in greyscale.
+ * SCAN a ring with a centre dot, SALE a gavel drawn as an upright T, GUARD a shield. They differ by shape, so they read in
+ * greyscale.
  */
-function FlagGlyph({ flag }: { flag: 'survey' | 'sabotage' | 'sale' }) {
+function FlagGlyph({ flag }: { flag: MapFlag }) {
   return (
     <svg aria-hidden viewBox="0 0 7 7" width={7} height={7}>
       {flag === 'sabotage' && <path d="M2.1 2.1L4.9 4.9M4.9 2.1L2.1 4.9" stroke="currentColor" strokeWidth={1.15} strokeLinecap="round" />}
@@ -512,6 +526,7 @@ function FlagGlyph({ flag }: { flag: 'survey' | 'sabotage' | 'sale' }) {
           <circle cx="3.5" cy="3.5" r="0.75" fill="currentColor" />
         </>
       )}
+      {flag === 'guard' && <path d="M3.5 1l2.4.9v1.7c0 1.3-1 2.2-2.4 2.5-1.4-.3-2.4-1.2-2.4-2.5V1.9z" fill="none" stroke="currentColor" strokeWidth={0.95} strokeLinejoin="round" />}
       {flag === 'sale' && (
         <>
           <rect x="1.4" y="1.5" width="4.2" height="1.6" rx="0.3" fill="currentColor" />
