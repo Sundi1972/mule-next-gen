@@ -1,12 +1,13 @@
 import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
-import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot } from '../slots';
+import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
 import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
 import { CouncilBallot, CouncilRail } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
+import { BudgetSub, electionAsking, ElectionsSub, isGovernor, lawBallotOpen, LawsSub } from './tabs';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
@@ -59,8 +60,6 @@ export const LAW_AGENDA: AgendaSlot = {
 export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'governor' } };
 
 export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
-
-const isGovernor = ({ view, self }: HubSeat) => view.politics !== null && view.politics.governor === self.id;
 
 export const GOVERNOR_DESK: DeskSlot = {
   id: 'governor',
@@ -176,3 +175,11 @@ export function councilNow({ view, self }: HubSeat): Now | null {
     };
   return { step: 1, of: 2, title: 'Vote on the law', detail: 'Yes or No, then Done. Nobody sees how you voted. No clock: it closes once everyone is Done.' };
 }
+
+/** The Governor / Council tab's sub-tabs (Sheriff is WS8's). A ballot, when open, sits first in its sub-tab. */
+export const POLITICS_TABS: SubTabSlot[] = [
+  { id: 'laws', label: () => 'Laws', Body: LawsSub, show: politicsOn, first: lawBallotOpen },
+  // Only the Governor has a Budget body until S5-PR-6 builds the Council's.
+  { id: 'budget', label: () => 'Budget', Body: BudgetSub, show: isGovernor },
+  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, show: politicsOn, first: electionAsking },
+];
