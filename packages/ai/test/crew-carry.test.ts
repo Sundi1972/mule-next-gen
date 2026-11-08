@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, crewFactor, observe, type GameState, type Outfit, type Tile } from '@mule/engine';
+import { advancePhase, createGame, crewFactor, DEV_WALK, factoryFit, isFactory, monthNeeds, needsOf, observe, rawOutput, UPKEEP, type GameState, type Good, type Outfit, type ProcessedGood, type Tile } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { installGain, monthlyNet } from '../src/value.js';
+import { afterTax, foodUnits, installGain, keptUnits, monthlyNet, monthWalkSeconds, secondValue, unitValues, wholeNextMonth } from '../src/value.js';
 
 /**
  * PR-8 (needs C14): a player's plots, but its Energy plants, make crewFactor of their output in the production after a
@@ -67,5 +67,40 @@ describe('PR-8 (needs C14): a seat whose crews went short values its next produc
       return observe(state, ME);
     };
     expect(gain(after(SHORT), 'food')).toBeCloseTo(gain(after(undefined), 'food'), 6);
+  });
+});
+
+describe("PR-8 (needs C15, PM ruling 8 Nov): no Food carry; the household's Food keeps off hunger, the crews' keeps their output", () => {
+  /** Month 2's development, fed: ai0 runs a farm on x 0 and a Smithore mine on x 1, so it has crews to feed. */
+  function running(): GameState {
+    const state = development(undefined);
+    state.tiles[0]!.outfit = 'food';
+    state.tiles[1]!.outfit = 'smithore';
+    return state;
+  }
+
+  it('wholeNextMonth holds the Food upkeep eats, no more; Water and Energy keep their carry', () => {
+    const obs = observe(running(), ME);
+    expect(wholeNextMonth(obs, ME, 'food')).toBe(needsOf(obs, ME).food);
+    // Negative: next production draws on carried Water and Energy (AM-17, AM-18), so they still carry.
+    expect(wholeNextMonth(obs, ME, 'energy')).toBeGreaterThan(0);
+    expect(wholeNextMonth(obs, ME, 'water')).toBe(needsOf(obs, ME).water + keptUnits('water', monthNeeds(obs, ME).water));
+  });
+
+  it("the Food block: the household's units first, each its share of the hunger they keep off; then the crews', each its share of crewDrop of the plots' output", () => {
+    const m = mind();
+    const obs = observe(running(), ME);
+    const o = outlook(obs, ME, { lookAhead: m.level.lookAhead });
+    const P = (g: Good) => o.price(g);
+    const eat = needsOf(obs, ME).food;
+    const crews = eat - UPKEEP.baseFood;
+    expect(crews, 'the case: the crews eat').toBeGreaterThan(0);
+    const hunger = (monthWalkSeconds(obs, m) * (1 / DEV_WALK.hungerPaceMin - 1) * secondValue(obs, ME)) / UPKEEP.baseFood;
+    const made = (t: Tile) => (isFactory(t.outfit!) ? factoryFit(obs, t, t.outfit as ProcessedGood, ME).output : rawOutput(obs, t));
+    const output = obs.tiles.filter((t) => t.owner === ME && t.outfit).reduce((n, t) => n + afterTax(obs, made(t) * P(t.outfit as Good)), 0);
+    const units = foodUnits(obs, m, P);
+    expect(units).toHaveLength(eat);
+    units.forEach((x, k) => expect(x, `unit ${k}`).toBeCloseTo(k < UPKEEP.baseFood ? hunger : (UPKEEP.crewDrop * output) / crews, 6));
+    expect(unitValues(obs, o, 'food', m).block, 'the block is what upkeep eats').toBe(eat);
   });
 });
