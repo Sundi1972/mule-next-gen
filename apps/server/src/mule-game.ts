@@ -1039,7 +1039,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
     if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
     this.enterPhase();
-    // After the phase opens: its own report (production's harvest line, game over) replaces the news and keeps first place; any other opening writes none, so the lines go on top.
+    // After the phase opens. Production's harvest line and game over replace the whole news with one headline, and the
+    // sabotage this opening settled (a worked cut, the last upkeep's fines) must not push it out, so those lines go
+    // behind it. At the other openings no sabotage change lands except planning's standard fine, which is news of its
+    // own and goes on top; the auction and upkeep headlines are written after nothing sabotage settles.
     this.noteSabotage(settledIn, opened.phase === 'production' || opened.phase === 'gameOver');
   }
 
