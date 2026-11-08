@@ -474,7 +474,7 @@ export function sabotageView(state: GameState): NonNullable<PoliticsView['sabota
     incidents: [...p.sabotage].reverse().flatMap((o) => incidentView(state, o, EVERYONE) ?? []),
     // What he may post, never what he has posted: a guard shows only by its catch (AM-1).
     sheriff: { guards: guardsMax(state), investigations: POLITICS.sheriff.investigations, investigationsLeft: Math.max(0, POLITICS.sheriff.investigations - done), bounty: POLITICS.sheriff.bounty },
-    // Public on election day (AM-11): the two counts only, never where the guards stood.
+    // Public: the two counts only, never where the guards stood.
     sheriffRecord: p.sheriff === null ? null : { ...p.sheriffRecord },
   };
 }

@@ -38,9 +38,15 @@ function ownsSheriffPlot(state: GameState, order: SabotageOrder): boolean {
   return sheriff !== null && order.target.kind === 'powerCut' && state.tiles[order.target.tile]?.owner === sheriff;
 }
 
-/** The tiles the Sheriff's guards stand on now: the first guardsMax of politics.guards, in the order they were listed (S4-RULE-6). */
+/**
+ * The tiles the Sheriff's guards stand on now: the first guardsMax of the listed tiles the Sheriff may still guard, in the
+ * order listed (S4-RULE-6). A plot the Sheriff came to own since planning stands down (AM-12).
+ */
 function standingGuards(state: GameState): number[] {
-  return state.politics?.guards.slice(0, guardsMax(state)) ?? [];
+  const sheriff = state.politics?.sheriff ?? null;
+  const listed = state.politics?.guards ?? [];
+  const standing = sheriff === null ? listed : listed.filter((tile) => canGuard(state, sheriff, tile) === true);
+  return standing.slice(0, guardsMax(state));
 }
 
 /** Whether a power cut's plot is among the standing guards. A rumour has no plot to guard. */
@@ -75,10 +81,7 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   if (can === 'sheriff') throw new RuleError("The Sheriff can't order sabotage");
   const old = standing(state, playerId);
   if (target === null) {
-    if (old) {
-      const kept = state.politics!.sabotage.filter((o) => o !== old);
-      edit(state).sabotage = kept;
-    }
+    withdrawOrder(state, playerId);
     return;
   }
   if (target.kind === 'powerCut') {
