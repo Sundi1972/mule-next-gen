@@ -7,6 +7,7 @@ import { BRAIN, cloneForSim, outfitMule, RuleError, type GameState, type Outfit,
 import {
   afterGrant,
   atAuctionStart,
+  factsHold,
   GOOD_NAME,
   handsDevelopment,
   keptPlaysToday,
@@ -15,6 +16,7 @@ import {
   ownedPlots,
   phaseBrief,
   playbookFrom,
+  relationMemory,
   resolveGranted,
   toolsFor,
   WRITER_SYSTEM,
@@ -23,8 +25,12 @@ import {
   type Feedback,
   type HandsDevelopment,
   type LastPhase,
+  type LastRead,
+  type Message,
   type PhaseFact,
   type PlaybookSource,
+  type SocialInput,
+  type Stance,
   type ValidatePlan,
   type WhatIfSim,
   type WriterReply,
@@ -55,7 +61,19 @@ export interface PlaybooksOptions {
   speak?: (seat: PlayerId, said: PlanLine) => void;
   /** How long a write may take, by kind, instead of WRITE_CALLS': brain:trial --deep, whose calls think longer. */
   waitMs?: Partial<Record<'strategy' | 'playbook', number>>;
+  /**
+   * Says one of a seat's messages: to the table, or whispered to `to`. The game sends it through the room and hands it to
+   * the other AI seats it reaches. A message is never recorded, so it must not open a step or a timer.
+   */
+  say?: (seat: PlayerId, text: string, to?: PlayerId) => void;
+  /** Whether `listener` has muted the AI seat `seat`: none can yet, so a whisper to them is always sent. */
+  muted?: (listener: PlayerId, seat: PlayerId) => boolean;
+  /** Hears each message not sent, by its cause code: never its text. */
+  dropped?: (seat: PlayerId, cause: DropCause) => void;
 }
+
+/** Why a message of a reply was not sent (RULE-B1): a code, never the text. */
+export type DropCause = 'not_at_table' | 'empty' | 'muted' | 'fact_mismatch' | 'month_cap' | 'player_cap';
 
 /** A plan's line as the game hears it: a decision's spoken fields, said by Claude at the plan's phase. */
 export type PlanLine = Pick<Spoken, 'month'> & { line: string; phase: 'landGrant' | EditPhase };
@@ -98,7 +116,7 @@ function splitDevelopment(written: WriterReply): { land: WriterReply; developmen
   const { reply, refused } = written;
   const devEdits = reply.edits.filter((e) => isDevelopmentPath(e.path));
   const devRefused = refused.filter((r) => isDevelopmentPath(r.path));
-  const land: WriterReply = { reply: { ...reply, edits: reply.edits.filter((e) => !isDevelopmentPath(e.path)) }, refused: refused.filter((r) => !isDevelopmentPath(r.path)) };
+  const land: WriterReply = { ...written, reply: { ...reply, edits: reply.edits.filter((e) => !isDevelopmentPath(e.path)) }, refused: refused.filter((r) => !isDevelopmentPath(r.path)) };
   if (devEdits.length === 0 && devRefused.length === 0) return { land, development: null };
   return { land, development: { reply: { edits: devEdits, line: null }, refused: devRefused } };
 }
@@ -168,6 +186,8 @@ export class Playbooks {
   private readonly handsDev = new Map<PlayerId, HandsDevelopment>();
   /** Every seat's Worth when each seat's last land plan was asked, for the result line of its next. */
   private readonly worthAtAsk = new Map<PlayerId, WorthAt>();
+  /** Every notice of the game so far, in the order it settled: what each seat's memory is rebuilt from. */
+  private readonly notices: PhaseFact[] = [];
 
   constructor(private readonly options: PlaybooksOptions) {
     if (!options.source) return;
@@ -223,6 +243,7 @@ export class Playbooks {
           development?.development ?? null,
           grant.plot,
           keptPlaysToday(seat, month, 'development'),
+          this.socialFor(state, seat.id, month),
         );
         const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development, owned: ownedPlots(state, seat.id) };
         this.asks.set(seat.id, ask);
@@ -301,6 +322,99 @@ export class Playbooks {
       this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
       // The land part's line: the development part carries none, and is said nothing at its start.
       if (asked?.written && saysPlan(asked.written, playbook.by)) this.speak(seat.id, asked.written.reply.line, state.month, 'landGrant');
+      // A reply that came in time sends its messages now, once; a late one was never kept, so it sends none.
+      if (asked?.written) this.send(state, seat.id, asked.written);
+    }
+  }
+
+  /** A notice as it settles: kept for the seats' memories. */
+  notice(notice: PhaseFact): void {
+    this.notices.push(structuredClone(notice));
+  }
+
+  /** The social section's input for a Smart seat; none for a Claude Code seat, whose plans are its own chat's. */
+  private socialFor(state: GameState, seat: PlayerId, month: number): SocialInput | null {
+    if (this.options.kinds?.get(seat) === 'claude') return null;
+    const wanted = new Map<number, number[]>();
+    for (let m = 1; m < month; m++) {
+      const ranked = this.playing.get(`${seat}/${m}`)?.landGrant?.ranked;
+      if (ranked) wanted.set(m, ranked.map((r) => r.plot));
+    }
+    return { memory: relationMemory(state, seat, this.notices, wanted), reads: this.readsOf(state, seat, month) };
+  }
+
+  /** The seat's newest recorded stance and notes on each other player, from a land playbook by 'llm' before `month`. */
+  private readsOf(state: GameState, seat: PlayerId, month: number): Record<PlayerId, LastRead> {
+    const reads: Record<PlayerId, LastRead> = {};
+    for (const p of state.players) {
+      if (p.id === seat) continue;
+      for (let m = month - 1; m >= 1; m--) {
+        const playbook = this.playing.get(`${seat}/${m}`);
+        const edited = (path: string) => playbook?.by === 'llm' && (playbook.edits ?? []).some((e) => e.path === path);
+        const stance = edited(`/strategy/stances/${p.id}`);
+        const notes = edited(`/rivalReads/${p.id}`);
+        if (!stance && !notes) continue;
+        reads[p.id] = { month: m, stance: stance ? (playbook!.strategy.stances[p.id] as Stance) : null, notes: notes ? (playbook!.rivalReads?.[p.id] ?? []) : [] };
+        break;
+      }
+    }
+    return reads;
+  }
+
+  /**
+   * Sends a reply's messages by RULE-B1, in order: each to a player still at the table with a line to say, not muted by
+   * them, its facts and numbers holding (RULE-B2), within the month's caps. Never throws into the game.
+   */
+  private send(state: GameState, seat: PlayerId, written: WriterReply): void {
+    const messages = written.messages ?? [];
+    if (messages.length === 0 || written.reply.cause !== undefined) return;
+    const trades = this.notices.filter((n) => n.kind === 'trade');
+    let sent = 0;
+    const whispers = new Map<PlayerId, number>();
+    for (const m of messages) {
+      let cause: DropCause | null;
+      try {
+        cause = this.dropCause(state, seat, m, trades, sent, whispers);
+      } catch (err) {
+        console.error(`playbooks: seat ${seat}'s message could not be checked, it is not sent: ${messageOf(err)}`);
+        continue;
+      }
+      if (cause) {
+        this.dropped(seat, cause);
+        continue;
+      }
+      try {
+        this.options.say?.(seat, m.text, m.to === 'table' ? undefined : m.to);
+      } catch (err) {
+        console.error(`playbooks: seat ${seat}'s message could not be said: ${messageOf(err)}`);
+        continue;
+      }
+      sent++;
+      if (m.to !== 'table') whispers.set(m.to, (whispers.get(m.to) ?? 0) + 1);
+    }
+  }
+
+  /** RULE-B1's first matching row for one message, or null to send it. */
+  private dropCause(state: GameState, seat: PlayerId, m: Message, trades: readonly PhaseFact[], sent: number, whispers: ReadonlyMap<PlayerId, number>): DropCause | null {
+    const { messagesPerMonth, whispersPerPlayerMonth } = BRAIN.social;
+    if (m.to !== 'table' && (m.to === seat || !state.players.some((p) => p.id === m.to))) return 'not_at_table';
+    if (!m.text.trim()) return 'empty';
+    if (m.to !== 'table' && this.options.muted?.(m.to, seat)) return 'muted';
+    if (!factsHold(state, seat, m, trades)) return 'fact_mismatch';
+    if (sent >= messagesPerMonth) return 'month_cap';
+    if (m.to !== 'table' && (whispers.get(m.to) ?? 0) >= whispersPerPlayerMonth) return 'player_cap';
+    return null;
+  }
+
+  private dropped(seat: PlayerId, cause: DropCause): void {
+    if (!this.options.dropped) {
+      console.info(`playbooks: seat ${seat}'s message not sent: ${cause}`);
+      return;
+    }
+    try {
+      this.options.dropped(seat, cause);
+    } catch (err) {
+      console.error(`playbooks: a dropped message could not be heard: ${messageOf(err)}`);
     }
   }
 
