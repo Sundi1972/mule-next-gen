@@ -367,7 +367,14 @@ function listenForKeys(): void {
   (FakeElement.prototype as unknown as { focus(): void }).focus = function (this: FakeElement) {
     (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
   };
+  // Only the one selector the dialogs ask: their first button marked to take the focus on open.
+  (FakeElement.prototype as unknown as { querySelector(s: string): FakeElement | null }).querySelector = function (this: FakeElement, s: string) {
+    if (s !== '[data-autofocus]') throw new Error(`fake querySelector: ${s}`);
+    return this.findAll('button').find((b) => b.getAttribute('data-autofocus') !== null) ?? null;
+  };
 }
+/** The focused element's testid: a failing comparison of the elements themselves would print the whole fake tree. */
+const focused = () => (document.activeElement as unknown as FakeElement | null)?.getAttribute('data-testid') ?? null;
 const press = (key: string) => act(() => [...keydown].forEach((l) => l({ key })));
 /** A tap as a browser gives it: the button takes the focus, then its handler runs. */
 const tapFocused = (testid: string) => {
@@ -383,15 +390,28 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     tap(`chat-to-${OSSA}`);
     tapFocused('add-deal');
     expect(findTestid('composer-a')).toBeDefined();
+    expect(focused(), 'the composer takes the focus, on its Cancel as the lobby dialogs do').toBe('composer-a-close');
     press('Escape');
     expect(findTestid('composer-a'), 'Escape closes the composer').toBeUndefined();
-    expect(document.activeElement, 'the focus is back on + Deal').toBe(byTestid('add-deal'));
+    expect(focused(), 'the focus is back on + Deal').toBe('add-deal');
 
     tapFocused('agenda-deals');
     expect(findTestid('incoming-sheet')).toBeDefined();
+    expect(focused(), 'the incoming sheet takes the focus').toBe('incoming-sheet-close');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
-    expect(document.activeElement, 'the focus is back on the agenda door').toBe(byTestid('agenda-deals'));
+    expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
+  });
+
+  it("S3-B-AC-6: a name's player card takes the focus on open, closes on Escape and gives the focus back to the chip", () => {
+    listenForKeys();
+    const game = gameFor(myView(LENA, []));
+    mount(game, (g) => createElement('p', null, g.players.map((pl) => createElement(Who, { key: pl.id, view: g, id: pl.id, me: LENA, rep: true, open: true }))));
+    tapFocused(`who-${OSSA}-rep`);
+    expect(focused(), "the card's Close takes the focus").toBe(`player-card-${OSSA}-close`);
+    press('Escape');
+    expect(findTestid(`player-card-${OSSA}`), 'Escape closes the card').toBeUndefined();
+    expect(focused(), 'the focus is back on the chip').toBe(`who-${OSSA}-rep`);
   });
 });
 
