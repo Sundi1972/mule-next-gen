@@ -1,13 +1,14 @@
 import { POLITICS, SOCIAL_EVENTS, START, type DealCard } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Button, Creature, cx, SLOT_COLOR } from '@mule/ui';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { AiMark } from '../../../chat/Chat';
+import { useEscape } from '../../dialog';
 import { slotOf } from '../../../game/derive';
 import { useHub, type HubNav } from '../Hub';
 import { SeatWords } from '../../../components/SeatWords';
-import { brokenMove, brokenWho, brokenWords } from './deals-words';
+import { brokenMove, brokenWho, brokenWords, noNewCard } from './deals-words';
 
 export function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
   return (
@@ -18,7 +19,7 @@ export function Section({ title, children, testid }: { title: ReactNode; childre
   );
 }
 
-type NameView = Pick<MuleView, 'players'> & Partial<Pick<MuleView, 'politics'>>;
+type NameView = Pick<MuleView, 'players'> & Partial<Pick<MuleView, 'politics' | 'me'>>;
 
 /** Who on a deal card: the name, its chip, and the mark for a computer seat. */
 export function CardWho(props: Parameters<typeof Who>[0]) {
@@ -27,16 +28,30 @@ export function CardWho(props: Parameters<typeof Who>[0]) {
 
 export type Band = 'good' | 'fair' | 'low';
 
-/** POLITICS.weight's thresholds: repHigh and up is a good name (+1 vote), under repLow a low one (−1 vote, AI seats refuse). */
+/** POLITICS.weight's thresholds: repHigh and up is a good name (+repVotes), under repLow a low one (−repVotes). */
 export function bandOf(rep: number): Band {
   return rep >= POLITICS.weight.repHigh ? 'good' : rep < POLITICS.weight.repLow ? 'low' : 'fair';
 }
 
-export const BAND_WORDS: Record<Band, string> = {
-  good: 'Good name: +1 vote',
-  fair: 'Fair name',
-  low: 'Low name: −1 vote, and AI players turn down their cards',
-};
+const votes = (n: number) => `${n} ${n === 1 ? 'vote' : 'votes'}`;
+
+/** A name's band in words, and AI seats' refusal under POLITICS.ai.deals.refuseBelow: a threshold of its own, not the band's. */
+export function repWords(rep: number): string {
+  const { repVotes } = POLITICS.weight;
+  const band = bandOf(rep);
+  const words = band === 'good' ? `Good name: +${votes(repVotes)}` : band === 'low' ? `Low name: −${votes(repVotes)}` : 'Fair name';
+  const { refuseBelow } = POLITICS.ai.deals;
+  if (rep >= refuseBelow) return words;
+  return band === 'low' ? `${words}, and AI players turn down their cards` : `${words}, but AI players turn down cards under ${refuseBelow}`;
+}
+
+/** The player card's key to the chip: both thresholds, and the AI seats' own when it is not repLow. */
+function repLegend(): string {
+  const { repHigh, repLow, repVotes } = POLITICS.weight;
+  const { refuseBelow } = POLITICS.ai.deals;
+  const bands = `${repHigh} and up: +${votes(repVotes)}. Under ${repLow}: −${votes(repVotes)}`;
+  return refuseBelow === repLow ? `${bands}, and AI players turn down their cards.` : `${bands}. Under ${refuseBelow}, AI players turn down their cards.`;
+}
 
 const STAR = 'M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8-4.3-4.1 5.9-.9z';
 const WARN = 'M12 4l9 16H3z M12 10v4 M12 17v.01';
@@ -85,7 +100,7 @@ export function RepChip({ view, id, tv = false, onOpen, testid }: { view: Pick<M
   const change = useChange(rep);
   const s = SIZES[tv ? 'tv' : 'phone'];
   const tid = testid ?? `rep-${id}`;
-  const label = `${name}: reputation ${rep}. ${BAND_WORDS[band]}.`;
+  const label = `${name}: reputation ${rep}. ${repWords(rep)}.`;
   const body = (
     <>
       <BandMark band={band} size={s.mark} />
@@ -175,9 +190,16 @@ export function useHubIfAny(): HubNav | null {
 export function reasonRows(view: NameView, id: string): { key: string; month: number; words: string; who: string[]; move: number }[] {
   const reasons = view.politics?.reputationReasons?.[id] ?? [];
   const broken = view.politics?.brokenDeals ?? [];
+  const caught = new Map<number, number>();
   return reasons.flatMap((r) => {
+    if (r.kind === 'caught') {
+      // One row per incident: the reasons carry no id, so the n-th catch of its month. No figure (PM ruling): the view
+      // holds the sabotage ban in force now, not the one the engine applied at the catch.
+      const n = (caught.get(r.month) ?? 0) + 1;
+      caught.set(r.month, n);
+      return [{ key: `caught-${r.month}-${n}`, month: r.month, words: 'Caught sabotaging', who: [], move: 0 }];
+    }
     if (r.kind === 'unrest') return [{ key: `unrest-${r.month}`, month: r.month, words: 'Blamed for the unrest', who: [], move: SOCIAL_EVENTS.player.blamedForUnrest.reputation }];
-    if (r.kind === 'caught') return [{ key: `caught-${r.month}`, month: r.month, words: 'Caught sabotaging', who: [], move: 0 }];
     const c = broken.find((x: DealCard) => x.id === r.id);
     if (!c) return [];
     return [{ key: c.id, month: c.settled ?? 0, words: brokenWords(view, c, false), who: brokenWho(c, false), move: brokenMove(c) }];
@@ -189,36 +211,67 @@ export function shellOf(el: Element | null): Element | null {
   return el?.closest('[data-testid="game-shell"]') ?? null;
 }
 
+/** The first control in a dialog that can take the focus. */
+export const FIRST_CONTROL = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]';
+
+/** The open dialogs, the newest last: Escape closes only the one on top. */
+const dialogs: object[] = [];
+
+/**
+ * A dialog's keyboard, as the lobby's dialogs keep it: Escape closes it when it is on top; on open the element `first`
+ * finds takes the focus (by default its button marked `data-autofocus`), and on close the focus goes back to the element
+ * that had it. Put the returned ref on the dialog's box.
+ */
+export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefObject<HTMLDivElement> {
+  const box = useRef<HTMLDivElement>(null);
+  const [self] = useState(() => ({}));
+  // Both handlers see one Escape before either dialog unmounts, so the one under the top stays.
+  useEscape(useCallback(() => dialogs.at(-1) === self && onClose(), [self, onClose]));
+  useEffect(() => {
+    dialogs.push(self);
+    const opener = document.activeElement as HTMLElement | null;
+    box.current?.querySelector?.<HTMLElement>(first)?.focus?.();
+    return () => {
+      dialogs.splice(dialogs.indexOf(self), 1);
+      opener?.focus?.();
+    };
+  }, [self, first]);
+  return box;
+}
+
 /**
  * The player's card, from their chip or name: their reputation and its band in words, the public reasons it moved, and
  * in the hub, Whisper and + Deal.
  */
 export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; id: string; me: string | null; anchor: Element | null; onClose: () => void }) {
   const hub = useHubIfAny();
+  const box = useDialog(onClose);
   const p = view.players.find((q) => q.id === id)!;
   const rep = reputationOf(view, id);
   const rows = reasonRows(view, id);
   const mine = id === me;
+  // S3-RULE-2 row 5: the same check as every other "+ Deal" door; the composer refuses too.
+  const waiting = view.me && !mine ? noNewCard(view, view.me, id) : null;
   const go = (focus: string) => {
     onClose();
     hub?.openDesk('talk', focus);
   };
   const sheet = (
-    <div className="absolute inset-0 z-50 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-label={`${p.name}'s card`} onClick={onClose} data-testid={`player-card-${id}`}>
+    <div ref={box} className="absolute inset-0 z-50 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-label={`${p.name}'s card`} onClick={onClose} data-testid={`player-card-${id}`}>
       <div className="flex w-full max-w-[340px] flex-col gap-2 rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center gap-2">
           <Creature species={p.species} color={colorOf(view, id)} size={22} />
           <h2 className="font-display text-lg font-semibold leading-tight">{mine ? `You (${p.name})` : p.name}</h2>
           <RepChip view={view} id={id} testid={`player-card-${id}-rep`} />
-          <Button size="md" variant="ghost" className="ml-auto -mr-2" onClick={onClose} data-testid={`player-card-${id}-close`}>
+          <Button size="md" variant="ghost" className="ml-auto -mr-2" onClick={onClose} data-autofocus data-testid={`player-card-${id}-close`}>
             Close
           </Button>
         </header>
         <p className="text-sm leading-snug" data-testid={`player-card-${id}-band`}>
-          <strong className="font-semibold">Reputation {rep}</strong> · {BAND_WORDS[bandOf(rep)]}.
+          <strong className="font-semibold">Reputation {rep}</strong> · {repWords(rep)}.
         </p>
-        <p className="text-[11px] leading-snug text-ink-2">
-          {POLITICS.weight.repHigh} and up: +1 vote. Under {POLITICS.weight.repLow}: −1 vote, and AI players turn down their cards.
+        <p className="text-[11px] leading-snug text-ink-2" data-testid={`player-card-${id}-legend`}>
+          {repLegend()}
         </p>
         <section className="flex flex-col gap-1" data-testid={`player-card-${id}-reasons`}>
           <span className="label-caps text-[10px]!">What moved it, in public</span>
@@ -247,9 +300,14 @@ export function PlayerCard({ view, id, me, anchor, onClose }: { view: NameView; 
             <Button size="md" variant="outline" onClick={() => go(`whisper:${id}`)} data-testid={`player-card-${id}-whisper`}>
               Whisper
             </Button>
-            <Button size="md" onClick={() => go(`compose:${id}`)} data-testid={`player-card-${id}-deal`}>
+            <Button size="md" disabled={!!waiting} title={waiting ?? undefined} onClick={() => go(`compose:${id}`)} data-testid={`player-card-${id}-deal`}>
               + Deal
             </Button>
+            {waiting && (
+              <span className="col-span-2 text-center text-[11px] leading-snug text-ink-2" data-testid={`player-card-${id}-deal-no`}>
+                {waiting}
+              </span>
+            )}
           </div>
         )}
       </div>

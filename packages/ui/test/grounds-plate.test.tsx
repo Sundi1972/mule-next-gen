@@ -82,8 +82,8 @@ describe('ColonyGrounds · the base plate under the buildings (AM-7, Task 4.3)',
     expect(tagsWith(html, 'data-testid="paving"'), 'no paving').toHaveLength(0);
     expect(count(html, /<polygon[\s>]/g), 'no ground polygons and no cone trees').toBe(0);
     expect(count(html, /<polyline[\s>]/g), 'no ground paths').toBe(0);
-    // Each colonist has one circle, its head; an edge lamp would add two more.
-    expect(count(html, /<circle[\s>]/g), 'no edge lamps').toBe(tagsWith(html, 'data-testid="walker"').length);
+    // Each colonist has one circle, its head (and a hidden one's outline another); an edge lamp would add two more.
+    expect(count(html, /<circle[\s>]/g), 'no edge lamps').toBe(tagsWith(html, 'data-testid="walker"').length + tagsWith(html, 'data-testid="walker-ghost"').length);
     for (const n of ['hall', '1', '2', '3', '4']) expect(tagsWith(html, `data-testid="picture-${n}"`), `picture-${n}`).toHaveLength(1);
   });
 

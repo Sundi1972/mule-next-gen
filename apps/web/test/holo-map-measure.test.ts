@@ -101,7 +101,8 @@ describe('B-AC-9 (WS6 ruling and PM ruling, 7 Nov): the map rendered at a measur
     return { classes: chip.getAttribute('class') ?? '', icons: chip.findAll('svg').length, dots: chip.findAll('span').filter((s) => /\bsize-\[3px\]/.test(s.getAttribute('class') ?? '')), label: byId(map, 'map-plot-1-0')?.getAttribute('aria-label') };
   };
 
-  it('under 16 px the chip drops its icon and keeps three 3 px dots, lit in the good’s colour, at 1 px by 2 px padding; the label still names the good', async () => {
+  it('under 24 px the chip drops its icon and keeps three 3 px dots, lit in the good’s colour, at 1 px by 2 px padding; the label still names the good', async () => {
+    for (const plot of [12.8, 16, 19.8]) expect((await at(plot, { x: 1, y: 1 }, chipOf)).icons, `${plot} px`).toBe(0);
     const chip = await at(12.8, { x: 1, y: 1 }, chipOf);
     expect(chip.icons).toBe(0);
     expect(chip.dots).toHaveLength(3);
@@ -110,8 +111,8 @@ describe('B-AC-9 (WS6 ruling and PM ruling, 7 Nov): the map rendered at a measur
     expect(chip.label).toBe('Plains, free, Water 2 of 3');
   });
 
-  it('at 16 px the chip is unchanged: the good’s icon over the dots, 3 px by 2 px padding; the label names the good', async () => {
-    const chip = await at(16, { x: 1, y: 1 }, chipOf);
+  it('at 24 px the chip is the full one: the good’s icon over the dots, 3 px by 2 px padding; the label names the good', async () => {
+    const chip = await at(24, { x: 1, y: 1 }, chipOf);
     expect(chip.icons).toBe(1);
     expect(chip.dots).toHaveLength(3);
     expect(chip.classes).toMatch(/\bpx-\[3px\] py-\[2px\]/);
@@ -196,11 +197,12 @@ describe('B-AC-9 (WS6 ruling and PM ruling, 7 Nov): the map rendered at a measur
     }
   });
 
-  it('SA-1372 (WS6 ruling in #636): under 16 px a plot with a MULE and no dots draws no special badge: the MULE wins, as on a dots plot; from 16 px it keeps it', async () => {
+  it('SA-1372 (WS6 ruling in #636): under 24 px a plot with a MULE and no dots draws no special badge: the MULE wins, as on a dots plot; from 24 px it keeps it', async () => {
     const plots: MapTile[] = tiles.map((t) => (t.x === 1 && t.y === 1 ? { ...t, owner: 0, good: 'food', special: { kind: 'oasis' } } : t));
     const read = (map: FakeElement) => ({ badge: !!byId(map, 'special-glyph-1-1'), mule: !!byId(map, 'installed-1-1') });
     expect(await at(12.8, null, read, plots)).toEqual({ badge: false, mule: true });
-    expect(await at(16, null, read, plots)).toEqual({ badge: true, mule: true });
+    expect(await at(19.8, null, read, plots)).toEqual({ badge: false, mule: true });
+    expect(await at(24, null, read, plots)).toEqual({ badge: true, mule: true });
   });
 
   it('SA-1372 (#640 review): on a 12.8 px plot a special without dots keeps its badge inside, 2 px in, off the next plot’s chip at its foot', async () => {
