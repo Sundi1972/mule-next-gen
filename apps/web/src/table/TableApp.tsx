@@ -490,11 +490,13 @@ function NewsWords({ text, who, players }: { text: string; who: readonly string[
   let from = 0;
   for (const id of who) {
     const p = players.find((q) => q.id === id);
-    if (!p?.isAi) continue;
+    if (!p) continue;
     const at = wholeWordAt(text, p.name, from);
     if (at < 0) continue;
     const end = at + p.name.length;
-    parts.push(text.slice(from, end), <AiMark key={end} />);
+    // A person's name is passed over unmarked, so a computer seat of the same name is found in its own place.
+    if (p.isAi) parts.push(text.slice(from, end), <AiMark key={end} />);
+    else parts.push(text.slice(from, end));
     from = end;
   }
   parts.push(text.slice(from));
@@ -503,6 +505,7 @@ function NewsWords({ text, who, players }: { text: string; who: readonly string[
 
 const WORD = /[\p{L}\p{N}]/u;
 function wholeWordAt(text: string, name: string, from: number): number {
+  if (name === '') return -1;
   for (let at = text.indexOf(name, from); at >= 0; at = text.indexOf(name, at + 1)) {
     if (!WORD.test(text[at - 1] ?? '') && !WORD.test(text[at + name.length] ?? '')) return at;
   }

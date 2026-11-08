@@ -47,6 +47,13 @@ describe("the TV's news column marks a computer seat (Heiko, 7 Nov)", () => {
     expect(text(also!)).toBe('Also: Al · AI bought a plot from Lena for 120.');
   });
 
+  it('a person named before a computer seat of the same name keeps no mark: each seat is found in its own place', () => {
+    const twins = [aPlayer({ id: 'h', name: 'The Gambler', slot: 0, isAi: false }), aPlayer({ id: 'a', name: 'The Gambler', slot: 1, isAi: true })];
+    const sold = 'The Gambler sold 3 food to The Gambler at 40.';
+    const html = onTv(aMuleView({ phase: 'planning', players: twins, me: null, politics: null, news: [sold], newsLines: [{ text: sold, who: ['h', 'a'] }] }));
+    expect(newsOf(html).map(text)).toEqual(['The Gambler sold 3 food to The Gambler · AI at 40.']);
+  });
+
   it('without newsLines (an older server), or when a line names no seat, the words show as they are', () => {
     const old = onTv(aMuleView({ phase: 'planning', players: PLAYERS, me: null, politics: null, news: [BROKE] }));
     expect(newsOf(old).map(text)).toEqual([BROKE]);
