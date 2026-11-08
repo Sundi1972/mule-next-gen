@@ -183,6 +183,13 @@ function bars(html: string, x: number, y: number): number {
   const next = html.indexOf('data-testid="plot-', start + 1);
   return (html.slice(start, next < 0 ? undefined : next).match(/data-bar="unit"/g) ?? []).length;
 }
+/**
+ * The two frame-by-frame tests render the whole TV screen a few hundred times each, one frame every 0.1 s (or 0.05 s) of the
+ * show, on purpose: that sweep is what proves the chips never run ahead of the map. That's about 0.35 s here, but it ran
+ * a CI runner past vitest's 5 s (run 42402784840). 30 s leaves that runner's slowdown plenty of room.
+ */
+const SWEEP_MS = 30_000;
+
 /** Show seconds from a to b, every `step`. */
 const frames = (a: number, b: number, step: number) => Array.from({ length: Math.floor((b - a) / step) }, (_, i) => a + (i + 0.5) * step);
 
@@ -314,7 +321,7 @@ describe("the TV's production screen follows the event that is playing", () => {
           expect(struck - before, `${l.owner} on (${l.x}, ${l.y}) at ${s.at.toFixed(3)}`).toBe(s.after - s.before);
         }
     }
-  });
+  }, SWEEP_MS);
 
   it('B-AC-1: the rail plays the map’s script: one of title card, card or log entry per moment, the log a prefix of fired order', () => {
     const keys: string[] = both.events.map((e) => e.key);
@@ -346,7 +353,7 @@ describe("the TV's production screen follows the event that is playing", () => {
       expect(log(html), `${step}`).toEqual([]);
       expect(openTag(html, `data-testid="act-${step}"`), `${step}`).toContain('data-now="true"');
     }
-  });
+  }, SWEEP_MS);
 
   it('B-AC-1: inside the phase’s intro no story plays yet, and the drought plays from the moment the intro ends', () => {
     // The intro's first moments: its card is up and the map plays nothing.

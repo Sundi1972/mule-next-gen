@@ -49,7 +49,7 @@ import {
   type Tile,
 } from '@mule/engine';
 import { standPoint, tripSeconds } from './floor-time.js';
-import { belief, outlook, productionsLeft, type Outlook } from './outlook.js';
+import { belief, endMonth, outlook, productionsLeft, type Outlook } from './outlook.js';
 
 /** Who is thinking: the seat, its persona and its level. */
 export interface Mind {
@@ -199,10 +199,12 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
  * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
  * production on a copy of what it sees, with the new factory in it and fed, makes (madeNext), each month alike: a farm
- * the factory's own Energy use turns off feeds it only that 20%, though no input is in stock yet.
+ * the factory's own Energy use turns off feeds it only that 20%, though no input is in stock yet. A Medicine works is
+ * always fed while STRATEGIST.medicineDespiteInputs is on.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
+  if (outfit === 'medicine' && STRATEGIST.medicineDespiteInputs) return true;
   const lasts = inputLasts(obs, me, outfit);
   // Stops at the first input it can't feed: each input's check may roll a production out.
   return inputRuns(outfit).find(([g, q]) => !lasts(g, q)) === undefined;
@@ -427,9 +429,10 @@ export function keptUnits(good: Good, n: number): number {
  * Food and drinks its Water, then every good spoils and the depot keeps what it can; next development is hungry under
  * the household's Food, and next production turns off a plot short of its Energy, or halves a farm whose owner is
  * short of Water. Water counts only for a seat with a farm to water: without one, going short costs it nothing. 0 for
- * other goods.
+ * other goods. 0 in the game's last month: no next month comes, and the last upkeep's shortfall costs nothing (deep4 D3).
  */
 export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
+  if (obs.month >= endMonth(obs)) return 0;
   if (good === 'food') return needsOf(obs, me).food + keptUnits(good, needsOf(obs, me).food);
   if (good === 'energy') return keptUnits(good, monthNeeds(obs, me).energy);
   const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
@@ -492,7 +495,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   // Water is bought without FM-factory-input's buy-side fix. Inert while the switch is off; build it with the switch.
   if (AI_VALUE.unit) return modelValues(obs, o, good, mind);
   const me = mind.me;
-  const need = monthNeeds(obs, me)[good];
+  // In the game's last month no next month comes: no block, no floor, nothing kept for it (deep4 D3).
+  const last = obs.month >= endMonth(obs);
+  const need = last ? 0 : monthNeeds(obs, me)[good];
   const full = mind.level.fullScoring;
   const spoil = full ? GOOD_CONFIG[good].spoilage : 0;
   const keepRate = 1 - spoil;
@@ -516,7 +521,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       block = drink + Math.ceil(drink / keepRate);
       use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
     }
-  } else if (good === 'energy') {
+  } else if (good === 'energy' && !last) {
     // AM-17: the plants' net output covers the plots first; a unit short keeps on the plot energyOffOrder would turn
     // off at that point, worth what that plot loses turned off, over each unit of its use. Next month, so no cold snap.
     const order = energyOffOrder(obs, me, 1);
@@ -549,7 +554,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   let factoryUnits = 0;
   let factoryWorth = 0;
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
-  for (const t of mine) {
+  for (const t of last ? [] : mine) {
     if (!isFactory(t.outfit!)) continue;
     const q = RECIPES[t.outfit].inputs[good];
     if (!q || good === 'energy') continue;
@@ -679,10 +684,11 @@ function factoryUse(obs: GameState, me: string, good: Good): number {
 /**
  * The units that keep the seat whole next month (wholeNextMonth), plus what its factories turn after spoilage. Energy
  * its plants are forecast to supply is needed only at the forecast's risk; without a look-ahead the seat can't count
- * on them, and every unit is needed.
+ * on them, and every unit is needed. None in the game's last month: nothing is held for a month that doesn't come.
  */
 export function unitNeed(obs: GameState, mind: Mind, good: Good): UnitNeed {
   const me = mind.me;
+  if (obs.month >= endMonth(obs)) return { sure: 0, target: 0 };
   if (good === 'energy') {
     const target = wholeNextMonth(obs, me, good);
     if (!mind.level.lookAhead) return { sure: target, target };

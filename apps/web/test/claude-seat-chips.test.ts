@@ -3,7 +3,7 @@ import type { MuleView, MyView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { MuleGame } from '../../server/src/mule-game.js';
 import { Chip, claudeChip } from '../src/components/ClaudeSeat';
 import type { TableClient } from '../src/net/client';
@@ -65,6 +65,16 @@ function aGame({ toSidePick = false, at = seats } = {}): MuleGame {
   game.handle('s1', { type: 'ready' });
   return game;
 }
+
+/**
+ * The first good's side pick, played once for the file: the tests only read its views. A play is about 1,700 ticks, 0.35-0.7 s
+ * here, and played per test (eight plays) it ran a CI runner past vitest's 5 s (run 42399911141). Played once, it runs in
+ * the hook, whose 30 s leaves that runner's tenfold slowdown plenty of room.
+ */
+let sidePick: MuleGame;
+beforeAll(() => {
+  sidePick = aGame({ toSidePick: true });
+}, 30_000);
 
 /** The room's seats: Juno played by Claude with this status, or each seat named played by Claude with its own; `away` dropped. */
 const tableOf = (game: MuleView, claude: Status | Partial<Record<string, Status>>, away: readonly string[] = []): TableView<MuleView> => {
@@ -167,7 +177,8 @@ describe('HC-3: in planning a Claude seat is a label, never a wait (mock #tv-rea
     expect(part(thinking, `tv-ready-${JUNO}`)).toMatch(/^\S+ Juno Claude CLAUDE · THINKING$/);
     expect(part(thinking, `tv-state-${JUNO}`)).toBe('CLAUDE · THINKING');
     expect(part(thinking, `tv-ready-${JUNO}`)).not.toContain('plays its built-in plan');
-    expect(part(thinking, 'tv-waiting'), 'nobody waits for a thinking Claude seat').not.toContain('Juno');
+    // At four seats the ready list alone says who the table waits for (TV-FIT, PM ruling 8 Nov): nowhere names Juno.
+    expect(thinking, 'nobody waits for a thinking Claude seat').not.toContain(`data-testid="waiting-${JUNO}"`);
     expect(part(thinking, 'ready-count'), 'the AIs, Juno among them, are ready').toBe('2 / 4 READY');
     expect(part(onTv(view, 'connected'), `tv-state-${JUNO}`)).toBe('CLAUDE · CONNECTED');
     const offline = onTv(view, 'offline');
@@ -197,7 +208,7 @@ describe('HC-3: in planning a Claude seat is a label, never a wait (mock #tv-rea
 
 describe("RULE-6: the first good's side pick waits for a thinking Claude seat, with its countdown (mock #tv-ready, #phone-ready)", () => {
   it('the TV lists Juno as thinking with the seconds left by the server clock, under Waiting for, and does not count it picked', () => {
-    const view = waitedFor(aGame({ toSidePick: true }).viewFor(null), 32);
+    const view = waitedFor(sidePick.viewFor(null), 32);
     const html = onTv(view, 'thinking');
     expect(part(html, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · THINKING · 0:32');
     // The countdown shows once on the TV, in the picked list: the waiting box beside it is too narrow for it (TV-FIT).
@@ -206,7 +217,7 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
   });
 
   it('once its plan is taken Juno leaves the list: the same TV then shows its side, and the count has it picked', () => {
-    const view = aGame({ toSidePick: true }).viewFor(null);
+    const view = sidePick.viewFor(null);
     const waited = onTv(waitedFor(view, 32), 'thinking');
     expect(part(waited, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · THINKING · 0:32');
     expect(part(waited, 'ready-count')).toBe('2 / 4 PICKED');
@@ -217,7 +228,7 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
   });
 
   it('two Claude seats waited for: each counts down its own seconds beside its own status; only THINKING pulses', () => {
-    const view = waitedFor(aGame({ toSidePick: true }).viewFor(null), { [JUNO]: 32, [BARON]: 9 });
+    const view = waitedFor(sidePick.viewFor(null), { [JUNO]: 32, [BARON]: 9 });
     const statuses = { [JUNO]: 'thinking', [BARON]: 'offline' } as const;
     const tv = onTv(view, statuses);
     expect(part(tv, `tv-picked-${JUNO}`)).toBe('Juno CLAUDE · THINKING · 0:32');
@@ -230,7 +241,7 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
   });
 
   it("the host's Move on confirm, Kai away and Juno waited for, says Kai sits out and Juno starts on the side shown", () => {
-    const view = waitedFor(aGame({ toSidePick: true }).viewFor('s1'), 32);
+    const view = waitedFor(sidePick.viewFor('s1'), 32);
     const left = stillPicking(view, (id) => id !== 's2').filter((s) => s.id !== 's1');
     expect(left.map((s) => s.name)).toEqual(['Kai', 'Juno']);
     const juno = sideWords(view.auction!, left[1]!, view.auction!.good).line;
@@ -242,7 +253,7 @@ describe("RULE-6: the first good's side pick waits for a thinking Claude seat, w
   });
 
   it("the host's phone, once picked, waits for Kai and Juno, Juno's chip counting down; the host can move on for them", () => {
-    const view = waitedFor(aGame({ toSidePick: true }).viewFor('s1'), 45);
+    const view = waitedFor(sidePick.viewFor('s1'), 45);
     const html = onPhone(view, 'thinking', () => createElement(Auction));
     expect(part(html, 'waiting-to-pick')).toBe('Waiting for Kai Juno CLAUDE · THINKING · 0:45 to pick');
     expect(part(html, 'move-on')).toBe('Move on for them');
@@ -296,7 +307,7 @@ describe('the Claude line shows where a Claude seat can be waited for or not: pl
 
 describe("PM ruling: a waited Claude seat whose 45 s ran out (WS3 sets builtin) reads READY and plays its built-in plan", () => {
   /** The side pick with Juno's wait run out, its entry still in the list. */
-  const ranOut = (seat: string | null) => waitedFor(aGame({ toSidePick: true }).viewFor(seat), 0, [JUNO]);
+  const ranOut = (seat: string | null) => waitedFor(sidePick.viewFor(seat), 0, [JUNO]);
 
   it('the TV: Juno reads CLAUDE · READY, dimmed, with the note and no countdown; the waiting box no longer names it', () => {
     const html = onTv(ranOut(null), 'thinking');

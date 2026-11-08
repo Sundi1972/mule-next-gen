@@ -1,18 +1,24 @@
 import {
   analysisSeconds,
   DEVELOPMENT,
+  fineStepsWords,
   LOTS,
   MULE,
   mulePriceFor,
   outfitCostFor,
+  PERCENT,
   POLITICS,
   type AuctionSide,
+  type BudgetLine,
+  type DealOffer,
   type GameState,
   type LawProposal,
   type Office,
   type Outfit,
+  type OverruleTarget,
   type Phase,
   type PrestigeId,
+  type SabotageTarget,
   type TaxPromise,
 } from '@mule/engine';
 
@@ -56,7 +62,27 @@ export type AiAction =
   /** Planning, the Governor once the votes are over: put a law to the next planning's ballot; null withdraws it (slice 2a RULE-41). */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes (slice 2a RULE-40). */
-  | { type: 'voteLaw'; yes: boolean };
+  | { type: 'voteLaw'; yes: boolean }
+  /** Planning, the Governor once the votes are over: share the fund between the budget's lines (slice 5 S5-RULE-2). */
+  | { type: 'setBudget'; shares: Record<BudgetLine, number> }
+  /** Planning, any player but the Governor: call this month's overrule on a setting, or null withdraws the caller's own call (S5-RULE-6). */
+  | { type: 'callOverrule'; target: OverruleTarget | null }
+  /** The open overrule ballot: yes restores the start of the month, no keeps the Governor's setting; a later vote replaces it (S5-RULE-7). */
+  | { type: 'voteOverrule'; yes: boolean }
+  /** Planning: offer another player a deal card, a pact or a promised vote (slice 3 S3-RULE-2). */
+  | { type: 'offerDeal'; offer: DealOffer }
+  /** Planning: take back a card the other player has not answered. */
+  | { type: 'withdrawDeal'; id: string }
+  /** Planning: accept or decline a card offered to this seat. */
+  | { type: 'answerDeal'; id: string; accept: boolean }
+  /** Planning: order sabotage against a target, or withdraw this month's order with null (slice 4 S4-RULE-2). */
+  | { type: 'sabotage'; target: SabotageTarget | null }
+  /** Planning, the Sheriff once the votes are over: the whole list of plots guarded this month (S4-RULE-6). */
+  | { type: 'guard'; tiles: number[] }
+  /** Planning, the Sheriff once the votes are over: investigate a public order whose culprit is unknown (S4-RULE-7). */
+  | { type: 'investigate'; order: string }
+  /** Planning, the Sheriff once the votes are over: fine a revealed culprit; amount is the base before the ban's multiplier (S4-RULE-8). */
+  | { type: 'fine'; order: string; amount: number };
 
 /** Plays one action. Returns false when the rules refused it (a RuleError), so the hands move on to the next item. */
 export type Act = (action: AiAction) => boolean;
@@ -190,7 +216,7 @@ const DESCRIBED = {
       'Candidates are closed until the result',
       `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`,
       'The {office} is not elected yet',
-      'Sheriff candidates make no promise yet',
+      'Sheriff candidates make no promise',
       `A tax promise is ${POLITICS.tax.min}% to ${POLITICS.tax.max}%`,
       'Pick a promise to run for Governor',
     ],
@@ -219,6 +245,7 @@ const DESCRIBED = {
       'The tax is set in planning',
       'Wait for the election to end',
       'Only the Governor sets the tax',
+      'An overrule vote on the tax is called: it holds until it is settled',
       'The tax can be {low}% to {high}% this month',
     ],
     cost: null,
@@ -375,6 +402,127 @@ const DESCRIBED = {
     legalWhen: () => ['The law ballot is not open'],
     cost: null,
     args: { yes: 'true for yes, false for no' },
+  },
+  setBudget: {
+    type: 'setBudget',
+    command: 'setBudget',
+    phases: ['planning'],
+    does: () => "Shares the colony fund's spare credits between the budget's lines, in whole percent; the buildings, Welfare and the rest are paid from those shares at month end.",
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'Set the budget once the votes are over',
+      'Only the Governor sets the budget',
+      'The colony has no {line} line yet',
+      `{line} is 0% to {max}%, in steps of ${POLITICS.budget.step}`,
+      `The shares add up to {total}%: at most ${PERCENT}%`,
+    ],
+    cost: null,
+    args: { shares: `{ projects, welfare, security }: whole percent of the spare fund, in steps of ${POLITICS.budget.step}; at most ${PERCENT} in all` },
+  },
+  callOverrule: {
+    type: 'callOverrule',
+    command: 'callOverrule',
+    phases: ['planning'],
+    does: () => "Calls this month's overrule vote on a setting the Governor changed; null takes your own call back.",
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'Call an overrule once the votes are over',
+      'There is no Governor to overrule',
+      "The Governor can't overrule themself",
+      "{name} already called this month's vote",
+      'Only the tax can be overruled in this version',
+      "Only the Sheriff's inquiry opens a no-confidence vote",
+      'The {target} is as it was when the month began',
+      'There is no call of yours to withdraw',
+    ],
+    cost: null,
+    args: { target: "'tax', or null to withdraw your call" },
+  },
+  voteOverrule: {
+    type: 'voteOverrule',
+    command: 'voteOverrule',
+    phases: ['planning'],
+    does: () => 'Votes yes (restore the setting the month began with) or no (keep the Governor\'s) on the open overrule ballot; a later vote replaces it until the ballot closes.',
+    legalWhen: () => ['The overrule vote is not open'],
+    cost: null,
+    args: { yes: 'true for yes, false for no' },
+  },
+  offerDeal: {
+    type: 'offerDeal',
+    command: 'offerDeal',
+    phases: ['planning'],
+    does: () => 'Offers another player a deal card: a pact for a few months, or a promise to vote for a candidate or on the next law; nothing binds until they accept.',
+    legalWhen: () => [
+      'This game plays without deals',
+      'Cards are offered in planning',
+      'Pick another player',
+      'You have {count} cards waiting for an answer',
+      '{name} has not answered your last card',
+      `A pact runs ${POLITICS.deals.pactMonths.slice(0, -1).join(', ')} or ${POLITICS.deals.pactMonths.at(-1)} months`,
+      'You already have a pact with {name}',
+      'The {office} is not elected yet',
+      'No election is left this game',
+      'Promise your vote to someone else',
+      '{name} is not running for {office}',
+      'No law is up for a vote',
+      'You already promised your vote on this ballot',
+    ],
+    cost: null,
+    args: { offer: "{ to, terms, months? }: terms is { kind: 'pact' }, { kind: 'vote', office, candidate } or { kind: 'vote', law: true, yes }; months is for a pact" },
+  },
+  withdrawDeal: {
+    type: 'withdrawDeal',
+    command: 'withdrawDeal',
+    phases: ['planning'],
+    does: () => 'Takes back a card this seat offered and the other player has not answered.',
+    legalWhen: () => ['This game plays without deals', 'That card is no longer open'],
+    cost: null,
+    args: { id: "the card's id, 'deal-…'" },
+  },
+  answerDeal: {
+    type: 'answerDeal',
+    command: 'answerDeal',
+    phases: ['planning'],
+    does: () => 'Accepts or declines a card offered to this seat; an accepted vote card whose ballot has closed is shown expired.',
+    legalWhen: () => ['Cards are answered in planning', 'That card is no longer open', 'You already have a pact with {name}'],
+    cost: null,
+    args: { id: "the card's id, 'deal-…'", accept: 'true to accept, false to decline' },
+  },
+  sabotage: {
+    type: 'sabotage',
+    command: 'sabotage',
+    phases: ['planning'],
+    does: () => "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
+    legalWhen: () => ['This game plays without sabotage', 'Orders are given in planning', "Pick another player's plot", 'That plot makes nothing to cut', 'Pick a good', 'A rumour moves a price up or down', 'A crew costs {cost} cr; you have {money}'],
+    cost: null, // the crew is charged at upkeep, by the order's kind, never when the order is given
+    args: { target: "{ kind: 'powerCut', tile } or { kind: 'rumour', good, dir: 'up' | 'down' } or null to withdraw" },
+  },
+  guard: {
+    type: 'guard',
+    command: 'guard',
+    phases: ['planning'],
+    does: () => "The Sheriff posts the whole list of plots guarded this month (any owner's); a guarded plot's cut always fails and names its saboteur. It replaces the earlier list.",
+    legalWhen: () => ['This game plays without sabotage', 'Guards are posted once the votes are over', 'Only the Sheriff posts guards', "Guards watch players' plots", 'You have {count} guards'],
+    cost: null,
+    args: { tiles: 'the plots to guard, as tile indices' },
+  },
+  investigate: {
+    type: 'investigate',
+    command: 'investigate',
+    phases: ['planning'],
+    does: () => 'The Sheriff investigates one public incident whose culprit is unknown; it may name the culprit or go cold. One investigation a month.',
+    legalWhen: () => ['This game plays without sabotage', 'Investigations are made once the votes are over', 'Only the Sheriff investigates', 'One investigation a month', 'No such incident', 'That one is solved', 'The trail went cold on that one'],
+    cost: null,
+    args: { order: "the incident's order id, 'sab-…'" },
+  },
+  fine: {
+    type: 'fine',
+    command: 'fine',
+    phases: ['planning'],
+    does: () => 'The Sheriff fines a revealed culprit once; the base is multiplied by any sabotage ban and shared with the victim.',
+    legalWhen: () => ['This game plays without sabotage', 'Fines are levied once the votes are over', 'Only the Sheriff fines', 'Only a revealed culprit is fined', 'Already fined', "You can't fine yourself", fineStepsWords()],
+    cost: null,
+    args: { order: "the incident's order id, 'sab-…'", amount: `the base fine in credits: ${POLITICS.sheriff.fine.steps[0]} to ${POLITICS.sheriff.fine.steps.at(-1)} in steps of ${POLITICS.sheriff.fine.steps[1]! - POLITICS.sheriff.fine.steps[0]!}` },
   },
 } satisfies Described;
 

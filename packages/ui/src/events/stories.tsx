@@ -9,13 +9,14 @@ import { Sneeze } from './rollcall';
 import { Colonist, ease, mix, useStoryClock, type Scene } from './scene';
 import { COLONY_SCENES } from './stories-colony';
 import { LEDGER_SCENES } from './stories-ledger';
+import { SABOTAGE_SCENES } from './stories-sabotage';
 import type { ShowEventKey, ShowSize } from './types';
 
 /**
  * The stories: the camera goes to the place and the event happens on it. Drawn in the map's own space, so the
  * camera's zoom carries them, and sized against the map's width, so a scene plays on the TV and, smaller, on a phone.
  * The spotlights' stories are here (bumper harvest, cavern collapse, MULE theft); the ledger's and the colony's are
- * stories-ledger.tsx and stories-colony.tsx.
+ * stories-ledger.tsx and stories-colony.tsx; sabotage's, stories-sabotage.tsx.
  */
 
 /** A bumper harvest: the plot glows, its produce bursts up, and a ×2 stamp lands. */
@@ -164,6 +165,7 @@ const SCENE: Partial<Record<ShowEventKey, Scene>> = {
   sickness: Sneeze,
   ...LEDGER_SCENES,
   ...COLONY_SCENES,
+  ...SABOTAGE_SCENES,
 };
 
 /** Each segment's story over the map, from when it starts to play. */
