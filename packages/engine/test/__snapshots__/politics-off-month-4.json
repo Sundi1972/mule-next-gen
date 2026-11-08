@@ -82,9 +82,9 @@
         "alloy": 90,
         "crystite": 90,
         "electronics": 880,
-        "energy": 31,
+        "energy": 25,
         "food": 38,
-        "medicine": 150,
+        "medicine": 120,
         "rareEarth": 75,
         "smithore": 50,
         "water": 25
@@ -216,9 +216,9 @@
         "alloy": 90,
         "crystite": 90,
         "electronics": 880,
-        "energy": 31,
+        "energy": 25,
         "food": 38,
-        "medicine": 150,
+        "medicine": 120,
         "rareEarth": 75,
         "smithore": 50,
         "water": 25
@@ -350,9 +350,9 @@
         "alloy": 90,
         "crystite": 138,
         "electronics": 880,
-        "energy": 31,
+        "energy": 25,
         "food": 60,
-        "medicine": 240,
+        "medicine": 120,
         "rareEarth": 75,
         "smithore": 50,
         "water": 25
@@ -406,7 +406,7 @@
       "shortages": [
         "food"
       ],
-      "storeCapital": 4000,
+      "storeCapital": 4699,
       "storeMules": 10,
       "warnings": []
     }
@@ -565,14 +565,14 @@
       "alloy": "normal",
       "crystite": "offWorld",
       "electronics": "severe",
-      "energy": "tight",
+      "energy": "normal",
       "food": "severe",
-      "medicine": "severe",
+      "medicine": "normal",
       "rareEarth": "tight",
       "smithore": "normal",
       "water": "tight"
     },
-    "capital": 4000,
+    "capital": 4699,
     "lastWalk": {
       "water": {
         "dryBudget": false,
@@ -598,9 +598,9 @@
       "alloy": 91,
       "crystite": 137,
       "electronics": 868,
-      "energy": 31,
+      "energy": 25,
       "food": 120,
-      "medicine": 476,
+      "medicine": 119,
       "rareEarth": 75,
       "smithore": 50,
       "water": 31
@@ -620,9 +620,9 @@
       "alloy": 8,
       "crystite": 0,
       "electronics": 0,
-      "energy": 15,
+      "energy": 39,
       "food": 0,
-      "medicine": 1,
+      "medicine": 28,
       "rareEarth": 4,
       "smithore": 20,
       "water": 2
