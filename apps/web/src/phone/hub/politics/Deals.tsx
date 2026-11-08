@@ -5,11 +5,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useClient, useClientState } from '../../../net/react';
 import { usePhoneGame } from '../../game';
-import { lawUp, monthsWords, stakesWords } from './deals-words';
-import { CardWho, shellOf, Who } from './parts';
+import { OnlyYou } from '../OnlyYou';
+import { bindsWords, lawUp, monthsWords, nameOf, stakesWords, statusWords, titleWords } from './deals-words';
+import { CardWho, Marked, shellOf, Who } from './parts';
 
 /**
- * Deal cards on the phone (S3-C17, S3-C18): the composer over the rail. Reads me.deals and the public politics view;
+ * Deal cards on the phone (S3-C17, S3-C18): the composer over the rail, a card offered to me (in its whisper thread
+ * and behind the agenda's door), and My cards, one section of the Talk desk. Reads me.deals and the public politics view;
  * sends only offerDeal, withdrawDeal and answerDeal, and shows a refusal as the server words it.
  */
 
@@ -307,3 +309,242 @@ function RailSheet({ label, title, testid, anchor, onClose, closeWord = 'Close',
   const shell = shellOf(anchor);
   return shell ? createPortal(sheet, shell) : sheet;
 }
+
+/**
+ * A card offered to me, opened from the agenda in the composer's sheet, so its label, terms and Accept / Decline fit
+ * the smallest phone together. Closes itself once the card is no longer offered.
+ */
+export function IncomingDealSheet({ id, onClose, anchor }: { id: string; onClose: () => void; anchor: Element | null }) {
+  const { view, me } = usePhoneGame();
+  const c = (me.deals?.cards ?? []).find((x) => x.id === id && x.status === 'offered' && x.to === me.id);
+  useEffect(() => {
+    if (!c) onClose();
+  }, [c, onClose]);
+  if (!c) return null;
+  return (
+    <RailSheet
+      label={`Deal offer from ${nameOf(view, c.from, me.id)}`}
+      testid="incoming-sheet"
+      anchor={anchor}
+      onClose={onClose}
+      closeWord="Answer later, in the whisper"
+      title={
+        <>
+          <span className="label-caps text-[10px]!">Deal offer</span>
+          <span className="shrink-0 whitespace-nowrap">
+            <OnlyYou />
+          </span>
+        </>
+      }
+    >
+      <IncomingDeal c={c} testid={`sheet-card-${c.id}`} pair={false} />
+    </RailSheet>
+  );
+}
+
+/** A card's face: who, what it binds, both names with their reputation, what it risks. Children: its buttons. */
+function DealFace({ c, tone = 'solid', expiry = false, pair = true, testid, children }: { c: DealCard; tone?: 'solid' | 'quiet'; expiry?: boolean; pair?: boolean; testid: string; children?: ReactNode }) {
+  const { view, me } = usePhoneGame();
+  return (
+    <section className={cx('flex shrink-0 flex-col gap-1 rounded-panel border-2 p-2', tone === 'solid' ? 'border-holo bg-holo-soft' : 'border-holo-line bg-panel')} data-testid={testid} data-status={c.status}>
+      <span className="flex items-center justify-between gap-1">
+        <span className="label-caps truncate text-[10px]!" data-testid={`${testid}-label`}>
+          <Marked text={`Card ${c.from === me.id ? `to ${nameOf(view, c.to, me.id)}` : `from ${nameOf(view, c.from, me.id)}`}`} view={view} />
+        </span>
+        {/* In the rail sheet its header says Only you, and the label keeps the room. */}
+        {pair && (
+          <span className="shrink-0 whitespace-nowrap">
+            <OnlyYou text="You two" />
+          </span>
+        )}
+      </span>
+      <span className="font-display text-base font-semibold leading-tight" data-testid={`${testid}-title`}>
+        <Marked text={titleWords(view, c, me.id)} view={view} />
+      </span>
+      <span className="text-xs leading-snug" data-testid={`${testid}-binds`}>
+        <Marked text={bindsWords(view, c, me.id)} view={view} />
+      </span>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" data-testid={`${testid}-names`}>
+        <CardWho view={view} id={c.from} me={me.id} size={14} rep open testid={`${testid}-from`} />
+        <CardWho view={view} id={c.to} me={me.id} size={14} rep open testid={`${testid}-to`} />
+      </span>
+      <span className="text-[11px] leading-snug text-ink-2" data-testid={`${testid}-stakes`}>
+        <Marked text={stakesWords(view, c, me.id)} view={view} />
+        {expiry && <> Unanswered, it expires when planning ends.</>}
+      </span>
+      {children}
+    </section>
+  );
+}
+
+/** A card offered to me, with Accept and Decline, one tap each. */
+export function IncomingDeal({ c, testid = `incoming-${c.id}`, pair = true }: { c: DealCard; testid?: string; pair?: boolean }) {
+  const client = useClient();
+  const { view, me } = usePhoneGame();
+  return (
+    <DealFace c={c} expiry pair={pair} testid={testid}>
+      <span className="grid grid-cols-2 gap-1.5">
+        <Button size="md" onClick={() => client.intent({ type: 'answerDeal', id: c.id, accept: true })} data-testid={`${testid}-accept`}>
+          Accept
+        </Button>
+        <Button size="md" variant="outline" onClick={() => client.intent({ type: 'answerDeal', id: c.id, accept: false })} data-testid={`${testid}-decline`}>
+          Decline
+        </Button>
+      </span>
+      <span className="sr-only">{statusWords(view, c, me.id)}</span>
+    </DealFace>
+  );
+}
+
+/** My card, sent and not yet answered: "Waiting for Brix" and Withdraw. */
+export function OutgoingDeal({ c }: { c: DealCard }) {
+  const client = useClient();
+  const { view, me } = usePhoneGame();
+  return (
+    <DealFace c={c} tone="quiet" testid={`outgoing-${c.id}`}>
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-holo" data-testid={`outgoing-${c.id}-waiting`}>
+          <span aria-hidden className="size-2 animate-pulse rounded-full bg-holo" />
+          <Marked text={statusWords(view, c, me.id)} view={view} />
+        </span>
+        <Button size="md" variant="ghost" className="-mr-2" onClick={() => client.intent({ type: 'withdrawDeal', id: c.id })} data-testid={`outgoing-${c.id}-withdraw`}>
+          Withdraw
+        </Button>
+      </span>
+    </DealFace>
+  );
+}
+
+const MARK: Record<DealCard['status'], string> = { offered: '…', active: '✓', kept: '✓', broken: '✗', declined: '–', withdrawn: '–', expired: '–' };
+const TONE: Record<DealCard['status'], string> = { offered: 'text-holo', active: 'text-ok', kept: 'text-ok', broken: 'text-alert', declined: 'text-ink-3', withdrawn: 'text-ink-3', expired: 'text-ink-3' };
+
+/** One line for an answered card: its title and where it stands. The mark and the words carry it, not colour. */
+export function DealLine({ c, testid }: { c: DealCard; testid?: string }) {
+  const { view, me } = usePhoneGame();
+  return (
+    <span className="flex min-w-0 items-baseline gap-1.5 text-xs" data-testid={testid ?? `deal-line-${c.id}`} data-status={c.status}>
+      <span aria-hidden className={cx('w-3 shrink-0 text-center font-mono font-bold', TONE[c.status])}>
+        {MARK[c.status]}
+      </span>
+      <span className="min-w-0">
+        <strong className="font-semibold">
+          <Marked text={titleWords(view, c, me.id)} view={view} />
+        </strong>
+        <span className="text-ink-2">
+          {' '}
+          · <Marked text={statusWords(view, c, me.id)} view={view} />
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The cards in a whisper thread with `other`, at its foot (a card carries months, not a time, so it cannot sit
+ * between the lines): the offered ones as cards, this month's answered ones as a line each.
+ */
+export function DealsInThread({ other }: { other: string }) {
+  const { view, me } = usePhoneGame();
+  const cards = (me.deals?.cards ?? []).filter((c) => between(c, me.id, other));
+  const offered = cards.filter((c) => c.status === 'offered');
+  const recent = cards.filter((c) => c.status !== 'offered' && (c.settled === view.month || (c.status === 'active' && c.offered === view.month)));
+  if (offered.length === 0 && recent.length === 0) return null;
+  return (
+    <li className="flex flex-col gap-1.5" data-testid={`thread-deals-${other}`}>
+      {recent.map((c) => (
+        <DealLine key={c.id} c={c} testid={`thread-line-${c.id}`} />
+      ))}
+      {offered.map((c) => (c.from === me.id ? <OutgoingDeal key={c.id} c={c} /> : <IncomingDeal key={c.id} c={c} />))}
+    </li>
+  );
+}
+
+function Group({ title, count, testid, children }: { title: ReactNode; count: number; testid: string; children: ReactNode }) {
+  if (count === 0) return null;
+  return (
+    <section className="flex flex-col gap-1" data-testid={testid}>
+      <h3 className="label-caps flex items-center gap-1.5 text-[10px]! @min-[1100px]/shell:text-xs!">
+        {title} <span className="font-mono text-ink-3">{count}</span>
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+/** A card in My cards that waits on nobody: with whom, what it binds and until when, or how it ended. */
+function MyDealRow({ c }: { c: DealCard }) {
+  const { view, me } = usePhoneGame();
+  const other = c.from === me.id ? c.to : c.from;
+  return (
+    <div className="flex flex-col gap-0.5 rounded-control border border-holo-faint bg-panel px-2 py-1" data-testid={`my-deal-${c.id}`} data-status={c.status}>
+      <span className="flex items-center justify-between gap-1.5">
+        <DealLine c={c} testid={`my-deal-${c.id}-line`} />
+      </span>
+      <span className="flex flex-wrap items-center gap-x-1.5 pl-[18px] text-[11px] text-ink-2">
+        with <CardWho view={view} id={other} me={me.id} size={12} rep open testid={`my-deal-${c.id}-with`} />
+        {c.status === 'active' && (
+          <span data-testid={`my-deal-${c.id}-binds`}>
+            · <Marked text={bindsWords(view, c, me.id)} view={view} />
+          </span>
+        )}
+        {c.settled !== null && <span className="font-mono text-[10px] text-ink-3">· month {c.settled}</span>}
+      </span>
+    </div>
+  );
+}
+
+/** Every card of mine, by what I must do: answer, waiting, active, settled. One section of the Talk desk. */
+export function MyDeals() {
+  const { me } = usePhoneGame();
+  const cards = me.deals?.cards ?? [];
+  const incoming = cards.filter((c) => c.status === 'offered' && c.to === me.id);
+  const waiting = cards.filter((c) => c.status === 'offered' && c.from === me.id);
+  const active = cards.filter((c) => c.status === 'active');
+  const settled = cards.filter((c) => !isOpen(c));
+  return (
+    <div className="flex flex-col gap-2.5" data-testid="my-deals">
+      <p className="flex items-start gap-1.5 text-[11px] leading-snug text-ink-2">
+        <span className="shrink-0 whitespace-nowrap">
+          <OnlyYou />
+        </span>
+        <span>A card is seen only by its two players, until it is broken: then the whole table sees it.</span>
+      </p>
+      {cards.length === 0 && (
+        <p className="text-sm text-ink-3" data-testid="my-deals-empty">
+          No cards yet. Whisper someone and tap + Deal: a pact, or your vote.
+        </p>
+      )}
+      <Group title="For you to answer" count={incoming.length} testid="my-deals-incoming">
+        {incoming.map((c) => (
+          <IncomingDeal key={c.id} c={c} />
+        ))}
+      </Group>
+      <Group
+        title={
+          <>
+            Waiting for an answer <span className="normal-case tracking-normal text-ink-3">· {me.deals?.offersLeft ?? 0} more you can offer</span>
+          </>
+        }
+        count={waiting.length}
+        testid="my-deals-waiting"
+      >
+        {waiting.map((c) => (
+          <OutgoingDeal key={c.id} c={c} />
+        ))}
+      </Group>
+      <Group title="Active" count={active.length} testid="my-deals-active">
+        {active.map((c) => (
+          <MyDealRow key={c.id} c={c} />
+        ))}
+      </Group>
+      <Group title="Settled" count={settled.length} testid="my-deals-settled">
+        {settled.map((c) => (
+          <MyDealRow key={c.id} c={c} />
+        ))}
+      </Group>
+    </div>
+  );
+}
+
+/** Cards offered to me and not answered yet: the agenda's door and the Talk tab's badge count them. */
+export const incomingOf = (me: Pick<MyView, 'id' | 'deals'>) => (me.deals?.cards ?? []).filter((c) => c.status === 'offered' && c.to === me.id);
