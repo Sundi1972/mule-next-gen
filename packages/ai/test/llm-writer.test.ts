@@ -4,7 +4,8 @@ import { PERSONAS } from '../src/personas.js';
 import type { Mind } from '../src/value.js';
 import { landBrief, type LandBrief } from '../src/llm/brief.js';
 import { playbookFrom, replySchema, writeReply, type Cause, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
-import type { PlanEdit, ValidatePlan } from '../src/playbook/index.js';
+import { validatorFor, type PlanEdit, type ValidatePlan } from '../src/playbook/index.js';
+import { relationMemory } from '../src/social/index.js';
 
 const state = createGame({ seed: 7, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `Seat ${i}`, isAi: true })) });
 
@@ -288,5 +289,68 @@ describe('B fix 5: an edit to a setting play does not read is refused as not off
       expect(written.reply.cause).toBe('bad_shape');
       expect(made.playbook).toEqual(ENGINE);
     }
+  });
+});
+
+describe('T-AC-B3 (writer): the social reply (spec B C3)', () => {
+  /** A text no game produces, so a message leaking into the recorded reply is unmistakable. */
+  const MARK = 'MARK-message-q8';
+  const socialBrief = () => landBrief(state, mindOf('trader'), PERSONAS.trader, { strategy: STRATEGY, landGrant: LAND }, [], {}, null, null, false, { memory: relationMemory(state, 'p0', [], new Map()), reads: {} });
+  const message = (to: string, text = `${MARK} Food for votes?`) => ({ to, purpose: 'goodwill', text, facts: [] as unknown[] });
+  const socialText = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      edits: [
+        { path: '/strategy/stances/p1', to: 'ally', reason: 'Sells me Food.' },
+        { path: '/rivalReads/p1', to: ['sells Food', 'wants Governor'], reason: 'What I know.' },
+      ],
+      line: 'Friends?',
+      messages: [message('p1'), message('table', 'Who sells Energy?'), message('p9'), { ...message('p2'), facts: [{ price: 'food', value: 31 }] }],
+      ...over,
+    });
+
+  it("T-AC-B3 (writer): a reply's stances and rivalReads arrive as edits in the recorded reply; its messages are returned beside it and never appear in the record; the replay returns the same edits", async () => {
+    const model = fakeModel(socialText());
+    const brief = socialBrief();
+    const written = await writeReply(model.complete, { brief, system: SYSTEM, waitMs: WAIT });
+
+    // The request offers the stance and notes for every other player, and messages to them or the table.
+    const schema = model.asked[0]!.prompt.schema as unknown as { properties: { messages: { items: { properties: { to: { enum: string[] } } } } }; required: string[] };
+    expect(schema.properties.messages.items.properties.to.enum).toEqual(['p1', 'p2', 'p3', 'table']);
+    expect(schema.required).toContain('messages');
+
+    // The edits, as recorded; the messages beside the reply, a message to no seat at the table dropped.
+    expect(written.reply.edits).toEqual([
+      { path: '/strategy/stances/p1', to: 'ally', reason: 'Sells me Food.' },
+      { path: '/rivalReads/p1', to: ['sells Food', 'wants Governor'], reason: 'What I know.' },
+    ]);
+    expect(written.messages).toEqual([
+      { to: 'p1', purpose: 'goodwill', text: `${MARK} Food for votes?`, facts: [] },
+      { to: 'table', purpose: 'goodwill', text: 'Who sells Energy?', facts: [] },
+      { to: 'p2', purpose: 'goodwill', text: `${MARK} Food for votes?`, facts: [{ price: 'food', value: 31 }] },
+    ]);
+    expect(JSON.stringify(written.reply)).not.toContain(MARK);
+    expect(written.reply).not.toHaveProperty('messages');
+
+    // WS1's real clamps take both edits: the stance plays in the playbook, the notes are kept; by 'llm'.
+    const validate = validatorFor({ mind: mindOf('trader'), seed: 102 });
+    const { playbook } = playbookFrom(validate, state, DRAFT, written);
+    expect(playbook.by).toBe('llm');
+    expect(playbook.strategy.stances.p1).toBe('ally');
+    expect(playbook.rivalReads?.p1).toEqual(['sells Food', 'wants Governor']);
+    expect(playbook.rejected).toEqual([]);
+    expect(JSON.stringify(playbook)).not.toContain(MARK);
+  });
+
+  it('T-AC-B3 (writer): a message that is not of its shape is dropped and the reply stands; a brief without the social section offers no messages, and a reply carrying them is not its shape', async () => {
+    const odd = await writeReply(fakeModel(socialText({ messages: [{ to: 'p1', text: 'no purpose' }, { ...message('p1'), facts: [{ price: 'gold', value: 3 }] }, message('p1', '   ')] })).complete, { brief: socialBrief(), system: SYSTEM, waitMs: WAIT });
+    expect(odd.reply.cause).toBeUndefined();
+    expect(odd.reply.edits).toHaveLength(2);
+    expect(odd.messages).toEqual([]);
+
+    const plain = fakeModel(replyText({ messages: [message('p1')] }));
+    const written = await writeReply(plain.complete, { brief: briefOf('trader'), system: SYSTEM, waitMs: WAIT });
+    expect(plain.asked[0]!.prompt.schema.properties).not.toHaveProperty('messages');
+    expect(written.reply.cause).toBe('bad_shape');
+    expect(written.messages ?? []).toEqual([]);
   });
 });

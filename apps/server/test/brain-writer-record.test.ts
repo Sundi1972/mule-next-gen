@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGame, type GameRecord, type GameState, type Strategy } from '@mule/engine';
-import { LAND_OFFERS, type LandBrief, type WriterReply } from '@mule/ai';
+import { LAND_OFFERS, STANCES, type LandBrief, type WriterReply } from '@mule/ai';
 import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import { WRITE_CALLS } from '../src/brain/client.js';
@@ -38,7 +38,7 @@ const REPLY_TEXT = JSON.stringify({
  * Stands in for the game until playbooks.ts asks the writer: at start it asks seat p0's writer once, keeps what came
  * back, and ends the game. Its brain is the recorder's while recording and the replay's while replaying.
  */
-const asked = vi.hoisted(() => ({ written: [] as unknown[] }));
+const asked = vi.hoisted(() => ({ written: [] as unknown[], ask: null as unknown }));
 vi.mock('../src/mule-game.js', async (original) => {
   const real = await original<typeof import('../src/mule-game.js')>();
   class WriterGame {
@@ -49,7 +49,7 @@ vi.mock('../src/mule-game.js', async (original) => {
     ) {}
     start(seats: SeatInfo[]): void {
       const writer = this.options.brain.writerFor({ id: seats[0]!.id, persona: 'trader', level: 'trader' });
-      void writer?.write('strategy', ASK).then((r) => {
+      void writer?.write('strategy', (asked.ask as WriteAsk | null) ?? ASK).then((r) => {
         asked.written.push(structuredClone(r));
         // A caller that goes on to change the reply it was handed must not change what was recorded.
         r.reply.line = 'MUTATED';
@@ -84,6 +84,7 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 let dir: string;
 beforeEach(() => {
   asked.written = [];
+  asked.ask = null;
   sdkBuilt.count = 0;
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-writer-record-'));
 });
@@ -92,9 +93,9 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** Records the stand-in game with a keyed brain on a fake SDK that answers REPLY_TEXT. */
-async function recorded() {
-  const sdk = fakeSdk(() => sdkMessage(REPLY_TEXT, { input: 400, output: 60 }));
+/** Records the stand-in game with a keyed brain on a fake SDK that answers `text` (REPLY_TEXT by default). */
+async function recorded(text = REPLY_TEXT) {
+  const sdk = fakeSdk(() => sdkMessage(text, { input: 400, output: 60 }));
   const logPath = path.join(dir, 'costs.jsonl');
   const brain = createBrain({ gameId: 'g-writer', env: KEY, logPath, sdkFactory: () => sdk });
   const { game, recorder } = createRecordedGame({ ctx, seed: 3, options: { maxMonths: 1, politics: false }, brain });
@@ -163,5 +164,50 @@ describe('the writer port through the game record', () => {
     expect(text).not.toContain('Sneak.');
     expect(text).not.toContain('path_not_offered');
     expect(text).not.toContain('"refused"');
+  });
+});
+
+describe('T-AC-B3 (writer): the social reply through the game record (spec B C3)', () => {
+  /** A text no game produces, so a message reaching the record is unmistakable. */
+  const MARK = 'MARK-whisper-k3';
+  const SOCIAL_BRIEF: LandBrief = {
+    ...BRIEF,
+    offers: [...LAND_OFFERS, { path: '/strategy/stances/p1', to: { type: 'string', enum: [...STANCES] } }, { path: '/rivalReads/p1', to: { type: 'array', items: { type: 'string' } } }],
+    messageTo: ['p1'],
+  };
+  const SOCIAL_TEXT = JSON.stringify({
+    edits: [
+      { path: '/strategy/stances/p1', to: 'rival', reason: 'Took my river.' },
+      { path: '/rivalReads/p1', to: ['wants the river'], reason: 'Watch him.' },
+    ],
+    line: 'Hm.',
+    messages: [{ to: 'p1', purpose: 'influence', text: `${MARK} Leave me the river and I back you.`, facts: [] }],
+  });
+
+  it("T-AC-B3 (writer): a reply's stances and rivalReads arrive as edits in the recorded reply; its messages are returned beside it and never appear in the record; the replay returns the same edits", async () => {
+    asked.ask = { ...ASK, brief: SOCIAL_BRIEF };
+    const { record, written } = await recorded(SOCIAL_TEXT);
+
+    const edits = [
+      { path: '/strategy/stances/p1', to: 'rival', reason: 'Took my river.' },
+      { path: '/rivalReads/p1', to: ['wants the river'], reason: 'Watch him.' },
+    ];
+    expect(written.reply).toEqual({ edits, line: 'Hm.' });
+    expect(written.messages).toEqual([{ to: 'p1', purpose: 'influence', text: `${MARK} Leave me the river and I back you.`, facts: [] }]);
+
+    // The record keeps the reply's edits as the answer's write, and nothing of the message.
+    const answers = record.events.filter((e) => e.type === 'answer');
+    expect(answers).toHaveLength(1);
+    expect(answers[0]!.type === 'answer' && answers[0]!.write).toEqual({ edits, line: 'Hm.' });
+    const text = JSON.stringify(record);
+    expect(text).not.toContain(MARK);
+    expect(text).not.toContain('influence');
+    expect(text).not.toContain('"messages"');
+
+    // The replay hands the game the same edits, and no message: nothing it says was ever recorded.
+    asked.written = [];
+    const result = await replay(record);
+    expect(result.identical).toBe(true);
+    expect(asked.written).toEqual([{ reply: { edits, line: 'Hm.' }, refused: [] }]);
   });
 });
