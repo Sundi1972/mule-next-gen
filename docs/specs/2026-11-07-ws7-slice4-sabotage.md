@@ -1296,8 +1296,7 @@ goal      S4-1, S4-2 — unchanged
 ```
 
 ```
-AM-6 · 2026-11-08 · WS7 (build: S4-PR-4's logic review, finding I1) · the ban's vote breaks a tie for the law in
-                    force
+AM-6 · 2026-11-08 · WS7 (build: S4-PR-4's logic review, finding I1) · a tie in the ban's vote goes to the ban
 
 target    S4-RULE-13, VoteHand's law-vote row
 said      "sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0", for an enact and a repeal alike

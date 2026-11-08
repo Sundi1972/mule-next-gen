@@ -133,7 +133,7 @@ function ownLawVote(obs: GameState, mind: Mind, proposal: LawProposal, port?: Vo
   if (typeof asked === 'boolean') return asked;
   if (proposal.kind === 'enact' && proposal.law === 'landTax' && politics.baron === me) return false;
   if (mind.levelId === 'rookie') return null;
-  // S4-RULE-13, AM-6: the ban's vote is its worth to the seat; a tie goes to the law in force (an enact passes on >= 0, a repeal only on > 0).
+  // S4-RULE-13, AM-6: the ban's vote is its worth to the seat; a tie goes to the ban (an enact passes on >= 0, a repeal only on > 0).
   if (proposal.law === 'sabotageBan') return proposal.kind === 'enact' ? lawWorth(obs, me, proposal) >= 0 : lawWorth(obs, me, proposal) > 0;
   // A law's worth is minus its cost (an enact) or its cost saved (a repeal): the cost rows of RULE-46 read the other way up.
   const worths = obs.players.map((p) => lawWorth(obs, p.id, proposal)).sort((a, b) => a - b);
