@@ -233,6 +233,8 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     mount(ballot(), ElectionDay);
     pick('abstain');
     expect(checked('abstain')).toBe(true);
+    // The ballot closes: the election leaves its voting stage (a sub-tab switch alone forgets nothing, S3-RULE-12).
+    rerender(game(politics({ election: ballotDay({ stage: 'ceremony' }) }), me()), ElectionDay);
     unmount();
     const html = renderToStaticMarkup(onPhone(ballot(), () => createElement(Hub, { slots: { ...TAB_SLOTS, stage: [{ ...ELECTION_DAY_STAGE, show: () => true }, ...TAB_SLOTS.stage.slice(1)] } }), 'ZORP'));
     for (const option of ['s1', 's2', 'abstain']) expect(html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0], option).not.toMatch(/checked/);

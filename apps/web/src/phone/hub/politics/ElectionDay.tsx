@@ -14,6 +14,10 @@ import { OFFICE_NAME, officeNames, promiseWords, termEnd } from './words';
 export function ElectionDay() {
   const { view, table } = usePhoneGame();
   const election = view.politics?.election;
+  // The picks are forgotten when the ballot closes, not when it unmounts: a switch to another sub-tab unmounts it too (S3-RULE-12).
+  useEffect(() => {
+    if (election && election.stage !== 'ballot') forgetPicks();
+  }, [election?.stage]);
   if (!election) return null;
   if (election.stage === 'announce') return <Announce />;
   if (election.stage === 'ballot') return <Ballot election={election} />;
@@ -106,7 +110,6 @@ function Ballot({ election }: { election: ElectionView }) {
   const { view, me } = usePhoneGame();
   const client = useClient();
   usePicks();
-  useEffect(() => forgetPicks, []);
   const mine: BallotOf = { seat: me.id, month: view.month };
   const offices = contested(election.candidates);
   useEffect(() => {
