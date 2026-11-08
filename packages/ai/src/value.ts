@@ -620,7 +620,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     use = sick * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
   // The household's own block, before any factory's units join it: the buy side values it apart (FM-factory-input).
-  const household = { block, use };
+  const household = { block, use, perUnit: perUnit ? [...perUnit] : null };
   let factoryUnits = 0;
   let factoryWorth = 0;
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
@@ -678,14 +678,15 @@ function buyForFactories(
   me: string,
   good: Good,
   buy: number[],
-  f: { household: { block: number; use: number }; factoryUnits: number; factoryWorth: number; resaleBuy: number; room: number },
+  f: { household: { block: number; use: number; perUnit: number[] | null }; factoryUnits: number; factoryWorth: number; resaleBuy: number; room: number },
 ): void {
   const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
   const reach = eaten + f.factoryUnits;
   const held = Math.min(obs.players.find((p) => p.id === me)!.stock[good], reach);
   const run = f.factoryWorth / Math.max(1, reach - held);
   for (let k = 0; k < buy.length; k++) {
-    const own = k < f.household.block ? f.household.use : 0;
+    // Unit by unit where the household's units differ (Food: the meal's, then the crews', needs C15).
+    const own = k < f.household.block ? (f.household.perUnit?.[k] ?? f.household.use) : 0;
     const worth = (k < reach ? run : 0) + own;
     buy[k] = k < reach || k < f.room ? Math.max(worth, f.resaleBuy) : 0;
   }
