@@ -435,10 +435,20 @@ function listenForKeys(): void {
   (FakeElement.prototype as unknown as { focus(): void }).focus = function (this: FakeElement) {
     (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
   };
-  // Only the one selector the dialogs ask: their first button marked to take the focus on open.
+  // The two selectors the dialogs ask: a button marked to take the focus on open, or the first control that can.
   (FakeElement.prototype as unknown as { querySelector(s: string): FakeElement | null }).querySelector = function (this: FakeElement, s: string) {
-    if (s !== '[data-autofocus]') throw new Error(`fake querySelector: ${s}`);
-    return this.findAll('button').find((b) => b.getAttribute('data-autofocus') !== null) ?? null;
+    if (s === '[data-autofocus]') return this.findAll('button').find((b) => b.getAttribute('data-autofocus') !== null) ?? null;
+    if (!s.startsWith('button:not([disabled])')) throw new Error(`fake querySelector: ${s}`);
+    const first = (n: FakeElement): FakeElement | null => {
+      for (const c of n.childNodes) {
+        if (!(c instanceof FakeElement)) continue;
+        if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(c.tagName) && c.getAttribute('disabled') === null) return c;
+        const hit = first(c);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    return first(this);
   };
 }
 /** The focused element's testid: a failing comparison of the elements themselves would print the whole fake tree. */
@@ -458,14 +468,14 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     tap(`chat-to-${OSSA}`);
     tapFocused('add-deal');
     expect(findTestid('composer-a')).toBeDefined();
-    expect(focused(), 'the composer takes the focus, on its Cancel as the lobby dialogs do').toBe('composer-a-close');
+    expect(focused(), 'the composer takes the focus, on its first control').toBe('composer-a-kind-pact');
     press('Escape');
     expect(findTestid('composer-a'), 'Escape closes the composer').toBeUndefined();
     expect(focused(), 'the focus is back on + Deal').toBe('add-deal');
 
     tapFocused('agenda-deals');
     expect(findTestid('incoming-sheet')).toBeDefined();
-    expect(focused(), 'the incoming sheet takes the focus').toBe('incoming-sheet-close');
+    expect(focused(), 'the incoming sheet takes the focus, on its first control').toBe('sheet-card-deal-in9-from-rep');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
     expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
