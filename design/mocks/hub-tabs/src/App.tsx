@@ -4,6 +4,8 @@ import { mockTable, SEAT_LABEL, type MockTable } from './fixture';
 import { PhoneBody } from './PhoneBody';
 import { Prototype } from './Prototype';
 import { MEASURED, SHERIFF_MEASURED } from './measured';
+import { TV_NOTE, type TvFocus } from './tv/TvFor';
+import { TV_FIT, TV_FLOOR } from './tv/measured';
 import type { ShellVariant } from './proposed/Shell';
 import { SCREENS, stateOf, type State } from './scenarios';
 
@@ -182,6 +184,10 @@ function Index() {
         <a href="?" className="text-sm font-semibold text-holo" data-testid="to-prototype">
           ← The prototype: one planning month, played through
         </a>
+        <p className="text-sm font-semibold text-ok" data-testid="approved">
+          APPROVED by Heiko 8 Nov ~06:10Z; tabs: left column. This mock is the binding scaffold for the build; where Heiko made no pick, the PM’s defaults stand (budget steppers and bar as drawn, the laptop gets the same tabs, the 8 s break folds to news, the TV
+          waiting box up to 3 seats).
+        </p>
         <h1 className="font-display text-2xl font-semibold">The planning hub as tabs · design notes</h1>
         <p className="max-w-4xl text-sm text-ink-2">
           Heiko, 8 Nov: “I wouldn’t pack all of this in one screen. Make multiple screens.” The planning hub’s desks become four whole-stage tabs (Overview · Governor or Council · Colony · Talk), the explanation card hides behind a “?”, and
@@ -231,6 +237,45 @@ function Index() {
           WS8’s variant B folded (d0a52c1a): every case one 44 px row with its next step on a chip, opened in place one at a time. With the left column (A) it fits the sub-tab in one screen at both phones; the bottom bar (B) takes 40 px of its height, so
           folded it runs 23 px over at 667 and 8 px at 844. Opened, the fine case scrolls itself into view, its button on screen.
         </p>
+      </Section>
+      <Section title="The TV, measured (mock-hub-tv)" id="tv-measured">
+        <table className="text-left text-sm" data-testid="tv-measured">
+          <thead className="text-xs text-ink-3">
+            <tr>
+              <th className="py-1 pr-4 font-normal">State</th>
+              <th className="py-1 pr-4 font-normal">Beat</th>
+              <th className="py-1 pr-4 font-normal">2 seats</th>
+              <th className="py-1 pr-4 font-normal">4 seats</th>
+              <th className="py-1 pr-4 font-normal">6 seats</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(TV_FIT).map(([state, { beat, fit }]) => (
+              <tr key={state} className="border-t border-holo-line font-mono" data-testid={`tv-measured-${state}`}>
+                <td className="py-1.5 pr-4 font-sans">{state}</td>
+                <td className="py-1.5 pr-4">{beat}</td>
+                {([2, 4, 6] as const).map((n) => (
+                  <td key={n} className={cx('py-1.5 pr-4', fit[n] >= TV_FLOOR ? 'text-ok' : 'text-warn')}>
+                    {fit[n].toFixed(3)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="max-w-4xl text-xs text-ink-3">
+          The TV&rsquo;s fit (TV-FIT) at 1280 × 720, the guided path&rsquo;s own worlds at 2, 4 and 6 seats; the floor is {TV_FLOOR} (rulebook #tv-fit), held by every state. Measured by mock-hub-tv (src/tv/measured.ts, which also keeps the superseded
+          placement A and the moment-vs-steady reads). On the guided page at its default table (the fixture’s four seats, scripts/measure-guided.mjs), the half-size TV reads the same 4-seat fits beat by beat, lowest 0.708 at the month end; it sits beside
+          the phone from a 1680 px window (at 1440 it wraps under the phone), and the whole page fits 1920 × 1080 with no scroll (at 1680 × 1050 only the step list runs 24 px past). What the TV shows at each focus:
+        </p>
+        <ul className="flex max-w-5xl flex-col gap-1 text-sm" data-testid="tv-notes">
+          {(Object.entries(TV_NOTE) as [TvFocus, string][]).map(([focus, line]) => (
+            <li key={focus} className="flex gap-3" data-testid={`tv-note-${focus}`}>
+              <span className="w-32 shrink-0 font-mono text-holo">{focus}</span>
+              <span className="text-ink-2">{line}</span>
+            </li>
+          ))}
+        </ul>
       </Section>
       <Section title="Key decisions" id="decisions">
         <ul className="flex max-w-5xl flex-col gap-1 text-sm" data-testid="decisions">
