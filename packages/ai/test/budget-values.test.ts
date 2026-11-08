@@ -148,6 +148,22 @@ describe('S5-B-AC-6 (S5-C9\'s values): overruleWorth, the tax', () => {
     expect(overruleWorth(obs, 'ai3', 'tax'), 'undoing the raise pays the seller it taxed').toBeGreaterThan(0);
   });
 
+  it("under its cap, Welfare loses its share of the lost income, and the recipient counts that share against the raise (review of #796, nit)", () => {
+    const state = raised();
+    state.politics!.budget = { month: 3, setBy: 'ai0', shares: { projects: 80, welfare: 20, security: 0 } };
+    state.treasury.money = COLONY.reserve + 600;
+    state.players.find((p) => p.id === 'ai3')!.stock.smithore = 20;
+    const obs = observe(state, 'ai3');
+    const delta = 0.1 - 0.05;
+    const lost = delta * obs.players.reduce((sum, p) => sum + sales(obs, p.id), 0);
+    const before = budgetCredits(obs);
+    const after = budgetCredits({ ...obs, treasury: { ...obs.treasury, money: obs.treasury.money - lost } });
+    expect(before.welfare, 'the case: Welfare under its cap').toBeLessThan(POLITICS.budget.welfare.maxCredits);
+    expect(before.welfare - after.welfare, 'Welfare loses about its 20% of the lost income').toBeCloseTo(0.2 * lost, -0.5);
+    const through = lineWorth(obs, 'ai3', 'welfare', before.welfare) - lineWorth(obs, 'ai3', 'welfare', after.welfare);
+    expect(overruleWorth(obs, 'ai3', 'tax')).toBeCloseTo(delta * sales(obs, 'ai3') - through, 6);
+  });
+
   it('undoing a cut costs a seller what it saves; with the tax unchanged it is worth 0; with no target given it values the tax', () => {
     const state = raised();
     state.politics!.taxAtStart = 0.1;
