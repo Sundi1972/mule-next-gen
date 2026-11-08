@@ -190,7 +190,8 @@ describe('the tabbed planning hub (SB-2)', () => {
   ])('B-AC-14 (D3, D8, I-4): while another tab is open, the Council tab carries a ballot open: %s', (_, stage, badge) => {
     const overrule: OverruleView = { target: 'tax', caller: 's3', stage, restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: ['s1', 's2'], clockMs: 0, revealMs: 0, total: 3, needed: 2, result: null };
     mount(game({ pol: politics({ tax: { percent: 9, start: 5, low: 0, high: 10 }, overrule }) }));
-    expect(findTestid('politics-badge')?.textContent ?? null).toBe(badge);
+    // The badge's word, then its spoken label.
+    expect(findTestid('politics-badge')?.textContent ?? null).toBe(badge && `${badge}A ballot is open: vote here`);
     tap('tab-politics');
     expect(findTestid('politics-badge'), 'the open tab carries no badge').toBeUndefined();
   });
