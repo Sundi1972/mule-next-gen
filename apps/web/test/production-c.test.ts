@@ -119,6 +119,9 @@ describe('B-AC-6 (AM-19): good by good for every player at once, then every bonu
     expect(done.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).toBe('✓ Harvest ✓ Bonuses');
     expect(done).toMatch(/data-testid="act-harvest"[^>]*data-now="false"/);
     expect(done).toMatch(/data-testid="act-bonus"[^>]*data-now="false"/);
+    // The fold is the room it frees: a step played has no row of its own any more.
+    expect(losses).not.toMatch(/<li[^>]*data-testid="act-harvest"/);
+    expect(losses).not.toMatch(/<li[^>]*data-testid="act-bonus"/);
     // This step is a row of its own with its line; the steps to come keep theirs, numbered.
     expect(losses).toMatch(/<li[^>]*data-testid="act-loss"[^>]*data-now="true"[^>]*>.*?make less/);
     expect(losses).toMatch(/<li[^>]*data-testid="act-flight"[^>]*data-now="false"/);
