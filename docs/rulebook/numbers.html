@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1357 settings in 53 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1359 settings in 53 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>d1ae9f5913d6</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>ab7fbe25e650</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1044,6 +1044,8 @@
 <tr><td><code>POLITICS.sheriff.guardsPerHundred</code></td><td class="n">1</td><td>Extra guards per 100 credits of Security spent that month (slice 5 supplies the figure).</td></tr>
 <tr><td><code>POLITICS.sheriff.securityDetect</code></td><td class="n">0.1</td><td>Added to an order&#39;s chance of being seen, 0..1, per 100 credits of Security spent that month.</td></tr>
 <tr><td><code>POLITICS.sheriff.investigations</code></td><td class="n">1</td><td>Investigations the Sheriff may open in a month.</td></tr>
+<tr><td><code>POLITICS.sheriff.bounty</code></td><td class="n">50</td><td>Credits the fund pays the Sheriff for each culprit a guard or a solved investigation names (slice 4 AM-11, Heiko, 8 Nov): a catch on the spot earns none.</td></tr>
+<tr><td><code>POLITICS.sheriff.ownPlotDetectBonus</code></td><td class="n">0.2</td><td>Added to a power cut&#39;s chance of being seen when the plot is the Sheriff&#39;s own (slice 4 AM-11, Heiko, 8 Nov: sabotaging the Sheriff should be a bit harder).</td></tr>
 <tr><td><code>POLITICS.sheriff.investigateOdds</code></td><td class="n">0.3</td><td>Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3; Heiko, 8 Nov: 0.3, was 0.5, AM-10).</td></tr>
 <tr><td><code>POLITICS.sheriff.fine.steps</code></td><td class="n">[50, 100, 150, 200, 250, 300]</td><td>The base fines the Sheriff may levy, in credits, before the ban&#39;s multiplier.</td></tr>
 <tr><td><code>POLITICS.sheriff.fine.standard</code></td><td class="n">150</td><td>The fine an unfined case pays when planning ends, in credits, before the multiplier.</td></tr>
