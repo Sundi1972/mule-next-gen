@@ -85,7 +85,7 @@ export function ColonyTab() {
       {view.colony && (
         // The desk's 212 px box, the picture at its own 16:9 inside it, letterboxed: the standings stay on the first screen.
         <div className="flex h-53 shrink-0 justify-center overflow-hidden rounded-panel border border-holo-line bg-void [&>svg]:h-full [&>svg]:w-auto [&>svg]:max-w-full" data-testid="colony-picture">
-          <Grounds colony={view.colony} size="phone" light={view.phase === 'upkeep' ? 'dusk' : 'day'} />
+          <Grounds colony={view.colony} size="phone" light={view.phase === 'upkeep' ? 'dusk' : 'day'} players={view.players.length} />
         </div>
       )}
       <Standings />
