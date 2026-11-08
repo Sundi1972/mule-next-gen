@@ -221,7 +221,7 @@ describe('the reputation chip (S3-C19)', () => {
       expect(chip.getAttribute('data-band'), id).toBe(band);
       expect(chip.getAttribute('aria-label'), id).toContain(`reputation ${rep}. ${words}.`);
     }
-    expect(text(`who-${KAI}`), 'a computer seat carries its mark only where asked').not.toContain('· AI');
+    expect(findTestid('ai-mark'), 'a computer seat carries its mark only where asked').toBeUndefined();
 
     tap(`who-${BRIX}-rep`);
     expect(text(`player-card-${BRIX}-band`)).toBe(`Reputation ${repLow - 1} · Low name: −1 vote, and AI players turn down their cards.`);
