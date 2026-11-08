@@ -4,8 +4,9 @@ import { mockTable, SEAT_LABEL, type MockTable, type Seat } from './fixture';
 import { MEASURED } from './measured';
 import { PhoneBody } from './PhoneBody';
 import type { ShellVariant } from './proposed/Shell';
+import { SHERIFF_BEATS, SHERIFF_STEPS, sheriffBeatOf } from './sheriff-path';
 import { BEATS, beatOf, STEPS, type Beat } from './steps';
-import { TvFor } from './tv/TvFor';
+import { TV_NOTE, TvFor, type TvFocus } from './tv/TvFor';
 
 /*
  * The guided prototype: one planning month, played through. A step list to jump, "Next" to go on, and the controls
@@ -15,6 +16,15 @@ import { TvFor } from './tv/TvFor';
 
 const Q = new URLSearchParams(location.search);
 type Show = 'both' | 'phone' | 'tv';
+
+/** The guided paths: the planning month (the landing page), and the Sheriff month (?path=sheriff, Heiko's add-on, 8 Nov). */
+const PATHS = {
+  planning: { title: 'One planning month, played through', steps: STEPS, beats: BEATS, beatOf, other: { href: '?path=sheriff', words: 'The Sheriff’s month →' } },
+  sheriff: { title: 'The Sheriff’s month: a guard, a cut, a fine', steps: SHERIFF_STEPS, beats: SHERIFF_BEATS, beatOf: sheriffBeatOf, other: { href: '?', words: '← The planning month' } },
+};
+const PATH = PATHS[Q.get('path') === 'sheriff' ? 'sheriff' : 'planning'];
+/** A focus mock-hub-tv has built carries a TV_NOTE line. */
+const built = (f: string | undefined): f is TvFocus => !!f && f in TV_NOTE;
 
 /** The two phones, held sideways: the device's screen, the only raw sizes in the mock. */
 const PHONES: Record<string, [number, number]> = { '667': [667, 375], '844': [844, 390] };
@@ -72,16 +82,23 @@ function Phone({ store, beat, seat, variant, size }: { store: MockTable; beat: B
 
 function Tv({ store, beat }: { store: MockTable; beat: Beat }) {
   const world = useSyncExternalStore(store.subscribe, store.get);
+  const focus = built(beat.tvWanted) ? beat.tvWanted : beat.tv;
+  const pending = beat.tvWanted && !built(beat.tvWanted) ? beat.tvWanted : null;
   return (
     <figure className="flex flex-col gap-1" data-testid="tv-pane">
       <figcaption className="flex gap-2 text-xs text-ink-2">
         <span className="label-caps text-[10px]!">The TV</span>
-        <span className="font-mono">1280 × 720 at ½ · {beat.tv}</span>
+        <span className="font-mono">1280 × 720 at ½ · {focus}</span>
+        {pending && (
+          <span className="text-warn" data-testid="tv-pending">
+            “{pending}” is mock-hub-tv’s to build; the TV shows {beat.tv} meanwhile.
+          </span>
+        )}
       </figcaption>
       {/* The TV's screen at half size: the frame is the scaled box, the TV draws at its own size inside it. */}
       <div className="overflow-hidden rounded-panel border border-holo-line bg-void" style={{ width: 1280 * TV_SCALE, height: 720 * TV_SCALE }} data-testid="tv-frame">
         <div className="origin-top-left" style={{ width: 1280, height: 720, transform: `scale(${TV_SCALE})` }}>
-          <TvFor world={world} focus={beat.tv} />
+          <TvFor world={world} focus={focus} />
         </div>
       </div>
     </figure>
@@ -89,7 +106,9 @@ function Tv({ store, beat }: { store: MockTable; beat: Beat }) {
 }
 
 export function Prototype() {
-  const beat = beatOf(Q.get('beat'));
+  const beat = PATH.beatOf(Q.get('beat'));
+  const BEATS = PATH.beats;
+  const STEPS = PATH.steps;
   const as = Q.get('as') as Seat | null;
   const seat: Seat = as && as in SEAT_LABEL ? as : beat.seat;
   const variant: ShellVariant = Q.get('tabs') === 'bottom' ? 'b' : 'a';
@@ -105,7 +124,12 @@ export function Prototype() {
     <main className="flex min-h-dvh flex-col gap-4 bg-table p-5 text-ink" data-testid="prototype" data-beat={beat.id}>
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <div className="flex flex-col">
-          <h1 className="font-display text-xl font-semibold">One planning month, played through</h1>
+          <h1 className="flex items-baseline gap-3 font-display text-xl font-semibold">
+            {PATH.title}
+            <a className="font-sans text-sm font-semibold text-holo underline" href={PATH.other.href} data-testid="other-path">
+              {PATH.other.words}
+            </a>
+          </h1>
           <p className="text-xs text-ink-2" data-testid="height-line">
             Landscape only, so height is the scarce side: a bottom tab bar spends 44 of 375 px. The map at 667: today {m667.today.w}×{m667.today.h} · left column {m667.a.w}×{m667.a.h} · bottom bar {m667.b.w}×{m667.b.h}.{' '}
             <a className="text-holo underline" href="?notes=1" data-testid="notes-link">

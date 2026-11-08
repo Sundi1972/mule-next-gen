@@ -14,6 +14,10 @@ import { OverruleCall } from '../../copied/budget/OverruleCall';
 import { PromisedElectionDay } from '../../copied/deals/ElectionDay';
 import { PromisedCouncilBallot } from '../../copied/deals/LawBallot';
 import { SheriffDeskB } from '../../copied/sheriff/VariantB';
+import { SheriffDeskB as SheriffDeskTips } from '../../copied/sheriff-d6977/VariantB';
+
+/** MOCK PLUMBING: the Sheriff path (?path=sheriff) draws WS8's case file at d6977e1a, with WS7's tips and the real intents; the planning path keeps d0a52c1a. */
+const SHERIFF_PATH = new URLSearchParams(location.search).get('path') === 'sheriff';
 import { useDrawn, useHub } from '../Hub';
 import { TabBadge } from '../parts';
 import type { SubTabSlot } from '../slots';
@@ -159,7 +163,10 @@ function SheriffSub() {
   const sheriff = view.politics?.sheriff;
   if (!sheriff) return null;
   const desk = me.politics?.sheriff;
-  if (sheriff === self.id && desk) return <SheriffDeskB view={view} start={desk} incidents={view.politics?.sabotage?.incidents ?? []} onMap={() => startPick('guard')} />;
+  if (sheriff === self.id && desk) {
+    const Desk = SHERIFF_PATH ? SheriffDeskTips : SheriffDeskB;
+    return <Desk view={view} start={desk} incidents={view.politics?.sabotage?.incidents ?? []} onMap={() => startPick('guard')} />;
+  }
   return (
     <div className="flex flex-col gap-1 rounded-panel border-2 border-dashed border-holo-line bg-holo-soft p-2.5" data-testid="slot-sheriff-public">
       <span className="label-caps text-[10px]! text-holo">P7 · WS8 · the Sheriff, in public</span>

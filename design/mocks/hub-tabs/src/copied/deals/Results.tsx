@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 // Copied from design/mocks/politics-deals/src/proposed/Results.tsx (7–8 Nov); changes for the prototype are marked TABS:.
 import { Button, cx } from '@mule/ui';
 import { PhoneMonthScoreNote } from '../../../../../../apps/web/src/components/Colony';
@@ -13,7 +14,7 @@ import { FundLines } from '../budget/FundLines';
  * one change, marked CHANGE: the month's broken cards under the league (the same list the TV shows), and the league's
  * chips. The footer here is a stand-in for MonthEndFooter (not exported, unchanged).
  */
-export function PhoneMonthEndDeals({ month }: { month: number }) {
+export function PhoneMonthEndDeals({ month, extra }: { month: number; extra?: ReactNode }) {
   const { view, self } = usePhoneGame();
   const lg = league(view);
   const mine = lg.rows.find((r) => r.player.id === self.id)!;
@@ -43,6 +44,8 @@ export function PhoneMonthEndDeals({ month }: { month: number }) {
         <section className="grid grid-cols-3 rounded-panel border border-holo-line bg-panel px-2.5 py-1.5" data-testid="phone-paid-out">
           <FundLines view={view} />
         </section>
+        {/* TABS: the Sheriff path's sabotage lines (the month's news and this phone's own crew, fine or restitution), when there are any. */}
+        {extra}
         <PhoneMonthScoreNote view={view}>
           <p className="mt-auto text-[11px] leading-snug text-ink-3">How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices; your own lines are beside, for you only.</p>
         </PhoneMonthScoreNote>

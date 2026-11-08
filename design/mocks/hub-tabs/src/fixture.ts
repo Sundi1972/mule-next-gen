@@ -1,5 +1,5 @@
-import { COLONY, GOODS, POLITICS, PRESTIGE, type BudgetLine, type DealCard, type DealOffer, type LawProposal, type Office, type OverruleTarget, type OverruleWhy, type PrestigeId, type Terrain } from '@mule/engine';
-import type { BudgetView, ChatMessage, MarketRow, ColonyView, CouncilView, ElectionView, ListingView, MuleIntent, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import { COLONY, GOODS, POLITICS, PRESTIGE, type BudgetLine, type Good, type Outfit, type SabotageTarget, type DealCard, type DealOffer, type LawProposal, type Office, type OverruleTarget, type OverruleWhy, type PrestigeId, type Terrain } from '@mule/engine';
+import type { BudgetView, ChatMessage, IncidentView, MarketRow, ColonyView, CouncilView, ElectionView, ListingView, MuleIntent, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import type { TableClient } from '../../../../apps/web/src/net/client';
 import { aMuleView, aPlayer } from '../../../../apps/web/test/fixtures/views';
@@ -75,6 +75,133 @@ const TILES: TileView[] = ROWS.flatMap((row, y) =>
   }),
 );
 
+/** The MULEs on the plots, for the Sheriff path (World.outfitted): Brix's Food plot at 9,2 is the one Lena cuts. */
+const OUTFITS: Record<string, Outfit> = {
+  '9,2': 'food', '10,3': 'energy', '11,3': 'smithore', '6,2': 'food', '7,2': 'energy', '6,5': 'smithore',
+  '12,4': 'smithore', '13,4': 'crystite', '10,2': 'food', '9,7': 'energy', '10,7': 'food',
+};
+const OUTFITTED: TileView[] = TILES.map((t) => ({ ...t, outfit: OUTFITS[`${t.x},${t.y}`] ?? null }) as TileView);
+const tilesOf = (w: { outfitted?: boolean }) => (w.outfitted ? OUTFITTED : TILES);
+
+// ---- Sabotage on the Sheriff path (slice 4): every number from the config ----
+
+const ORDERS = POLITICS.sabotage.orders;
+const SHERIFF_RULES = POLITICS.sheriff;
+/** A caught saboteur's reputation points (POLITICS.reputation.moves.caught), before the ban. */
+export const CAUGHT_MOVE = POLITICS.reputation.moves.caught;
+/** What a revealed case pays when planning ends unfined (POLITICS.sheriff.fine.standard). */
+export const STANDARD_FINE_CFG = SHERIFF_RULES.fine.standard;
+export const FINE_STEPS_CFG = SHERIFF_RULES.fine.steps;
+export const VICTIM_SHARE = SHERIFF_RULES.victimShare;
+export const SAB_TERMS = {
+  powerCut: { cost: ORDERS.powerCut.cost, success: ORDERS.powerCut.success, detect: ORDERS.powerCut.detect },
+  rumour: { cost: ORDERS.rumour.cost, success: ORDERS.rumour.success, detect: ORDERS.rumour.detect },
+};
+export const RUMOUR_SHIFT = ORDERS.rumour.shift;
+export const tileIndex = (x: number, y: number) => y * W + x;
+const tileOf = (i: number) => TILES[i]!;
+
+const isPublic = (o: SabOrder) => o.guarded || o.seen || o.solved;
+
+/** An order as every screen sees it (IncidentView): the culprit only once public. Pending orders are no incident. */
+export function incidentOf(o: SabOrder): IncidentView {
+  const t = o.target.kind === 'powerCut' ? tileOf(o.target.tile) : null;
+  return {
+    id: o.id, month: o.month, kind: o.target.kind,
+    victim: t?.owner ?? null,
+    at: t ? { x: t.x, y: t.y } : null,
+    good: o.target.kind === 'powerCut' ? ((OUTFITS[`${t!.x},${t!.y}`] ?? 'food') as Good) : o.target.good,
+    ...(o.target.kind === 'rumour' ? { dir: o.target.dir } : {}),
+    worked: o.worked,
+    culprit: isPublic(o) ? o.by : null,
+    how: o.guarded ? 'guard' : o.seen ? 'caught' : o.solved ? 'investigation' : null,
+    investigated: o.investigated,
+    fine: o.fine,
+  };
+}
+/** The orders behind the incidents, for the month end's own lines (who paid a crew, a fine, restitution). */
+export const ordersOf = (w: World): SabOrder[] => w.sabotage?.orders ?? [];
+export const incidentsOf = (w: World): IncidentView[] => (w.sabotage?.orders ?? []).filter((o) => o.outcome !== 'pending').map(incidentOf).sort((a, b) => b.month - a.month);
+
+/** The sabotage show's event, in WS8's #p10 shape (ShowEventView plus `sabotage`, the TABS fixture's cast). */
+export interface SabotageShowEvent {
+  key: 'powerCut' | 'marketRumour';
+  kind: 'sabotage';
+  sign: 'bad';
+  phase: 'production';
+  weight: 'spotlight';
+  playMs: number;
+  title: string;
+  scope: 'personal' | 'colony';
+  origin: { x: number; y: number };
+  hits: { x: number; y: number; order: number; delta: number }[];
+  line: string;
+  good?: Good;
+  dir?: 'up' | 'down';
+  sabotage: { order: string; culprit: string | null; worked: boolean; guarded: boolean };
+}
+const STORE_AT = { x: 6, y: 4 };
+/** WS8's #p10 timing (design/mocks/politics-p2/src/show/events.ts at d6977e1a). */
+const SHOW_MS = 5200;
+const goodName = (g: Good) => g.charAt(0).toUpperCase() + g.slice(1);
+
+/** Production's sabotage events this month (WS7's sabotageEvents, one per public outcome; S4-RULE-4). Lines are WS7's words via WS8's #p10. */
+export function showEventsOf(w: World): SabotageShowEvent[] {
+  if (w.stage !== 'production') return [];
+  return (w.sabotage?.orders ?? [])
+    .filter((o) => o.month === w.month && o.outcome !== 'pending' && (o.worked || isPublic(o)))
+    .map((o) => {
+      const c = incidentOf(o);
+      const sabotage = { order: o.id, culprit: c.culprit, worked: c.worked, guarded: o.guarded };
+      if (o.target.kind === 'rumour')
+        return { key: 'marketRumour', kind: 'sabotage', sign: 'bad', phase: 'production', weight: 'spotlight', playMs: SHOW_MS, title: 'Sabotage: market rumour', scope: 'colony', origin: STORE_AT, hits: [], good: o.target.good, dir: o.target.dir,
+          line: c.worked ? `A rumour: ${goodName(o.target.good)} opens ${Math.round(RUMOUR_SHIFT * 100)}% ${o.target.dir === 'up' ? 'higher' : 'lower'} at the auction.` : 'Caught! The saboteur is named.', sabotage };
+      const at = c.at!;
+      return { key: 'powerCut', kind: 'sabotage', sign: 'bad', phase: 'production', weight: 'spotlight', playMs: SHOW_MS, title: 'Sabotage: power cut', scope: 'personal', origin: at,
+        hits: c.worked ? [{ ...at, order: 0, delta: -3 }] : [],
+        line: o.guarded ? 'Caught at a guarded plot: the power stays on.' : `Someone cut the power to a ${goodName(c.good)} plot: it makes nothing this month.`, sabotage };
+    });
+}
+
+/**
+ * Planning ends and production resolves this month's pending orders as scripted (S4-RULE-3): a guarded plot always
+ * catches and the cut never works; otherwise the two draws, works and seen, come from `how`. A culprit made public
+ * loses CAUGHT_MOVE reputation (S4-RULE-5).
+ */
+export function resolveOrders(w: World, how: { worked: boolean; seen: boolean }): World {
+  const rep = { ...w.rep };
+  const orders = (w.sabotage?.orders ?? []).map((o): SabOrder => {
+    if (o.month !== w.month || o.outcome !== 'pending') return o;
+    const guarded = o.target.kind === 'powerCut' && w.guards.includes(o.target.tile);
+    const worked = !guarded && how.worked;
+    const seen = !guarded && how.seen;
+    if (guarded || seen) rep[o.by] = (rep[o.by] ?? 50) + CAUGHT_MOVE;
+    return { ...o, guarded, seen, worked, outcome: guarded || seen ? 'caught' : worked ? 'done' : 'failed' };
+  });
+  return { ...w, stage: 'production', ready: [], sabotage: { orders }, rep };
+}
+
+/** The seat's own sabotage (MyPoliticsView.sabotage): this month's pending order, what it owes, every order it made. */
+function mySabotage(w: World, id: string): NonNullable<NonNullable<MyView['politics']>['sabotage']> {
+  if (!w.sabotage) return { order: null, canOrder: 'off', owed: 0, mine: [] };
+  const mine = w.sabotage.orders.filter((o) => o.by === id);
+  const now = mine.filter((o) => o.month === w.month);
+  return {
+    order: now.find((o) => o.outcome === 'pending')?.target ?? null,
+    canOrder: w.stage === 'planning' ? true : 'notPlanning',
+    owed: now.reduce((n, o) => n + SAB_TERMS[o.target.kind].cost, 0),
+    mine: mine.filter((o) => o.outcome !== 'pending').map((o) => ({ ...incidentOf(o), culprit: id, public: isPublic(o), outcome: o.outcome })),
+  };
+}
+
+const investigationsLeft = (w: World) => Math.max(0, SHERIFF_RULES.investigations - (w.investigation ? 1 : 0));
+
+/** The Sheriff's desk on the Sheriff path (MyPoliticsView.sheriff), from the world and the config. */
+function pathSheriff(w: World): NonNullable<NonNullable<MyView['politics']>['sheriff']> {
+  const fineable = incidentsOf(w).filter((c) => c.culprit && !c.fine).map((c) => c.id);
+  return { canAct: w.stage === 'planning' ? true : 'notPlanning', guards: w.guards, max: SHERIFF_RULES.guards, investigationsLeft: investigationsLeft(w), fineable, steps: [...FINE_STEPS_CFG], multiplier: 1 };
+}
+
 // ---- The seats ----
 
 /** The phones this mock draws. Ossa is an AI seat: no phone. */
@@ -102,9 +229,10 @@ export const NEEDED = Math.floor(TOTAL_VOTES / 2) + 1;
 /**
  * planning: the month's hub. election: month 8's Governor ballot (Brix against Ossa · AI). lawBallot: Brix's land tax
  * up for the Council's vote. overrule: Kai's call on the tax, its ballot open as planning ends. overruleReveal: that
- * ballot's result, on every screen. monthEnd: the month's end (upkeep), with what the fund paid out and the cards broken.
+ * ballot's result, on every screen. production: the month's production show (the Sheriff path: the sabotage plays).
+ * monthEnd: the month's end (upkeep), with what the fund paid out and the cards broken.
  */
-export type Stage = 'planning' | 'election' | 'lawBallot' | 'overrule' | 'overruleReveal' | 'monthEnd';
+export type Stage = 'planning' | 'election' | 'lawBallot' | 'overrule' | 'overruleReveal' | 'production' | 'monthEnd';
 
 export interface World {
   month: number;
@@ -138,6 +266,39 @@ export interface World {
   guards: number[];
   /** Plots and MULEs listed for the auction after planning (the list / unlist intents). */
   listings: ListingView[];
+  /**
+   * The Sheriff path (?path=sheriff): every sabotage order so far, the server's private truth. Absent on the planning
+   * path, which keeps WS8's fixed case list (SABOTAGE). Screens never read it: they read the views (incidentsOf,
+   * MyView.politics.sabotage and .sheriff, showEventsOf).
+   */
+  sabotage?: { orders: SabOrder[] };
+  /** The plots carry their MULEs (OUTFITS), so a power cut has something to cut. The Sheriff path only. */
+  outfitted?: boolean;
+  /** This month's investigation and what it found: the TV's moment ("Solved by the Sheriff: it was Lena" / "The trail went cold"). */
+  investigation?: { order: string; solved: boolean } | null;
+  /** What an investigation of each order would find (the seeded draw, S4-RULE-7), by order id. */
+  verdicts?: Record<string, boolean>;
+}
+
+/** One sabotage order as the server holds it (the engine's SabotageOrder, with how it came out). */
+export interface SabOrder {
+  id: string;
+  month: number;
+  by: string;
+  target: SabotageTarget;
+  outcome: 'pending' | 'done' | 'failed' | 'caught';
+  /** The cut or the rumour took (S4-RULE-3's first draw); never at a guarded plot. */
+  worked: boolean;
+  /** Caught by the Sheriff's guard on the plot (S4-RULE-3 row 2). */
+  guarded: boolean;
+  /** Seen on the spot (S4-RULE-3's second draw). */
+  seen: boolean;
+  investigated: boolean;
+  /** An investigation named the culprit. */
+  solved: boolean;
+  fine: IncidentView['fine'];
+  /** The month the Sheriff set the fine: it is paid, and half goes to the victim, at that month's end. */
+  finedMonth?: number;
 }
 
 /**
@@ -305,6 +466,34 @@ export function mockTable(start: World): MockTable {
           return set({ ...world, listings: world.listings.filter((l) => l.id !== intent.id || l.seller !== seat) });
         case 'guard':
           return seat === SHERIFF ? set({ ...world, guards: intent.tiles }) : undefined;
+        case 'sabotage': {
+          // One order a month between the two kinds; null withdraws it (S4-RULE-1, -2).
+          if (!world.sabotage || world.stage !== 'planning') return;
+          const kept = world.sabotage.orders.filter((o) => !(o.by === seat && o.month === world.month && o.outcome === 'pending'));
+          const order: SabOrder[] = intent.target
+            ? [{ id: `sab-${world.month}${seat.slice(0, 2)}x${intent.target.kind === 'powerCut' ? 'p' : 'r'}`, month: world.month, by: seat, target: intent.target, outcome: 'pending', worked: false, guarded: false, seen: false, investigated: false, solved: false, fine: null }]
+            : [];
+          return set({ ...world, sabotage: { orders: [...kept, ...order] } });
+        }
+        case 'investigate': {
+          // One investigation a month, on a case nobody has named; the seeded draw decides (S4-RULE-7).
+          if (!world.sabotage || seat !== SHERIFF || world.stage !== 'planning' || investigationsLeft(world) === 0) return;
+          const o = world.sabotage.orders.find((x) => x.id === intent.order);
+          if (!o || isPublic(o) || o.investigated) return;
+          const solved = world.verdicts?.[o.id] ?? false;
+          const orders = world.sabotage.orders.map((x) => (x.id === o.id ? { ...x, investigated: true, solved } : x));
+          const rep = solved ? { ...world.rep, [o.by]: (world.rep[o.by] ?? 50) + CAUGHT_MOVE } : world.rep;
+          return set({ ...world, sabotage: { orders }, investigation: { order: o.id, solved }, rep });
+        }
+        case 'fine': {
+          // Once per revealed case, within the steps; half to the victim when it is paid (S4-RULE-8).
+          if (!world.sabotage || seat !== SHERIFF || world.stage !== 'planning' || !FINE_STEPS_CFG.includes(intent.amount)) return;
+          const o = world.sabotage.orders.find((x) => x.id === intent.order);
+          if (!o || !isPublic(o) || o.fine) return;
+          const victim = incidentOf(o).victim;
+          const fine = { due: intent.amount, paid: 0, toVictim: victim ? Math.floor(intent.amount * VICTIM_SHARE) : 0, by: 'sheriff' as const };
+          return set({ ...world, sabotage: { orders: world.sabotage.orders.map((x) => (x.id === o.id ? { ...x, fine, finedMonth: world.month } : x)) } });
+        }
         case 'ready':
           if (world.stage === 'overruleReveal') return set({ ...world, continued: world.continued.includes(seat) ? world.continued : [...world.continued, seat] });
           if (world.stage === 'overrule') return set({ ...world, overruleDone: world.overruleDone.includes(seat) ? world.overruleDone : [...world.overruleDone, seat] });
@@ -501,11 +690,13 @@ function gameOf(w: World, me: MyView | null): MuleView {
     budget: budgetView(w),
     overrule: overruleView(w),
     // Slice 4 (WS8's P2 fixture): the colony's sabotage cases, public; the Sheriff's own desk is on the Sheriff's MyView.
-    sabotage: SABOTAGE,
+    sabotage: w.sabotage
+      ? { terms: SAB_TERMS, incidents: incidentsOf(w), sheriff: { guards: SHERIFF_RULES.guards, investigations: SHERIFF_RULES.investigations, investigationsLeft: investigationsLeft(w) } }
+      : SABOTAGE,
   } as PoliticsView;
   return aMuleView({
     players, me: me as MyView, politics, news: w.news,
-    month: w.month, phase: monthEnd ? 'upkeep' : 'planning', width: W, height: H, tiles: TILES,
+    month: w.month, phase: monthEnd ? 'upkeep' : w.stage === 'production' ? 'production' : 'planning', width: W, height: H, tiles: tilesOf(w),
     colony: colonyView(w),
     treasury: { money: politics.fund, salesTax: w.tax / 100 },
     colonists: 1_240, air: { level: 31, band: 'clean' }, lastAir: { level: 33, band: 'clean' }, colonistsFed: true,
@@ -533,8 +724,8 @@ export function viewFor(seat: Seat, w: World): SeatView {
       reputation: w.rep[id] ?? 50, lawBallot: w.lawBallots[id] ?? null, promised: promised(w, id),
       overruleBallot: w.stage === 'overrule' || w.stage === 'overruleReveal' ? (mineBallot ?? null) : null,
       canOverrule: canOverrule(w, id),
-      sheriff: id === SHERIFF ? { ...sheriffOf(w.guards), canAct: w.stage === 'planning' ? true : 'notPlanning' } : null,
-      sabotage: { order: null, canOrder: true, owed: 0, mine: [] },
+      sheriff: id === SHERIFF ? (w.sabotage ? pathSheriff(w) : { ...sheriffOf(w.guards), canAct: w.stage === 'planning' ? true : 'notPlanning' }) : null,
+      sabotage: mySabotage(w, id),
     },
     deals: { cards: mine, offersLeft: DEALS.maxOpenOffers - open, pactMonths: [...DEALS.pactMonths] },
     worthParts: { money: 640, goods: 180, plots: 7, land: 3500, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },

@@ -279,6 +279,18 @@ function Index() {
           ))}
         </ul>
       </Section>
+      <Section title="The Sheriff’s month (?path=sheriff)" id="sheriff-path">
+        <a href="?path=sheriff" className="text-sm font-semibold text-holo" data-testid="to-sheriff-path">
+          → The Sheriff’s month: a guard, a cut, a fine
+        </a>
+        <ul className="flex max-w-5xl list-disc flex-col gap-1 pl-5 text-sm text-ink-2" data-testid="sheriff-path-notes">
+          <li>Same table as the planning month: Kai is the Sheriff (D15) and guards Brix’s Food plot; Lena cuts it and is caught; next month Kai fines Lena and half goes to Brix at that month’s end. Step 4: an unguarded cut that works, then Kai’s investigation, solved or cold.</li>
+          <li>Real pieces: Lena’s order is the build’s own S4-C14 (LookSabotage under Look, MarketSabotage under Sell, from WS8’s #p6 at d6977e1a), with its real sabotage intent; the Sheriff sub-tab is WS8’s case file B at d6977e1a with WS7’s tips (a cold case wears no chip; “One investigation a month: used”), sending the real investigate and fine intents. The planning month keeps the case file at d0a52c1a.</li>
+          <li>Every number is the config’s (POLITICS.sabotage.orders, POLITICS.sheriff, reputation.moves.caught); every line WS8’s #p10 PHONE_LINES and MONTH_END (#750 builds them word for word) or the spec’s month-end row, with this table’s names, a good capitalised as the PM’s 8 Nov ruled lines write it.</li>
+          <li>STAND-IN: the phone during production (proposed/PhoneProduction.tsx) draws the end state of the real Production screen with #750’s rail card: the map, the public line, this seat’s own line. The TV’s production layer (#p10) is mock-hub-tv’s, behind the focuses production-caught, fine-set, month-end-fine, production-dark and investigation; until each is built the TV pane says so.</li>
+          <li>Found on trunk: HoloMap’s guard flag is built (MapFlag 'guard', WS4), so the planning month’s DS-GAP overlay on WS8’s GuardMap can give way to it in the build.</li>
+        </ul>
+      </Section>
       <Section title="Key decisions" id="decisions">
         <ul className="flex max-w-5xl flex-col gap-1 text-sm" data-testid="decisions">
           {DECISIONS.map(([id, line]) => (

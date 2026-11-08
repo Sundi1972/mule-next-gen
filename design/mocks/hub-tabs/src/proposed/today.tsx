@@ -1,5 +1,6 @@
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { MarketDesk } from '../../../../../apps/web/src/phone/hub/desks';
+import { MarketSabotage } from '../../../../../apps/web/src/phone/hub/politics/Sabotage';
 import { needRows } from '../../../../../apps/web/src/phone/hub/needs';
 import { COUNCIL_STAGE, ELECTION_AGENDA, ELECTION_DAY_STAGE, GOVERNOR_AGENDA, LAW_AGENDA, OFFICES_BANNER } from '../../../../../apps/web/src/phone/hub/politics/slots';
 import type { AgendaSlot } from '../../../../../apps/web/src/phone/hub/slots';
@@ -42,7 +43,17 @@ const ICON = {
 };
 
 /** Sell a plot or MULE: the tool's map as today, and in the rail what the Market desk held (the form, the line-up, the prices). */
-const tools = HUB_SLOTS.tools.map((t) => (t.id === 'list' ? { ...t, label: 'Sell', Panel: MarketDesk } : t));
+const tools = HUB_SLOTS.tools.map((t) => (t.id === 'list' ? { ...t, label: 'Sell', Panel: MarketAndRumour } : t));
+
+/** The Market desk, and under it the secret rumour and this player's orders (S4-C14, as trunk's MarketWithSabotage); nothing of sabotage while it is off. */
+function MarketAndRumour() {
+  return (
+    <>
+      <MarketDesk />
+      <MarketSabotage />
+    </>
+  );
+}
 
 /**
  * The Sheriff's Guard (WS8's P8, PM ruling 8 Nov): a pick the Sheriff sub-tab hands to Overview's one map. WS8's GuardMap
