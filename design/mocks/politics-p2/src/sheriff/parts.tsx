@@ -1,9 +1,10 @@
+import { plotName } from '../../../../../apps/web/src/game/derive';
 import type { IncidentView, MuleView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
 import { useState } from 'react';
 import { OnlyYou } from '../../../../../apps/web/src/phone/hub/OnlyYou';
 import { Who } from '../../../../../apps/web/src/phone/hub/politics/parts';
-import type { SheriffState } from '../fixture';
+import { STANDARD_FINE, type SheriffState } from '../fixture';
 
 /**
  * The Sheriff's desk's pieces, shared by both variants: they differ in how the pieces are arranged, not in what each says.
@@ -40,7 +41,7 @@ export function CaseHead({ view, c, state, solved }: { view: View; c: IncidentVi
         </span>
         <span className="text-[11px] text-ink-3 @min-[1100px]/shell:text-sm" data-testid={`case-meta-${c.id}`}>
           Month {c.month}
-          {c.at && ` · plot (${c.at.x + 1}, ${c.at.y + 1})`}
+          {c.at && ` · plot ${plotName(c.at.x, c.at.y)}`}
           {c.worked ? ' · it worked' : ' · it failed'}
         </span>
       </div>
@@ -124,7 +125,8 @@ export function FineControl({ view, c, sheriff, onFine }: { view: View; c: Incid
       </Button>
       <span className="text-[11px] text-ink-3 @min-[1100px]/shell:text-sm" data-testid={`fine-split-${c.id}`}>
         {c.victim ? `${total / 2} cr to ${name(view, c.victim)}, ${total / 2} cr to the colony fund.` : `All ${total} cr to the colony fund: a rumour has no victim.`}
-        {/* DS-GAP / open question for WS7: a rumour has no victim; does its fine go wholly to the fund? Assumed here. */}
+        {` Not fined by the end of planning: the standard ${STANDARD_FINE * sheriff.multiplier} cr.`}
+        {/* WS7 confirmed 8 Nov: a rumour has no victim, so its whole fine stays in the fund (S4-RULE-8, sabotage.ts::levy). */}
       </span>
     </div>
   );
@@ -157,7 +159,7 @@ export function GuardLine({ view, sheriff, onMap, compact = false }: { view: Vie
             <li key={`${t.x},${t.y}`} className="flex items-center gap-1 rounded-chip border border-holo-line bg-panel px-1.5 py-0.5 text-xs" data-testid={`guard-plot-${t.x}-${t.y}`}>
               <GuardGlyph />
               {t.owner && <Who view={view} id={t.owner} size={12} />}
-              <span className="font-mono text-ink-3">({t.x + 1}, {t.y + 1})</span>
+              <span className="font-mono text-ink-3">{plotName(t.x, t.y)}</span>
             </li>
           ))}
         </ul>

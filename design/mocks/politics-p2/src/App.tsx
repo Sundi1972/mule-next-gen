@@ -1,6 +1,7 @@
 import { cx } from '@mule/ui';
 import { useEffect, useState, type ReactNode } from 'react';
 import { DESK_STATES, viewFor, type DeskState } from './fixture';
+import { P6Page } from './sabotage/P6Page';
 import { GuardMap } from './sheriff/GuardMap';
 import { SheriffDeskA } from './sheriff/VariantA';
 import { SheriffDeskB } from './sheriff/VariantB';
@@ -19,11 +20,11 @@ const DECISIONS: string[] = [
   'Guards are the Sheriff’s secret: the desk says “hidden until they catch someone”; nobody else’s map shows them.',
   'Before the votes are counted the desk waits and says why; nothing on it can be pressed.',
   'No id is ever printed (ids are opaque): a case is named by what happened, to whom, and when.',
-  'The trade: in A a solved case jumps from Investigate down to Fine (clear jobs, but it moves under the thumb); in B it stays put and its next step changes (calmer, but one long list). WS8 leans B.',
+  'The trade: in A a solved case jumps from Investigate down to Fine (clear jobs, but it moves under the thumb); in B it stays put and its next step changes (calmer, but one long list). PM ruled B (8 Nov); it goes to Heiko inside the tabbed-hub card on 9 Nov (Governor › Sheriff), where he may veto. A stays here for that.',
 ];
 
-type Route = 'index' | 'a' | 'b';
-const route = (): Route => (location.hash === '#a' ? 'a' : location.hash === '#b' ? 'b' : 'index');
+type Route = 'index' | 'a' | 'b' | 'p6';
+const route = (): Route => (location.hash === '#a' ? 'a' : location.hash === '#b' ? 'b' : location.hash === '#p6' ? 'p6' : 'index');
 
 /** One variant on one phone: the desk, and Overview's map in Guard mode when the Sheriff opens it. */
 function Flow({ variant, state, w, h }: { variant: 'a' | 'b'; state: DeskState; w: number; h: number }) {
@@ -91,7 +92,7 @@ function Page({ title, children }: { title: string; children: ReactNode }) {
 }
 
 const A = { title: 'A · Three jobs', blurb: 'The office’s three powers as three sections, in the order a month uses them: Guard, Investigate, Fine. Only work that can still be done is on the desk; cold and closed cases are history.' };
-const B = { title: 'B · The case file', blurb: 'Guards as one line on top, then one list of every case, newest first, each with only its next step: Investigate, then Fine. Cold and closed cases fold under one line.' };
+const B = { title: 'B · The case file (chosen)', blurb: 'Guards as one line on top, then one list of every case, newest first, each with only its next step: Investigate, then Fine. Cold and closed cases fold under one line.' };
 
 export default function App() {
   const [r, setR] = useState(route);
@@ -101,6 +102,12 @@ export default function App() {
     addEventListener('hashchange', on);
     return () => removeEventListener('hashchange', on);
   }, []);
+  if (r === 'p6')
+    return (
+      <Page title="P6 · the secret order: a power cut from Look, a rumour from the market">
+        <P6Page />
+      </Page>
+    );
   if (r !== 'index')
     return (
       <Page title={`Sheriff’s desk, variant ${r === 'a' ? A.title : B.title}`}>
@@ -111,7 +118,7 @@ export default function App() {
   return (
     <main className="flex min-h-dvh flex-col gap-6 bg-table p-6 text-ink" data-testid="index">
       <header className="flex flex-col gap-2">
-        <h1 className="font-display text-2xl font-semibold">Politics P2 · the Sheriff’s desk, two variants</h1>
+        <h1 className="font-display text-2xl font-semibold">Politics P2 · sabotage and the Sheriff</h1>
         <p className="max-w-3xl text-sm text-ink-2">
           Brix is Sheriff, month 5 planning. Five sabotages so far: two unsolved, one caught by a guard and not yet fined, one gone cold, one fined.
           Press Investigate, fine, or post a guard on the map; switch the state to see the ban, a spent month, election day and a quiet colony.
@@ -120,6 +127,11 @@ export default function App() {
           {DECISIONS.map((d) => <li key={d}>{d}</li>)}
         </ul>
       </header>
+      <nav className="flex flex-wrap gap-4 text-sm" data-testid="screens">
+        <a href="#b" className="text-holo underline" data-testid="link-b">P7–P8 · Sheriff’s desk, B (chosen)</a>
+        <a href="#a" className="text-holo underline" data-testid="link-a">Sheriff’s desk, A</a>
+        <a href="#p6" className="text-holo underline" data-testid="link-p6">P6 · the secret order</a>
+      </nav>
       <States state={state} onPick={setState} />
       <div className="flex flex-wrap items-start gap-10">
         <Variant variant="a" state={state} {...A} />

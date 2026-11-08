@@ -80,3 +80,24 @@ ShowEventView.sabotage ~:753, intents ~:49), `packages/engine/src/types.ts:640` 
    map, the month-end line; the phones' private lines (the culprit's, the victim's, the Sheriff's).
 4. P9: election day with the Sheriff row; P11: the sabotage ban in the law list and the ballot.
 Real components from apps/web (hub desks, LookPanel, HoloMap flag 'sabotage', the event show) wherever they exist.
+
+## Rulings during the build
+
+- 8 Nov 02:53Z, Heiko via the PM: the phone hub becomes a tabbed shell (Overview, Governor, Colony, Talk; "?" explains).
+  P2 keeps its components and holds their placement until WS6's shell mock (9 Nov 02:00Z). Sabotage likely starts from
+  Overview's map, the Sheriff from the Governor tab.
+- 8 Nov, the PM: one map, Overview's. The Sheriff's guard switches to it in Guard mode under "Guarding · back to Sheriff".
+- 8 Nov, the PM: Sheriff desk **B, the case file**. A case keeps its place and only its step changes. Heiko sees it in
+  the tabbed-hub card on 9 Nov (Governor › Sheriff) and may veto.
+- 8 Nov, WS7 confirmed: a rumour has no victim, so its whole fine stays in the fund (S4-RULE-8; sabotage.ts::levy, S4-T-AC-5).
+  The month end shows it as "Fines N" in the fund's in-column, with no "To victims" line; the ban's multiplier applies.
+- Open: WS6, HoloMap `flag: 'guard'` (DS-GAP), in the shell build.
+
+## P6 as built (8 Nov)
+
+- Numbers from WS7's config on ws7-s4-engine 4b55602a (placeholders until WS1, HC-25): power cut 120 cr, works 60%, seen
+  30%; rumour 60 cr, 80%, 15%, shift 25%; Sheriff 2 guards, 1 investigation, fines 50–300 step 50, standard fine 150
+  when planning ends unfined, victim share 0.5; caught −10 reputation (−20 more under a pact), all × the ban.
+- A rumour may name any of the nine goods (the engine checks GOODS). The engine refuses an order the player cannot pay
+  for ("A crew costs N cr; you have M"): the build shows that refusal as today's toasts do.
+- The ban's multiplier is a prop in the mock: trunk's LawId has no 'sabotageBan' yet; ws7-s4-engine adds it.

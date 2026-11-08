@@ -1,3 +1,4 @@
+import type { Good, SabotageTarget } from '@mule/engine';
 import type { IncidentView, MuleView, MyPoliticsView, MyView } from '@mule/protocol';
 import { W, viewFor as frameView, type Seat } from './frame-fixture';
 
@@ -27,6 +28,8 @@ export const INCIDENTS: IncidentView[] = [
 export const INVESTIGATION: Record<string, string | null> = { q7f2: 'kai', k1m9: null };
 
 export const FINE_STEPS = [50, 100, 150, 200, 250, 300];
+/** What a revealed case pays when planning ends unfined (POLITICS.sheriff.fine.standard on ws7-s4-engine). */
+export const STANDARD_FINE = 150;
 
 /** The Sheriff's own desk state, as MyView.sheriff carries it. One guard of two posted, one investigation left. */
 export type SheriffState = NonNullable<MyPoliticsView['sheriff']>;
@@ -54,21 +57,39 @@ export function sheriffFor(state: DeskState): { sheriff: SheriffState; incidents
   }
 }
 
+/** Plots with a MULE at work: only a working plot can have its power cut. */
+const OUTFIT: Record<string, Good> = {
+  '12,4': 'smithore', '13,4': 'smithore', '12,5': 'energy', '10,2': 'food', '9,2': 'food', '10,3': 'energy', '3,2': 'smithore',
+  '9,7': 'energy', '10,7': 'food', '6,2': 'food', '7,2': 'energy', '6,5': 'smithore',
+};
+
+/** Lena's own orders, as her phone sees them: her name on each, public or not. */
+export const MINE: OwnOrder[] = [
+  { ...INCIDENTS[3]!, culprit: 'lena', public: false, outcome: 'done' },
+  { ...INCIDENTS[2]!, public: true, outcome: 'caught' },
+];
+export type OwnOrder = NonNullable<MyPoliticsView['sabotage']>['mine'][number];
+
+/** Whom Lena has a pact with (fixture shorthand for her active pact cards): a caught cut on them costs 20 more. */
+export const PACTS: string[] = ['brix'];
+
 /** The whole view for a seat, with slice 4 filled in. */
-export function viewFor(seat: Seat, state: DeskState = 'month') {
+export function viewFor(seat: Seat, state: DeskState = 'month', order: SabotageTarget | null = null) {
   const base = frameView(seat);
   const { sheriff, incidents } = sheriffFor(state);
   const view: MuleView = {
     ...base.view,
+    tiles: base.view.tiles.map((t) => (OUTFIT[`${t.x},${t.y}`] ? { ...t, outfit: OUTFIT[`${t.x},${t.y}`]! } : t)),
     politics: { ...base.view.politics!, sabotage: {
-      terms: { powerCut: { cost: 120, success: 0.7, detect: 0.25 }, rumour: { cost: 80, success: 0.8, detect: 0.15 } },
+      // WS7's config (ws7-s4-engine 4b55602a), placeholders until WS1 tunes them (HC-25).
+      terms: { powerCut: { cost: 120, success: 0.6, detect: 0.3 }, rumour: { cost: 60, success: 0.8, detect: 0.15 } },
       incidents,
       sheriff: { guards: sheriff.max, investigations: 1, investigationsLeft: sheriff.investigationsLeft },
     } },
   };
   const politics: MyPoliticsView = {
     running: null, ballot: {}, canRun: {}, paid: 0, reputation: 50, ...base.me.politics,
-    sheriff: seat === 'sheriff' ? sheriff : null, sabotage: { order: null, canOrder: true, owed: 0, mine: [] },
+    sheriff: seat === 'sheriff' ? sheriff : null, sabotage: { order, canOrder: true, owed: order ? view.politics!.sabotage!.terms[order.kind].cost : 0, mine: seat === 'lena' ? MINE : [] },
   };
   const me: MyView = { ...base.me, politics };
   return { ...base, view: { ...view, me }, me };
