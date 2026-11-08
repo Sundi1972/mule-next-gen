@@ -3,8 +3,10 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useId, useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
-import { leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
+import { frontOpacity, leaning, shortOfPlate, topOf, viewOf, type Box, type Framing } from './framing';
 import { Glow, WalkingScene, type PictureBox } from './LiveLayer';
+import { occluderOf } from './occlusion';
+import type { Spot } from './walks';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
 import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
@@ -40,6 +42,10 @@ export interface ColonyGroundsProps {
   framing?: Framing;
   /** The place numbers and stage chips over each place; off on the TV opener (AM-7 v). */
   chips?: boolean;
+  /** The players seated: the colonists wear their colours, the rest the colony's white or grey. Unknown: all four colours. */
+  players?: number;
+  /** Each colonist's route, in place of the walk round the hall (a mock places a colonist exactly). */
+  routes?: Spot[][];
   className?: string;
 }
 
@@ -64,16 +70,21 @@ interface Lit {
  * glow pass straight over it so nearer buildings still cover a farther one's light. A failed picture takes its glow
  * with it: the fallback shape is never lit.
  */
-function Picture({ c, r, href, frame, testid, fallback, lit }: { c: number; r: number; href: string; frame: Frame; testid: string; fallback: ReactNode; lit: Lit | null }) {
+/**
+ * One building's picture and its glow. `fade` (below 1 while the opener leans in on a place behind it) goes on each image,
+ * never on a group around them: a group's opacity isolates it, and the glow's screen blend would then paint its black
+ * as a dark box over the place the fade is there to show.
+ */
+function Picture({ c, r, href, frame, testid, fallback, lit, fade }: { c: number; r: number; href: string; frame: Frame; testid: string; fallback: ReactNode; lit: Lit | null; fade?: number }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return <>{fallback}</>;
+  if (failed) return <>{fade === undefined ? fallback : <g opacity={fade}>{fallback}</g>}</>;
   const [x, y] = iso(c, r);
   const k = W / frame.place;
   const box = { x: x - frame.centre[0] * k, y: y - frame.centre[1] * k, width: frame.width * k, height: frame.height * k };
   return (
     <>
-      <image href={href} {...box} data-testid={testid} onError={() => setFailed(true)} />
-      {lit && <Glow key={lit.href} href={lit.href} opacity={lit.opacity} box={box} testid={lit.testid} />}
+      <image href={href} {...box} opacity={fade} data-testid={testid} onError={() => setFailed(true)} />
+      {lit && <Glow key={lit.href} href={lit.href} opacity={fade === undefined ? lit.opacity : lit.opacity * fade} box={box} testid={lit.testid} />}
     </>
   );
 }
@@ -137,7 +148,7 @@ function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
  * farther ones (each with its glow at dusk), with the colonists on the paths sorted in among them; without a plate the
  * near edge; then the callouts.
  */
-export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, className }: ColonyGroundsProps) {
+export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, chips = true, players, routes, className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
   const [failedPlates, setFailedPlates] = useState<ReadonlySet<string>>(() => new Set());
@@ -166,18 +177,36 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   // The plate's lamps light as a standing building's do (RULE-2).
   const plateGlow = glowOpacity({ light, stage: 'standing', wealth: colony.gauges.wealth });
 
+  // During the lean-in, a building standing in front of a place the caption names fades, so the place shows through.
+  const fade = (block: GridPlace) => {
+    const o = frontOpacity(block, framing);
+    return o < 1 ? Number(o.toFixed(3)) : undefined;
+  };
+
+  // Each picture with its silhouette: a colonist it covers is hidden by it, with an outline over it (T-AC-13). The SVG
+  // shapes (no manifest) need none: drawn in the same order, they hide the colonists behind them as they are.
+  const occluders = manifest
+    ? scene.flatMap(({ p, col: c, row: r }) => {
+        const kind: PictureKind = p?.id ?? 'hall';
+        const picked = pick(kind, p ?? HALL_PLACE, light, manifest);
+        const skyline = picked.shows === 'picture' ? manifest.pictures[kind]?.[picked.stage]?.skyline : undefined;
+        return skyline ? [occluderOf(manifest.pictures[kind]?.frame ?? manifest.frame, skyline, c, r, c + r)] : [];
+      })
+    : [];
+
   const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
 
-  const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode) => {
+  const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode, fade?: number) => {
     const picked = pick(kind, place, light, manifest);
-    if (picked.shows === 'shape' || !manifest) return fallback;
+    // The SVG shapes hold no blended layer, so their group can take the fade whole.
+    if (picked.shows === 'shape' || !manifest) return fade === undefined ? fallback : <g opacity={fade}>{fallback}</g>;
     const frame = manifest.pictures[kind]?.frame ?? manifest.frame;
     const href = hrefOf(picked.src, manifest, size);
     const glow = manifest.pictures[kind]?.[picked.stage]?.glow;
     const opacity = glowOpacity({ light, stage: place.stage, wealth: colony.gauges.wealth });
     const lit = glow && opacity > 0 ? { href: hrefOf(glow, manifest, size), opacity, testid: `glow-${id}` } : null;
     // Keyed by its picture, so a load that failed for one stage never keeps the next stage's picture on the fallback.
-    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={`picture-${id}`} fallback={fallback} lit={lit} />;
+    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={`picture-${id}`} fallback={fallback} lit={lit} fade={fade} />;
   };
 
   return (
@@ -188,6 +217,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
       aria-label={`The colony grounds: the town hall and ${placed.length} buildings`}
       data-testid="colony-grounds"
       data-extent={R}
+      data-players={players}
     >
       {plate ? (
         <>
@@ -216,16 +246,20 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
           depth: c + r,
           node:
             !p || !block ? (
-              <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>
+              <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />, fade(HALL_BLOCK))}</g>
             ) : (
               <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
-                {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
+                {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />, fade(block))}
               </g>
             ),
         }))}
-        walkers={walkers}
+        walkers={routes ? routes.length : walkers}
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
+        occluders={occluders}
+        players={players}
+        routes={routes}
+        sprite={manifest?.walker && { entry: manifest.walker, light, href: (src) => hrefOf(src, manifest, size), oneTrim: size === 'phone' }}
       />
       {!plate && <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>}
       {chips &&
