@@ -1090,6 +1090,8 @@ export const POLITICS = {
       minEdge: 0,
       /** Weight on a victim who was caught sabotaging this seat, when picking a target. */
       grudge: 2,
+      /** Share, 0..1, of a power cut's damage a seat counts against a victim behind it on Worth (slice 4 §10: "little against a trailing player"); a victim ahead of it counts in full. WS1, S4-PR-3. */
+      behindWeight: 0.25,
     },
     /** How an AI Sheriff fines (slice 4, S4-RULE-13); every other case pays the standard fine. */
     sheriff: {

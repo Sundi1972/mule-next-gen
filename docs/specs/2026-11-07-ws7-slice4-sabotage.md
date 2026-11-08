@@ -1199,6 +1199,7 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-T-AC-18 (serves S4-B-AC-11) | the bounty: paid at a guard catch and at a solved investigation, never at a catch on the spot, never to a Sheriff who is the culprit; as far as the fund reaches; recorded on order.bounty | S4-C5 | engine test | fund 0 → paid 0, nothing owed |
 | S4-T-AC-19 (serves S4-B-AC-12) | captureOdds adds ownPlotDetectBonus only for a power cut on a plot the Sheriff owns at resolution, beside Security's bonus, capped at 1; a guarded plot is 1 | S4-C2 | engine test | no Sheriff in office → no bonus |
 | S4-T-AC-20 (serves S4-B-AC-11) | politics.sheriffRecord counts guard catches and solved investigations, resets in takeOffice every term; every view carries the outgoing Sheriff's record on election day and never a guarded tile | S4-C6 S4-C13 | engine and server tests | no Sheriff → null |
+| S4-T-AC-21 (serves S4-B-AC-11) | S4-RULE-2's Sheriff row: the sitting Sheriff's power cut and rumour are refused with "The Sheriff can't order sabotage"; canOrder says 'sheriff'; an order placed during the election by the player who then takes the Sheriff's office is withdrawn at takeOffice (no charge, no record) | S4-C1 S4-C6 | engine test | a Sheriff whose term ended may order again |
 
 Invariants, asserted by every relevant test: no player's money and never the fund below 0; nothing writes
 `treasury.money` but colony.ts; nothing writes `politics.sabotage` but sabotage.ts; one player never holds both
@@ -1384,7 +1385,7 @@ folded    §3 Config and §10 read with AM-10; packages/engine/src/config.ts; do
 ```
 AM-11 · 2026-11-08 · Heiko (AskUserQuestion and chat, 8 Nov, via PM) · the Sheriff's incentives: no guard on its own plots, a bounty per catch, its own plots harder to cut, its record on election day
 target    §2 S4-RULE-3 (captureOdds), S4-RULE-5, S4-RULE-6, S4-RULE-7, S4-RULE-11; §1 S4-C5, S4-C6, S4-C10/C11 (WS1),
-          S4-C15 (WS8), S4-C16; §3 Config and the views; §6 new rows S4-B-AC-11, S4-B-AC-12, S4-T-AC-17..S4-T-AC-20
+          S4-C15 (WS8), S4-C16; §3 Config and the views; §6 new rows S4-B-AC-11, S4-B-AC-12, S4-T-AC-17..S4-T-AC-21; S4-RULE-2
 said      a Sheriff may guard any owner's plot, its own included (S4-RULE-6's example); the office pays a flat
           POLITICS.pay.sheriff (30) a month, and a catch earns the Sheriff nothing; every plot is cut on the same odds
 why       as built a rational Sheriff guards only its own plots: the pay is flat and a catch earns nothing.
@@ -1411,6 +1412,16 @@ did       1. S4-RULE-6 gains a row before row 4: a tile the Sheriff owns → ref
              term, as AM-10 of slice 5 resets politics.overruled). Every screen's election view shows the outgoing
              Sheriff's record on election day, e.g. "Kai, Sheriff: caught 3, solved 1". Where the guards stood
              stays secret: only the two counts are public.
+          5. The Sheriff can't order sabotage (Heiko, 8 Nov: "the Sheriff himself shouldn't be allowed to sabotage").
+             S4-RULE-2 gains a row after "off" and "not planning": the orderer is the sitting Sheriff → refuse
+             "The Sheriff can't order sabotage", for a power cut and a rumour alike. canOrder returns 'sheriff' for
+             them, so every screen and hand reads one answer.
+             Edge cases (ruled by WS7): orders may be placed while the election's votes are open, so a player can
+             order and then take the Sheriff's office at the ceremony the same month. takeOffice withdraws the new
+             Sheriff's pending order, exactly as a free withdrawal (S4-RULE-2's null target): no charge, no record,
+             no news; the order card is gone from their phone. An order is never open across a term's end in any
+             other way: orders resolve at the same month's production, and terms end only at an election in
+             planning. A Sheriff whose term ended may order from that planning on.
 unknown   no Sheriff in office (nobody ran and none was appointed) → no bounty, no record line; a Sheriff who
           loses office mid-term cannot (terms end only at an election)
 examples  Kai guards Brix's Smithore plot; Lena's cut there is caught → Lena named, Kai +50 cr from the fund, the
