@@ -158,19 +158,19 @@ describe("the TV's break banner (S3-C20)", () => {
     expect(textOf(html, 'tv-break-deal-b3x8re')).toContain('A promise was broken');
     expect(textOf(html, 'tv-break-deal-b3x8re-words')).toBe('Lena broke a promise to Brix: a vote for Brix');
     // The breaker's name now, and what it was before the break: the move POLITICS gives a broken vote card.
-    expect(textOf(html, 'tv-break-deal-b3x8re-drop')).toMatch(new RegExp(`^${40 - POLITICS.reputation.moves.voteBroken} → 40`));
+    expect(textOf(html, 'tv-break-deal-b3x8re-drop')).toMatch(new RegExp(`^${40 - POLITICS.reputation.moves.voteBroken}→40`));
     expect(marks(html), 'Lena is a person: no AI mark').toBe(0);
   });
 
   it("S3-B-AC-2: the drop is the view's reputation and POLITICS' move, never a typed number: a pact's, and a retuned move", () => {
-    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9-drop')).toMatch(new RegExp(`^${40 - POLITICS.reputation.moves.pactBroken} → 40`));
+    expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9-drop')).toMatch(new RegExp(`^${40 - POLITICS.reputation.moves.pactBroken}→40`));
     expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9')).toContain('A pact was broken');
     expect(textOf(banner(atMonth([LENA_PACT])), 'tv-break-deal-q7k2m9-words')).toBe('Lena broke a pact with Brix');
     const moves = POLITICS.reputation.moves as { voteBroken: number };
     const was = moves.voteBroken;
     try {
       moves.voteBroken = -7;
-      expect(textOf(banner(atMonth([LENA_VOTE])), 'tv-break-deal-b3x8re-drop')).toMatch(/^47 → 40/);
+      expect(textOf(banner(atMonth([LENA_VOTE])), 'tv-break-deal-b3x8re-drop')).toMatch(/^47→40/);
     } finally {
       moves.voteBroken = was;
     }
