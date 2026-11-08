@@ -114,8 +114,9 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
   const pactMonths = me.deals?.pactMonths ?? POLITICS.deals.pactMonths;
   const [draft, setDraft] = useState<Draft>({ kind: kind ?? 'pact', months: pactMonths[Math.floor(pactMonths.length / 2)] ?? 1, choice: null });
   const before = useRef<Set<string> | null>(null);
-  // The newest toast when this composer last sent: only a later one is this card's refusal.
-  const [sentAfter, setSentAfter] = useState<number | null>(null);
+  // This send's answer: the first toast after it, kept once seen, so a later toast is never read as this card's refusal.
+  // The server's error names no intent, so the first one after the send is the nearest the phone can tie to it.
+  const [sent, setSent] = useState<{ after: number; answer: number | null } | null>(null);
   const offersLeft = me.deals?.offersLeft ?? 0;
   const other = view.players.find((p) => p.id === to)!;
   const myRep = view.players.find((p) => p.id === me.id)?.reputation ?? START.reputation;
@@ -124,7 +125,11 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
   const waiting = noNewCard(view, me, to);
   const pactNo = !waiting && cards.some((c) => c.terms.kind === 'pact' && isOpen(c) && between(c, me.id, to)) ? `You already have a pact with ${other.name}` : undefined;
   const offer = toOffer(to, draft);
-  const refusal = sentAfter === null ? null : (toasts.filter((t) => t.id > sentAfter).at(-1) ?? null);
+  const answer = sent === null ? null : (sent.answer ?? toasts.find((t) => t.id > sent.after)?.id ?? null);
+  useEffect(() => {
+    if (sent && sent.answer === null && answer !== null) setSent({ ...sent, answer });
+  }, [sent, answer]);
+  const refusal = answer === null ? null : (toasts.find((t) => t.id === answer) ?? null);
   const blocked = offersLeft <= 0 ? `You have ${cards.filter((c) => c.from === me.id && c.status === 'offered').length} cards waiting for an answer` : (waiting ?? (draft.kind === 'pact' ? pactNo : undefined));
   const landed = cards.some((c) => c.from === me.id && c.to === to && c.status === 'offered' && before.current && !before.current.has(c.id));
   useEffect(() => {
@@ -149,7 +154,7 @@ function useComposer(to: string, kind: DraftKind | undefined, onSent: () => void
       if (!offer) return;
       before.current = new Set(cards.map((c) => c.id));
       if (refusal) client.dismiss(refusal.id);
-      setSentAfter(toasts.at(-1)?.id ?? -1);
+      setSent({ after: toasts.at(-1)?.id ?? -1, answer: null });
       client.intent({ type: 'offerDeal', offer });
     },
     dismiss() {
