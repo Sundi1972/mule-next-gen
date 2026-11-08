@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>752b0c6da3c9</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>695c27092571</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1365,11 +1365,11 @@
 </table></div>
 
 <h2 id="health"><code>HEALTH</code> <span class="pill built">In the game</span></h2>
-<p>Colony health (needs C7-C9, RULE-7 to RULE-9): hunger and missing Medicine make colonists sick, and Electronics comfort them. Ships switched off until the Medicine supply can carry it; switch on with <code>--set HEALTH.enabled=true</code>.</p>
+<p>Colony health (needs C7-C9, RULE-7 to RULE-9): hunger and missing Medicine make colonists sick, and Electronics comfort them. A switch: <code>--set HEALTH.enabled=false</code>.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>HEALTH.enabled</code></td><td class="n">false</td><td>Whether colony health plays at all. Off, nobody falls sick and the colonists take no Medicine or Electronics.</td></tr>
+<tr><td><code>HEALTH.enabled</code></td><td class="n">true</td><td>Whether colony health plays at all: on (Heiko, 8 Nov). Off, nobody falls sick and the colonists take no Medicine or Electronics.</td></tr>
 <tr><td><code>HEALTH.base</code></td><td class="n">0.01</td><td>Share of the well colonists who fall sick in a month with nothing wrong.</td></tr>
 <tr><td><code>HEALTH.perHunger</code></td><td class="n">0.2</td><td>Added to that share at full hunger (the hardship of the worse of Food and Water at 1).</td></tr>
 <tr><td><code>HEALTH.perMedicine</code></td><td class="n">0.2</td><td>Added to that share with all of the colonists&#39; Medicine missing (its hardship at 1).</td></tr>
@@ -1378,7 +1378,7 @@
 <tr><td><code>HEALTH.medicineCut</code></td><td class="n">0.3</td><td>Share of that recovery lost with all their Medicine missing, in proportion to the share missing.</td></tr>
 <tr><td><code>HEALTH.cap</code></td><td class="n">0.4</td><td>The most of the colony that is ever sick at once, 0..1.</td></tr>
 <tr><td><code>HEALTH.moodPerSick</code></td><td class="n">10</td><td>Mood points off the month&#39;s target per unit of sick share (all sick: this many).</td></tr>
-<tr><td><code>HEALTH.growthPerSick</code></td><td class="n">0.05</td><td>Off the colony&#39;s monthly growth factor per unit of sick share.</td></tr>
+<tr><td><code>HEALTH.growthPerSick</code></td><td class="n">0.2</td><td>Off the colony&#39;s monthly growth factor per unit of sick share: 0.08 at the cap, so sickness bites like hunger (Heiko, 8 Nov, option A).</td></tr>
 <tr><td><code>HEALTH.electronicsBonus</code></td><td class="n">4</td><td>Mood points onto the month&#39;s target with the colonists&#39; whole Electronics want met; in proportion when part.</td></tr>
 <tr><td><code>HEALTH.crewSickFrom</code></td><td class="n">0.2</td><td>The sick share from which players&#39; crews fall sick too, unless their player takes a Medicine (needs RULE-15).</td></tr>
 <tr><td><code>HEALTH.playerSpill</code></td><td class="n">0.1</td><td>Added to a player&#39;s development sickness chance with the colony at the cap; in proportion below it (needs RULE-14).</td></tr>
@@ -2140,7 +2140,7 @@
 <tr><td><code>STRATEGIST.cashLeftFloor</code></td><td class="n">0.75</td><td>The &quot;cash left&quot; consideration: spending down to the reserve scores this much, and keeping cashLeftFull times the reserve scores 1. The reserve itself is a hard rule, so this is only a mild preference for cash in hand.</td></tr>
 <tr><td><code>STRATEGIST.cashLeftFull</code></td><td class="n">2</td><td>Explained in the note on <code>STRATEGIST.cashLeftFloor</code>.</td></tr>
 <tr><td><code>STRATEGIST.energyFirst</code></td><td class="n">false</td><td>Energy first: while a seat has no Energy plant and may install one, every other install and &quot;Keep the cash&quot; are ruled out, so its next MULE is that plant. Spike S1&#39;s lever (c) (PM rulings, 7 and 8 Nov). OFF (Heiko, 8 Nov: &quot;the colony can choose [its own] approach&quot;): kept as a switch, <code>--set STRATEGIST.energyFirst=true</code>.</td></tr>
-<tr><td><code>STRATEGIST.medicineDespiteInputs</code></td><td class="n">false</td><td>Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can still build the colony&#39;s Medicine (blocked, hungry seats never built one: a spiral). Spike S2&#39;s lever B with START.storeStock.medicine 40 (PM ruling, 8 Nov). OFF until health is on: without sick colonists it only diverts seats from their Energy plant (seed 1&#39;s Energy gate 9.6% -&gt; 15.8%); PR-13 switches it on with health (PM ruling, 8 Nov). A switch: <code>--set STRATEGIST.medicineDespiteInputs=true</code>.</td></tr>
+<tr><td><code>STRATEGIST.medicineDespiteInputs</code></td><td class="n">true</td><td>Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can still build the colony&#39;s Medicine (blocked, hungry seats never built one: a spiral). Spike S2&#39;s lever B (its START.storeStock.medicine became 22: Heiko, 8 Nov, Medicine A). On with colony health (PM ruling, 8 Nov): without sick colonists it only diverts seats from their Energy plant (seed 1&#39;s Energy gate 9.6% -&gt; 15.8%). A switch: <code>--set STRATEGIST.medicineDespiteInputs=false</code>.</td></tr>
 <tr><td><code>STRATEGIST.waterFirst</code></td><td class="n">false</td><td>Water first, Energy first&#39;s twin for AM-18: once a seat has its Energy plant (or may not install one), while its wells&#39; next output (net of their own use) is short of its drink and its plots&#39; Water, and it may install a well, every other install and &quot;Keep the cash&quot; are ruled out, so its next MULE is a well. A PR-5b lever, chosen by sweep. A switch: <code>--set STRATEGIST.waterFirst=true|false</code>.</td></tr>
 </tbody>
 </table></div>

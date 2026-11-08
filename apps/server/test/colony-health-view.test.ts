@@ -6,15 +6,18 @@ import { fakeContext, seats } from './fake-context.js';
 
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
-/** Runs `body` with colony health switched on, and switches it back off whatever happens. */
-function withHealth<T>(body: () => T): T {
-  HEALTH.enabled = true;
+/** Runs `body` with colony health set to `on`, and puts back what it was whatever happens. */
+function withHealthAs<T>(on: boolean, body: () => T): T {
+  const was = HEALTH.enabled;
+  HEALTH.enabled = on;
   try {
     return body();
   } finally {
-    HEALTH.enabled = false;
+    HEALTH.enabled = was;
   }
 }
+const withHealth = <T>(body: () => T): T => withHealthAs(true, body);
+const withoutHealth = <T>(body: () => T): T => withHealthAs(false, body);
 
 /** A started game, politics on unless asked otherwise, with no election open. */
 function table(politics = true) {
@@ -77,10 +80,11 @@ describe('needs C19: the view carries colony health and the run of Medicine-shor
   });
 
   it('needs B-AC-18 (negative): with health off, or politics off, colonyHealth is null', () => {
-    const off = table();
-    upkeepWith(off.state, NONE);
-    expect(HEALTH.enabled, 'health ships off').toBe(false);
-    expect(sent(off.game), 'health off').toBeNull();
+    withoutHealth(() => {
+      const off = table();
+      upkeepWith(off.state, NONE);
+      expect(sent(off.game), 'health off').toBeNull();
+    });
 
     withHealth(() => {
       const plain = table(false);

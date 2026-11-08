@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { healthOffInTest, withHealth, withoutHealth } from './health-switch.js';
 import {
   advancePhase,
   cloneForSim,
@@ -25,6 +26,7 @@ import {
   shipInPort,
   sickShare,
   stableJson,
+  STRATEGIST,
   UPKEEP,
   type GameState,
   type MoodInputs,
@@ -34,16 +36,6 @@ const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const W = HAPPINESS.weights;
 const QUIET: MoodInputs = { hardship: 0, air: 0, tax: W.taxFree, broken: 0, prestige: 0, gap: 0, welfare: 0 };
 const FED = { food: 0, water: 0, medicine: 0 };
-
-/** Runs `body` with colony health switched on, and switches it back off whatever happens. */
-function withHealth<T>(body: () => T): T {
-  HEALTH.enabled = true;
-  try {
-    return body();
-  } finally {
-    HEALTH.enabled = false;
-  }
-}
 
 /** A seed-7 game with Lena governing and no election open, the air clean and the tax at its free level. */
 function game(politics = true): GameState {
@@ -110,7 +102,7 @@ describe('needs C7: the colonists\' sick share (RULE-7)', () => {
 });
 
 describe('needs C8: sickness weighs on the mood, the growth and the Medicine need (RULE-8)', () => {
-  it('needs T-AC-9: the target loses 10 × h, the growth rate 0.05 × h, and the Medicine need grows by (1 + h_old)', () => {
+  it('needs T-AC-9: the target loses 10 × h, the growth rate growthPerSick × h, and the Medicine need grows by (1 + h_old)', () => {
     expect(moodTarget({ ...QUIET, sick: 0.2 })).toBeCloseTo(moodTarget(QUIET) - HEALTH.moodPerSick * 0.2, 9);
     expect(moodTarget({ ...QUIET, sick: 0 })).toBe(moodTarget(QUIET));
 
@@ -132,11 +124,11 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
       // The store's Medicine then spoils at its slower rate, rounded down.
       const kept = 1 - GOOD_CONFIG.medicine.spoilage * PRICE.storeSpoilage;
       expect(sick.left, 'the colonists take that need from the shelf').toBe(Math.floor((sick.medicine - sick.need) * kept));
-      // From h 0 the month ends at 0.01: 400 × (1.04 − 0.0005) still rounds to 416.
-      expect(well.colonists).toBe(Math.round(400 * UPKEEP.colonistGrowth.fed));
+      // From h 0 the month ends at 0.01: 400 × (1.04 − 0.2 × 0.01) = 415.2, so 415.
+      expect(well.colonists).toBe(Math.round(400 * (UPKEEP.colonistGrowth.fed - HEALTH.growthPerSick * HEALTH.base)));
       // The growth reads the month's new share, not h_old's 0.2: fed and treated, 0.2 + 0.8 × (0.01 + 0.15 × 0.2) − 0.2 × 0.5 = 0.132.
-      // Rounded once: 400 × 1.0334 = 413.36 → 413 (h_old's 0.2 would give 412, no cut 416).
-      expect(sick.colonists, 'the growth rate is 0.05 × 0.132 lower').toBe(Math.round(400 * (UPKEEP.colonistGrowth.fed - HEALTH.growthPerSick * 0.132)));
+      // Rounded once: 400 × 1.0136 = 405.44 → 405 (h_old's 0.2 would give 400, no cut 416).
+      expect(sick.colonists, 'the growth rate is growthPerSick × 0.132 lower').toBe(Math.round(400 * (UPKEEP.colonistGrowth.fed - HEALTH.growthPerSick * 0.132)));
     });
   });
 
@@ -206,7 +198,7 @@ describe('needs C8: sickness weighs on the mood, the growth and the Medicine nee
 
   it('needs T-AC-4: the sick growth cut floors the colony at 0: rate 0 with h 0.4 gives 0, not a negative', () => {
     expect(grownColonists(100, 0, 0.4)).toBe(0);
-    expect(grownColonists(100, 1, 0.4), 'above 0 it still cuts').toBe(98);
+    expect(grownColonists(100, 1, 0.4), 'above 0 it still cuts: 0.2 × 0.4').toBe(92);
   });
 
   it("FM-medicine-shortage: an upkeep the colonists go short of Medicine reports Medicine short, as Food and Water, and the mood does not count it", () => {
@@ -270,7 +262,7 @@ describe('needs C9: Electronics are a comfort (RULE-9)', () => {
         advancePhase(state);
         return state;
       };
-      return on ? withHealth(run) : run();
+      return on ? withHealth(run) : withoutHealth(run);
     };
     const comforted = month(8, true);
     const without = month(0, true);
@@ -282,12 +274,20 @@ describe('needs C9: Electronics are a comfort (RULE-9)', () => {
   });
 });
 
-describe('needs HC-13: health ships switched off', () => {
+describe('needs HC-13: colony health is on', () => {
+  it('needs HC-13: colony health is on by default (Heiko, 8 Nov)', () => {
+    expect(HEALTH.enabled, 'health plays').toBe(true);
+    expect(STRATEGIST.medicineDespiteInputs, 'a hungry seat may still build a Medicine works').toBe(true);
+    expect(HEALTH.growthPerSick * HEALTH.cap, 'growth\'s cut at the cap: sickness bites like hunger').toBeCloseTo(0.08, 9);
+  });
+});
+
+describe('needs HC-13: health off stays a switch', () => {
   // The snapshot is stableJson(state) of this game on b5e59dda, the base before colony health. It may change only when
   // health-off behaviour is meant to change, as needs C3's hardship did (its mood and the colony's memory of hardship).
   // Regenerate with `pnpm --filter @mule/engine test colony-health -u`.
   it('needs T-AC-11: health off, h stays 0 and a month\'s state is identical to the base; politics off, there is no h', async () => {
-    expect(HEALTH.enabled, 'health ships off').toBe(false);
+    healthOffInTest();
     const state = game();
     state.store.stock.electronics = 10;
     for (let steps = 0; state.month < 4 && steps < 200; steps++) advancePhase(state);
@@ -302,7 +302,7 @@ describe('needs HC-13: health ships switched off', () => {
         for (let steps = 0; s.month < 4 && steps < 200; steps++) advancePhase(s);
         return s;
       };
-      return on ? withHealth(run) : run();
+      return on ? withHealth(run) : withoutHealth(run);
     };
     const offOn = plain(true);
     expect(sickShare(offOn), 'politics off: no colony, so no sick share').toBeNull();
@@ -319,7 +319,7 @@ describe('needs HC-13: health ships switched off', () => {
       advancePhase(state);
       return { colonists: state.colonists, plain: Math.round(2000 * rate) };
     };
-    const off = hungry(true);
+    const off = withoutHealth(() => hungry(true));
     expect(off.colonists, 'health off').toBe(off.plain);
     const noColony = withHealth(() => hungry(false));
     expect(noColony.colonists, 'health on, politics off').toBe(noColony.plain);

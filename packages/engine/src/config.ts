@@ -1287,11 +1287,11 @@ export const HARDSHIP = {
 
 /**
  * Colony health (needs C7-C9, RULE-7 to RULE-9): hunger and missing Medicine make colonists sick, and Electronics
- * comfort them. Ships switched off until the Medicine supply can carry it; switch on with `--set HEALTH.enabled=true`.
+ * comfort them. A switch: `--set HEALTH.enabled=false`.
  */
 export const HEALTH = {
-  /** Whether colony health plays at all. Off, nobody falls sick and the colonists take no Medicine or Electronics. */
-  enabled: false as boolean,
+  /** Whether colony health plays at all: on (Heiko, 8 Nov). Off, nobody falls sick and the colonists take no Medicine or Electronics. */
+  enabled: true as boolean,
   /** Share of the well colonists who fall sick in a month with nothing wrong. */
   base: 0.01,
   /** Added to that share at full hunger (the hardship of the worse of Food and Water at 1). */
@@ -1308,8 +1308,8 @@ export const HEALTH = {
   cap: 0.4,
   /** Mood points off the month's target per unit of sick share (all sick: this many). */
   moodPerSick: 10,
-  /** Off the colony's monthly growth factor per unit of sick share. */
-  growthPerSick: 0.05,
+  /** Off the colony's monthly growth factor per unit of sick share: 0.08 at the cap, so sickness bites like hunger (Heiko, 8 Nov, option A). */
+  growthPerSick: 0.2,
   /** Mood points onto the month's target with the colonists' whole Electronics want met; in proportion when part. */
   electronicsBonus: 4,
   /** The sick share from which players' crews fall sick too, unless their player takes a Medicine (needs RULE-15). */
@@ -2035,12 +2035,12 @@ export const STRATEGIST = {
   energyFirst: false as boolean,
   /**
    * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
-   * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
-   * START.storeStock.medicine 40 (PM ruling, 8 Nov). OFF until health is on: without sick colonists it only diverts
-   * seats from their Energy plant (seed 1's Energy gate 9.6% -> 15.8%); PR-13 switches it on with health (PM ruling,
-   * 8 Nov). A switch: `--set STRATEGIST.medicineDespiteInputs=true`.
+   * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B (its
+   * START.storeStock.medicine became 22: Heiko, 8 Nov, Medicine A). On with colony health (PM ruling, 8 Nov): without sick colonists
+   * it only diverts seats from their Energy plant (seed 1's Energy gate 9.6% -> 15.8%). A switch:
+   * `--set STRATEGIST.medicineDespiteInputs=false`.
    */
-  medicineDespiteInputs: false as boolean,
+  medicineDespiteInputs: true as boolean,
   /**
    * Water first, Energy first's twin for AM-18: once a seat has its Energy plant (or may not install one), while its
    * wells' next output (net of their own use) is short of its drink and its plots' Water, and it may install a well,

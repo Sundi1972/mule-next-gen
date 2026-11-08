@@ -17,6 +17,7 @@ import {
   type PrestigeId,
   type Project,
 } from '../src/index.js';
+import { healthOffInTest } from './health-switch.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const B = POLITICS.budget;
@@ -85,6 +86,8 @@ function project(state: GameState, id: PrestigeId): Project {
 
 describe('S5-C2: upkeep pays Welfare and caps building funding by the Projects share', () => {
   it("S5-T-AC-3: with budget null, runColony's output on a fixed state equals today's", () => {
+    // Health off: the golden is the colony before budgets; health adds its sick share and Medicine run to the output.
+    healthOffInTest();
     const state = governed(800);
     withProjects(state, [projectOf('hospital', 'standing'), projectOf('park', 'building'), projectOf('stadium', 'commissioned'), projectOf('observatory', 'commissioned')]);
     worth(state, { lena: 9_000, brix: 14_000, ossa: 16_000, kai: 10_500 });

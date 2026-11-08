@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { colonistMeal, createGame, PRICE, runUpkeep, shipInPort, UPKEEP, type GameState } from '../src/index.js';
 import { foodMonth, post } from './fixtures/food-month.js';
+import { healthOffInTest } from './health-switch.js';
 
 /** A fresh 4-seat game whose colony needs exactly `need` Food and `need` Water this month, at upkeep. */
 function colonyNeeding(need: number): GameState {
@@ -40,6 +41,8 @@ describe('needs C1: the colonists eat free from the store (RULE-1)', () => {
   });
 
   it('needs B-AC-4: Food posted at 300 and the shelf holding their need, they are fed in full and store.capital is unchanged by their meal', () => {
+    // Health off: the promise is the free meal; with health on the base sick share trims the growth by a colonist.
+    healthOffInTest();
     const state = colonyNeeding(20);
     state.store.posted.food = 300;
     state.store.stock.food = 20;

@@ -18,6 +18,7 @@ import {
   type PrestigeId,
   type Project,
 } from '../src/index.js';
+import { healthOffInTest } from './health-switch.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 
@@ -60,6 +61,8 @@ function standing(state: GameState, id: PrestigeId): void {
 describe('prestige objects: commissioned, funded, built, kept up', () => {
   it('B-AC-21: Lena commissions the hospital; the fund pays and buys its goods at upkeep, it builds, then stands, counts its prestige and pays upkeep each month after', () => {
     const row = PRESTIGE.hospital;
+    // Health off: with it on, the colonists take some of the shelf's Electronics too.
+    healthOffInTest();
     // Enough over the credits and the reserve to buy the Electronics at the store's selling price.
     const state = governedGame(2_000);
     state.store.stock.electronics = 5;

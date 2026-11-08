@@ -22,6 +22,7 @@ import {
   type GameState,
   type MoodInputs,
 } from '../src/index.js';
+import { healthOffInTest } from './health-switch.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const W = HAPPINESS.weights;
@@ -105,6 +106,8 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
   });
 
   it("T-AC-31: moodInputs reads the month: the colony's memory of hardship, the air, the tax in whole %, standing prestige and the gap", () => {
+    // Health off: health's own inputs, the sick share and the comfort, are colony-health.test.ts's.
+    healthOffInTest();
     const state = colony();
     state.air = 55;
     state.treasury.salesTax = 9 / PERCENT;
