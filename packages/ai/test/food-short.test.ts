@@ -486,6 +486,13 @@ describe('B-AC-water-short: a seat short of Water buys from the store when it ca
     keepsNeed('water', 'ai0', 0, { plots: Array<Outfit>(7).fill('energy'), held: 15, shelf: 0, rival: false, storeBuys: 3 });
   });
 
+  it('B-AC-water-short: a seat with no plot that drinks (seven green belts) stays free to sell its Water below the screen need when the store buys at 3 times the reference price', () => {
+    // Under AM-18 every working plot drinks but a green belt, so this is the seat the old "no farm to water" case meant.
+    const { state, need } = sellsSurplus('water', 'ai0', 0, { plots: Array<Outfit>(7).fill('greenBelt'), held: 10, shelf: 0, rival: false, storeBuys: 3 });
+    expect(need, 'the premise: its household drinks').toBeGreaterThan(0);
+    expect(state.players.find((p) => p.id === 'ai0')!.stock.water, `it sold below the screen's need of ${need}`).toBeLessThan(need);
+  });
+
   it('B-AC-water-short: a seat with no plot that drinks is not made to buy Water: going without costs it nothing', () => {
     // Seven green belts: its household drinks, but no plot of its uses Water (AM-18), so nothing turns off without it.
     const id = 'ai0';

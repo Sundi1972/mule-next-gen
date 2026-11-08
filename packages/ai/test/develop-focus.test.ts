@@ -40,12 +40,7 @@ describe('development focus', () => {
     expect(rankOf(today.all, focus)).toBeGreaterThan(0);
 
     const leaning = developDecision(obs, mind, 0, undefined, focus);
-    // On this map AM-18's Water use leaves the focus good further behind than a lean closes, so it ranks no lower and
-    // closes on the top pick.
-    const best = (l: typeof today, good: Outfit | null) => Math.max(...l.all.filter((c) => !c.veto && outfitOf(c) === good).map((c) => c.utility));
-    const gap = (l: typeof today) => best(l, top) - best(l, focus);
-    expect(rankOf(leaning.all, focus)).toBeLessThanOrEqual(rankOf(today.all, focus));
-    expect(gap(leaning)).toBeLessThan(gap(today));
+    expect(rankOf(leaning.all, focus)).toBeLessThan(rankOf(today.all, focus));
 
     // A lean, not a rule: what a hard rule rules out stays ruled out.
     const vetoes = (l: typeof today) => l.all.filter((c) => c.veto).map((c) => [c.key, c.veto]);
