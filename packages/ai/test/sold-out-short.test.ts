@@ -11,7 +11,7 @@ import type { GoodPlan } from '../src/strategist.js';
  * Month 1's Food auction with the store holding none, played through the engine; ai1's plan is stubbed so its need is set.
  */
 
-const stub = vi.hoisted(() => ({ need: null as { floorUnits: number; mustHold: number } | null }));
+const stub = vi.hoisted(() => ({ need: null as { floorUnits: number; mustHold: number } | null, worth: 0 }));
 vi.mock('../src/strategist.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('../src/strategist.js')>();
   return {
@@ -19,7 +19,10 @@ vi.mock('../src/strategist.js', async (importOriginal) => {
     goodPlan: (...args: Parameters<typeof real.goodPlan>): GoodPlan => {
       const plan = real.goodPlan(...args);
       if (!stub.need) return plan;
-      return { ...plan, mustHold: stub.need.mustHold, values: { ...plan.values, floorUnits: stub.need.floorUnits } };
+      // Every unit is worth more than ai1's limit, so the limit is its ceiling. With no Food carry a unit past what
+      // upkeep eats is worth only its resale, under the limit here (needs C15, PM ruling 8 Nov); the rows read the limit.
+      const buy = plan.values.buy.map((v) => Math.max(v, stub.worth));
+      return { ...plan, mustHold: stub.need.mustHold, values: { ...plan.values, buy, floorUnits: stub.need.floorUnits } };
     },
   };
 });
@@ -71,6 +74,7 @@ function play(setup: Setup): Walk {
   startAuction(state, ['food']);
   const a = state.auction!;
   const limit = setup.limit(a.zones);
+  stub.worth = limit + 1;
   const asks = setup.asks(a.zones);
   const seat = new AiSeat({ id: BUYER, name: 'AI 2', ...SEATS[1]!, seed: SEED * 10 + 1 });
   const part: GoodPlay = { role: 'buyer', hold: setup.h + 10, walkAway: limit, start: limit, concedeCrPerS: 0, bluff: false, vsRival: 'undercut1' }; // literal-ok: room to buy more than the walk can sell it
@@ -97,6 +101,7 @@ function play(setup: Setup): Walk {
     if (c.stage === 'walk') walk.top = Math.max(walk.top, Math.round(c.walkers.find((w) => w.id === BUYER)!.price));
   }
   stub.need = null;
+  stub.worth = 0;
   return walk;
 }
 

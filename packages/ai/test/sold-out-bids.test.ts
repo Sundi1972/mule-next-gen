@@ -3,7 +3,6 @@ import {
   advancePhase,
   createGame,
   createRng,
-  GOOD_CONFIG,
   monthNeeds,
   needsOf,
   shownSellLine,
@@ -42,8 +41,8 @@ const SELLER = 'ai0';
 const BUYER = 'ai1';
 const seatsFor = () => SEATS.map((s, i) => new AiSeat({ id: `ai${i}`, name: `AI ${i + 1}`, ...s, seed: SEED * 10 + i }));
 
-/** Upkeep eats the household's Food, half of the rest spoils, and next development is hungry under the household's Food. */
-const wholeFood = (state: GameState, id: string) => needsOf(state, id).food + Math.ceil(needsOf(state, id).food / (1 - GOOD_CONFIG.food.spoilage));
+/** Upkeep eats the household's and the crews' Food, and next development is hungry by that meal alone (needs C15: no carry, PM ruling 8 Nov). */
+const wholeFood = (state: GameState, id: string) => needsOf(state, id).food;
 
 /**
  * The Food status screen with the store sold out: ai0 holds 40 over what keeps it whole, ai1 none and 3,000 cr. A surplus

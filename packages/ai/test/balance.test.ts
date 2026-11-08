@@ -569,9 +569,11 @@ describe('the sales tax', () => {
     expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
     expect(taxed.value).toBeCloseTo(free.value * 0.85, 0);
 
-    // Its own use of Food is next month's walking at full pace (value.ts unitValues), worth the most to a seat with land
+    // Its own use of Food is next month's walking at full pace (value.ts foodUnits), worth the most to a seat with land
     // still to develop: an undeveloped plains plot of its own makes its development seconds worth the busy rate. With
     // none, at the walk of 4 Nov (DEV_WALK.hungerPaceMin 0.6), the walking a unit keeps is worth less than its resale.
+    // With no Food carry every unit it eats is under its floor, kept whatever the price, so its own use shows on the
+    // buy side: what a unit it eats is worth to it (needs C15, PM ruling 8 Nov).
     const food = (tax: number) => {
       const state = auctionAtTax(tax, 'food', 20);
       state.tiles.find((t) => t.terrain === 'plains' && !t.owner)!.owner = 'ai0';
@@ -580,12 +582,13 @@ describe('the sales tax', () => {
       return goodPlan(obs, traderMind, 'food').values;
     };
     const [v0, v15] = [food(0), food(0.15)];
-    const resale0 = v0.keep[v0.block]!;
-    const own = [...Array(v0.block).keys()].filter((k) => k >= v0.floorUnits && v0.keep[k]! > resale0);
+    const resaleBuy0 = v0.buy[v0.block]!;
+    const own = [...Array(v0.block).keys()].filter((k) => v0.buy[k]! > resaleBuy0);
     expect(own.length).toBeGreaterThan(0);
-    for (const k of own) expect(v15.keep[k]).toBe(v0.keep[k]);
-    // Negative case: a unit held for resale next month is taxed when it sells, so it is worth 85%.
-    expect(v15.keep[v15.block]).toBeCloseTo(resale0 * 0.85, 6);
+    for (const k of own) expect(v15.buy[k]).toBe(v0.buy[k]);
+    // Negative case: a unit held for resale next month is taxed when it sells, so it is worth 85%, kept or bought.
+    expect(v15.keep[v15.block]).toBeCloseTo(v0.keep[v0.block]! * 0.85, 6);
+    expect(v15.buy[v15.block]).toBeCloseTo(resaleBuy0 * 0.85, 6);
   });
 });
 
