@@ -84,7 +84,7 @@ export function OfficesCard({ tv = false }: { tv?: boolean }) {
           <>
             <dt className="font-semibold">Sheriff</dt>
             <dd data-testid="job-sheriff">
-              Posts at least {guards} secret guards a month, investigates {investigations === 1 ? 'one' : investigations} sabotage{investigations === 1 ? '' : 's'}, and fines the culprits. Paid {POLITICS.pay.sheriff} cr a month.
+              Posts {guards} secret guards a month, investigates {investigations === 1 ? 'one' : investigations} sabotage{investigations === 1 ? '' : 's'}, and fines the culprits. Paid {POLITICS.pay.sheriff} cr a month.
             </dd>
           </>
         )}

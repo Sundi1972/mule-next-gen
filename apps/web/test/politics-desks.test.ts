@@ -476,7 +476,7 @@ describe('election day on the phone (C66, E-2)', () => {
       expect(card).not.toContain('What the Governor does');
       expect(textOf(html, 'job-governor')).toBe(`Sets the sales tax each month; the tax fills the colony fund. Paid ${POLITICS.pay.governor} cr a month.`);
       expect(textOf(html, 'job-sheriff')).toBe(
-        `Posts at least ${POLITICS.sheriff.guards} secret guards a month, investigates one sabotage, and fines the culprits. Paid ${POLITICS.pay.sheriff} cr a month.`,
+        `Posts ${POLITICS.sheriff.guards} secret guards a month, investigates one sabotage, and fines the culprits. Paid ${POLITICS.pay.sheriff} cr a month.`,
       );
       expect(card).toContain(`Nobody holds both. A term lasts until the next election and adds ${POLITICS.termScore} to your final score.`);
       const papers = both({ governor: 's2' });
