@@ -387,7 +387,7 @@ export class VoteHand {
     if (pick) act({ type: 'commission', id: pick });
   }
 
-  /** S5-RULE-11, S5-RULE-13: after an overrule passed this term (the engine's count, AM-10), the Governor holds its tax and its budget. */
+  /** S5-RULE-11, S5-C6: after an overrule passed this term (the engine's count, AM-10), the Governor holds its tax and its budget. */
   private holding(obs: GameState): boolean {
     return obs.politics!.overruled > 0;
   }

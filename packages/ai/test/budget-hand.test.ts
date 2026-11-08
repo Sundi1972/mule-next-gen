@@ -362,7 +362,7 @@ describe('S5-C6: VoteHand drives the hands (S5-RULE-13)', () => {
 
   it("S5-T-AC-15: colonyActs commissions only when the share of the credits is within budgetCredits(obs).projects", () => {
     POLITICS.ai.budget.base.aggressive.welfare = 20; // literal-ok: the line's max share; the Governor sets Projects 80
-    const poor = governed(wants + 1); // 80% of the spare is below `wants`
+    const poor = governed(125); // 80% of the spare is below `wants`
     expect(types(tick(poor, 'ai0')), 'the split lands first, and the Park is beyond its Projects share').not.toContain('commission');
     const rich = governed(130); // literal-ok: 30 spare, 80% of it is 24 credits: the Park's 21 fit, the Hospital's 34 do not
     expect(tick(rich, 'ai0')).toContainEqual({ type: 'commission', id: 'park' });

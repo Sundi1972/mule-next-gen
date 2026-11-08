@@ -126,6 +126,7 @@ export class OverruleHand {
     }
     // literal-ok: more than half of all votes is the rule's definition (S5-RULE-8)
     const needed = Math.floor(total / 2) + 1;
+    // The stream is per seat and per month, so a seat has one protest coin a month; a month allows one call.
     if (yes >= needed || handStream(this.mind, obs.month, OVERRULE_SALT).chance(longShot[this.mind.personaId as AiPersonaId])) act({ type: 'callOverrule', target: 'tax' });
   }
 
