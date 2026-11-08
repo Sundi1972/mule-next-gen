@@ -241,6 +241,15 @@ describe('the secret ballot, mounted (C66, AM-21)', () => {
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"[^>]*>Cast my vote</);
   });
 
+  it("S3-RULE-12 (O-2): a ballot that unmounts still open (planning ended, or the player left) leaves nothing for another room's ballot at the same seat and month", () => { // trace-allow: S3-RULE-12 row 2 is a rule id, not an AC id; found in the #734 re-review
+    mount(ballot(), ElectionDay);
+    pick('abstain');
+    unmount();
+    const html = renderToStaticMarkup(onPhone(ballot(), () => createElement(Hub, { slots: { ...TAB_SLOTS, stage: [{ ...ELECTION_DAY_STAGE, show: () => true }, ...TAB_SLOTS.stage.slice(1)] } }), 'ZORP'));
+    for (const option of ['s1', 's2', 'abstain']) expect(html.slice(html.indexOf(`data-testid="ballot-governor-${option}"`)).match(/<input[^>]*>/)![0], option).not.toMatch(/checked/);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="ready"[^>]*>Cast my vote</);
+  });
+
   it.each(['s2', 'abstain'])("C66, AM-21: changing a vote the server holds shows the new pick at once, before the server's view comes back (to %s)", (option) => {
     mount(ballot({ governor: 's1' }), ElectionDay);
     expect(checked('s1')).toBe(true);
