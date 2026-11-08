@@ -47,12 +47,12 @@ const promisedWho = (p: { candidate: string; to: string[] }): string[] => (p.to.
 
 /** The line under a promised ballot's legend: to whom, and what keeping and breaking it does. */
 export function YouPromised({ words, testid }: { words: ReactNode; testid: string }) {
-  const { kept, voteBroken } = POLITICS.reputation.moves;
+  const { voteBroken } = POLITICS.reputation.moves;
   return (
     <span className="flex flex-col gap-0.5 rounded-control border border-holo bg-holo-soft px-1.5 py-1" data-testid={testid}>
       <span className="text-xs font-semibold leading-tight @min-[1100px]/shell:text-base">{words}</span>
       <span className="text-[10px] leading-tight text-ink-2 @min-[1100px]/shell:text-sm">
-        Keep it: +{kept}. Break it: −{-voteBroken}, and the table sees it. Your vote stays secret either way.
+        Keeping it builds your name. Breaking it costs −{-voteBroken}, and the table sees it. Your vote stays secret either way.
       </span>
     </span>
   );
