@@ -1025,7 +1025,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private governorChanged(governorId: string, line: string): void {
     for (const id of [...this.ready]) if (id !== governorId) this.ready.delete(id);
     this.addNews(line, [governorId]);
-    this.tickVoteHands(0);
+    // An AI Governor's own change comes from inside a hand's tick: the hands judge it on their next one, not re-entrantly.
+    if (!this.ai.has(governorId)) this.tickVoteHands(0);
   }
 
   /** During development: true once a player went to the pub or ran out of time by `at`, the wall clock unless a tick's own. */
