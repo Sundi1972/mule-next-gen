@@ -349,7 +349,8 @@ async function main(): Promise<void> {
     }
 
     // S3-B-AC-1 (UBER-AC-3 leg A): still in month 2's planning, Lena whispers Ossa and attaches a 3-month pact. Ossa
-    // declines the first, then accepts the next; only their two phones ever hold either card.
+    // declines the first, then accepts the next; only their two phones ever hold either card. The flow has no third
+    // human, so the AI seat's view and the TV's stand for the table that must not see it.
     await dealCardLegA(truth, lena, ossa, aiIds);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -431,7 +432,7 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
   await bothList(first, 'declined', (p) => (p === to ? 'Declined by you' : `Declined by ${to.name}`));
   check(!pacts().some((d) => d.status === 'active'), 'S3-B-AC-1 (negative): a declined pact leaves nothing active');
   onlyThePair(first, 'declined');
-  console.log(`✓ S3-B-AC-1 (negative): ${to.name} declined ${from.name}'s pact; both phones list it declined, nothing active, no third view holds it`);
+  console.log(`✓ S3-B-AC-1 (negative): two phones — ${from.name} whispers ${to.name}, attaches a ${PACT_MONTHS}-month pact, ${to.name} taps Decline; both phones list it declined, nothing active, no third view holds it`);
 
   const second = await offer();
   const active = await answer(second, true);
@@ -441,7 +442,7 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
   check(active.until === until, `S3-B-AC-1: the server's pact binds until month ${until}, got ${active.until}`);
   await bothList(active, 'active', () => `Binds until the end of month ${until}`);
   onlyThePair(active, 'active');
-  console.log(`✓ S3-B-AC-1: ${from.name} whispered ${to.name} a ${PACT_MONTHS}-month pact and ${to.name} accepted; both phones list it active until month ${until}; no other seat's view nor the TV's holds it`);
+  console.log(`✓ S3-B-AC-1: two phones — ${from.name} whispers ${to.name}, attaches a ${PACT_MONTHS}-month pact, ${to.name} taps Accept; both phones list the pact active until month ${until}; no other seat's view nor the TV's holds it`);
 }
 
 /** E-4's words for a promise beside a candidate, as every screen gives them. */
