@@ -42,6 +42,7 @@ import {
   setGuards,
   setSalesTax,
   votesDone,
+  openOverrule,
   votesOpen,
   setWalk,
   SHIP_ID,
@@ -450,17 +451,34 @@ function* playPhases(
         // The votes come first, as on the server: the election, then the law ballot and its reveal. Hands act before
         // each step, with the same dt, until every vote is over; one more tick lets the Governor set the tax, propose and
         // act for the colony, and a seat declare ahead of the next election (every month, with or without a vote).
-        const vote = (i: number) => voteHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, seats[i]!.id, a));
-        // literal-ok: a runaway guard on the votes' ticks, not a game clock
-        for (let ticks = 0; votesOpen(state) && ticks < 100_000; ticks++) {
-          seats.forEach((_, i) => vote(i));
-          stepVotes(state, WALK.tickMs);
-        }
-        seats.forEach((_, i) => vote(i));
+        // As on the server (S5-C9, mule-game.ts::tickEachHand): a Governor's change of the tax or budget during a pass
+        // was never seen by the hands that ticked before it, so every hand looks once more, at dt 0, only if a setting
+        // changed. A called overrule is voted as planning would end: openOverrule, then the votes loop, and no second
+        // planMonth.
+        const settings = () => `${state.treasury.salesTax}|${JSON.stringify(state.politics?.budget)}`;
+        const look = (dt: number) => seats.forEach((s, i) => voteHands[i]!.tick(state, dt, (a) => applyAction(state, s.id, a)));
+        const pass = (dt: number) => {
+          const before = settings();
+          look(dt);
+          if (settings() !== before) look(0);
+        };
+        const runVotes = () => {
+          // literal-ok: a runaway guard on the votes' ticks, not a game clock
+          for (let ticks = 0; votesOpen(state) && ticks < 100_000; ticks++) {
+            pass(WALK.tickMs);
+            stepVotes(state, WALK.tickMs);
+          }
+        };
+        runVotes();
+        pass(WALK.tickMs);
         seats.forEach((s, i) => {
+          const before = settings();
           s.planMonth(state, (a) => applyAction(state, s.id, a));
           adoptEdits(options, s, specs[i], state, 'planning');
+          // The server judges a change made outside a tick at once (governorChanged: a whole pass at dt 0).
+          if (settings() !== before) pass(0);
         });
+        if (openOverrule(state)) runVotes();
         break;
       }
       case 'landGrant': {

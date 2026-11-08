@@ -1154,11 +1154,15 @@ export const POLITICS = {
         aggressive: { welfare: 0.5, security: 1 },
         saboteur: { welfare: 0.5, security: 0.5 },
       } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+      /** Credits a month one point of the colony's mood target is worth to a seat (the unrest it keeps off). WS1, S5-PR-3; judged in play (Heiko, 8 Nov). */
+      moodPoint: 5,
+      /** How many times more a mood point is worth to the sitting Governor, whose re-election it sways. WS1, S5-PR-3; judged in play. */
+      governorMood: 3,
     },
     /** How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them. */
     overrule: {
-      /** Credits a month a change must cost the seat before it calls an overrule. */
-      minGain: 20,
+      /** Credits a month a change must cost the seat before it calls an overrule. 5 (WS1, S5-PR-3): with S5-C9's real values a 5-point tax step costs a seller about 5-25 a month, so at 20 no seat ever called (0 in 6 seeded games; 5: one call a game). */
+      minGain: 5,
       /** Chance a persona calls an overrule that cannot win, as a protest. */
       longShot: { trader: 0.1, cautious: 0.05, aggressive: 0.3, saboteur: 0.2 } satisfies Record<AiPersonaId, number>,
       /** A Rookie's chance of a yes: a coin from the overrule's own stream. */

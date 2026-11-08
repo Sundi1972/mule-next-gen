@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import { Brain } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import WebSocket from 'ws';
 import { callOverrule, ceremonyBeats, COLONY, openOverrule, openPlanning, POLITICS, RuleError, setSalesTax, voteOverrule, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
@@ -693,6 +693,12 @@ describe('the politics view', () => {
     expect(election(g.game).result.governor).toMatchObject({ how });
   });
   it('B-AC-2: after the Governor sets 8%, the next auction sale is taxed at 8%', () => {
+    // S5-PR-3 pin: this row predates the AI's overrule calls; an AI seat's call would hold planning for its ballot.
+    const savedMinGain = POLITICS.ai.overrule.minGain;
+    POLITICS.ai.overrule.minGain = Infinity;
+    onTestFinished(() => {
+      POLITICS.ai.overrule.minGain = savedMinGain;
+    });
     const g = started();
     // The Big Spender runs against Lena; the three humans vote her in.
     g.game.handle('lena', { type: 'run', office: 'governor', promise: HOLD });
@@ -978,6 +984,12 @@ describe('AI seats in the election', () => {
   });
 
   it('T-AC-6 (server) · C8: an AI Governor sets the tax in planning, and the screens get it', () => {
+    // S5-PR-3 pin: this row predates the AI's overrule calls; an AI seat's call would hold planning for its ballot.
+    const savedMinGain = POLITICS.ai.overrule.minGain;
+    POLITICS.ai.overrule.minGain = Infinity;
+    onTestFinished(() => {
+      POLITICS.ai.overrule.minGain = savedMinGain;
+    });
     // RULE-8 from a 5% start: a step of at most 5 toward the persona's target (cautious 4, aggressive 8, saboteur 10), +2 when the fund is low, inside the month's bounds.
     const month1: Record<string, number> = { acc: 4, nbr: 4, spender: 8, grudge: 10 };
     const month2LowFund: Record<string, number> = { acc: 6, nbr: 6, spender: 10, grudge: 12 };
@@ -1033,6 +1045,12 @@ describe('AI seats in the election', () => {
   });
 
   it("T-AC-6 (server) · C8: an AI Governor's tax lands that month even when every human presses ready the moment planning proper starts", () => {
+    // S5-PR-3 pin: this row predates the AI's overrule calls; an AI seat's call would hold planning for its ballot.
+    const savedMinGain = POLITICS.ai.overrule.minGain;
+    POLITICS.ai.overrule.minGain = Infinity;
+    onTestFinished(() => {
+      POLITICS.ai.overrule.minGain = savedMinGain;
+    });
     const g = started({ seed: 1, seats: aiTable, phaseScale: 0.1 });
     setMoney(g.game, { lena: 0, acc: 1_000, spender: 1_000, grudge: 1_000 });
     engineOf(g.game).treasury.money = 10_000;

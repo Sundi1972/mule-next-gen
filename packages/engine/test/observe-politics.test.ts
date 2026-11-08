@@ -94,7 +94,7 @@ describe('what a seat sees of politics slices 3-5 (HC-4)', () => {
     expect(state.politics!.guards).toEqual([12, 14]);
   });
 
-  it("overrule: a seat sees only its own ballot, a no included; the result's totals are public", () => {
+  it("S5-T-AC-17: observe() for seat B never holds seat A's overrule ballot: a seat sees only its own, a no included; the result's totals are public", () => {
     const state = politicsInPlay();
     expect(observe(state, 'brix').politics!.overrule!.ballots).toEqual({ brix: false });
     expect(observe(state, 'lena').politics!.overrule!.ballots).toEqual({});
