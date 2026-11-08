@@ -1,9 +1,9 @@
-import { POLITICS, type DealCard } from '@mule/engine';
+import { POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { PlayerMark } from '@mule/ui';
 import { SeatWords } from '../components/SeatWords';
 import { toSlot } from '../game/derive';
-import { brokenIn, brokenMove, brokenWords } from '../phone/hub/politics/deals-words';
+import { brokenIn, brokenMove, brokenWho, brokenWords } from '../phone/hub/politics/deals-words';
 import { RepChip } from '../phone/hub/politics/parts';
 
 /*
@@ -11,13 +11,6 @@ import { RepChip } from '../phone/hub/politics/parts';
  * news's words, with the drop beside the breaker's chip, for the rest of that month. WS4 places it under the planning
  * header; the month end lists the same cards itself.
  */
-
-/** The seats a broken card's words name, in their order (SeatWords' `who`): the breaker, the other party, a vote's candidate. */
-function namedIn(c: DealCard): string[] {
-  const breaker = c.brokenBy ?? c.from;
-  if (c.terms.kind === 'pact') return [breaker, breaker === c.from ? c.to : c.from];
-  return 'law' in c.terms ? [breaker, c.to] : [breaker, c.to, c.terms.candidate];
-}
 
 /** The banner of this month's broken cards on the TV; nothing when none broke. */
 export function TvDeals({ game }: { game: MuleView }) {
@@ -38,7 +31,7 @@ export function TvDeals({ game }: { game: MuleView }) {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="label-caps text-base! text-alert-ink">{c.terms.kind === 'pact' ? 'A pact was broken' : 'A promise was broken'}</span>
               <span className="font-display text-3xl font-semibold leading-tight text-alert-ink" data-testid={`tv-break-${c.id}-words`}>
-                <SeatWords text={brokenWords(game, c)} who={namedIn(c)} players={game.players} />
+                <SeatWords text={brokenWords(game, c)} who={brokenWho(c)} players={game.players} />
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end gap-1">
