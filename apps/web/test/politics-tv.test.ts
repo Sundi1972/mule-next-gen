@@ -194,6 +194,9 @@ describe("the TV's break banner (S3-C20)", () => {
     ['a game without politics', { ...game(null, 8), players: SEATS }],
   ])('S3-B-AC-2: no new broken card, no banner (%s)', (_, g) => {
     expect(banner(g)).toBe('');
+  });
+});
+
 /* Slice 5's TV parts (S5-C11): the budget line, the call, and the overrule ballot and reveal, each drawn from the view alone. */
 
 const budgetOf = (lines: [number, number, number, number], extra: Partial<BudgetView> = {}): BudgetView => ({
