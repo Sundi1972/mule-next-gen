@@ -44,6 +44,7 @@ function Mark({ player, size }: { player: PlayerView; size: number }) {
  * colony is Well. `crews`: below it crews start falling sick (decision 25).
  * SEAM: from the engine's HEALTH config once WS5's PR-10 lands it; until then the gauge's own, as the mock had them.
  */
+// SEAM: move to engine HEALTH config with WS5 PR-10
 export const HEALTH_LOOK = { well: 90, floor: 60, crews: 80 } as const;
 
 export interface HealthBand {
