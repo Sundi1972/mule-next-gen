@@ -570,6 +570,6 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
     if (!isFactory(t.outfit)) continue;
     for (const [g, q] of Object.entries(feedOf(t.outfit)) as [Good, number][]) need[g] += q;
   }
-  need.medicine = medicine + (airBand(state.air).sickens ? 1 : 0);
+  need.medicine += medicine + (airBand(state.air).sickens ? 1 : 0);
   return need;
 }
