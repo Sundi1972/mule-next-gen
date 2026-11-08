@@ -314,16 +314,15 @@ describe('S5-C6: the AI calls and votes on the tax (S5-RULE-12)', () => {
     POLITICS.ai.overrule.rookieYes = 0.5;
     const councilAfter = (overruleFirst: boolean) => {
       const state = open();
-      state.politics!.council = { stage: 'ballot', clockMs: 0, proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 'ai0', ballots: { ai0: true }, done: [], result: null };
       const rng = counted(5);
       const hand = new VoteHand(mindOf('ai2', 'trader', 'rookie'), rng);
       const { sent, act } = recorder(state, 'ai2');
-      // With the overrule ballot open the hand votes it and returns; closed, the same hand votes the council's ballot.
       if (overruleFirst) hand.tick(state, 0, act);
       else sent.push({ type: 'voteOverrule', yes: false }, { type: 'done', done: true });
       const overruleMoves = sent.splice(0);
+      // The engine never has both ballots live (openOverrule refuses while a vote is open, openPlanning clears both): the council's goes on the state once the overrule's is over.
       state.politics!.overrule = null;
-      state.politics!.council!.done = []; // Done is the seat's, whichever ballot was open: the fixture opens the council's as if the overrule had never been
+      state.politics!.council = { stage: 'ballot', clockMs: 0, proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 'ai0', ballots: { ai0: true }, done: [], result: null };
       hand.tick(state, 0, act);
       return { overruleMoves: overruleMoves.length, council: sent, draws: rng.draws() };
     };
