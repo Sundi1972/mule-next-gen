@@ -215,6 +215,6 @@ describe("the TV's legend names every reason the map shows", () => {
     expect(start, 'the legend shows in the loss act').toBeGreaterThan(-1);
     const legend = html.slice(start, html.indexOf('</ul>', start));
     expect(legend.match(/<li /g)?.length, 'one line per reason').toBe(reasons.length);
-    expect(legend).toContain('Crew went short last month: works slower');
+    expect(legend).toContain('Crews short of Food or Water last month: makes less');
   });
 });
