@@ -26,6 +26,10 @@ import {
   offerDeal,
   withdrawDeal,
   castLawVote,
+  callOverrule,
+  openOverrule,
+  setBudget,
+  voteOverrule,
   DEV_STEER,
   buildFloor,
   IDLE_INPUT,
@@ -118,7 +122,7 @@ import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
-import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, politicsView, sabotageNews, sabotageNotices, voidedOrders } from './politics-view.js';
+import { ceremonyNews, councilNews, dealNews, dealNotices, dealsView, myPoliticsView, overruleNews, politicsView, sabotageNews, sabotageNotices, voidedOrders } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -752,8 +756,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'vote':
         castVote(state, seatId, intent.office, intent.candidate);
         return;
-      case 'setTax':
+      case 'setTax': {
+        const was = state.treasury.salesTax;
         setSalesTax(state, seatId, intent.percent);
+        if (state.treasury.salesTax !== was) this.governorChanged(seatId, `${this.nameOf(seatId)} set the tax to ${intent.percent}%.`);
+        return;
+      }
+      case 'setBudget': {
+        setBudget(state, seatId, intent.shares);
+        this.governorChanged(seatId, `${this.nameOf(seatId)} set the colony budget.`);
+        return;
+      }
+      case 'callOverrule': {
+        callOverrule(state, seatId, intent.target);
+        this.addNews(intent.target === null ? `${this.nameOf(seatId)} withdrew the overrule call.` : `${this.nameOf(seatId)} called an overrule vote on the ${intent.target}, held as planning ends.`, [seatId]);
+        return;
+      }
+      case 'voteOverrule':
+        voteOverrule(state, seatId, intent.yes);
         return;
       case 'commission':
         commission(state, seatId, intent.id);
@@ -818,6 +838,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const goneOn = (did: string, left: readonly { id: string; name: string }[]) => {
       if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left.map((s) => s.name))}.`, [hostId, ...left.map((s) => s.id)]);
     };
+    const overrule = state.politics?.overrule;
+    if (this.electionOpen() && overrule && overrule.month === state.month && (overrule.stage === 'ballot' || overrule.stage === 'reveal')) {
+      if (overrule.stage === 'reveal') throw new RuleError('The result is being announced');
+      const waiting = this.seats.filter((s) => !s.isAi && !isVotesDone(state, s.id));
+      for (const s of waiting) votesDone(state, s.id);
+      goneOn('closed the overrule vote', waiting.filter((s) => s.id !== hostId));
+      return;
+    }
     const council = state.politics?.council;
     if (this.electionOpen() && council && council.stage !== 'over') {
       if (council.stage === 'reveal') throw new RuleError('The result is being announced');
@@ -848,6 +876,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
     if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning, a side pick or the month end only');
     const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id));
+    // A called overrule is voted as planning would end, so the host's Continue opens its ballot first.
+    if (state.phase === 'planning' && this.openOverruleBallot()) {
+      goneOn('opened the overrule vote', left);
+      return;
+    }
     this.nextPhase();
     goneOn('continued', left);
   }
@@ -966,7 +999,33 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
     if (waiting.length > 0) return;
+    // A called overrule is voted as planning would end: the last Ready opens its ballot, and the vote ends planning.
+    if (phase === 'planning' && this.openOverruleBallot()) return;
     this.nextPhase();
+  }
+
+  /**
+   * Planning would end now: a standing call opens its ballot (S5-RULE-7), the votes tick runs it, and the news says so.
+   * Returns whether it did; planning then waits for the ballot, and the tick ends it.
+   */
+  private openOverruleBallot(): boolean {
+    const state = this.requireState();
+    if (!openOverrule(state)) return false;
+    this.addNews(`The overrule vote on the ${state.politics!.overrule!.target} is open.`);
+    this.phaseEndsAt = null;
+    this.scheduleElectionTick(this.ctx.now());
+    this.ctx.changed();
+    return true;
+  }
+
+  /**
+   * The Governor changed the tax or the budget in planning proper: the others must look again, so their Ready is
+   * cleared (a change in the last second has no clock to guard it), the vote hands judge it at once, and the news says so.
+   */
+  private governorChanged(governorId: string, line: string): void {
+    for (const id of [...this.ready]) if (id !== governorId) this.ready.delete(id);
+    this.addNews(line, [governorId]);
+    this.tickVoteHands(0);
   }
 
   /** During development: true once a player went to the pub or ran out of time by `at`, the wall clock unless a tick's own. */
@@ -1208,6 +1267,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const seat of this.ai.values()) seat.planMonth(state, (action) => this.aiAct(seat.id, action));
   }
 
+  /** This month's overrule has run its ballot and reveal: the vote that ends planning is over. */
+  private overruleOver(): boolean {
+    const state = this.requireState();
+    const overrule = state.politics?.overrule;
+    return state.phase === 'planning' && overrule?.month === state.month && overrule.stage === 'over';
+  }
+
   /** True while the colony votes in planning (this month's election, then its law ballot), before planning proper. */
   private electionOpen(): boolean {
     return !!this.state && votesOpen(this.state);
@@ -1230,14 +1296,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.tickVoteHands(dt);
         const before = state.politics!.election?.ceremony?.elapsedMs ?? -1;
         const revealed = !!state.politics!.council?.result;
+        const settled = !!state.politics!.overrule?.result;
         stepVotes(state, dt);
         for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
         const news = revealed ? null : councilNews(state);
         if (news) this.addNews(news);
+        const overruled = settled ? null : overruleNews(state);
+        if (overruled) this.addNews(overruled);
         // A ballot's result settles the vote cards bound to it.
         this.noteDeals();
         if (this.electionOpen()) this.scheduleElectionTick(now);
-        else {
+        else if (this.overruleOver()) {
+          // The overrule is the last vote of a planning phase: its end is planning's end, with no second planning proper.
+          this.nextPhase();
+        } else {
           // Planning proper opens now: its show, were it to fire one, starts here and not at the election's start.
           this.phaseEnteredAt = now;
           this.startPhaseTimer('planning');

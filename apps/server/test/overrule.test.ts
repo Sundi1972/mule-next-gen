@@ -63,6 +63,7 @@ describe('S5-C7: the server opens the overrule ballot where planning already end
     expect(state.politics!.overrule).toMatchObject({ stage: 'ballot', caller: 's2' });
     expect(game.viewFor('s2').me!.politics!.overruleBallot, "the caller's yes is preset").toBe(true);
 
+    game.handle('s1', { type: 'ready' });
     game.handle('s2', { type: 'voteOverrule', yes: true });
     game.handle('s3', { type: 'voteOverrule', yes: true });
     run(1_000);
