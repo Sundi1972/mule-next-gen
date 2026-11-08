@@ -9,6 +9,7 @@
  */
 import { AI_HANDS, GAME, lawImpact, POLITICS, storeQuotes, voteWeight, WALK, type DealCard, type GameState, type Good, type LawProposal, type TaxPromise } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
+import { isDeepStrictEqual } from 'node:util';
 import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
@@ -403,10 +404,11 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
     const sent = from.offers.length;
     await from.page.getByTestId('composer-a-send').click({ timeout: PRESS_MS });
     const card = await untilServer(from.page, () => (pacts().length > before ? pacts().at(-1)! : null), `S3-B-AC-1: the server holds ${from.name}'s offered pact`);
-    const intent = JSON.stringify(from.offers.slice(sent));
-    const months = (from.offers.at(-1) as { offer?: { months?: number } } | undefined)?.offer?.months;
+    // The frames as parsed off the socket, compared by value: the order of their keys is not the promise.
+    const frames = from.offers.slice(sent);
+    check(isDeepStrictEqual(frames, [{ type: 'offerDeal', offer: { to: toId, terms: { kind: 'pact' }, months: PACT_MONTHS } }]), `S3-B-AC-1: ${from.name}'s phone sent one ${PACT_MONTHS}-month pact to ${to.name}, got ${JSON.stringify(frames)}`);
+    const months = (frames[0] as { offer?: { months?: number } } | undefined)?.offer?.months;
     check(months === PACT_MONTHS, `S3-B-AC-1: the offerDeal frame ${from.name}'s phone sent carries months ${PACT_MONTHS}, got ${months}`);
-    check(intent === JSON.stringify([{ type: 'offerDeal', offer: { to: toId, terms: { kind: 'pact' }, months: PACT_MONTHS } }]), `S3-B-AC-1: ${from.name}'s phone sent one ${PACT_MONTHS}-month pact to ${to.name}, got ${intent}`);
     return card;
   };
   /** The card's id, on the two phones' views only: never another seat's, never the TV's. */
