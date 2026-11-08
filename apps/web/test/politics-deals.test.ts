@@ -1,0 +1,239 @@
+import { document, FakeElement } from './fake-dom';
+import { POLITICS, SOCIAL_EVENTS, type DealCard } from '@mule/engine';
+import type { ChatMessage, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
+import type { Slot } from '@mule/ui';
+import { act, createElement, type ReactElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { ClientState, Toast } from '../src/net/client';
+import { aMuleView, aPlayer } from './fixtures/views';
+
+/*
+ * Deal cards and the reputation chip on the phone (slice 3, S3-C17..C19), mounted in the fake DOM: what a tap shows and
+ * which intent it sends. Taps call the handler React gave the element; the fake DOM dispatches no events.
+ */
+
+let ClientProvider: typeof import('../src/net/react').ClientProvider;
+let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
+let Who: typeof import('../src/phone/hub/politics/parts').Who;
+
+beforeAll(async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  ({ ClientProvider } = await import('../src/net/react'));
+  ({ PhoneGameProvider } = await import('../src/phone/game'));
+  ({ Who } = await import('../src/phone/hub/politics/parts'));
+  const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
+  doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
+  (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
+  (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame ??= () => 0;
+  (globalThis as { MutationObserver?: unknown }).MutationObserver ??= class {
+    observe() {}
+    disconnect() {}
+  };
+  const proto = FakeElement.prototype as unknown as Record<string, unknown>;
+  proto.getBoundingClientRect ??= () => ({ x: 0, y: 0, top: 0, left: 0, width: 667, height: 375, right: 667, bottom: 375 });
+  proto.scrollIntoView ??= () => undefined;
+  // A sheet portals into the shell it sits in: the fake DOM finds it by its test id, the one selector the code asks.
+  proto.closest ??= function (this: FakeElement, selector: string) {
+    const id = /^\[data-testid="(.+)"\]$/.exec(selector)?.[1];
+    for (let n: FakeElement | null = this; n; n = n.parentNode instanceof FakeElement ? n.parentNode : null) if (id && n.getAttribute('data-testid') === id) return n;
+    return null;
+  };
+});
+
+// ---- The table: Lena and Brix play phones, Ossa a third phone, Kai a computer seat ----------------------------------
+
+const { repHigh, repLow } = POLITICS.weight;
+const LENA = 's1';
+const OSSA = 's2';
+const KAI = 's3';
+const BRIX = 's4';
+/** Each seat's reputation sits on one side of a threshold: 70, 69, 30, 29 as config has it today. */
+const PLAYERS: PlayerView[] = [
+  aPlayer({ id: LENA, name: 'Lena', slot: 0, reputation: repHigh }),
+  aPlayer({ id: OSSA, name: 'Ossa', slot: 1, reputation: repHigh - 1 }),
+  aPlayer({ id: KAI, name: 'Kai', slot: 2, reputation: repLow, isAi: true }),
+  aPlayer({ id: BRIX, name: 'Brix', slot: 3, reputation: repLow - 1 }),
+];
+const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
+
+const card = (over: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to'>): DealCard => ({ terms: { kind: 'pact' }, offered: 2, until: 4, status: 'offered', brokenBy: null, settled: null, ...over });
+
+function myView(id: string, cards: DealCard[] = [], over: Partial<NonNullable<MyView['deals']>> = {}): MyView {
+  return {
+    id,
+    species: 'zipwing',
+    stock: { ...NO_GOODS, food: 9 },
+    carriedMule: null,
+    installedThisTurn: false,
+    worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
+    claimsLeft: 0,
+    hungry: false,
+    sick: false,
+    needs: { food: 5, water: 3 },
+    monthNeeds: { ...NO_GOODS, food: 5, water: 3 },
+    devEndsAt: null,
+    devSeconds: 50,
+    produced: null,
+    mulePrice: 148,
+    outfitCosts: { food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100, alloy: 150, electronics: 200, medicine: 150, greenBelt: 40 },
+    droneOrder: [],
+    politics: { running: null, ballot: {}, canRun: { governor: true }, paid: 0, reputation: 50 },
+    deals: { cards, offersLeft: POLITICS.deals.maxOpenOffers, pactMonths: [...POLITICS.deals.pactMonths], ...over },
+  };
+}
+
+function politics(extra: Partial<PoliticsView> = {}): PoliticsView {
+  return {
+    governor: null,
+    sheriff: null,
+    term: null,
+    next: 4,
+    baron: null,
+    tax: { percent: 5, start: 5, low: 0, high: 10 },
+    fund: 0,
+    pay: { governor: 50 },
+    weights: PLAYERS.map(({ id }) => ({ id, votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } })),
+    candidates: { governor: [] },
+    promises: {},
+    promise: null,
+    promiseFrom: null,
+    election: null,
+    brokenDeals: [],
+    reputationReasons: {},
+    ...extra,
+  };
+}
+
+const gameFor = (me: MyView, p: PoliticsView = politics(), over: Partial<MuleView> = {}): MuleView => aMuleView({ month: 2, players: PLAYERS, me, politics: p, ...over });
+
+// ---- A phone: its client, what it sent, and its screen ---------------------------------------------------------------
+
+const sent: unknown[] = [];
+let state: ClientState;
+const listeners = new Set<() => void>();
+const client = {
+  subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)),
+  getState: () => state,
+  serverNow: () => 0,
+  intent: (intent: unknown) => void sent.push(intent),
+  chat: () => undefined,
+  emote: () => undefined,
+  dismiss: (id: number) => setState({ toasts: state.toasts.filter((t) => t.id !== id) }),
+};
+function setState(over: Partial<ClientState>): void {
+  state = { ...state, ...over };
+  for (const l of listeners) l();
+}
+
+let root: Root | null = null;
+let host: FakeElement;
+let screen: (game: MuleView) => ReactElement;
+
+const tableOf = (game: MuleView): TableView<MuleView> => ({ code: 'MULE', status: 'playing', hostId: LENA, boards: 1, game, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) });
+
+function phoneOf(game: MuleView): ReactElement {
+  const self = game.players.find((p) => p.id === game.me!.id)!;
+  const value = { table: tableOf(game), view: game, me: game.me!, self, slot: self.slot as Slot };
+  // The shell's box, so a sheet has its game-shell to portal into.
+  const shell = createElement('div', { 'data-testid': 'game-shell' }, screen(game));
+  return createElement(ClientProvider, { client: client as never, children: createElement(PhoneGameProvider, { value, children: shell }) });
+}
+
+function mount(game: MuleView, draw: (game: MuleView) => ReactElement, chat: ChatMessage[] = []): void {
+  screen = draw;
+  state = { status: 'open', role: 'player', code: 'MULE', seatId: game.me!.id, view: null, chat, emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null } as ClientState;
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host as unknown as HTMLElement);
+  act(() => root!.render(phoneOf(game)));
+}
+/** The server's next view reaches the phone. */
+const rerender = (game: MuleView) => act(() => root!.render(phoneOf(game)));
+
+afterEach(() => {
+  const r = root;
+  if (r) act(() => r.unmount());
+  root = null;
+  sent.length = 0;
+  listeners.clear();
+});
+
+function findTestid(testid: string, node: FakeElement = host): FakeElement | undefined {
+  if (node.getAttribute('data-testid') === testid) return node;
+  for (const child of node.childNodes) {
+    const hit = child instanceof FakeElement ? findTestid(testid, child) : undefined;
+    if (hit) return hit;
+  }
+  return undefined;
+}
+function byTestid(testid: string): FakeElement {
+  const found = findTestid(testid);
+  expect(found, `an element with data-testid="${testid}"`).toBeDefined();
+  return found!;
+}
+/** Every element whose test id starts with `prefix`, in document order. */
+function allTestids(prefix: string, node: FakeElement = host, out: string[] = []): string[] {
+  const id = node.getAttribute('data-testid');
+  if (id?.startsWith(prefix)) out.push(id);
+  for (const c of node.childNodes) if (c instanceof FakeElement) allTestids(prefix, c, out);
+  return out;
+}
+function handlers(el: FakeElement): Record<string, (e?: unknown) => void> {
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  expect(key, 'a React element').toBeDefined();
+  return (el as unknown as Record<string, Record<string, (e?: unknown) => void>>)[key!]!;
+}
+const tap = (testid: string) => act(() => handlers(byTestid(testid)).onClick!({ currentTarget: byTestid(testid), stopPropagation() {}, preventDefault() {} }));
+const text = (testid: string) => byTestid(testid).textContent;
+
+// ---- S3-C19 · the chip --------------------------------------------------------------------------------------------
+
+describe('the reputation chip (S3-C19)', () => {
+  it('S3-B-AC-6: a chip beside every name in the hub (Who) shows PlayerView.reputation with the 70/30 thresholds readable, and its tap lists the public reasons', () => {
+    // Brix broke a vote card to Lena in month 2 and was blamed for unrest in month 1; Ossa broke one too. Lena and Brix
+    // kept a pact: a kept card moves the number, never the reasons.
+    const brixBroke = card({ id: 'deal-b1', from: BRIX, to: LENA, terms: { kind: 'vote', office: 'governor', candidate: KAI }, status: 'broken', brokenBy: BRIX, settled: 2 });
+    const ossaBroke = card({ id: 'deal-o1', from: OSSA, to: LENA, terms: { kind: 'pact' }, status: 'broken', brokenBy: OSSA, settled: 2 });
+    const kept = card({ id: 'deal-k1', from: LENA, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
+    const p = politics({
+      brokenDeals: [brixBroke, ossaBroke],
+      reputationReasons: { [BRIX]: [{ kind: 'broken', id: 'deal-b1' }, { kind: 'unrest', month: 1 }], [OSSA]: [{ kind: 'broken', id: 'deal-o1' }] },
+    });
+    mount(gameFor(myView(LENA, [kept]), p), (game) =>
+      createElement(
+        'p',
+        null,
+        game.players.map((pl) => createElement(Who, { key: pl.id, view: game, id: pl.id, me: LENA, rep: true, open: true })),
+      ),
+    );
+
+    // Each side of each threshold: the number, and the band said without colour (a data band and the label's words).
+    const rows: [string, number, string, string][] = [
+      [LENA, repHigh, 'good', 'Good name: +1 vote'],
+      [OSSA, repHigh - 1, 'fair', 'Fair name'],
+      [KAI, repLow, 'fair', 'Fair name'],
+      [BRIX, repLow - 1, 'low', 'Low name: −1 vote, and AI players turn down their cards'],
+    ];
+    for (const [id, rep, band, words] of rows) {
+      const chip = byTestid(`who-${id}-rep`);
+      expect(chip.textContent, id).toBe(String(rep));
+      expect(chip.getAttribute('data-band'), id).toBe(band);
+      expect(chip.getAttribute('aria-label'), id).toContain(`reputation ${rep}. ${words}.`);
+    }
+    expect(findTestid('ai-mark'), 'a computer seat carries its mark only where asked').toBeUndefined();
+
+    tap(`who-${BRIX}-rep`);
+    expect(text(`player-card-${BRIX}-band`)).toBe(`Reputation ${repLow - 1} · Low name: −1 vote, and AI players turn down their cards.`);
+    expect(text(`player-card-${BRIX}`), 'the thresholds, readable').toContain(`${repHigh} and up: +1 vote. Under ${repLow}: −1 vote, and AI players turn down their cards.`);
+    expect(allTestids('reason-'), "Brix's public reasons, newest first").toEqual(['reason-deal-b1', 'reason-unrest-1']);
+    expect(text('reason-deal-b1')).toBe(`M2Broke a promise to Lena: a vote for Kai · AI−${-POLITICS.reputation.moves.voteBroken}`);
+    expect(text('reason-unrest-1')).toBe(`M1Blamed for the unrest−${-SOCIAL_EVENTS.player.blamedForUnrest.reputation}`);
+    expect(findTestid('reason-deal-k1'), 'a kept card is never among the reasons').toBeUndefined();
+    expect(findTestid('reason-deal-o1'), "Ossa's broken card is Ossa's reason, not Brix's").toBeUndefined();
+
+    tap(`player-card-${BRIX}-close`);
+    tap(`who-${LENA}-rep`);
+    expect(text(`player-card-${LENA}-reasons`), 'Lena kept her pact: nothing public').toBe('What moved it, in publicNothing public. A kept card never shows here, only the number rising.');
+  });
+});
