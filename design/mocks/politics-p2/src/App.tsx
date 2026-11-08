@@ -2,6 +2,7 @@ import { cx } from '@mule/ui';
 import { useEffect, useState, type ReactNode } from 'react';
 import { DESK_STATES, viewFor, type DeskState } from './fixture';
 import { P6Page } from './sabotage/P6Page';
+import { P10Page } from './show/P10Page';
 import { GuardMap } from './sheriff/GuardMap';
 import { SheriffDeskA } from './sheriff/VariantA';
 import { SheriffDeskB } from './sheriff/VariantB';
@@ -23,8 +24,8 @@ const DECISIONS: string[] = [
   'The trade: in A a solved case jumps from Investigate down to Fine (clear jobs, but it moves under the thumb); in B it stays put and its next step changes (calmer, but one long list). PM ruled B (8 Nov); Heiko approved B folded (651 → 294 px in the 309 px sub-tab, one tap more per action), 8 Nov 03:57Z. A stays here for the record.',
 ];
 
-type Route = 'index' | 'a' | 'b' | 'p6';
-const route = (): Route => (location.hash === '#a' ? 'a' : location.hash === '#b' ? 'b' : location.hash === '#p6' ? 'p6' : 'index');
+type Route = 'index' | 'a' | 'b' | 'p6' | 'p10';
+const route = (): Route => (location.hash === '#a' ? 'a' : location.hash === '#b' ? 'b' : location.hash === '#p6' ? 'p6' : location.hash === '#p10' ? 'p10' : 'index');
 
 /** One variant on one phone: the desk, and Overview's map in Guard mode when the Sheriff opens it. */
 function Flow({ variant, state, w, h }: { variant: 'a' | 'b'; state: DeskState; w: number; h: number }) {
@@ -103,6 +104,12 @@ export default function App() {
     addEventListener('hashchange', on);
     return () => removeEventListener('hashchange', on);
   }, []);
+  if (r === 'p10')
+    return (
+      <Page title="P10 · on the TV: Caught!, the dark plot, the rumour">
+        <P10Page />
+      </Page>
+    );
   if (r === 'p6')
     return (
       <Page title="P6 · the secret order: a power cut from Look, a rumour from the market">
@@ -132,6 +139,7 @@ export default function App() {
         <a href="#b" className="text-holo underline" data-testid="link-b">P7–P8 · Sheriff’s desk, B folded (approved)</a>
         <a href="#a" className="text-holo underline" data-testid="link-a">Sheriff’s desk, A</a>
         <a href="#p6" className="text-holo underline" data-testid="link-p6">P6 · the secret order</a>
+        <a href="#p10" className="text-holo underline" data-testid="link-p10">P10 · Caught! on the TV</a>
       </nav>
       <States state={state} onPick={setState} />
       <div className="flex flex-wrap items-start gap-10">

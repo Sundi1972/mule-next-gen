@@ -63,14 +63,14 @@ const OUTFIT: Record<string, Good> = {
   '9,7': 'energy', '10,7': 'food', '6,2': 'food', '7,2': 'energy', '6,5': 'smithore',
 };
 
-/** Lena's own orders, as her phone sees them: her name on each, public or not. */
+/** Lena's own orders, as Lena's phone sees them: Lena's name on each, public or not. */
 export const MINE: OwnOrder[] = [
   { ...INCIDENTS[3]!, culprit: 'lena', public: false, outcome: 'done' },
   { ...INCIDENTS[2]!, public: true, outcome: 'caught' },
 ];
 export type OwnOrder = NonNullable<MyPoliticsView['sabotage']>['mine'][number];
 
-/** Whom Lena has a pact with (fixture shorthand for her active pact cards): a caught cut on them costs 20 more. */
+/** Whom Lena has a pact with (fixture shorthand for Lena's active pact cards): a caught cut on them costs 20 more. */
 export const PACTS: string[] = ['brix'];
 
 /** The whole view for a seat, with slice 4 filled in. */

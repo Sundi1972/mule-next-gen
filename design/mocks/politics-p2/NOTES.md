@@ -115,3 +115,28 @@ controls are a tap away), so it went to Heiko as a change.
 
 **APPROVED by Heiko, 8 Nov 03:57Z (board, via the PM): folded B, 651 → 294 px, one tap more per action. It replaces
 the unfolded B as the approved basis.** WS6 copies it at d0a52c1a for a "Sheriff month" prototype step.
+
+## P10 design (8 Nov, built: #p10)
+
+Grounding: WS7 files `powerCut` and `marketRumour` (kind `sabotage`) on ws7-s4-engine 4b55602a, sabotage.ts::sabotageEvents:
+one event per order done or caught, in seat order, with `sabotage {order, culprit, worked, guarded}`. Worked cut: the
+plot's hits, line "Someone cut the power to a Smithore plot: it makes nothing this month." Caught at a guard: no hits,
+line "Caught at a guarded plot: the power stays on." Rumour: a store event. Neither key has an EVENT_ENTRY on trunk,
+so today both would play as the generic 'plot' card; ShowEventView (packages/ui) has no `sabotage` field yet.
+
+The look (proposed, drawn in the mock over the real EventShow / EventLivingMap / EventTvLog):
+- Worked power cut ('plot'): a spark runs along a line into the plot, it flickers and goes dark (a dark wash stays on
+  it for the rest of production), its bars drop to 0. Card: "Sabotage!" + "Someone cut the power…". No name.
+- Caught (guard or seen): the guard's shield (guarded) or a searchlight (seen) flashes on the plot, then a "Caught!"
+  stamp with the saboteur's creature and name; a guarded cut keeps its power. Card names them.
+- Rumour ('store'): a whisper bubble at the store and the good's price tag tips up or down 25%; caught → the stamp at
+  the store with the name.
+- Phones' private lines: the culprit's ("Your crew cut Ossa's power. Nobody saw." / "You were caught: −10 reputation"),
+  the victim's ("Your smithore plot went dark: sabotage"), the Sheriff's ("Your guard caught Lena at Kai's plot").
+- Month end: one line per sabotage in the colony's news: "Sabotage: a power cut on Ossa's plot. Caught: Lena."
+Build needs (for WS7/WS3): ShowEventView gains `sabotage`; EVENT_ENTRY gains powerCut ('plot') and marketRumour ('store').
+- P10 built over the real EventShow / EventLivingMap (its `over` slot) / EventTvLog, scrubbed: five scenarios
+  (cut works; caught at a guard; cut works but seen; rumour takes; rumour seen). Checked in the browser: the dark wash
+  stays after its event; the stamp and the whisper show only while their event plays. Shots: p10-caught-guard.png,
+  p10-dark-plot.png. The stamp is anchored at the plot's left edge; the build clamps it inside the map for the right
+  edge's plots.

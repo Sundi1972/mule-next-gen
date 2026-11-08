@@ -47,7 +47,7 @@ export const PLAYERS: PlayerView[] = [
 
 const NONE = Object.fromEntries(GOODS.map((g) => [g, 0])) as MyView['stock'];
 
-/** Politics on: Ossa governs, Brix is Sheriff (P7's desk shows to him), Lena holds no office. */
+/** Politics on: Ossa governs, Brix is Sheriff (P7's desk shows to Brix), Lena holds no office. */
 function politics(governor: string, sheriff: string | null): PoliticsView {
   return {
     governor, sheriff, term: [4, 7], next: 8, baron: 'ossa',
