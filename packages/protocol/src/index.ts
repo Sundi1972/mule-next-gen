@@ -350,6 +350,8 @@ export interface IncidentView {
   how: 'guard' | 'caught' | 'investigation' | null;
   investigated: boolean;
   fine: { due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard' } | null;
+  /** The Sheriff's bounty for naming this culprit, by a guard or an investigation (slice 4 AM-11); null for none. Optional only for older fixtures. */
+  bounty?: { to: string; paid: number } | null;
 }
 
 /** The colony budget as every screen sees it (slice 5). */
@@ -418,6 +420,8 @@ export interface MyPoliticsView {
     guards: number[];
     max: number;
     investigationsLeft: number;
+    /** Tile indices this Sheriff may guard now (canGuard, slice 4 AM-11): players' plots, never the Sheriff's own. Optional only for older fixtures. */
+    guardable?: number[];
     /** Order ids this Sheriff may fine. */
     fineable: string[];
     /** The fine bases allowed. */
@@ -524,7 +528,10 @@ export interface PoliticsView {
   sabotage?: {
     terms: Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
     incidents: IncidentView[];
-    sheriff: { guards: number; investigations: number; investigationsLeft: number };
+    /** bounty: credits the Sheriff gets from the fund for each culprit a guard or an investigation names (POLITICS.sheriff.bounty, slice 4 AM-11). Optional only for older fixtures. */
+    sheriff: { guards: number; investigations: number; investigationsLeft: number; bounty?: number };
+    /** The sitting Sheriff's record this term: culprits caught by a guard, investigations solved (slice 4 AM-11). Shown for the outgoing Sheriff on election day; where the guards stood is never sent. null with no Sheriff. Optional only for older fixtures. */
+    sheriffRecord?: { caught: number; solved: number } | null;
   } | null;
   /** The colony budget (slice 5); null with politics off. Optional only for older fixtures. */
   budget?: BudgetView | null;
@@ -810,6 +817,18 @@ export interface ColonistMealView {
   water: { took: number; need: number };
 }
 
+/** The colony's health on MuleView (needs §3, C19). */
+export interface ColonyHealthView {
+  /** round(100 × (1 − h)), 60..100: h is the colonists' sick share, which never passes 0.4. */
+  health: number;
+  /** The colonists took less Medicine than their need at the last upkeep. */
+  medicineShort: boolean;
+  /** Consecutive upkeeps with medicineShort; 0 when it is false. */
+  shortMonths: number;
+  /** `health` as it stood one upkeep earlier, so the gauge can show the month's move; null at the first upkeep with health on. */
+  lastHealth?: number | null;
+}
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -844,6 +863,11 @@ export interface MuleView {
    * rounded down. Null outside the month end or when the report has no meal; absent from an older server.
    */
   colonistMeal?: ColonistMealView | null;
+  /**
+   * The colony's health as the phone's gauge shows it (needs C19). Null exactly while colony health is switched off
+   * (HEALTH.enabled false) or the game has no colony (politics off); absent from a server that does not carry it yet.
+   */
+  colonyHealth?: ColonyHealthView | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };
