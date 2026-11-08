@@ -441,6 +441,9 @@ describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
     expect(on.sent.some(sabotageMoves), 'the hands did act, so the comparison is not vacuous').toBe(true);
     expect(on.draws).toEqual(off.draws);
     expect(on.sent.filter((m) => !sabotageMoves(m))).toEqual(off.sent);
+    // Once a month, after govern: three ticks send one order and one guard list, not one a tick.
+    expect(on.sent.filter((m) => m.type === 'sabotage' && m.by === 'ai0')).toHaveLength(1);
+    expect(on.sent.filter((m) => m.type === 'guard' && m.by === 'ai1')).toHaveLength(1);
   });
 
   it('S4-T-AC-10: with sabotage off the hands send nothing, ask no value and draw nothing, the Sheriff and the orderer alike', () => {
@@ -468,18 +471,26 @@ describe('S4-T-AC-10: the new hands change no draw and read no seed', () => {
 
   it('S4-T-AC-10: an election run with the hands active ends on the ballots and candidates it ends on with sabotage off (slice 1)', () => {
     eager();
+    // The hands wait for the votes to be over: no sabotage move goes out while the election is live.
+    const early: string[] = [];
     const play = (on: boolean) => {
       POLITICS.sabotage.on = on;
       const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: true })) });
       const hands = SEATS.map((id, i) => new VoteHand(mindOf(id, (['trader', 'cautious', 'aggressive', 'saboteur'] as const)[i]!, 'trader', i + 1), createRng(100 + i)));
       for (let t = 0; t < 120_000 && state.politics!.election!.stage !== 'over'; t += WALK.tickMs) {
-        for (const h of hands) h.tick(state, WALK.tickMs, (a) => applyElection(state, h.mind.me, a));
+        for (const h of hands) {
+          h.tick(state, WALK.tickMs, (a) => {
+            if (['sabotage', 'guard', 'investigate', 'fine'].includes(a.type)) early.push(`${a.type} in ${state.politics!.election!.stage}`);
+            return applyElection(state, h.mind.me, a);
+          });
+        }
         stepElection(state, WALK.tickMs);
       }
       const election = state.politics!.election!;
       return { stage: election.stage, ballots: election.ballots, candidates: election.candidates, promises: state.politics!.promises };
     };
     expect(play(true)).toEqual(play(false));
+    expect(early).toEqual([]);
   });
 
   /** A seat's election move applied the way play.ts does; false on a refusal. */
