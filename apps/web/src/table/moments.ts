@@ -17,6 +17,8 @@ export function isMoment(firstSeen: number | null | undefined, now: number, hold
  * that leaves the screen has had its moment, so one that goes and comes back is not a moment twice, even inside its time.
  */
 export function useMoment(key: string | null, now: number): boolean {
+  // Written during render, idempotently: a render React discards could only mark a key spent early, so a moment may
+  // fail to show, never stick.
   const seen = useRef<Map<string, number | null> | null>(null);
   const last = useRef<string | null>(null);
   if (seen.current === null) {
