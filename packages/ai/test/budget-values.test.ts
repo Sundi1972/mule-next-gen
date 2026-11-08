@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { auctionNeed, budgetCredits, colonyPrestige, createGame, GOODS, HAPPINESS, observe, POLITICS, PRESTIGE, stillNeeds, welfareRecipient, type GameState, type Project } from '@mule/engine';
+import { auctionNeed, budgetCredits, COLONY, colonyPrestige, createGame, GOODS, HAPPINESS, observe, POLITICS, PRESTIGE, stillNeeds, welfareRecipient, type GameState, type Project } from '@mule/engine';
 import { endMonth } from '../src/outlook.js';
 import { lineWorth, overruleWorth } from '../src/politics-value.js';
 
@@ -102,6 +102,25 @@ describe('S5-B-AC-6 (S5-C9\'s values): overruleWorth, the tax', () => {
     expect(sales(obs, 'ai1'), 'the case: ai1 sells').toBeGreaterThan(0);
     expect(overruleWorth(obs, 'ai1', 'tax')).toBeCloseTo(delta * sales(obs, 'ai1') - through, 6);
     expect(overruleWorth(obs, 'ai1', 'tax')).toBeGreaterThan(0);
+  });
+
+  it("the fund's lost income reaches each line by its share and within its cap: Welfare full at its cap, a raise undone still pays the recipient", () => {
+    // Review of #796 (I1): 80/20 with 2,000 spare puts Welfare at its 200 cap, and the raise's lost income leaves it there.
+    const state = raised();
+    state.politics!.budget = { month: 3, setBy: 'ai0', shares: { projects: 80, welfare: 20, security: 0 } };
+    state.treasury.money = COLONY.reserve + 2_000;
+    state.players.find((p) => p.id === 'ai3')!.stock.smithore = 20;
+    const obs = observe(state, 'ai3');
+    expect(welfareRecipient(obs), 'the case: ai3 gets Welfare').toBe('ai3');
+    const delta = 0.1 - 0.05;
+    const lost = delta * obs.players.reduce((sum, p) => sum + sales(obs, p.id), 0);
+    const before = budgetCredits(obs);
+    const after = budgetCredits({ ...obs, treasury: { ...obs.treasury, money: obs.treasury.money - lost } });
+    expect([before.welfare, after.welfare], 'the case: Welfare stays at its cap').toEqual([POLITICS.budget.welfare.maxCredits, POLITICS.budget.welfare.maxCredits]);
+    const through = (['projects', 'welfare'] as const).reduce((n, l) => n + lineWorth(obs, 'ai3', l, before[l]) - lineWorth(obs, 'ai3', l, after[l]), 0);
+    expect(through, 'Welfare at its cap loses nothing').toBe(0);
+    expect(overruleWorth(obs, 'ai3', 'tax')).toBeCloseTo(delta * sales(obs, 'ai3') - through, 6);
+    expect(overruleWorth(obs, 'ai3', 'tax'), 'undoing the raise pays the seller it taxed').toBeGreaterThan(0);
   });
 
   it('undoing a cut costs a seller what it saves; with the tax unchanged it is worth 0; with no target given it values the tax', () => {
