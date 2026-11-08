@@ -499,7 +499,7 @@ function bestGoods(dots: Dots, count: number): [Good, number][] {
 }
 
 /** A plot's flag: its chip's colours, and the words its plot's label says it with (WS6, SA-1372). */
-const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo', guard: 'bg-void text-holo ring-1 ring-holo' } as const;
+const FLAG_TONE = { sabotage: 'bg-alert text-white', sale: 'bg-warn text-void', survey: 'bg-holo text-on-holo', guard: 'bg-void text-holo ring-1 ring-inset ring-holo' } as const;
 const FLAG_WORDS = { sabotage: 'switched off', sale: 'listed for sale', survey: 'drone scan', guard: 'guarded' } as const;
 
 /** The Sheriff's guard: a shield (WS8's politics-p2 mock, GuardGlyph), where the other flags print a word. */
