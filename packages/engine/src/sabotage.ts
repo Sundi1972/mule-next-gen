@@ -72,6 +72,7 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   const can = canOrder(state, playerId);
   if (can === 'off') throw new RuleError('This game plays without sabotage');
   if (can === 'notPlanning') throw new RuleError('Orders are given in planning');
+  if (can === 'sheriff') throw new RuleError("The Sheriff can't order sabotage");
   const old = standing(state, playerId);
   if (target === null) {
     if (old) {
@@ -95,6 +96,14 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   const known: SabotageTarget = target.kind === 'powerCut' ? { kind: 'powerCut', tile: target.tile } : { kind: 'rumour', good: target.good, dir: target.dir };
   const order: SabotageOrder = { id: old?.id ?? newId(state, kept, playerId), by: playerId, month: state.month, target: known, cost, outcome: 'pending', culpritPublic: false };
   edit(state).sabotage = [...kept, order];
+}
+
+/** Withdraw the player's pending order for this month, free and unrecorded, as a null order does: the new Sheriff's, at takeOffice (AM-11). */
+export function withdrawOrder(state: GameState, playerId: string): void {
+  const old = standing(state, playerId);
+  if (!old) return;
+  const kept = state.politics!.sabotage.filter((o) => o !== old); // read before edit() swaps in the copy
+  edit(state).sabotage = kept;
 }
 
 /** The refusal for a Sheriff's act now, or null when the player may act; `words` fills the words of rows 2 and 3 (S4-RULE-6 rows 1-3). */
@@ -342,9 +351,10 @@ export function orderTerms(state: GameState): OrderTerms {
 }
 
 /** Whether the player may order now, or why not. */
-export function canOrder(state: GameState, _playerId: string): true | 'off' | 'notPlanning' {
+export function canOrder(state: GameState, playerId: string): true | 'off' | 'notPlanning' | 'sheriff' {
   if (!state.politics || !POLITICS.sabotage.on) return 'off';
-  return state.phase === 'planning' ? true : 'notPlanning';
+  if (state.phase !== 'planning') return 'notPlanning';
+  return state.politics.sheriff === playerId ? 'sheriff' : true; // the sitting Sheriff does not sabotage (AM-11)
 }
 
 /** How many plots the Sheriff may guard this month. */

@@ -9,6 +9,8 @@ vi.mock('../src/politics.js', async (original) => {
 
 import {
   canGuard,
+  advancePhase,
+  canOrder,
   captureOdds,
   createGame,
   observe,
@@ -16,6 +18,7 @@ import {
   orderSabotage,
   POLITICS,
   resolveSabotage,
+  runFor,
   RuleError,
   setGuards,
   type GameState,
@@ -121,7 +124,12 @@ describe('S4-T-AC-18: the Sheriff\'s bounty', () => {
 
   it('S4-T-AC-18: a Sheriff who is the culprit earns nothing for being caught at a guard', () => {
     const { state, food } = monthOf();
-    const order = cutAndResolve(state, food, [food], 'ossa');
+    // The Sheriff cannot order (S4-T-AC-21), so the rule is pinned on an order whose orderer is made the Sheriff in the state.
+    orderSabotage(state, 'lena', { kind: 'powerCut', tile: food });
+    orders(state)[0]!.by = 'ossa';
+    state.politics!.guards = [food];
+    resolveSabotage(state);
+    const order = orders(state)[0]!;
     expect(order).toMatchObject({ by: 'ossa', outcome: 'caught' });
     expect(order.bounty).toBeUndefined();
     expect(state.politics!.sheriffRecord).toEqual({ caught: 0, solved: 0 });
@@ -266,5 +274,52 @@ describe('S4-B-AC-11 (engine leg): what another seat sees of the bounty', () => 
     const quiet = monthOf().state;
     orderSabotage(quiet, 'lena', { kind: 'powerCut', tile: ore });
     expect(observe(quiet, 'kai').politics!.sabotage).toEqual([]);
+  });
+});
+
+describe('S4-T-AC-21: the sitting Sheriff does not sabotage (AM-11 item 5)', () => {
+  const cutOn = (tile: number) => ({ kind: 'powerCut' as const, tile });
+  const rumour = { kind: 'rumour' as const, good: 'food' as const, dir: 'up' as const };
+
+  it('S4-T-AC-21: the Sheriff\'s cut and rumour are refused in the published words, and canOrder says sheriff', () => {
+    const { state, food } = monthOf();
+    const before = structuredClone(state.politics);
+    expect(canOrder(state, 'ossa')).toBe('sheriff');
+    expect(canOrder(state, 'lena')).toBe(true);
+    expect(refusalOf(() => orderSabotage(state, 'ossa', cutOn(food)))).toBe("The Sheriff can't order sabotage");
+    expect(refusalOf(() => orderSabotage(state, 'ossa', rumour))).toBe("The Sheriff can't order sabotage");
+    expect(state.politics).toEqual(before);
+    // The off and not-planning rows come first.
+    state.phase = 'auction';
+    expect(canOrder(state, 'ossa')).toBe('notPlanning');
+  });
+
+  it('S4-T-AC-21: a Sheriff whose term ended may order again', () => {
+    const { state, food } = monthOf();
+    state.politics = { ...state.politics!, sheriff: 'kai' };
+    orderSabotage(state, 'ossa', cutOn(food));
+    expect(orders(state)).toHaveLength(1);
+  });
+
+  it('S4-T-AC-21: an order placed during the election by the player who then takes the Sheriff\'s office is withdrawn at takeOffice, money unchanged', () => {
+    const saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+    try {
+      const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+      const free = state.tiles.map((t, i) => [t, i] as const).filter(([t]) => t.terrain !== 'store' && t.owner === null).map(([, i]) => i);
+      Object.assign(state.tiles[free[0]!]!, { owner: 'brix', outfit: 'food' });
+      for (const p of state.players) p.money = 1_000;
+      runFor(state, 'lena', 'governor', { kind: 'hold' });
+      runFor(state, 'ossa', 'sheriff');
+      orderSabotage(state, 'ossa', { kind: 'powerCut', tile: free[0]! });
+      orderSabotage(state, 'lena', { kind: 'powerCut', tile: free[0]! });
+      expect(orders(state)).toHaveLength(2);
+      advancePhase(state);
+      expect(state.politics!.sheriff).toBe('ossa');
+      expect(orders(state).map((o) => o.by)).toEqual(['lena']);
+      expect(moneyOf(state, 'ossa')).toBe(1_000);
+    } finally {
+      POLITICS.offices = saved;
+    }
   });
 });

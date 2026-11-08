@@ -390,6 +390,7 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
 
   it('S4-T-AC-8: the notices of a month: a done order is public with culprit null, a failed one is private to its orderer, a void one is private and says nothing; none is made for an order placed, withdrawn or a guard posted', () => {
     const w = world();
+    w.state.politics = { ...w.state.politics!, sheriff: 'ai1' }; // AM-11: Brix orders here, and the Sheriff does not
     force('powerCut', true, false);
     force('rumour', false, false);
     w.game.handle('lena', cut(w.brixPlot));
@@ -398,7 +399,7 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
     w.game.handle('ossa', { type: 'sabotage', target: null });
     w.game.handle('ossa', { type: 'sabotage', target: { kind: 'rumour', good: 'food', dir: 'down' } });
     w.game.handle('brix', cut(w.ossaPlot));
-    w.game.handle('brix', { type: 'guard', tiles: [w.ossaPlot] });
+    (w.game as unknown as { aiAct(seat: string, action: object): boolean }).aiAct('ai1', { type: 'guard', tiles: [w.ossaPlot] });
     expect(w.notices.filter((n) => ['sabotage', 'investigation', 'fine'].includes(n.kind)), 'nothing yet, not even a withdrawal').toEqual([]);
     // Ossa's plot loses its MULE before production: Brix's cut on it is void.
     w.state.tiles[w.ossaPlot]!.outfit = null;
@@ -440,6 +441,7 @@ describe('S4-T-AC-8: the TV, the board and each phone follow S4-RULE-12', () => 
 
   it('S4-T-AC-8: the news is a ring of three with the phase headline first: three caught cases never push out the harvest line, and three fines at the last upkeep never push out the game-over line', () => {
     const w = world(1);
+    w.state.politics = { ...w.state.politics!, sheriff: 'ai1' }; // AM-11: Brix orders here, and the Sheriff does not
     force('powerCut', true, true);
     force('rumour', true, true);
     w.game.handle('lena', cut(w.ossaPlot));
@@ -670,6 +672,26 @@ describe('S4-B-AC-11 (server leg): the Sheriff\'s bounty, record and guardable p
       expect(sabotage.incidents[0], String(viewer)).toMatchObject({ how: 'guard', bounty: { to: 'brix', paid: POLITICS.sheriff.bounty } });
       if (viewer !== 'brix') expect(wire(w.game, viewer), String(viewer)).not.toMatch(/"guards":\[/);
     }
+  });
+
+  it('S4-B-AC-11: an incident whose culprit is not public carries bounty null, on the public list and in the orderer\'s own list', () => {
+    const w = world();
+    force('powerCut', true, false);
+    w.game.handle('lena', cut(w.ossaPlot));
+    until(w, 'production');
+    const order = orders(w)[0]!;
+    expect(order).toMatchObject({ outcome: 'done', culpritPublic: false });
+    // A bounty on an unsolved case cannot come from the engine; put one there to prove the view will not carry it.
+    order.bounty = { to: 'brix', paid: POLITICS.sheriff.bounty };
+    expect(w.game.viewFor(null).politics!.sabotage!.incidents[0]).toMatchObject({ culprit: null, bounty: null });
+    expect(w.game.viewFor('lena').me!.politics!.sabotage!.mine[0]).toMatchObject({ culprit: 'lena', bounty: null });
+  });
+
+  it('S4-T-AC-21 (server): the Sheriff\'s phone says canOrder is sheriff and refuses the order in words; the others\' say true', () => {
+    const w = world();
+    expect(w.game.viewFor('brix').me!.politics!.sabotage!.canOrder).toBe('sheriff');
+    expect(w.game.viewFor('lena').me!.politics!.sabotage!.canOrder).toBe(true);
+    expect(() => w.game.handle('brix', cut(w.ossaPlot))).toThrow(new RuleError("The Sheriff can't order sabotage"));
   });
 
   it('S4-B-AC-11: with no Sheriff the record is null', () => {

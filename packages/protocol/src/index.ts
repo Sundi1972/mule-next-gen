@@ -409,7 +409,7 @@ export interface MyPoliticsView {
   sabotage?: {
     /** This month's pending order. */
     order: SabotageTarget | null;
-    canOrder: true | 'off' | 'notPlanning';
+    canOrder: true | 'off' | 'notPlanning' | 'sheriff';
     /** The crew cost due at this month's upkeep. */
     owed: number;
     /**

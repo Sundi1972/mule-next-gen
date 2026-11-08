@@ -9,7 +9,7 @@ import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { settleVotes } from './diplomacy.js';
 import { player } from './game.js';
-import { closeCases, newSabotageMonth } from './sabotage.js';
+import { closeCases, newSabotageMonth, withdrawOrder } from './sabotage.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
 import type { BudgetLine, CanRun, CeremonyBeat, Council, Election, ElectionResult, GameState, LawId, LawProposal, Office, OfficeResult, Outfit, Overrule, OverruleTarget, OverruleWhy, Politics, TaxPromise } from './types.js';
@@ -373,6 +373,8 @@ function takeOffice(state: GameState, politics: Politics): void {
     const run = politics.governorRun;
     politics.governorRun = { id: governor, terms: run?.id === governor ? run.terms + 1 : 1 };
   }
+  const sheriff = result.sheriff?.winner;
+  if (sheriff !== undefined) withdrawOrder(state, sheriff); // the Sheriff does not sabotage (AM-11)
   // Last, and on the new term: it copies Politics, so `politics` is stale after it.
   settleVotes(state, 'election');
 }

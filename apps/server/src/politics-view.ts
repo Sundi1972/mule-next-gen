@@ -459,7 +459,8 @@ function incidentView(state: GameState, order: SabotageOrder, viewerId: string |
     how: howOf(state, order),
     investigated: order.investigated != null,
     fine: order.fine ? { due: order.fine.due, paid: order.fine.paid, toVictim: order.fine.toVictim, by: order.fine.by } : null,
-    bounty: order.bounty ? { ...order.bounty } : null,
+    // Never more than `how` tells: the bounty shows only once the culprit is public, even on the orderer's own list (WS3).
+    bounty: order.bounty && order.culpritPublic ? { ...order.bounty } : null,
   };
 }
 
