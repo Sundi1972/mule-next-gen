@@ -3,10 +3,10 @@ import { Brain } from '@mule/ai';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { ceremonyBeats, openPlanning, POLITICS, RuleError, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
+import { callOverrule, ceremonyBeats, openOverrule, openPlanning, POLITICS, RuleError, setSalesTax, voteOverrule, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
-import { fakeContext, readyAll, throughSidePicks } from './fake-context.js';
+import { fakeContext, readyAll, seats, throughSidePicks } from './fake-context.js';
 
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
@@ -1103,13 +1103,17 @@ const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
   expect(board.me).toBeNull();
-  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'brokenDeals', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'reputationReasons', 'retry', 'sabotage', 'sheriff', 'tax', 'term', 'weights']);
+  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'brokenDeals', 'budget', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'overrule', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'reputationReasons', 'retry', 'sabotage', 'sheriff', 'tax', 'term', 'weights']);
   // S4-T-AC-8: the board carries the public sabotage view and nothing of an order's party (S4-RULE-12).
   if (politics.sabotage) {
     expect(keysOf(politics.sabotage), NEW_FIELD).toEqual(['incidents', 'sheriff', 'terms']);
     expect(keysOf(politics.sabotage.sheriff), NEW_FIELD).toEqual(['guards', 'investigations', 'investigationsLeft']);
     expect(typeof politics.sabotage.sheriff.guards, 'the count he may post, never the tiles').toBe('number');
   }
+  // S5-T-AC-11: the budget is public money; the overrule holds no ballot, only who has cast.
+  expect(keysOf(politics.budget!), NEW_FIELD).toEqual(['frozen', 'kept', 'lines', 'setBy', 'welfareTo']);
+  for (const line of politics.budget!.lines) expect(keysOf(line), NEW_FIELD).toEqual(['credits', 'line', 'maxCredits', 'maxShare', 'share', 'start', 'step']);
+  if (politics.overrule) expect(keysOf(politics.overrule), NEW_FIELD).toEqual(['caller', 'clockMs', 'done', 'needed', 'restores', 'result', 'revealMs', 'stage', 'stands', 'target', 'total', 'voted', 'waitingFor']);
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {
@@ -1183,5 +1187,93 @@ describe('S4-C13 (server): the four sabotage intents on the wire', () => {
     const mine = await phone.waitForGame((g) => !!g.me?.politics?.sabotage);
     expect(mine.me!.politics!.sabotage).toEqual({ order: null, canOrder: true, owed: 0, mine: [] });
     expect(mine.me!.politics!.sheriff ?? null, 'Brix is not the Sheriff').toBeNull();
+  });
+});
+
+describe('S5-C8 (server): the budget, the overrule and Welfare reach every screen by S5-RULE-10', () => {
+  /** Month 2's planning, Heiko (s1) governing, his tax raised 5 → 10; Mia (s2) has called the tax overrule and the ballot is open. */
+  function onTheOverrule(thirdVotes: boolean) {
+    const { ctx } = fakeContext();
+    const game = new MuleGame(ctx, 7, { politics: true });
+    game.start(seats);
+    const state = (game as unknown as { state: GameState }).state;
+    state.month = 2;
+    state.phase = 'planning';
+    state.politics = { ...state.politics!, governor: 's1', election: null, council: null, taxAtStart: state.treasury.salesTax };
+    setSalesTax(state, 's1', 10);
+    callOverrule(state, 's2', 'tax');
+    openOverrule(state);
+    voteOverrule(state, 's3', thirdVotes);
+    return { game, state };
+  }
+  const VIEWERS = [null, 's1', 's2', 's3'];
+
+  it('S5-T-AC-11: the budget, the call and the stage are on every screen; a ballot only in its voter\'s own view; totals only from the reveal', () => {
+    const { game, state } = onTheOverrule(true);
+    const board = game.viewFor(null);
+    expect(board.politics!.budget).toMatchObject({ kept: 100 - POLITICS.budget.default.projects - POLITICS.budget.default.welfare, frozen: false, setBy: null });
+    expect(board.politics!.budget!.lines.map((l) => l.line)).toEqual(['projects', 'welfare']);
+    expect(board.politics!.budget!.welfareTo, 'named at every share').not.toBeNull();
+    for (const viewer of VIEWERS) {
+      const view = game.viewFor(viewer);
+      expect(view.politics, 'the politics view is public: the same JSON for every screen').toEqual(board.politics);
+      expect(view.politics!.overrule).toMatchObject({ target: 'tax', caller: 's2', stage: 'ballot', restores: { tax: 5 }, stands: { tax: 10 }, result: null });
+      expect(view.politics!.overrule!.voted.sort(), 'who has cast, by key').toEqual(['s1', 's2', 's3']);
+      expect(view.politics!.overrule!.done, 'the presets are not Done').toEqual(['s3']);
+      expect(view.politics!.overrule!.waitingFor.sort()).toEqual(['s1', 's2']);
+    }
+    // A ballot is its voter's own: each phone holds theirs, the board none; no key named ballot rides in any public part.
+    expect(game.viewFor('s1').me!.politics!.overruleBallot, 'the Governor\'s preset no').toBe(false);
+    expect(game.viewFor('s2').me!.politics!.overruleBallot, "the caller's preset yes").toBe(true);
+    expect(game.viewFor('s3').me!.politics!.overruleBallot).toBe(true);
+    expect(game.viewFor(null).me).toBeNull();
+    for (const viewer of VIEWERS) expect(JSON.stringify({ ...game.viewFor(viewer), me: null })).not.toMatch(/overruleBallot|"ballots"/);
+    // Whole-JSON: the AI's yes or no changes nothing anyone but the AI is sent, before the reveal.
+    const flipped = onTheOverrule(false).game;
+    for (const viewer of VIEWERS) {
+      const [a, b] = [game.viewFor(viewer), flipped.viewFor(viewer)];
+      if (viewer === 's3') expect(a.me!.politics!.overruleBallot).not.toBe(b.me!.politics!.overruleBallot);
+      else expect(JSON.stringify(a), `the ${viewer ?? 'board'} view`).toBe(JSON.stringify(b));
+    }
+    // canOverrule is the viewer's own reason; the Governor can't, the others have a call standing.
+    expect(game.viewFor('s1').me!.politics!.canOverrule!.tax).toBe('governor');
+    expect(game.viewFor('s3').me!.politics!.canOverrule!.tax).toBe('called');
+    // The reveal: the totals reach every screen, the ballots still none.
+    state.politics!.overrule = { ...state.politics!.overrule!, stage: 'reveal', result: { passed: true, yes: 5, no: 2, total: 9, needed: 5 } };
+    for (const viewer of VIEWERS) {
+      expect(game.viewFor(viewer).politics!.overrule!.result).toEqual({ passed: true, yes: 5, no: 2 });
+      expect(JSON.stringify(game.viewFor(viewer).politics)).not.toMatch(/"total":9,"needed":5,"ballots/);
+    }
+  });
+
+  it('S5-T-AC-11: restores and stands name the setting each target would undo, with no vote open before the call', () => {
+    const { game, state } = onTheOverrule(true);
+    const shares = { projects: 70, welfare: 20, security: 0 };
+    state.politics!.budgetAtStart = { month: 2, setBy: null, shares: { projects: 80, welfare: 10, security: 0 } };
+    state.politics!.budget = { month: 2, setBy: 's1', shares };
+    state.politics!.overrule = { ...state.politics!.overrule!, target: 'budget' };
+    const view = game.viewFor('s2').politics!;
+    expect(view.budget).toMatchObject({ setBy: 's1', kept: 10 });
+    expect(view.budget!.lines.find((l) => l.line === 'welfare')).toMatchObject({ share: 20, start: 10, maxShare: POLITICS.budget.welfare.maxShare, step: POLITICS.budget.step });
+    expect(view.overrule).toMatchObject({ restores: { shares: { projects: 80, welfare: 10, security: 0 } }, stands: { shares } });
+    state.politics!.overrule = { ...state.politics!.overrule!, target: 'confidence' };
+    expect(game.viewFor(null).politics!.overrule).toMatchObject({ restores: { governor: 's1' }, stands: { governor: 's1' } });
+  });
+
+  it("S5-T-AC-11: Welfare's payment is on the colony view for every screen, and a month without one has none", () => {
+    const { game, state } = onTheOverrule(true);
+    expect(game.viewFor(null).colony!.welfare ?? null).toBeNull();
+    state.colony!.welfare = { month: 2, to: 's3', paid: 54 };
+    for (const viewer of VIEWERS) expect(game.viewFor(viewer).colony!.welfare).toEqual({ month: 2, to: 's3', paid: 54 });
+  });
+
+  it('S5-T-AC-11: with politics off every view is as before — no budget, no overrule, no welfare', () => {
+    const { ctx } = fakeContext();
+    const game = new MuleGame(ctx, 7);
+    game.start(seats);
+    const view = game.viewFor('s1');
+    expect(view.politics).toBeNull();
+    expect(view.colony).toBeNull();
+    expect(view.me!.politics ?? null).toBeNull();
   });
 });
