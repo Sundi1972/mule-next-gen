@@ -98,7 +98,7 @@ describe("the month end's news line (WS3's named edit)", () => {
     return game.viewFor(null).news[0];
   };
 
-  it('a Medicine-only shortage with the colony fed says the store ran out of Medicine, never that colonists are leaving', () => {
+  it('FM-news-leaving: a Medicine-only shortage with the colony fed says the store ran out of Medicine, never that colonists are leaving', () => {
     withHealth(() => {
       const { game, state } = table();
       for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
@@ -111,12 +111,23 @@ describe("the month end's news line (WS3's named edit)", () => {
     });
   });
 
-  it('a Food shortage that leaves the colonists hungry still says they are leaving', () => {
-    const { game, state } = table();
-    for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
-    Object.assign(state.store.stock, { food: 0, water: 500 });
-    advancePhase(state);
-    expect(state.history.at(-1)!.colonistsHungry).toBe(true);
-    expect(upkeepNews(game)).toBe('The store ran out of food! Colonists are leaving.');
+  it('FM-news-leaving: colonists leave in the news only when the upkeep shrank the colony: no Food says so, 5% short of it (the colony still grows) does not', () => {
+    /** The news after an upkeep with 400 colonists and `food` Food on the store's shelf, and the colony's size before and after it. */
+    const upkeepWithFood = (food: number) => {
+      const { game, state } = table();
+      for (let steps = 0; state.phase !== 'auction' && steps < 50; steps++) advancePhase(state);
+      state.colonists = 400;
+      Object.assign(state.store.stock, { food, water: 500 });
+      advancePhase(state);
+      return { news: upkeepNews(game), after: state.colonists, hungry: state.history.at(-1)!.colonistsHungry };
+    };
+    const none = upkeepWithFood(0);
+    expect(none.after, 'the premise: the colony shrank').toBeLessThan(400);
+    expect(none.news).toBe('The store ran out of food! Colonists are leaving.');
+
+    const slightly = upkeepWithFood(19);
+    expect(slightly.hungry, 'the premise: 1 of their 20 Food went missing').toBe(true);
+    expect(slightly.after, 'the premise: within the tolerance the colony still grew').toBeGreaterThan(400);
+    expect(slightly.news).toBe('The store ran out of food.');
   });
 });
