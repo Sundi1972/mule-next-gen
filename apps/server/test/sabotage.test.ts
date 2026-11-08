@@ -411,7 +411,7 @@ describe('S4-T-AC-14 (server): only sabotage is an incident', () => {
 describe('S4-C13: an AI seat\'s moves reach the same handle as a phone\'s', () => {
   const aiAct = (game: MuleGame, seat: string, action: object) => (game as unknown as { aiAct(seat: string, action: object): boolean }).aiAct(seat, action);
 
-  it('S4-C13: an AI Sheriff\'s guard lands in the engine; a refused AI move returns false', () => {
+  it('S4-T-AC-8 (AI seats): an AI Sheriff\'s guard lands in the engine; a refused AI move returns false', () => {
     const w = world();
     w.state.politics = { ...w.state.politics!, sheriff: 'ai1' };
     expect(aiAct(w.game, 'ai1', { type: 'guard', tiles: [w.ossaPlot] })).toBe(true);
@@ -421,7 +421,7 @@ describe('S4-C13: an AI seat\'s moves reach the same handle as a phone\'s', () =
     expect(aiAct(w.game, 'lena', { type: 'guard', tiles: [w.ossaPlot] }), 'a non-Sheriff\'s guard').toBe(false);
   });
 
-  it('S4-C13: an AI seat\'s order lands in the engine under its own id', () => {
+  it('S4-T-AC-8 (AI seats): an AI seat\'s order lands in the engine under its own id', () => {
     const w = world();
     expect(aiAct(w.game, 'ai1', cut(w.ossaPlot))).toBe(true);
     expect(orders(w).map((o) => [o.by, o.outcome])).toEqual([['ai1', 'pending']]);
@@ -435,7 +435,7 @@ const KEY_VAR = 'ANTHROPIC_API_KEY';
 const SEED = 21;
 
 describe('S4-RULE-12 (the record): orders and guards are in the record and replay', () => {
-  it('S4-RULE-12: a recorded game with an order, a guard and a fine replays to the same state hash with the key unset', { timeout: 120_000 }, async () => {
+  it('S4-T-AC-8 (record): a recorded game with an order, a guard and a fine replays to the same state hash with the key unset', { timeout: 120_000 }, async () => {
     const savedKey = process.env[KEY_VAR];
     delete process.env[KEY_VAR];
     try {
