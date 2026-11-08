@@ -1688,6 +1688,19 @@ because   AM-5 is the later decision, made for the Governor's screen; the server
 goal      S5-1 — unchanged
 ```
 
+```
+AM-10 · 2026-11-09 · WS7 (build: S5-PR-2; the lead's ruling) · the engine counts passed tax overrules from the RC
+
+target    S5-C6's hold; S5-C15's count (politics.overruled)
+said      the count was after-RC (S5-C15), but the RC's hold needs to see an earlier month's pass
+did       the engine counts passed tax overrules from the RC, in politics.overruled, and a new term (every election,
+          a re-elected Governor's included) resets it to 0. No snap election: S5-C15's snap stays after RC. The AI
+          Governor reads the count (obs.politics.overruled > 0) and holds its tax and budget
+because   the implementer found openPlanning clears `overrule` each month, so a hand could only remember a pass in
+          memory, which is lost if it is rebuilt
+goal      S5-1 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change:

@@ -168,8 +168,6 @@ export class VoteHand {
   /** Slice 5's hands (S5-C6). */
   private readonly budget: BudgetHand;
   private readonly overrule: OverruleHand;
-  /** The term (its termStart) in which this seat, as Governor, saw a tax overrule pass against it: it holds its tax and budget till the term ends. */
-  private overruledTerm: number | null = null;
 
   constructor(
     readonly mind: Mind,
@@ -188,7 +186,6 @@ export class VoteHand {
     // The law ballot, once the election is over: it votes per RULE-46 and presses Done at once. Its draws come from
     // the council's own stream, so the election's seeded stream stays as it was (HC-41) and no ballot waits on an AI seat.
     const { council, election, overrule } = state.politics;
-    this.noteOverrule(state);
     // The overrule ballot opens as planning ends: one vote and Done, from the overrule's own stream (S5-RULE-12, D-S5-2).
     if (overrule?.stage === 'ballot') {
       if (!overrule.done.includes(this.mind.me)) this.overrule.vote(observe(state, this.mind.me), act);
@@ -390,15 +387,9 @@ export class VoteHand {
     if (pick) act({ type: 'commission', id: pick });
   }
 
-  /** Remembers a tax overrule that passed against this seat as Governor: the engine's per-month record is gone by next month. */
-  private noteOverrule(state: GameState): void {
-    const { overrule, governor, termStart } = state.politics!;
-    if (governor === this.mind.me && overrule?.target === 'tax' && overrule.result?.passed) this.overruledTerm = termStart;
-  }
-
-  /** S5-RULE-11, S5-RULE-13: after an overrule passed against it this term, the Governor holds its tax and its budget. */
+  /** S5-RULE-11, S5-RULE-13: after an overrule passed this term (the engine's count, AM-10), the Governor holds its tax and its budget. */
   private holding(obs: GameState): boolean {
-    return obs.politics!.overruled > 0 || this.overruledTerm === obs.politics!.termStart;
+    return obs.politics!.overruled > 0;
   }
 
   private govern(obs: GameState, act: Act, look: () => GameState): void {
