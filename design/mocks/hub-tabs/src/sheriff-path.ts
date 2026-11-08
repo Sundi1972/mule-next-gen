@@ -88,7 +88,7 @@ export const SHERIFF_BEATS: Beat[] = [
   },
   {
     id: 's3-fined', step: 3, label: 'Fined', seat: 'lena', world: () => fined(), start: { tab: 'overview', tool: 'list' }, tv: 'planning', tvWanted: 'fine-set',
-    line: `Lena’s Sell › her orders: everyone knows, fined ${FINE}. The TV’s incidents list shows the fine.`,
+    line: `Lena’s Sell › her orders: everyone knows, fined ${FINE}. On the TV the fine is the news’s first line.`,
   },
   {
     id: 's3-month-end', step: 3, label: 'Month 6 ends: half to Brix', seat: 'brix', world: () => monthEnd6(), tv: 'month-end', tvWanted: 'month-end-fine',

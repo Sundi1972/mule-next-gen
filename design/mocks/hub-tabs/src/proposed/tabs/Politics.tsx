@@ -181,7 +181,9 @@ export const POLITICS_TABS: SubTabSlot[] = [
   { id: 'laws', label: () => 'Laws', Body: LawsSub, first: (s) => lawBallotOpen(s) || overruleOpen(s), Badge: () => <SubBadge on={(s) => lawBallotOpen(s) || overruleOpen(s)} id="laws" /> },
   { id: 'budget', label: () => 'Budget', Body: BudgetSub },
   { id: 'elections', label: () => 'Elections', Body: ElectionsSub, first: electionOpen, Badge: () => <SubBadge on={electionOpen} id="elections" /> },
-  { id: 'sheriff', label: () => 'Sheriff', Body: SheriffSub, show: ({ view }) => !!view.politics?.sheriff },
+  // Holder-only (PM RULED for the RC): on the Sheriff path the sub-tab is Kai's alone. The planning path keeps the public
+  // stub for the other phones, post-RC.
+  { id: 'sheriff', label: () => 'Sheriff', Body: SheriffSub, show: ({ view, self }) => !!view.politics?.sheriff && (!SHERIFF_PATH || view.politics.sheriff === self.id) },
 ];
 
 function SubBadge({ on, id }: { on(s: Pick<HubSeat, 'view'>): boolean; id: string }) {

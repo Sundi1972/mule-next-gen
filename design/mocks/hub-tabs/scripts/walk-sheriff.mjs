@@ -87,6 +87,14 @@ await beat('s3-case', 'kai', async ({ see, tap, says }) => {
   await says(`fined-${ORDER}`, 'Lena');
   await says(`step-chip-${ORDER}`, 'Fined');
 });
+// Holder-only (PM RULED for the RC): only Kai's phone has a Sheriff sub-tab on this path.
+for (const as of ['lena', 'brix']) {
+  await beat('s3-case', as, async ({ see, tap, phone }) => {
+    await tap('tab-politics');
+    await see('sub-laws');
+    if (await phone.getByTestId('sub-sheriff').count()) throw new Error(`${as} has a Sheriff sub-tab`);
+  });
+}
 await beat('s3-fined', 'lena', async ({ says }) => { await says(`my-order-known-${ORDER}`, 'Everyone knows', 'Fined 150'); });
 await beat('s3-month-end', 'brix', async ({ says }) => { await says('phone-sabotage', 'Lena was fined 150 for sabotage; half to Brix'); await says(`phone-sabotage-restitution-${ORDER}`, '+75 cr'); });
 await beat('s3-month-end', 'lena', async ({ says }) => { await says(`phone-sabotage-fine-${ORDER}`, '150 cr'); });

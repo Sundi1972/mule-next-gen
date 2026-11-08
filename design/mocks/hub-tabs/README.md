@@ -2,7 +2,7 @@
 
 Heiko approved this mock on 8 Nov 2026 (~06:10Z), with the tabs in a left column. It is the **binding
 scaffold** for every PR below. Each screen PR starts from these files and keeps their `data-testid`s.
-The design decisions (D1–D15), the DS-GAPs and the owner-tagged file list are in the design notes
+The design decisions (D1–D18), the DS-GAPs and the owner-tagged file list are in the design notes
 (`?notes=1`). This README is the build plan, so that every lane reads the same plan from disk.
 
 Run it: `npx vite --port <free-port> --strictPort` in this folder, then open `/`: the guided play-through of a
@@ -52,7 +52,7 @@ planning month. `?path=sheriff` plays the Sheriff month (guard, catch, fine, an 
 
 ### Sources
 
-- The TV fit table and `TV_NOTE`: `src/tv/measured.ts` and the notes page.
+- The TV fit table and `TV_NOTE`: `src/tv/measured.ts` (`TV_FIT`), `src/tv/TvFor.tsx` (`TV_NOTE`) and the notes page.
 - The Sheriff month's cast (D18): Kai is the Sheriff, Brix the Governor and victim, Lena the saboteur.
 - The contract: #755 (SB-1a at `a7d2095c`; SB-1a.2 at `9fdfb927` supersedes it).
 - Rulebook: `docs/rulebook/table-and-phones.html#politics-phone` ("Planning on the phone: the tabbed hub", #753, "Designed, not in the game yet, WS6").
