@@ -7,6 +7,8 @@ import { AiMark } from '../chat/Chat';
 import { player, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { usePhoneGame } from './game';
+import { DealComposerSheet, DealsInThread, type DraftKind } from './hub/politics/Deals';
+import { PlayerCard, RepChip } from './hub/politics/parts';
 
 const ALL: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'];
 
@@ -81,13 +83,46 @@ export function ShipLine({ view }: { view: MuleView }) {
   );
 }
 
-/** Table talk and whispers. A whisper reaches only the two of you, never the big screen. */
-export function Chat() {
+/** A deal card being drafted, for whom, and the kind it opens on. */
+export interface Composing {
+  to: string;
+  kind?: DraftKind;
+}
+
+/** Where the Talk desk points Chat: the whisper, the composer, the whispered player's card. Absent, Chat holds its own. */
+export interface ChatFocus {
+  to: string | null;
+  setTo(id: string | null): void;
+  composing: Composing | null;
+  setComposing(c: Composing | null): void;
+  card: boolean;
+  setCard(open: boolean): void;
+}
+
+/**
+ * Table talk and whispers. A whisper reaches only the two of you, never the big screen; in planning it ends with the
+ * pair's deal cards and offers "+ Deal".
+ */
+export function Chat({ focus }: { focus?: ChatFocus }) {
   const client = useClient();
   const { chat, seatId } = useClientState();
-  const { view } = usePhoneGame();
-  const [to, setTo] = useState<string | null>(null);
+  const { view, me } = usePhoneGame();
+  const [ownTo, setOwnTo] = useState<string | null>(null);
+  const [ownComposing, setOwnComposing] = useState<Composing | null>(null);
+  const [ownCard, setOwnCard] = useState(false);
+  const { to, setTo, composing, setComposing, card, setCard } = focus ?? {
+    to: ownTo,
+    setTo: (id: string | null) => {
+      setOwnTo(id);
+      setOwnComposing(null);
+    },
+    composing: ownComposing,
+    setComposing: setOwnComposing,
+    card: ownCard,
+    setCard: setOwnCard,
+  };
   const [text, setText] = useState('');
+  const root = useRef<HTMLDivElement>(null);
   const others = view.players.filter((p) => p.id !== seatId);
   const lines = chat.filter((m) => (to === null ? !m.to : (m.to === to && m.from === seatId) || (m.from === to && m.to === seatId)));
   const end = useRef<HTMLLIElement>(null);
@@ -95,6 +130,9 @@ export function Chat() {
     end.current?.scrollIntoView({ block: 'nearest' });
   }, [lines.length]);
   const target = player(view, to);
+  // A card is offered in planning only (S3-RULE-2 row 2), and one unanswered card to a player at a time (row 5).
+  const planning = view.phase === 'planning' && !!view.politics;
+  const waiting = !!to && (me.deals?.cards ?? []).some((c) => c.from === me.id && c.to === to && c.status === 'offered');
 
   const send = () => {
     client.chat(text, to ?? undefined);
@@ -102,9 +140,9 @@ export function Chat() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="flex shrink-0 gap-2 overflow-x-auto pb-0.5">
-        <button type="button" onClick={() => setTo(null)} className={cx('h-9 shrink-0 rounded-full border px-3 text-sm font-semibold', to === null ? 'border-holo bg-holo-soft text-holo' : 'border-holo-faint text-ink-2')}>
+    <div ref={root} className="flex min-h-0 flex-1 flex-col gap-2" data-testid="chat">
+      <div className="flex shrink-0 gap-2 overflow-x-auto pb-0.5" data-testid="chat-to">
+        <button type="button" onClick={() => setTo(null)} className={cx('h-9 shrink-0 rounded-full border px-3 text-sm font-semibold', to === null ? 'border-holo bg-holo-soft text-holo' : 'border-holo-faint text-ink-2')} data-testid="chat-to-all">
           Whole table
         </button>
         {others.map((p) => (
@@ -113,18 +151,25 @@ export function Chat() {
             type="button"
             onClick={() => setTo(p.id)}
             className={cx('flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold', to === p.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-faint text-ink-2')}
+            data-testid={`chat-to-${p.id}`}
           >
             <PlayerMark slot={slotOf(view, p.id) ?? 0} size={10} glow={false} />
             {p.name}
           </button>
         ))}
       </div>
-      {target && <p className="font-mono text-xs text-ink-3">WHISPER · ONLY YOU AND {target.name.toUpperCase()} SEE THIS</p>}
-      <ul className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto rounded-control border border-holo-faint bg-panel/50 p-2.5">
+      {target && (
+        <p className="flex items-center gap-1.5 font-mono text-xs text-ink-3" data-testid="whisper-line">
+          <span className="min-w-0 truncate">WHISPER · ONLY YOU AND {target.name.toUpperCase()}</span>
+          {view.politics && <RepChip view={view} id={target.id} onOpen={() => setCard(true)} testid="whisper-rep" />}
+        </p>
+      )}
+      <ul className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto rounded-control border border-holo-faint bg-panel/50 p-2.5" data-testid="chat-lines">
         {lines.length === 0 && <li className="text-sm text-ink-3">{target ? `Nothing whispered with ${target.name} yet.` : 'Nobody has said anything yet.'}</li>}
         {lines.map((l) => (
           <ChatLine key={l.id} line={l} view={view} />
         ))}
+        {to && <DealsInThread other={to} />}
         <li ref={end} aria-hidden />
       </ul>
       {to === null && (
@@ -137,11 +182,12 @@ export function Chat() {
         </div>
       )}
       <form
-        className="flex shrink-0 gap-2"
+        className="flex shrink-0 gap-1.5"
         onSubmit={(e) => {
           e.preventDefault();
           send();
         }}
+        data-testid="chat-form"
       >
         <input
           value={text}
@@ -149,11 +195,29 @@ export function Chat() {
           maxLength={280}
           placeholder={target ? `Whisper to ${target.name}` : 'Say something to everyone'}
           className="h-11 min-w-0 flex-1 rounded-control border border-holo-line bg-panel px-3 text-ink outline-none placeholder:text-ink-3 focus:border-holo"
+          data-testid="chat-input"
         />
-        <Button size="md" type="submit" disabled={!text.trim()}>
+        {target && planning && (
+          <Button
+            size="md"
+            variant="outline"
+            type="button"
+            className="shrink-0 px-2.5"
+            disabled={waiting}
+            title={waiting ? `${target.name} has not answered your last card` : undefined}
+            aria-label={`Offer ${target.name} a deal card`}
+            onClick={() => setComposing({ to: target.id })}
+            data-testid="add-deal"
+          >
+            + Deal
+          </Button>
+        )}
+        <Button size="md" type="submit" className="shrink-0 px-3" disabled={!text.trim()} data-testid="chat-send">
           Send
         </Button>
       </form>
+      {composing && <DealComposerSheet to={composing.to} kind={composing.kind} onClose={() => setComposing(null)} anchor={root.current} />}
+      {card && target && <PlayerCard view={view} id={target.id} me={me.id} anchor={root.current} onClose={() => setCard(false)} />}
     </div>
   );
 }
