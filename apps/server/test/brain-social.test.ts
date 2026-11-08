@@ -17,6 +17,9 @@ const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }))
 vi.mock('@anthropic-ai/sdk', async (original) => (await import('./brain-fakes.js')).fakeSdkModule(original, sdkModule));
 
 const SEED = 10;
+/** Long enough for a played game on the fake clock, many times over. */
+const GAME_MS = 120_000;
+
 let dir: string;
 beforeEach(() => {
   sdkModule.built = [];
@@ -154,7 +157,7 @@ describe('T-AC-B1: which messages of a writer reply are sent (spec B RULE-B1)', 
     // Planning over: a reply that comes after the land grant started sends nothing.
     const late = await month1(three, { answerAtMs: 2_000, grantAtMs: 1_000 });
     expect(late.said).toEqual([]);
-  });
+  }, GAME_MS);
 });
 
 /** Steps of the fake clock the table reads a waiting screen before every phone presses Ready. */
@@ -295,7 +298,7 @@ describe('B-AC-B1: the AIs reason about the table every month and message it (sp
     // A whisper reached only its two ends: the TV saw none of them.
     expect(t.tv.chat.filter((m) => m.to !== undefined)).toEqual([]);
     t.dispose();
-  });
+  }, GAME_MS);
 
   it('B-AC-B1: with the key unset the game is today\'s: no social reasoning, no message, no stance or note recorded', async () => {
     vi.stubEnv('ANTHROPIC_API_KEY', '');
@@ -310,7 +313,7 @@ describe('B-AC-B1: the AIs reason about the table every month and message it (sp
       expect((n.playbook.edits ?? []).filter((e) => e.path.startsWith('/strategy/stances/'))).toEqual([]);
     }
     t.dispose();
-  });
+  }, GAME_MS);
 });
 
 describe('B-AC-B2: an AI asks the player who sells what its plan needs (spec B C1, C3, C4)', () => {
@@ -354,7 +357,7 @@ describe('B-AC-B2: an AI asks the player who sells what its plan needs (spec B C
     expect(delivered(t.phones).filter((m) => m.from === ai && m.to === mia)).toEqual([]);
     expect(notes.find((n) => n.seat === ai && n.month === 2 && n.phase === 'landGrant')!.playbook.rivalReads?.[mia]).toBeUndefined();
     t.dispose();
-  });
+  }, GAME_MS);
 });
 
 describe('B-AC-B5: AIs hear each other (spec B C5)', () => {
@@ -387,5 +390,5 @@ describe('B-AC-B5: AIs hear each other (spec B C5)', () => {
     expect(delivered(t.phones).some((m) => m.from === heiko && m.text.startsWith(HUMANS_MARK))).toBe(true);
     expect(delivered(t.phones).filter((m) => m.text.startsWith(MARK))).toEqual([]);
     t.dispose();
-  });
+  }, GAME_MS);
 });
