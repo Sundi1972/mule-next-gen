@@ -75,16 +75,21 @@ export const TV_MONTH_END_NEWS_CONSIDERED = {
 } as const;
 
 /**
- * The Sheriff month (?path=sheriff, mock-hub-tabs' de7da350, its news lines in), each beat sampled every 0.5 s on solo.html?beat=: the
- * lowest scale it showed (production's rail changes through the show), at 2 / 4 / 6 seats (2 = Lena and Brix here).
+ * The Sheriff month (?path=sheriff, mock-hub-tabs' b25a4abf: its news lines, and month 6's ledger with the fine in and the
+ * victim's half out), each beat on solo.html?beat=, at 2 / 4 / 6 seats (2 = Lena and Brix here). `fit` is the lowest
+ * scale the beat holds. Production's rail changes through the show, so its two beats were read every frame over the
+ * whole show (45 s): each step holds about 1.5 s at `fit`, and as the rail re-fits it passes, for about 0.1 s (7 frames),
+ * through the lower scales in `dip` (the lowest of two runs; a dip moves by up to 0.008 between runs). Every dip is above the floor too. A 0.5 s sample catches a dip only sometimes
+ * (693dad07 recorded two of them as the 4-seat values).
  * WS8's layer sits out of flow over the map: the guard's shield and the dark plot measured 0.0 px off Brix's Food plot's
  * centre, every size. The investigation's moment showed for its 8 s at the same scale as after it.
  */
-export const TV_FIT_SHERIFF: Record<string, { beat: string; fit: BySeats }> = {
-  productionCaught: { beat: 's2-caught', fit: { 2: 0.973, 4: 0.884, 6: 0.788 } },
+export const TV_FIT_SHERIFF: Record<string, { beat: string; fit: BySeats; dip?: BySeats }> = {
+  productionCaught: { beat: 's2-caught', fit: { 2: 0.973, 4: 0.923, 6: 0.788 }, dip: { 2: 0.932, 4: 0.882, 6: 0.76 } },
   fineSet: { beat: 's3-fined', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
+  /** Wealth note “fund 311 cr · paid out 574”: the fine in, the victim’s 75 in the paid-out total. */
   monthEndFine: { beat: 's3-month-end', fit: { 2: 0.826, 4: 0.708, 6: 0.768 } },
-  productionDark: { beat: 's4-dark', fit: { 2: 0.93, 4: 0.851, 6: 0.758 } },
+  productionDark: { beat: 's4-dark', fit: { 2: 0.93, 4: 0.882, 6: 0.758 }, dip: { 2: 0.897, 4: 0.856, 6: 0.741 } },
   /** Solved and cold alike; the moment's scale equals its folded state's. */
   investigation: { beat: 's4-solved', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
   guarding: { beat: 's1-guarded', fit: { 2: 0.896, 4: 0.85, 6: 0.793 } },
