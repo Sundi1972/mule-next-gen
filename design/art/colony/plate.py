@@ -198,8 +198,8 @@ for c in range(N):
 
 # lamps. Heads and posts only on the outer apron, where every walkway meets it: no place layer can cover them there.
 # Each inner crossing is the near corner of the place behind it, whose building layer would cover a lamp head, so
-# there the plate keeps only the lamp's warm pool (a light with no head; dusk and glow). Inner heads: a per-row front
-# overlay in the compositor, a follow-up.
+# there the plate keeps only the lamp's warm pool (a light with no head; dusk and glow). The inner heads are lamp.py's
+# sprite, which the page stands at each inner crossing in depth order (spec AM-9).
 lines = [-G + SL * k for k in range(1, N)]
 LAMP = float(os.environ.get("COLONY_PLATE_LAMP", "110"))  # W per lamp; env for calibration runs only
 # a head-less pool at each inner crossing. Lower than a lamp: inside the 5 x 5 every place has four round it, and at

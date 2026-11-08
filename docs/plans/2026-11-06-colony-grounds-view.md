@@ -291,6 +291,21 @@ human are dropped; Mixamo is not used (licence). Builds on Task 2.2c (#776): the
   907,390 B, dusk 807,718 B. Generated art, no review. **MERGED** → aeab42013.
 - Trunk: #797 on trunk as 6c0f8cd4 (batch 95); #808 (head 05cef333 = aeab42013 + trunk, CI green) in batch 96, PR #809.
 
+### Task 2.2e: T-AC-16 — a lamp at every inner crossing (C2, C4; spec AM-9)
+
+**Why:** the plate keeps lamp heads to its outer apron (`plate.py`: a building layer drawn later would cover a head
+baked in at an inner crossing), so look.html's lit lamps between the buildings were missing. **Files:**
+`design/art/colony/lamp.py` (renders `kits.lamp` in a 320×288 cell, foot (24,216), on a solid catcher; glow = the globe),
+`lamp_publish.py` (WebP, the manifest's `lamp` entry), `publish.sh` (keeps it), `packages/ui/src/grounds/pick.ts`
+(`LampEntry`), `ColonyGrounds.tsx` (`crossingsOf`, `CrossingLamp`, in `WalkingScene`'s depth list),
+`packages/ui/test/grounds-lamps.test.tsx`.
+- [x] Size the cell from a 16-sample render (lamp +272/−13 px across, −200/+65 down from the foot); final 128 samples, edges ≤ 9/255.
+- [x] Test first, `T-AC-16`: every inner crossing but one under a 2×2 building; foot on the crossing at the walker's
+  scale; after the place behind, before the place in front; glow at dusk at the plate's opacity; none without the entry.
+  Red 92b20fccd (4 of 5, the placement test guarded against an empty list). Mutants (no skip under a block, lamps
+  late) each fail one test; "glow by day" was equivalent (its opacity is 0 by day), so the redundant check is gone.
+- [x] B-AC-5: phone heaviest colony 908,459 B day, 808,447 B dusk (+1,069 / +729 B).
+
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
 **Files:** `apps/web/src/phone/hub/politics/Colony.tsx::ColonyWithFacts` (one line above `ColonyDeskCard`); test: extend `apps/web/test/politics-desks.test.ts`.
@@ -474,7 +489,8 @@ The plate-404 browser check (`apps/web/e2e/grounds-opener.ts`, 18913ebd, WS4 OK)
 
 ## Follow-ups (after the 8 Nov play-test; none blocks #535)
 
-- **Inner lamp heads** (the lamps' heads read unlit close up) and **far-to-near shadows** across neighbouring layers.
+- **Far-to-near shadows** across neighbouring layers.
+- **Inner lamp heads** → Task 2.2e (8 Nov).
 - **Task 2.2b** smoke and haze — mock first (above), build after the PM's OK.
 - **WS4's SHOULD:** poll for the plate request in `apps/web/e2e/grounds-opener.ts` rather than a fixed wait (WS4's file).
 - **WS4:** `apps/web/e2e/colony.ts` takes 364 s against the 360 s watchdog. Checked 8 Nov: the watchdog is CI-only
