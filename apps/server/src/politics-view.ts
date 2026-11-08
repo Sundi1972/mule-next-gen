@@ -4,6 +4,7 @@ import {
   canRun,
   ceremonyBeats,
   fineable,
+  GOODS,
   goodWords,
   guardsMax,
   isElectionDone,
@@ -197,8 +198,7 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
     promised: structuredClone(promisedVotes(state, playerId)),
-    // Omitted with sabotage off, so a game that plays without it sends a phone nothing new (the pinned rows).
-    ...(POLITICS.sabotage.on ? { sabotage: mySabotageView(state, playerId) } : {}),
+    sabotage: mySabotageView(state, playerId),
     ...sheriffDesk(state, playerId),
     ...(p.governor === playerId && state.phase === 'planning' && !votesOpen(state) ? { candidates: candidates(state) } : {}),
   };
@@ -340,6 +340,24 @@ function howOf(state: GameState, order: SabotageOrder): IncidentView['how'] {
   return order.outcome === 'caught' ? 'caught' : 'investigation';
 }
 
+/**
+ * The crop a power cut hit: the one the engine recorded when the order resolved. Only a pending order, which only its
+ * orderer sees, reads the plot's outfit now. Null when it cannot be told (the plot lost its MULE since): the words and
+ * the views then say "plot" and name no crop, and nothing here may throw.
+ */
+function cutGood(state: GameState, order: SabotageOrder): Good | null {
+  if (order.good) return order.good;
+  if (order.outcome !== 'pending' || order.target.kind !== 'powerCut') return null;
+  const outfit = state.tiles[order.target.tile]?.outfit;
+  return outfit && (GOODS as readonly string[]).includes(outfit) ? (outfit as Good) : null;
+}
+
+/** "Ossa's Food plot", or "Ossa's plot" when the crop is unknown. */
+function plotWords(state: GameState, order: SabotageOrder, nameOf: (seatId: string) => string): string {
+  const good = cutGood(state, order);
+  return `${nameOf(order.victim!)}'s ${good ? `${capital(goodWords(good))} ` : ''}plot`;
+}
+
 /** One order as `viewerId` sees it, or null when they may see none of it. */
 function incidentView(state: GameState, order: SabotageOrder, viewerId: string | null): IncidentView | null {
   if (orderSight(order, viewerId) === 'none') return null;
@@ -351,7 +369,8 @@ function incidentView(state: GameState, order: SabotageOrder, viewerId: string |
     kind: target.kind,
     victim: order.victim ?? null,
     at: tile && { x: tile.x, y: tile.y },
-    good: target.kind === 'rumour' ? target.good : (tile!.outfit as Good),
+    // IncidentView.good is typed Good: with no crop to name it is left out rather than sent as null.
+    good: (target.kind === 'rumour' ? target.good : cutGood(state, order)) as Good,
     ...(target.kind === 'rumour' ? { dir: target.dir } : {}),
     worked: order.worked === true,
     culprit: culpritSeen(order, viewerId) ? order.by : null,
@@ -395,8 +414,8 @@ export function mySabotageView(state: GameState, playerId: string): NonNullable<
 /** The Sheriff's desk: only on the sitting Sheriff's view, and only with sabotage on. */
 function sheriffDesk(state: GameState, playerId: string): Pick<MyPoliticsView, 'sheriff'> {
   if (!POLITICS.sabotage.on || !guardsSeen(state, playerId)) return {};
-  const can = sheriffCanAct(state, playerId);
-  if (can === 'notSheriff') return {};
+  // guardsSeen is the one gate: the sitting Sheriff is the viewer, so 'notSheriff' cannot come back.
+  const can = sheriffCanAct(state, playerId) as Exclude<ReturnType<typeof sheriffCanAct>, 'notSheriff'>;
   const done = state.politics!.sabotage.filter((o) => o.investigated === state.month).length;
   return {
     sheriff: {
@@ -464,7 +483,7 @@ const capital = (words: string): string => words[0]!.toUpperCase() + words.slice
 function aboutOrder(state: GameState, o: SabotageOrder, nameOf: (seatId: string) => string): string {
   const t: SabotageTarget = o.target;
   if (t.kind === 'rumour') return `the ${goodWords(t.good)} rumour`;
-  return `the power cut on ${nameOf(o.victim!)}'s ${capital(goodWords(state.tiles[t.tile]!.outfit as Good))} plot`;
+  return `the power cut on ${plotWords(state, o, nameOf)}`;
 }
 
 /**
@@ -488,7 +507,7 @@ export function sabotageNews(state: GameState, before: readonly SabotageOrder[],
       const { paid, toVictim } = o.fine!;
       lines.push({ text: `${nameOf(o.by!)} was fined ${paid} for sabotage${o.victim && toVictim > 0 ? `; ${toVictim} to ${nameOf(o.victim)}` : ''}.`, who });
     } else if (target.kind === 'powerCut') {
-      const plot = `${nameOf(o.victim!)}'s ${capital(goodWords(state.tiles[target.tile]!.outfit as Good))} plot`;
+      const plot = plotWords(state, o, nameOf);
       if (!culprit) lines.push({ text: `Sabotage: someone cut the power to ${plot}.`, who });
       else if (eventOf(state, o)?.sabotage?.guarded) lines.push({ text: `Caught! ${culprit} tried to cut the power to ${plot}; a guard stopped it.`, who });
       else lines.push({ text: `Caught! ${culprit} ${o.worked ? 'cut' : 'tried to cut'} the power to ${plot}.`, who });
