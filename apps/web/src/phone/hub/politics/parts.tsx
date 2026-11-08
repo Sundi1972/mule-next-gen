@@ -220,7 +220,8 @@ const dialogs: object[] = [];
 /**
  * A dialog's keyboard, as the lobby's dialogs keep it: Escape closes it when it is on top; on open the element `first`
  * finds takes the focus (by default its button marked `data-autofocus`), and on close the focus goes back to the element
- * that had it. Put the returned ref on the dialog's box.
+ * that had it. If that element is gone (a tab switch unmounted it) or off (+ Deal after a send), the open tab takes the
+ * focus instead, as ARIA tabs do. Put the returned ref on the dialog's box.
  */
 export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefObject<HTMLDivElement> {
   const box = useRef<HTMLDivElement>(null);
@@ -233,7 +234,8 @@ export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefO
     box.current?.querySelector?.<HTMLElement>(first)?.focus?.();
     return () => {
       dialogs.splice(dialogs.indexOf(self), 1);
-      opener?.focus?.();
+      const back = opener?.isConnected && opener.getAttribute('disabled') === null ? opener : document.querySelector?.<HTMLElement>('[role=tab][aria-selected=true]');
+      back?.focus?.();
     };
   }, [self, first]);
   return box;
