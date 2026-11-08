@@ -984,6 +984,12 @@ describe('AI seats in the election', () => {
   });
 
   it('T-AC-6 (server) · C8: an AI Governor sets the tax in planning, and the screens get it', () => {
+    // S5-PR-3 pin: this row predates the AI's overrule calls; an AI seat's call would hold planning for its ballot.
+    const savedMinGain = POLITICS.ai.overrule.minGain;
+    POLITICS.ai.overrule.minGain = Infinity;
+    onTestFinished(() => {
+      POLITICS.ai.overrule.minGain = savedMinGain;
+    });
     // RULE-8 from a 5% start: a step of at most 5 toward the persona's target (cautious 4, aggressive 8, saboteur 10), +2 when the fund is low, inside the month's bounds.
     const month1: Record<string, number> = { acc: 4, nbr: 4, spender: 8, grudge: 10 };
     const month2LowFund: Record<string, number> = { acc: 6, nbr: 6, spender: 10, grudge: 12 };
@@ -1039,6 +1045,12 @@ describe('AI seats in the election', () => {
   });
 
   it("T-AC-6 (server) · C8: an AI Governor's tax lands that month even when every human presses ready the moment planning proper starts", () => {
+    // S5-PR-3 pin: this row predates the AI's overrule calls; an AI seat's call would hold planning for its ballot.
+    const savedMinGain = POLITICS.ai.overrule.minGain;
+    POLITICS.ai.overrule.minGain = Infinity;
+    onTestFinished(() => {
+      POLITICS.ai.overrule.minGain = savedMinGain;
+    });
     const g = started({ seed: 1, seats: aiTable, phaseScale: 0.1 });
     setMoney(g.game, { lena: 0, acc: 1_000, spender: 1_000, grudge: 1_000 });
     engineOf(g.game).treasury.money = 10_000;
