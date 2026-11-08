@@ -5,6 +5,7 @@
 import {
   analysisSeconds,
   DEVELOPMENT,
+  fineStepsWords,
   LOTS,
   GAME,
   MULE,
@@ -54,6 +55,10 @@ export type IntentType =
   | 'offerDeal'
   | 'withdrawDeal'
   | 'answerDeal'
+  | 'sabotage'
+  | 'guard'
+  | 'investigate'
+  | 'fine'
   | 'continue'
   | 'steer'
   | 'act';
@@ -300,7 +305,7 @@ export const MOVES: MoveTable = {
       refused("candidates are open: not from the ballot until the result, nor in an election month's announce after month 1", 'Candidates are closed until the result'),
       refused(`for Governor, you have not served ${POLITICS.maxGovernorTermsInRow} Governor terms in a row`, `${POLITICS.maxGovernorTermsInRow} Governor terms in a row`),
       refused(`the office is one that is elected: ${POLITICS.offices.join(', ')}`, 'The <office> is not elected yet'),
-      refused('a Sheriff run carries no promise', 'Sheriff candidates make no promise yet'),
+      refused('a Sheriff run carries no promise', 'Sheriff candidates make no promise'),
       refused(`a cap promise is a whole ${TAX_MIN}% to ${TAX_MAX}%`, `A tax promise is ${TAX_MIN}% to ${TAX_MAX}%`),
       refused('a Governor run carries a promise', 'Pick a promise to run for Governor'),
     ],
@@ -549,6 +554,78 @@ export const MOVES: MoveTable = {
     args: [
       { name: 'id', kind: 'enum', values: ["the card's id, 'deal-…'"] },
       { name: 'accept', kind: 'boolean' },
+    ],
+  },
+  sabotage: {
+    type: 'sabotage',
+    command: 'sabotage',
+    phases: ['planning'],
+    does: () =>
+      "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning', 'Orders are given in planning'),
+      refused("a power cut names another player's plot", "Pick another player's plot"),
+      refused('that plot has a MULE making a good', 'That plot makes nothing to cut'),
+      refused('a rumour names a good', 'Pick a good'),
+      refused('a rumour moves its price up or down', 'A rumour moves a price up or down'),
+      refused('you can pay the crew', 'A crew costs <cost> cr; you have <money>'),
+    ],
+    cost: null,
+    args: [
+      { name: 'target', kind: 'enum', values: ["{ kind: 'powerCut', tile }", "{ kind: 'rumour', good, dir: 'up' | 'down' }", 'null to withdraw'] },
+    ],
+  },
+  guard: {
+    type: 'guard',
+    command: 'guard',
+    phases: ['planning'],
+    does: () => "The Sheriff posts the whole list of plots guarded this month (any owner's); a guarded plot's cut always fails and names its saboteur. It replaces the earlier list.",
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning and the votes are over', 'Guards are posted once the votes are over'),
+      refused('you are the Sheriff', 'Only the Sheriff posts guards'),
+      refused("every plot is a player's", "Guards watch players' plots"),
+      refused('you guard no more plots than the limit', 'You have <count> guards'),
+    ],
+    cost: null,
+    args: [{ name: 'tiles', kind: 'plot' }],
+  },
+  investigate: {
+    type: 'investigate',
+    command: 'investigate',
+    phases: ['planning'],
+    does: () => 'The Sheriff investigates one public incident whose culprit is unknown; it may name the culprit or go cold. One investigation a month.',
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning and the votes are over', 'Investigations are made once the votes are over'),
+      refused('you are the Sheriff', 'Only the Sheriff investigates'),
+      refused('you have not investigated this month', 'One investigation a month'),
+      refused('the incident is public', 'No such incident'),
+      refused('its culprit is not yet known', 'That one is solved'),
+      refused('it has not been investigated before', 'The trail went cold on that one'),
+    ],
+    cost: null,
+    args: [{ name: 'order', kind: 'enum', values: ["the incident's order id, 'sab-…'"] }],
+  },
+  fine: {
+    type: 'fine',
+    command: 'fine',
+    phases: ['planning'],
+    does: () => 'The Sheriff fines a revealed culprit once; the base is multiplied by any sabotage ban and shared with the victim.',
+    legalWhen: () => [
+      refused('the game plays with sabotage', 'This game plays without sabotage'),
+      refused('it is planning and the votes are over', 'Fines are levied once the votes are over'),
+      refused('you are the Sheriff', 'Only the Sheriff fines'),
+      refused('the culprit is revealed', 'Only a revealed culprit is fined'),
+      refused('the case is not yet fined', 'Already fined'),
+      refused('the culprit is not you', "You can't fine yourself"),
+      refused(`the amount is ${POLITICS.sheriff.fine.steps[0]} to ${POLITICS.sheriff.fine.steps.at(-1)} in steps of ${POLITICS.sheriff.fine.steps[1]! - POLITICS.sheriff.fine.steps[0]!}`, fineStepsWords()),
+    ],
+    cost: null,
+    args: [
+      { name: 'order', kind: 'enum', values: ["the incident's order id, 'sab-…'"] },
+      { name: 'amount', kind: 'number', values: POLITICS.sheriff.fine.steps.map(String) },
     ],
   },
 };
