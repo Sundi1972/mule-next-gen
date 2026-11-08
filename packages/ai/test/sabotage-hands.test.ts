@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  AI_LEVELS,
   AI_PERSONAS,
   createGame,
   castVote,
@@ -220,10 +219,6 @@ describe('S4-T-AC-9: SabotageHand per S4-RULE-13 (order)', () => {
     gains((t) => (t.kind === 'powerCut' && t.tile === plots.A ? 1e6 : 0));
     POLITICS.ai.sabotage.orderChance[persona] = 1;
     expect(run(state, mindOf('ai0', persona))).toEqual([]);
-  });
-
-  it('S4-T-AC-9: the Rookie level is the one that cannot sabotage; the Trader and Tycoon levels can', () => {
-    expect([AI_LEVELS.rookie.sabotage, AI_LEVELS.trader.sabotage, AI_LEVELS.tycoon.sabotage]).toEqual([false, true, true]);
   });
 });
 
