@@ -439,7 +439,7 @@ describe("the phone's month end (S3-C20)", () => {
     mount(monthEnd([vote, pact, earlier]), () => createElement(Results));
 
     expect(text('broken-cards')).toContain('Broken this month · in public');
-    expect(allTestids('broken-deal-'), "month 2's broken cards, and only those").toEqual(['broken-deal-v2', 'broken-deal-p2']);
+    expect(allTestids('broken-deal-').filter((id) => !/-(words|drop)$/.test(id)), "month 2's broken cards, and only those").toEqual(['broken-deal-v2', 'broken-deal-p2']);
     expect(text('broken-deal-v2-words')).toBe('Brix broke a promise to Kai Lee: a vote for Kai · AI');
     expect(text('broken-deal-v2-drop')).toBe(`−${-POLITICS.reputation.moves.voteBroken}`);
     expect(text('broken-deal-p2-words'), 'the computer seat that broke it is marked').toBe('Kai · AI broke a pact with Lena');
