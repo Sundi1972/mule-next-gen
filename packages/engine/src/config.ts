@@ -15,7 +15,8 @@ export interface GoodConfig {
 }
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
-  food: { refPrice: 30, spoilage: 0.5 },
+  /** Food spoils a quarter a month in a player's stock (needs C16; Heiko, 6 Nov); the store's at PRICE.storeSpoilage of that. */
+  food: { refPrice: 30, spoilage: 0.25 },
   water: { refPrice: 25, spoilage: 0.05 },
   energy: { refPrice: 25, spoilage: 0.25 },
   smithore: { refPrice: 50, spoilage: 0 },

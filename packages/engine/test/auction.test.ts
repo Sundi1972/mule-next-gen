@@ -171,10 +171,10 @@ describe('the live auction: goods one at a time', () => {
     });
     startAuction(state, ['food']);
     const row = a(state).status.find((r) => r.id === 'p0')!;
-    // The need to hold: 2 eaten at upkeep, plus 4 so that 2 are left after half spoils (auctionNeed).
-    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 6 });
-    // Upkeep eats 2 first; half of the other 5 spoils, rounded in the player's favour.
-    expect(row.spoils).toBe(3);
+    // The need to hold: 2 eaten at upkeep, plus 3 so that 2 are left after a quarter spoils (auctionNeed; needs C16).
+    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 5 });
+    // Upkeep eats 2 first; a quarter of the other 5 spoils: 3.75 kept, rounded down, so 2 are lost.
+    expect(row.spoils).toBe(2);
     expect(a(state).status.find((r) => r.id === 'p1')).toMatchObject({ had: 4, made: 0, now: 0, used: 4 });
   });
 
@@ -378,11 +378,11 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody buys' }]);
   });
 
-  it("FM-skip-spoilage: Food is what upkeep eats now plus what survives to next month's development: a seat with no crew eats 2 and must hold 6", () => {
+  it("FM-skip-spoilage: Food is what upkeep eats now plus what survives to next month's development: a seat with no crew eats 2 and must hold 5", () => {
     const state = energyTable(0, 0);
     expect(needsOf(state, 'p0').food, 'the household alone').toBe(2);
-    // 2 eaten at the month end; 4 halve to the 2 next month's development checks for.
-    expect(auctionNeed(state, 'p0').food).toBe(6);
+    // 2 eaten at the month end; 3 lose a quarter to the 2 next month's development checks for (needs C16).
+    expect(auctionNeed(state, 'p0').food).toBe(5);
   });
 
   /** p0 works the given outfits; every seat holds `water` Water (or its own drink, if less), and the store wants no Water. */
