@@ -219,7 +219,7 @@ const outfitOf = (good: string) => GOODS.find((g) => GOOD_NAME[g] === good)!;
  * draft's first MULE is a choice the hands weigh against keeping the cash.
  */
 const withEnergyPlant = (t: ReturnType<typeof table>) => {
-  const plant = t.state.tiles.findIndex((tile) => tile.terrain === 'plains' && tile.owner === null && !tile.isStore);
+  const plant = t.state.tiles.findIndex((tile) => tile.terrain === 'plains' && tile.owner === null);
   Object.assign(t.state.tiles[plant]!, { owner: 'p0', outfit: 'energy' });
 };
 
