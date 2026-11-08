@@ -277,6 +277,16 @@ describe('S4-B-AC-11 (engine leg): what another seat sees of the bounty', () => 
   });
 });
 
+describe('S4-T-AC-17 (list order): a list is refused by the first row that matches over the whole list', () => {
+  it('S4-T-AC-17: [unowned, own] and [own, unowned] both give the own-plot words', () => {
+    const { state, own, bare, food } = monthOf();
+    for (const list of [[bare, own], [own, bare], [food, bare, own], [own, food, bare]]) {
+      expect(refusalOf(() => setGuards(state, 'ossa', list)), JSON.stringify(list)).toBe("You can't guard your own plots");
+    }
+    expect(refusalOf(() => setGuards(state, 'ossa', [food, bare]))).toBe("Guards watch players' plots");
+  });
+});
+
 describe('S4-T-AC-21: the sitting Sheriff does not sabotage (AM-11 item 5)', () => {
   const cutOn = (tile: number) => ({ kind: 'powerCut' as const, tile });
   const rumour = { kind: 'rumour' as const, good: 'food' as const, dir: 'up' as const };
@@ -288,6 +298,7 @@ describe('S4-T-AC-21: the sitting Sheriff does not sabotage (AM-11 item 5)', () 
     expect(canOrder(state, 'lena')).toBe(true);
     expect(refusalOf(() => orderSabotage(state, 'ossa', cutOn(food)))).toBe("The Sheriff can't order sabotage");
     expect(refusalOf(() => orderSabotage(state, 'ossa', rumour))).toBe("The Sheriff can't order sabotage");
+    expect(refusalOf(() => orderSabotage(state, 'ossa', null)), 'a withdrawal is refused too').toBe("The Sheriff can't order sabotage");
     expect(state.politics).toEqual(before);
     // The off and not-planning rows come first.
     state.phase = 'auction';
@@ -313,10 +324,13 @@ describe('S4-T-AC-21: the sitting Sheriff does not sabotage (AM-11 item 5)', () 
       runFor(state, 'ossa', 'sheriff');
       orderSabotage(state, 'ossa', { kind: 'powerCut', tile: free[0]! });
       orderSabotage(state, 'lena', { kind: 'powerCut', tile: free[0]! });
-      expect(orders(state)).toHaveLength(2);
+      // An earlier month's resolved order of Ossa's is history and stays; only this month's pending one goes.
+      const old: SabotageOrder = { id: 'sab-old001', by: 'ossa', month: state.month - 1, target: { kind: 'rumour', good: 'food', dir: 'up' }, cost: 0, outcome: 'done', culpritPublic: false, victim: null, worked: true };
+      state.politics = { ...state.politics!, sabotage: [old, ...orders(state)] };
+      expect(orders(state)).toHaveLength(3);
       advancePhase(state);
       expect(state.politics!.sheriff).toBe('ossa');
-      expect(orders(state).map((o) => o.by)).toEqual(['lena']);
+      expect(orders(state).map((o) => [o.by, o.id])).toEqual([['ossa', 'sab-old001'], ['lena', expect.any(String)]]);
       expect(moneyOf(state, 'ossa')).toBe(1_000);
     } finally {
       POLITICS.offices = saved;

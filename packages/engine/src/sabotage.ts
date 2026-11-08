@@ -114,10 +114,12 @@ function refusal(state: GameState, playerId: string, words: { votes: string; she
   return new RuleError(can === 'notSheriff' ? words.sheriff : words.votes);
 }
 
+const OWN_PLOT = "You can't guard your own plots";
+
 /** Whether the Sheriff may guard this tile, or the refusal's words: a plot of another player's only (S4-RULE-6 rows 4-5, AM-11). */
 export function canGuard(state: GameState, playerId: string, tile: number): true | string {
   const owner = state.tiles[tile]?.owner ?? null;
-  if (owner === playerId) return "You can't guard your own plots";
+  if (owner === playerId) return OWN_PLOT;
   return owner === null ? "Guards watch players' plots" : true;
 }
 
@@ -126,10 +128,10 @@ export function setGuards(state: GameState, playerId: string, tiles: number[]): 
   const refused = refusal(state, playerId, { votes: 'Guards are posted once the votes are over', sheriff: 'Only the Sheriff posts guards' });
   if (refused) throw refused;
   const plots = [...new Set(tiles)];
-  for (const tile of plots) {
-    const can = canGuard(state, playerId, tile);
-    if (can !== true) throw new RuleError(can);
-  }
+  // First match wins over the whole list (S4-RULE-6): every own plot is refused before any unowned one, whatever the order listed.
+  const refusals = plots.map((tile) => canGuard(state, playerId, tile)).filter((can) => can !== true);
+  const first = refusals.find((can) => can === OWN_PLOT) ?? refusals[0];
+  if (first !== undefined) throw new RuleError(first);
   const max = guardsMax(state);
   if (plots.length > max) throw new RuleError(`You have ${max} guards`);
   edit(state).guards = plots;
