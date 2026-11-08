@@ -352,6 +352,8 @@ export interface IncidentView {
   how: 'guard' | 'caught' | 'investigation' | null;
   investigated: boolean;
   fine: { due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard' } | null;
+  /** The Sheriff's bounty for naming this culprit, by a guard or an investigation (slice 4 AM-11); null for none. Optional only for older fixtures. */
+  bounty?: { to: string; paid: number } | null;
 }
 
 /** The colony budget as every screen sees it (slice 5). */
@@ -429,6 +431,8 @@ export interface MyPoliticsView {
     guards: number[];
     max: number;
     investigationsLeft: number;
+    /** Tile indices this Sheriff may guard now (canGuard, slice 4 AM-11): players' plots, never the Sheriff's own. Optional only for older fixtures. */
+    guardable?: number[];
     /** Order ids this Sheriff may fine. */
     fineable: string[];
     /** The fine bases allowed. */
@@ -535,7 +539,10 @@ export interface PoliticsView {
   sabotage?: {
     terms: Record<SabotageTarget['kind'], { cost: number; success: number; detect: number }>;
     incidents: IncidentView[];
-    sheriff: { guards: number; investigations: number; investigationsLeft: number };
+    /** bounty: credits the Sheriff gets from the fund for each culprit a guard or an investigation names (POLITICS.sheriff.bounty, slice 4 AM-11). Optional only for older fixtures. */
+    sheriff: { guards: number; investigations: number; investigationsLeft: number; bounty?: number };
+    /** The sitting Sheriff's record this term: culprits caught by a guard, investigations solved (slice 4 AM-11). Shown for the outgoing Sheriff on election day; where the guards stood is never sent. null with no Sheriff. Optional only for older fixtures. */
+    sheriffRecord?: { caught: number; solved: number } | null;
   } | null;
   /** The colony budget (slice 5); null with politics off. Optional only for older fixtures. */
   budget?: BudgetView | null;
