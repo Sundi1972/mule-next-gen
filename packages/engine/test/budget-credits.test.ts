@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { budgetCredits, COLONY, createGame, lineCredits, lineMaxCredits, POLITICS, spare, spareOf } from '../src/index.js';
 
 describe('S5-RULE-3: what a share pays at a fund', () => {
-  it('S5-RULE-3: spareOf is the fund above the reserve, and 0 at or below it', () => {
+  it('S5-RULE-3: spareOf is the fund above the reserve, and 0 at or below it', () => { // trace-allow: S5-RULE-3 is a rule id; the AC that proves the ledger is S5-T-AC-2 in colony-budget.test.ts, and these pin the two pure helpers it now calls
     expect(spareOf(COLONY.reserve + 437)).toBe(437);
     expect(spareOf(COLONY.reserve)).toBe(0);
     expect(spareOf(COLONY.reserve - 1)).toBe(0);
     expect(spareOf(0)).toBe(0);
   });
 
-  it('S5-RULE-3: lineCredits is the share of the spare, floored, capped by the line; Projects has no credit cap', () => {
+  it('S5-RULE-3: lineCredits is the share of the spare, floored, capped by the line; Projects has no credit cap', () => { // trace-allow: S5-RULE-3 is a rule id; the AC that proves the ledger is S5-T-AC-2 in colony-budget.test.ts, and these pin the two pure helpers it now calls
     expect(lineCredits('projects', 60, 1000)).toBe(600);
     expect(lineCredits('projects', 33, 100)).toBe(33);
     expect(lineCredits('projects', 15, 7)).toBe(1);
@@ -20,7 +20,7 @@ describe('S5-RULE-3: what a share pays at a fund', () => {
     expect(lineCredits('projects', 100, 100_000)).toBe(100_000);
   });
 
-  it('S5-RULE-3: budgetCredits and spare are the same figures lineCredits and spareOf give', () => {
+  it('S5-RULE-3: budgetCredits and spare are the same figures lineCredits and spareOf give', () => { // trace-allow: S5-RULE-3 is a rule id; the AC that proves the ledger is S5-T-AC-2 in colony-budget.test.ts, and these pin the two pure helpers it now calls
     const state = createGame({ seed: 7, players: ['a', 'b', 'c'].map((id) => ({ id, name: id, isAi: false })) });
     state.treasury.money = COLONY.reserve + 1234;
     expect(spare(state)).toBe(spareOf(state.treasury.money));

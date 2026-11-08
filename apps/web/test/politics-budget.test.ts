@@ -332,7 +332,7 @@ describe('S5-B-AC-3 (component): the overrule ballot and its reveal', () => {
 });
 
 describe('S5-C10: the sub-tabs carry the budget and the overrule', () => {
-  it('S5-C10: Budget is a sub-tab for every seat while politics plays', () => {
+  it('S5-C10: Budget is a sub-tab for every seat while politics plays', () => { // trace-allow: S5-C10 is a spec change id, the sub-tab wiring has no AC id of its own; S5-B-AC-1 and -3 are proved in the tests above
     const budget = POLITICS_TABS.find((t) => t.id === 'budget')!;
     for (const id of ['s1', 's2']) {
       const game = viewFor(id, politics());
