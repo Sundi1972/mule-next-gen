@@ -454,11 +454,11 @@ today        packages/engine/src/game.ts::startDevelopment sets hungry when stoc
 tomorrow     MUST set hungry from the household's last meal (short of UPKEEP.baseFood at upkeep)
 seam         packages/engine/src/upkeep.ts::runUpkeep (records) · packages/engine/src/game.ts::startDevelopment (reads)
 mechanism    in_place
-owner        WS1 / WS3 (game.ts named edit) · decision for Heiko ("When is a player hungry?")
+owner        WS1 / WS3 (game.ts named edit) · Heiko approved 6 Nov (explainer v3 a28b861b, decision 7: "When is a player hungry?")
 ```
 
 ```
-C16 · MODIFIED (config) · Food spoils a quarter a month in a player's stock, not half — decision for Heiko
+C16 · MODIFIED (config) · Food spoils a quarter a month in a player's stock, not half — Heiko approved 6 Nov (explainer v3, decision 3)
 
 today        GOOD_CONFIG.food.spoilage 0.5 (the store's follows it at PRICE.storeSpoilage)
 tomorrow     0.25, set in the supply pass with the power supply (D6), never alone
@@ -928,8 +928,18 @@ target    §1 C14 (tomorrow); §6 T-AC-24
 said      "the dry-farm halving goes", and T-AC-24 scans that UPKEEP.irrigated and shortOutputShare no longer exist
 did       the halving never runs while AM-18 is on (the default); it stays as the AM-18-off fallback, live only at
           `--set UPKEEP.waterUse.food=0`. T-AC-24 checks that it does not run with AM-18 on, instead of scanning for
-          the names. RULE-12's sW is unchanged
+          the names. RULE-12's sW stays in the formula and reads 0 once the crews' table is Food only (AM-3, PR-6)
 because   since #723 the two values are WS1's AM-18-off fallback; removing them would remove WS1's switch
+goal      G-1 unchanged
+
+AM-5 · 2026-11-08 · WS7 (#802's design-owner review) · two status lines and AM-4's sW sentence made exact
+target    §1 C15 and C16 owner lines; AM-4's last sentence
+said      C15, C16 "decision for Heiko"; AM-4 "RULE-12's sW is unchanged"
+did       C15 and C16 record Heiko's approval (6 Nov 14:35Z, explainer v3 a28b861b, "all the proposed design options",
+          SEAMS); AM-4 says sW stays in RULE-12 and reads 0 once PR-6's Food-only crews' table lands. Until then a crew
+          short of Water is both slowed and, with AM-18 on, turned off: the double count AM-3 forbids, so PR-6 reaches
+          trunk in the same batch as PR-8 (HC-14)
+because   the old lines read as open decisions and as if sW were dropped; the code follows RULE-12 literally, which is right
 goal      G-1 unchanged
 ```
 
