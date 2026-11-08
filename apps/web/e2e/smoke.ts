@@ -18,7 +18,7 @@ import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { makeHungry } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
-import { doneThroughTheElection, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, theMarksStayClearOfTheDots, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doneThroughTheElection, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, theMarksStayClearOfTheDots, theRightColumnChipStaysInItsPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -223,6 +223,8 @@ try {
   ({ page: phone, show: phoneShow } = second);
   ctx = { ...ctx, phone };
   await readyIfStillPlanning(phone);
+  await phone.locator('[data-phase=landGrant]').waitFor({ timeout: READY_MS });
+  console.log(`the right column at the land grant: ${await theRightColumnChipStaysInItsPlot(ctx)}`);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
   // Month 2's clock runs from the start: the phone lets it end the turn.

@@ -506,6 +506,56 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
   }
 }
 
+/** The iPhone SE in landscape, the smallest phone the game supports. */
+const PHONE_SE = { width: 568, height: 320 };
+
+/**
+ * B-AC-9 (MG-2) at the land grant on the iPhone SE: its plots, about 24 px, are the smallest that draw the full dots
+ * chip, and there a right-column special's chip steps left, clear of its badge, only as far as its plot has room. Stages
+ * a special on a right-column plot the seat has analysed, reads its chip against its plot, and puts the plot back.
+ */
+export async function theRightColumnChipStaysInItsPlot(ctx: GameStepContext, seat = 's1'): Promise<string> {
+  const id = `B-AC-9 (WS4, the map's right column at the land grant, ${PHONE_SE.width}×${PHONE_SE.height})`;
+  type Room = { game: { state: GameState }; broadcast(): void };
+  const room = ctx.server.registry.get(ctx.code) as unknown as Room | undefined;
+  check(room, `${id}: a room ${ctx.code} on the server`);
+  const state = room.game.state;
+  const me = state.players.find((p) => p.id === seat);
+  check(me, `${id}: seat ${seat} in the game`);
+  return await ctx.held(async () => {
+    check(state.phase === 'landGrant', `${id}: the step runs in the land grant, not in ${state.phase}`);
+    const edge = state.tiles.find((t) => t.x === state.width - 1 && t.y > 0 && t.y < state.height - 1 && t.terrain !== 'store');
+    check(edge, `${id}: a plot in the map's right column`);
+    const at = `${edge.x}-${edge.y}`;
+    const was = { special: edge.special, outfit: edge.outfit, food: edge.ground.food, analysed: [...me.analysed] };
+    edge.special = edge.special ?? { kind: 'oasis' };
+    edge.outfit = null;
+    edge.ground.food = Math.max(edge.ground.food, 2);
+    const index = edge.y * state.width + edge.x;
+    if (!me.analysed.includes(index)) me.analysed.push(index);
+    room.broadcast();
+    try {
+      await ctx.phone.setViewportSize(PHONE_SE);
+      const map = ctx.phone.locator('[data-phase=landGrant] [data-testid=holo-map]');
+      await map.getByTestId(`map-dots-${at}`).waitFor({ timeout: PRESS_MS });
+      const [[plot] = []] = await rectsOf(map, [`[data-testid=map-plot-${at}]`]);
+      check(plot, `${id}: plot ${at} is drawn`);
+      const width = plot.right - plot.left;
+      check(width >= 24 && width < 26, `${id}: the land grant draws ${px(width)} plots, not the full chip's narrowest (24 to 26 px) this step is for`);
+      const fit = await dotsFitTheirPlots(map, [at], id);
+      return `on ${px(width)} plots the special ${at}'s chip reaches ${px(fit.out)} past its plot's edge, ${fit.chips} chips, none overlapping`;
+    } finally {
+      await ctx.phone.setViewportSize(PHONE.viewport);
+      if (was.special) edge.special = was.special;
+      else delete edge.special;
+      edge.outfit = was.outfit;
+      edge.ground.food = was.food;
+      me.analysed.splice(0, me.analysed.length, ...was.analysed);
+      room.broadcast();
+    }
+  });
+}
+
 /**
  * (c) of theMarksStayClearOfTheDots: Look-selects plot x-y, under a plot showing its dots, at the phone's size now; it
  * draws no pin, its ring's painted band stops within SLACK_PX of those dots, and its glow at half strength stops clear of
