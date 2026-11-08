@@ -77,6 +77,7 @@ export function ReadyBar({ words: given, canReady = true }: { words?: ReadyWords
   const on = (pressed: Press) => () => {
     const next = press(confirm, pressed);
     setConfirm(next.confirm);
+    if (pressed === 'ready') for (const intent of words.first?.() ?? []) client.intent(intent);
     if (next.intent) client.intent(next.intent);
   };
 
