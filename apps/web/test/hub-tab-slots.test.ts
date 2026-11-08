@@ -1,7 +1,8 @@
 import type { ComponentType } from 'react';
 import { describe, expectTypeOf, it } from 'vitest';
 import type { Now } from '../src/phone/Shell';
-import type { AgendaSlot, BannerSlot, Door, HubSeat, MapToolSlot, PlotPickSlot, ReadyBarWords, StageSlot, SubTabSlot, TabHubPlace, TabHubSlots, TabId, TabSlot } from '../src/phone/hub/slots';
+import type { HubNav } from '../src/phone/hub/Hub';
+import type { AgendaSlot, BannerSlot, Door, HubSeat, MapToolSlot, PlotPickSlot, ReadyBarWords, StageSlot, SubTabSlot, TabHubNav, TabHubPlace, TabHubSlots, TabId, TabSlot } from '../src/phone/hub/slots';
 
 /*
  * SB-1a: the tabbed hub's slot contract, frozen for the lanes that build against it before anything draws it. These
@@ -29,6 +30,22 @@ const HUB = {
   stage: [],
   readyWords: [],
 } satisfies TabHubSlots;
+
+/** A tabbed hub's navigation as a test double: today's moves and the tabbed ones, each a no-op. */
+const NAV = {
+  desk: 'colony',
+  tool: 'look',
+  focus: null,
+  openDesk: () => {},
+  pickTool: () => {},
+  takeFocus: () => {},
+  tab: 'overview',
+  sub: 'laws',
+  pick: null,
+  open: (_door: Door) => {},
+  startPick: (_id: string) => {},
+  endPick: () => {},
+} satisfies TabHubNav;
 
 describe('SB-1a: the tabbed hub slot contract', () => {
   // trace-allow: a type-level pin of the SB-1a contract freeze; tsc is the check, the run only loads it.
@@ -72,11 +89,16 @@ describe('SB-1a: the tabbed hub slot contract', () => {
       readyWords: ((seat: HubSeat) => ReadyBarWords | null)[];
     }>();
     expectTypeOf(HUB).toExtend<TabHubSlots>();
+    expectTypeOf<TabHubNav>().toExtend<HubNav>();
+    expectTypeOf<Omit<TabHubNav, keyof HubNav>>().toEqualTypeOf<{ tab: TabId; sub: string; pick: string | null; open(door: Door): void; startPick(id: string): void; endPick(): void }>();
+    expectTypeOf(NAV).toExtend<TabHubNav>();
 
     // @ts-expect-error a tab is one of the four: "map" is not
     const _map: TabSlot = { id: 'map', label: () => '', icon: '', Body };
     // @ts-expect-error a door names its tab
     const _door: Door = { sub: 'laws' };
-    void [_map, _door];
+    // @ts-expect-error the tabbed nav still carries today's moves: openDesk is not optional
+    const _nav: TabHubNav = { ...NAV, openDesk: undefined };
+    void [_map, _door, _nav];
   });
 });
