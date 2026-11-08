@@ -245,15 +245,17 @@ describe('S5-C6: the AI calls and votes on the tax (S5-RULE-12)', () => {
   });
 
   it('S5-T-AC-14: vote row 5 - in an unhappy colony a seat votes yes even for a small loss, up to unhappyTilt', () => {
-    const state = open();
-    state.colony!.happiness = 10; // literal-ok: Unrest, inside POLITICS.ai.colony.leanIn
+    const colony = (happiness: number) => {
+      const state = open();
+      state.colony!.happiness = happiness;
+      return state;
+    };
     worth.mockReturnValue(-(POLITICS.ai.overrule.unhappyTilt - 1));
-    expect(voteBy(state, 'ai2', 'trader')).toEqual(cast(true));
+    expect(voteBy(colony(10), 'ai2', 'trader')).toEqual(cast(true)); // literal-ok: Unrest, inside POLITICS.ai.colony.leanIn
     worth.mockReturnValue(-(POLITICS.ai.overrule.unhappyTilt + 1));
-    expect(voteBy(state, 'ai2', 'trader')).toEqual(cast(false));
-    state.colony!.happiness = 90; // literal-ok: Thriving
+    expect(voteBy(colony(10), 'ai2', 'trader')).toEqual(cast(false));
     worth.mockReturnValue(-1);
-    expect(voteBy(state, 'ai2', 'trader'), 'a happy colony keeps row 6').toEqual(cast(false));
+    expect(voteBy(colony(90), 'ai2', 'trader'), 'a happy colony keeps row 6').toEqual(cast(false)); // literal-ok: Thriving
   });
 
   it('S5-T-AC-14: a seat that has voted votes once; the ballot is not reopened for it', () => {
@@ -302,7 +304,7 @@ describe('S5-C6: the AI calls and votes on the tax (S5-RULE-12)', () => {
   it('S5-T-AC-14: every input is observe(state, me): the hands refuse a mind with no seat salt, as every politics hand does', () => {
     const bare: Mind = { ...mindOf('ai1', 'trader') };
     delete bare.salt;
-    worth.mockReturnValue(1);
+    worth.mockImplementation((_obs, who) => (who === 'ai1' ? POLITICS.ai.overrule.minGain : 0)); // short of a majority: the draw is reached
     const state = taxed();
     POLITICS.ai.overrule.longShot.trader = 1;
     expect(() => new OverruleHand(bare).call(observe(state, 'ai1'), () => true)).toThrow(/salt/);
