@@ -418,6 +418,76 @@ describe("S4-C15, P7: the Sheriff's case file (B folded)", () => {
   });
 });
 
+describe('S4-PR-11 part 2: the guard pick offers only the plots the server says are guardable (AM-11)', () => {
+  /** What the server lets Brix guard: every player's plot but his own (Brix's is 1·2), minus Kai's energy plot, to show
+   * the client follows the list rather than re-deriving it. */
+  const GUARDABLE = [at(0, 0), at(1, 0), at(2, 0)];
+
+  it("S4-PR-11: on the Sheriff's own plot the hint says so and nothing is posted", () => {
+    mount(brix({ guardable: GUARDABLE }));
+    tap('guard-open-map');
+    tap('map-plot-0-1');
+    expect(text('guard-hint')).toBe('You can’t guard your own plots.');
+    expect(text('guard-bar-words')).toBe('Guarding · 1 of 2');
+    expect(plotLabel(0, 1)).not.toContain('guarded');
+  });
+
+  it('S4-PR-11: a plot not on the list posts nothing and keeps the existing hint; a listed one posts', () => {
+    mount(brix({ guardable: GUARDABLE }));
+    tap('guard-open-map');
+    tap('map-plot-1-1');
+    expect(text('guard-hint'), "Kai's energy plot is a player's, but not on the server's list").toBe('Guards stand on players’ plots.');
+    expect(text('guard-bar-words')).toBe('Guarding · 1 of 2');
+    tap('map-plot-3-0');
+    expect(text('guard-hint')).toBe('Guards stand on players’ plots.');
+    tap('map-plot-2-0');
+    expect(text('guard-bar-words')).toBe('Guarding · 2 of 2');
+    tap('guard-back');
+    expect(sent).toEqual([{ type: 'guard', tiles: [at(1, 0), at(2, 0)] }]);
+  });
+
+  it('S4-PR-11: a guard already posted can still be lifted, listed or not', () => {
+    mount(brix({ guards: [at(1, 1)], guardable: GUARDABLE }));
+    tap('guard-open-map');
+    tap('map-plot-1-1');
+    expect(text('guard-bar-words')).toBe('Guarding · 0 of 2');
+  });
+
+  it('S4-PR-11: with no list (an older view) the owner filter stands', () => {
+    mount(brix());
+    tap('guard-open-map');
+    tap('map-plot-1-1');
+    expect(text('guard-bar-words')).toBe('Guarding · 2 of 2');
+  });
+
+  it("S4-PR-11: the tabbed hub's Guard pick follows the same list", () => {
+    // GUARD_PICK's map is the same picker: mounted alone, the own plot says so.
+    mount(brix({ guardable: GUARDABLE }), () => createElement(Sheriff.PickNavProvider, { value: { desk: '', tool: '', focus: null, openDesk() {}, pickTool() {}, takeFocus() {}, tab: 'overview', sub: 'sheriff', pick: 'guard', open() {}, startPick() {}, endPick() {} }, children: createElement(Sheriff.GUARD_PICK.Map) }));
+    tap('map-plot-0-1');
+    expect(text('guard-hint')).toBe('You can’t guard your own plots.');
+  });
+});
+
+describe('S4-PR-11 part 3: the bounty on the Sheriff’s desk (AM-11)', () => {
+  const withBounty = (bounty: number | undefined) => ({ politics: { sabotage: { terms: TERMS, incidents: INCIDENTS, sheriff: { guards: 2, investigations: 1, investigationsLeft: 1, ...(bounty === undefined ? {} : { bounty }) } } } });
+
+  it("S4-PR-11: the desk says what each catch pays, from the view's bounty, on the Cases line (it does not grow the folded desk)", () => {
+    mount(brix({}, withBounty(75)));
+    expect(text('sheriff-bounty')).toBe('75 cr for each saboteur you catch.');
+    expect(byTestid('b-cases-head').textContent).toContain('75 cr for each saboteur you catch.');
+  });
+
+  it('S4-PR-11: with no bounty in the view the desk shows no line', () => {
+    mount(brix());
+    expect(has('sheriff-bounty')).toBe(false);
+  });
+
+  it('S4-PR-11: the tabbed hub’s Sheriff sub-tab shows the same line', () => {
+    mount(brix({}, withBounty(40)), () => createElement(Sheriff.PickNavProvider, { value: { desk: '', tool: '', focus: null, openDesk() {}, pickTool() {}, takeFocus() {}, tab: 'politics', sub: 'sheriff', pick: null, open() {}, startPick() {}, endPick() {} }, children: createElement(Sheriff.SHERIFF_SUB.Body) }));
+    expect(text('sheriff-bounty')).toBe('40 cr for each saboteur you catch.');
+  });
+});
+
 describe('S4-C15, P8: guarding on the one map', () => {
   it("S4-B-AC-10: Guard a plot turns the hub's map to Guard under its bar; a tap posts or lifts; Done sends {type:'guard', tiles} and goes back", () => {
     mount(brix());
@@ -536,6 +606,84 @@ describe('S4-C14, P6: the power cut, under Look on a rival’s plot', () => {
     tap('sabotage-door');
     expect(text('order-blocked')).toBe('Orders are placed in planning.');
     expect(has('order-confirm')).toBe(false);
+  });
+});
+
+describe('S4-PR-11: the sitting Sheriff orders no sabotage (Heiko; the server says canOrder: \'sheriff\', #789)', () => {
+  /** The Sheriff's own view as the server sends it: the desk, and canOrder 'sheriff' (protocol #789, S4-PR-9 fills it). */
+  const SHERIFF_SAB: Sab = { ...NO_ORDER, canOrder: 'sheriff' };
+  const REASON = 'The Sheriff can’t order sabotage.';
+
+  it("S4-PR-11: on the Sheriff's phone a rival's working plot has no order control, only the reason; the market likewise", () => {
+    lookAt(1, 0, { id: 's4', sheriff: SHERIFF, sabotage: SHERIFF_SAB });
+    expect(has('sabotage-door'), 'Look on Ossa’s smithore plot').toBe(false);
+    expect(has('order-powercut')).toBe(false);
+    expect(has('order-confirm')).toBe(false);
+    expect(text('order-blocked')).toBe(REASON);
+    tap('desk-market');
+    expect(has('rumour-door'), 'at the market').toBe(false);
+    expect(has('order-rumour')).toBe(false);
+    expect(text('rumour-blocked')).toBe(REASON);
+  });
+
+  it("S4-PR-11: the reason shows only where an order could start: not on the Sheriff's own plot or a free one", () => {
+    lookAt(0, 1, { id: 's4', sheriff: SHERIFF, sabotage: SHERIFF_SAB });
+    expect(has('order-blocked'), 'own plot').toBe(false);
+    act(() => root!.unmount());
+    lookAt(3, 0, { id: 's4', sheriff: SHERIFF, sabotage: SHERIFF_SAB });
+    expect(has('order-blocked'), 'free plot').toBe(false);
+  });
+
+  it('S4-PR-11: at the same table a player who is not the Sheriff (canOrder true) still has both doors and no reason', () => {
+    for (const id of ['s1', 's3']) {
+      lookAt(1, 0, { id });
+      expect(has('sabotage-door'), id).toBe(true);
+      expect(has('order-blocked'), id).toBe(false);
+      tap('desk-market');
+      expect(has('rumour-door'), id).toBe(true);
+      expect(has('rumour-blocked'), id).toBe(false);
+      act(() => root!.unmount());
+      root = null;
+    }
+  });
+
+  it("S4-PR-11: the server's reason decides, not the office: the office holder with canOrder true has the doors", () => {
+    // The interim office check is gone: only canOrder 'sheriff' bars (one helper, orderBarred).
+    lookAt(1, 0, { id: 's4', sheriff: SHERIFF });
+    expect(has('sabotage-door')).toBe(true);
+  });
+
+  it('S4-PR-11: an order placed before the election is withdrawn when its player becomes Sheriff: no pending row, no crew cost, no empty list', () => {
+    const pending: Sab['mine'][number] = { id: 'sab-b7c8d9', month: 5, kind: 'powerCut', victim: null, at: { x: 1, y: 0 }, good: 'smithore', worked: false, culprit: 's4', how: null, investigated: false, fine: null, public: false, outcome: 'pending' };
+    const before = viewOf({ id: 's4', sabotage: { ...NO_ORDER, order: { kind: 'powerCut', tile: at(1, 0) }, owed: 120, mine: [pending] }, politics: { sheriff: null } });
+    mount(before);
+    tap('desk-market');
+    expect(text('order-pending-words')).toContain('120 cr at the month end');
+    expect(has('my-order-sab-b7c8d9')).toBe(true);
+
+    // The server's next view: Brix holds the office; the engine withdrew the order for free.
+    answer(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...SHERIFF_SAB, order: null, owed: 0, mine: [] } }));
+    expect(openDesk()).toBe('desk-sheriff');
+    tap('desk-market');
+    expect(has('order-pending'), 'no pending-order row').toBe(false);
+    expect(byTestid('desk-body-market').textContent, 'no crew cost').not.toMatch(/cr at the month end/);
+    expect(has('my-orders'), 'no Your orders head over an empty list').toBe(false);
+    expect(has('rumour-door')).toBe(false);
+    expect(text('rumour-blocked')).toBe(REASON);
+    expect(has('list-asset'), 'the Market desk itself is whole').toBe(true);
+    tap('tool-look');
+    tap('map-plot-1-0');
+    expect(has('look-plot')).toBe(true);
+    expect(has('order-pending')).toBe(false);
+    expect(has('sabotage-door')).toBe(false);
+  });
+
+  it("S4-PR-11: the Sheriff's own past orders stay listed under Your orders", () => {
+    const mine: Sab['mine'] = [{ ...GUARDED, culprit: 's4', public: true, outcome: 'caught' }];
+    mount(viewOf({ id: 's4', sheriff: SHERIFF, sabotage: { ...SHERIFF_SAB, mine } }));
+    tap('desk-market');
+    expect(has('my-order-w3c8')).toBe(true);
+    expect(has('rumour-door')).toBe(false);
   });
 });
 

@@ -84,7 +84,9 @@ function TermsList({ terms, caughtCost, children }: { terms: Terms; caughtCost: 
 
 /** Why no order can be placed now, if none can. */
 function blocked(sab: Sab): string | null {
-  return sab.canOrder === 'notPlanning' ? 'Orders are placed in planning.' : null;
+  if (sab.canOrder === 'notPlanning') return 'Orders are placed in planning.';
+  if (orderBarred(sab)) return 'The Sheriff can’t order sabotage.';
+  return null;
 }
 
 /** The month's one order, already placed: what it is, what it costs, and Withdraw. */
@@ -129,6 +131,13 @@ function PowerCutOrder({ view, tile, meId, sab, ban, pacts, onOrder, onWithdraw 
   const [open, setOpen] = useState(false);
   const terms = view.politics?.sabotage?.terms.powerCut;
   if (!terms || !tile.owner || tile.owner === meId || sab.canOrder === 'off') return null;
+  // The sitting Sheriff: no order control, only the server's reason (S4-PR-11).
+  if (orderBarred(sab))
+    return (
+      <p className="text-xs text-ink-2" data-testid="order-blocked">
+        {blocked(sab)}
+      </p>
+    );
   const index = tile.y * view.width + tile.x;
   const here = sab.order?.kind === 'powerCut' && sab.order.tile === index;
   if (sab.order) return <PendingOrder view={view} sab={sab} here={here} onWithdraw={onWithdraw} />;
@@ -183,6 +192,13 @@ function RumourOrder({ view, sab, ban, pacts, onOrder, onWithdraw }: OrderProps)
   const [dir, setDir] = useState<'up' | 'down'>('up');
   const terms = view.politics?.sabotage?.terms.rumour;
   if (!terms || sab.canOrder === 'off') return null;
+  // The sitting Sheriff: no order control, only the server's reason (S4-PR-11).
+  if (orderBarred(sab))
+    return (
+      <p className="text-xs text-ink-2" data-testid="rumour-blocked">
+        {blocked(sab)}
+      </p>
+    );
   if (sab.order) return <PendingOrder view={view} sab={sab} here={sab.order.kind === 'rumour'} onWithdraw={onWithdraw} />;
   if (!open)
     return (
@@ -322,6 +338,15 @@ function MyOrders({ view, sab }: { view: MuleView; sab: Sab }) {
   );
 }
 
+/**
+ * Why this phone may not order sabotage at all, or null when it may: the sitting Sheriff orders none (Heiko). The
+ * server says so in canOrder: 'sheriff' (protocol #789; S4-PR-9 fills it). The one place this is decided; the office
+ * check it replaces was the interim.
+ */
+export function orderBarred(sab: Pick<Sab, 'canOrder'>): 'sheriff' | null {
+  return sab.canOrder === 'sheriff' ? 'sheriff' : null;
+}
+
 /** This phone's order props: its sabotage, the ban, its pacts, and the intents a tap sends. Null with sabotage off. */
 function useOrder(): (OrderProps & { meId: string }) | null {
   const { view, me } = usePhoneGame();
@@ -348,7 +373,7 @@ export function LookSabotage() {
   return <PowerCutOrder key={`${tile.x},${tile.y}`} tile={tile} {...order} />;
 }
 
-/** At the Market desk: the rumour's door, then this player's orders. */
+/** At the Market desk: the rumour's door (for the Sheriff, the reason instead), then this player's orders. */
 export function MarketSabotage() {
   const order = useOrder();
   if (!order) return null;
