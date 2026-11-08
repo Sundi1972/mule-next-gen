@@ -34,8 +34,9 @@ export function FundPaidNote({ view }: { view: MuleView }) {
   );
 }
 
-const OUT_ORDER: FundLine[] = ['officePay', 'upkeep', 'repair', 'strikePay', 'welfare', 'project'];
-const OUT_NAME: Partial<Record<FundLine, string>> = { officePay: 'office pay', upkeep: 'upkeep', repair: 'repairs', strikePay: 'strike pay', welfare: 'Welfare', project: 'Buildings' };
+// TABS: slice 4's restitution ("To victims", the spec's month-end row) joins the out lines; a fine paid in follows them.
+const OUT_ORDER: FundLine[] = ['officePay', 'upkeep', 'repair', 'strikePay', 'welfare', 'project', 'restitution'];
+const OUT_NAME: Partial<Record<FundLine, string>> = { officePay: 'office pay', upkeep: 'upkeep', repair: 'repairs', strikePay: 'strike pay', welfare: 'Welfare', project: 'Buildings', restitution: 'To victims' };
 
 /** The phone's full line: "Paid out this month: office pay 80, upkeep 15, Welfare 54 → Kai, Buildings 350". */
 export function FundLines({ view }: { view: MuleView }) {
@@ -60,6 +61,12 @@ export function FundLines({ view }: { view: MuleView }) {
           </span>
         </Fragment>
       ))}
+      {(ledger.in.fine ?? 0) > 0 && (
+        <span className="whitespace-nowrap" data-testid="fund-line-fine">
+          {' · '}
+          <span className="label-caps mr-1 text-[10px]!">In</span>Fines <span data-num className="font-mono">{fmt(ledger.in.fine ?? 0)}</span>
+        </span>
+      )}
     </p>
   );
 }

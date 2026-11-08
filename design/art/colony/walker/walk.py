@@ -31,8 +31,9 @@ SPIN = float(a[9]) if len(a) > 9 else 1.0  # -1 where a rig turns the other way 
 # and add a mask sheet (suit in red, trim in green) the tints are laid through (Heiko, 8 Nov: coloured suits)
 TINT = [m for m in os.environ.get("COLONY_WALK_TINT", "").split(",") if m]
 NEUTRAL = (0.62, 0.62, 0.62, 1.0)
-# a cell 2.5 m wide and 2.9 m tall at the shared scale, the feet 0.35 m above its bottom edge
-CELL = {"width": 192, "height": 224, "centre": [96, 197]}
+# a cell 4.2 m wide and 3.4 m tall at the shared scale, the feet left of centre and 0.8 m above its bottom edge, so the
+# low day sun's shadow, falling down-right, stays inside it (the 2.5 m cell cut it square: review of #785)
+CELL = {"width": 320, "height": 256, "centre": [120, 197]}
 # the grid's two axes both ways: +x runs down-right on screen, +y up-right (x = 12 (col - 2), y = -12 (row - 2))
 HEADINGS = {"+x": 0.0, "+y": 90.0, "-x": 180.0, "-y": 270.0}
 
