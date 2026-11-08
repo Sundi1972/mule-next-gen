@@ -1,10 +1,11 @@
 import type { RawGood } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
-import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
+import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME, type FoodEaten } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { AiMark } from '../../chat/Chat';
 import { useTableChat } from '../../chat/store';
 import { plotName, toSlot } from '../../game/derive';
+import { hungerOf } from '../../game/month-end';
 import { OnlyYou } from '../hub/OnlyYou';
 import { bestLine, GoodDots } from '../plotInfo';
 import { SWAP_NOTE } from './guide';
@@ -84,19 +85,32 @@ export function OverCard({ seat, installs, className }: { seat: ArcadeSeat; inst
 
 // --- V-6 · your pace, and why ---------------------------------------------------------------------
 
-/** "Your pace 47%: you ate 1 of the 3 Food you need", and what to do about it next month. */
+/**
+ * Your household's last meal as the server judged it: hungry, and "ate n of m" as the month end says it.
+ * With no condition in the view it claims no hunger, and the need it names is the view's needs.
+ */
+export function mealOf(seat: ArcadeSeat): { hungry: boolean; food: FoodEaten } {
+  const short = hungerOf(seat.view).find((h) => h.id === seat.me.id);
+  if (short) return { hungry: true, food: { ate: short.ate, need: short.need } };
+  const need = seat.self.condition?.foodNeed ?? seat.me.needs.food;
+  return { hungry: false, food: { ate: need, need } };
+}
+
+/** "Your pace 80%: you ate 1 of the 2 Food you need", and what to do about it next month. */
 export function paceWords(seat: ArcadeSeat): { pct: number; line: string; short: string; next: string | null; slow: boolean } {
   const { me, self, view } = seat;
-  const food = Math.min(me.stock.food, me.needs.food);
-  const need = me.needs.food;
+  const { hungry, food: { ate: food, need } } = mealOf(seat);
   const sick = !!self.condition?.sick;
   const pct = Math.round((self.condition?.conditionPace ?? 1) * 100);
-  const hungry = food < need;
   const why = hungry ? `you ate ${food} of the ${need} Food you need` : sick ? 'you are sick' : 'fed and well';
   const andSick = hungry && sick ? ', and you are sick' : '';
   // What makes Food for you already: a Food MULE on a plot of yours.
   const foodMule = view.tiles.find((t) => t.owner === me.id && t.outfit === 'food');
-  const next = hungry ? (foodMule ? `Next month: your Food MULE on ${plotName(foodMule.x, foodMule.y)} should feed you` : `Next month: buy ${need} Food at the auction, or put a Food MULE on a plot`) : null;
+  // The advice feeds household and crews, not only the meal: a crew left short makes less. It names the crews' part,
+  // so "ate 1 of the 2" beside "buy 4" does not read as a contradiction.
+  const crews = me.needs.food - need;
+  const split = crews > 0 ? ` (${need} for you, ${crews} for your crews)` : '';
+  const next = hungry ? (foodMule ? `Next month: your Food MULE on ${plotName(foodMule.x, foodMule.y)} should feed you` : `Next month: buy ${me.needs.food} Food at the auction${split}, or put a Food MULE on a plot`) : null;
   return { pct, line: `Your pace ${pct}%: ${why}${andSick}`, short: hungry ? `Pace ${pct}%: ate ${food} of ${need} Food` : sick ? `Pace ${pct}%: sick` : `Pace ${pct}%`, next, slow: pct < 100 };
 }
 
@@ -116,10 +130,9 @@ function SickTag({ size }: { size: number }) {
  */
 function SickLine({ seat, short }: { seat: ArcadeSeat; short: boolean }) {
   const [open, setOpen] = useState(false);
-  const { me, self } = seat;
+  const { self } = seat;
   const pct = Math.round((self.condition?.conditionPace ?? 1) * 100);
-  const food = Math.min(me.stock.food, me.needs.food);
-  const hungry = food < me.needs.food;
+  const { hungry, food: { ate: food, need } } = mealOf(seat);
   return (
     <button
       type="button"
@@ -133,14 +146,14 @@ function SickLine({ seat, short }: { seat: ArcadeSeat; short: boolean }) {
     >
       {short ? (
         <span className="flex items-center gap-1 text-g-medicine">
-          <SickTag size={11} /> {hungry ? `Sick · ate ${food} of ${me.needs.food} · ${pct}%` : `Sick · ${pct}% pace`}
+          <SickTag size={11} /> {hungry ? `Sick · ate ${food} of ${need} · ${pct}%` : `Sick · ${pct}% pace`}
         </span>
       ) : (
         <>
           <span className="flex items-start gap-1 text-g-medicine" data-testid="sick-cause">
             <SickTag size={12} /> {sickReason(self.condition?.sickBecause)}
           </span>
-          <span className="text-alert">{hungry ? `${pct}% pace this turn · you ate ${food} of ${me.needs.food} Food` : `${pct}% pace this turn`}</span>
+          <span className="text-alert">{hungry ? `${pct}% pace this turn · you ate ${food} of ${need} Food` : `${pct}% pace this turn`}</span>
         </>
       )}
       <span className="absolute right-0 top-0 font-mono text-[10px] text-ink-3">{open ? '▴' : '▾'}</span>

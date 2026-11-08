@@ -12,7 +12,7 @@ import { ANALYSE_CARD_MS, analyseCard, type Plot } from './analyse';
 import { keyDown, keyUp } from './controls';
 import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box, type PhoneLayout } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { ANALYSE_CARD_W, AnalyseCard, ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, SwapWarning } from './parts';
+import { ANALYSE_CARD_W, AnalyseCard, ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, mealOf, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, SwapWarning } from './parts';
 import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
@@ -502,7 +502,7 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
           </div>
           <aside className="flex min-w-0 flex-1 flex-col gap-4" data-testid="laptop-rail">
             <ActionButton verb={r.verb} detail={r.detail} enabled={r.enabled} onPress={arcade.press} hint="SPACE" />
-            <YourPace condition={self.condition ?? WELL} rule={DEV_WALK} food={{ ate: Math.min(me.stock.food, me.needs.food), need: me.needs.food }} />
+            <YourPace condition={self.condition ?? WELL} rule={DEV_WALK} food={mealOf(seat).food} />
             <span className="relative flex flex-col items-start gap-2">
               <GroundChip seat={seat} />
             </span>

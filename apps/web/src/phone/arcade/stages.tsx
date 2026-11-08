@@ -6,6 +6,7 @@ import { speakerAt } from '../../chat/Chat';
 import { mapTiles, plotName } from '../../game/derive';
 import type { Density } from './layout';
 import { useArcade, useLive } from './live';
+import { mealOf } from './parts';
 import { GlintOnMap, GlintSightlines, GlintStrip, offTheLead, ScrambleBanner, ScrambleCorral, ScrambleLines, walkerMarks, WolvesOnMap } from './moments';
 import { suits } from './plots';
 import type { ArcadeColonist, ArcadeSeat, Target } from './seat';
@@ -164,7 +165,7 @@ export function HallStage({ data, width, density, store = density, interactive =
         wrapCreature={wrapCreature}
         {...(mine && seat
           ? {
-              me: { id: mine.id, slot: mine.slot, leading, x: mine.x + aside.dx, y: mine.y + aside.dy, facing: mine.facing, condition: seat.self.condition, food: { ate: Math.min(seat.me.stock.food, seat.me.needs.food), need: seat.me.needs.food }, moving: mine.moving },
+              me: { id: mine.id, slot: mine.slot, leading, x: mine.x + aside.dx, y: mine.y + aside.dy, facing: mine.facing, condition: seat.self.condition, food: mealOf(seat).food, moving: mine.moving },
               paceRule: DEV_WALK,
             }
           : {})}

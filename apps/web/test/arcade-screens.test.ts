@@ -359,12 +359,11 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
 
   it('B-AC-9: hungry, the pace line says her pace and the Food she ate, and her colonist wears the hunger tag at its level', () => {
     const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
-    const hungry = { foodShare: 1 - (hungryFrom + starvingFrom) / 2, conditionPace: 0.7 };
+    const hungry = { foodShare: 1 - (hungryFrom + starvingFrom) / 2, foodNeed: 4, conditionPace: 0.7 };
     const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, ...hungry } } : p));
-    const me = lenasMe();
-    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    const html = phone(devView(lenasMe({ hungry: true }), { players }), live(mine(5.5, 4.5)));
     expect(tag(html, 'pace-line')).toMatch(/data-pct="70"/);
-    expect(text(html, 'pace-line')).toMatch(/^Your pace 70%: you ate 2 of the 5 Food you need/);
+    expect(text(html, 'pace-line')).toMatch(/^Your pace 70%: you ate 2 of the 4 Food you need/);
     expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
   });
 
@@ -381,9 +380,8 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
   });
 
   it('B-AC-9 (sick and hungry): the line names the sickness first, then the pace and the Food she ate', () => {
-    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, sick: true, sickBecause: 'pollution' as const, conditionPace: 0.35 } } : p));
-    const me = lenasMe();
-    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, foodShare: 0.4, foodNeed: 5, sick: true, sickBecause: 'pollution' as const, conditionPace: 0.35 } } : p));
+    const html = phone(devView(lenasMe({ hungry: true, sick: true }), { players }), live(mine(5.5, 4.5)));
     expect(text(html, 'sick-cause')).toBe('✚ Sick: your own pollution fouled the air.');
     expect(text(html, 'pace-line')).toMatch(/35% pace this turn · you ate 2 of 5 Food/);
   });
@@ -408,6 +406,66 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
     const lit = phone(devView(lenasMe({ carriedMule: 'empty', reach: open.words })), live(mine(open.there.x, open.there.y, { space: 'hall' })));
     expect(text(lit, 'action-verb')).toBe(`OUTFIT · ${place.toUpperCase()}`);
     expect(tag(lit, 'action-button')).toMatch(/data-enabled="true"/);
+  });
+});
+
+describe("needs B-AC-14, phone half: the walking screen shows hunger as the server judged it, from the household's last meal", () => {
+  /** Lena's household ate this share of its 2 Food; her stock, 2 under the 4 her household and crews need, says otherwise. */
+  function lena(foodShare: number, conditionPace: number, sick = false) {
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, foodShare, foodNeed: 2, conditionPace, sick, sickBecause: sick ? ('air' as const) : null } } : p));
+    const me = lenasMe();
+    return devView(lenasMe({ hungry: foodShare < 1, sick, stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 4 } }), { players });
+  }
+  const here = live(mine(5.5, 4.5));
+
+  it('needs B-AC-14: her crews went short but her household ate in full: not hungry, full pace in the fed colour, "ate 2 of 2", never "2 of 4"', () => {
+    const view = lena(1, 1);
+    const html = phone(view, here);
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="100"/);
+    expect(tag(html, 'pace-line')).toMatch(/text-ok/);
+    expect(text(html, 'pace-line')).toBe('Your pace 100%: fed and well');
+    expect(tag(html, 'pace-next')).toBeNull();
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toBeNull();
+    expect(text(phone(view, here, 667), 'pace-line')).toBe('Pace 100%');
+    const rail = inside(laptop(view, here), 'your-pace');
+    expect(tag(rail, 'your-pace')).toMatch(/data-tone="ok"/);
+    expect(text(rail, 'your-pace')).toBe('Fed: full paceYou ate the 2 Food you need.');
+    for (const screen of [html, laptop(view, here)]) expect(screen.replace(/<[^>]+>/g, ' ')).not.toMatch(/\b2 of (the )?4\b/);
+  });
+
+  it('needs B-AC-14: sick, with her crews short and her household fed, the sick line claims no hunger', () => {
+    const html = phone(lena(1, 0.5, true), here);
+    expect(text(html, 'pace-line')).toMatch(/50% pace this turn/);
+    expect(text(html, 'pace-line')).not.toMatch(/Food/);
+    expect(text(phone(lena(1, 0.5, true), here, 667), 'pace-line')).toMatch(/^✚ Sick · 50% pace/);
+  });
+
+  it('needs B-AC-14: with no condition in the view, the walking screen claims no hunger, whatever her stock', () => {
+    const me = lenasMe();
+    const view = devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 4 } }), { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: null } : p)) });
+    const html = phone(view, here);
+    expect(text(html, 'pace-line')).toBe('Your pace 100%: fed and well');
+    expect(text(phone(view, here, 667), 'pace-line')).toBe('Pace 100%');
+    expect(text(inside(laptop(view, here), 'your-pace'), 'your-pace')).toBe('Fed: full paceYou ate the 4 Food you need.');
+  });
+
+  it('needs B-AC-14 (negative): her household ate half its meal: hungry, the hungry pace and tag, "ate 1 of 2"', () => {
+    const view = lena(0.5, 0.8);
+    const html = phone(view, here);
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="80"/);
+    expect(tag(html, 'pace-line')).toMatch(/text-warn/);
+    expect(text(html, 'pace-line')).toMatch(/^Your pace 80%: you ate 1 of the 2 Food you need/);
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
+    expect(text(phone(view, here, 667), 'pace-line')).toMatch(/^Pace 80%: ate 1 of 2 Food/);
+    const rail = inside(laptop(view, here), 'your-pace');
+    expect(tag(rail, 'your-pace')).toMatch(/data-tone="warn"/);
+    expect(text(rail, 'your-pace')).toMatch(/You ate 1 of the 2 Food you need\./);
+  });
+
+  it('needs B-AC-14 (negative): sick and her household short, the sick line says "you ate 1 of 2 Food"', () => {
+    const html = phone(lena(0.5, 0.4, true), here);
+    expect(text(html, 'pace-line')).toMatch(/40% pace this turn · you ate 1 of 2 Food/);
+    expect(text(phone(lena(0.5, 0.4, true), here, 667), 'pace-line')).toMatch(/^✚ Sick · ate 1 of 2 · 40%/);
   });
 });
 
@@ -834,35 +892,50 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
  * A bubble hangs at its speaker only once the speaker's creature has registered as its anchor, which a static render
  * never runs: these mount the screen into the fake DOM, last in this file, since the fake DOM stays for what follows.
  */
-describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)', () => {
-  type Dom = typeof import('./fake-dom');
-  let dom: Dom;
-  let act: typeof import('react').act;
-  let createRoot: typeof import('react-dom/client').createRoot;
+type Dom = typeof import('./fake-dom');
+let dom: Dom;
+let act: typeof import('react').act;
+let createRoot: typeof import('react-dom/client').createRoot;
 
-  beforeAll(async () => {
-    dom = await import('./fake-dom');
-    ({ act } = await import('react'));
-    ({ createRoot } = await import('react-dom/client'));
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-    const doc = dom.document as unknown as { createElementNS?: (ns: string, tag: string) => InstanceType<Dom['FakeElement']> };
-    doc.createElementNS ??= (_ns, tag) => dom.document.createElement(tag);
-    (dom.document.documentElement as unknown as { dataset?: object }).dataset ??= {};
-    // What the screen and the bubble reach for that the fake DOM lacks: focus, a box, no layout to fit into, animation
-    // frames (none run) and a mutation observer.
-    const element = dom.FakeElement.prototype as unknown as { focus(): void; getBoundingClientRect(): object; closest(): null };
-    element.focus = () => {};
-    element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 });
-    element.closest = () => null;
-    class Observer {
-      observe() {}
-      disconnect() {}
-      takeRecords() {
-        return [];
-      }
+/** Mounts screens in the fake DOM, with what the screen reaches for that it lacks. */
+async function installFakeDom() {
+  dom = await import('./fake-dom');
+  ({ act } = await import('react'));
+  ({ createRoot } = await import('react-dom/client'));
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const doc = dom.document as unknown as { createElementNS?: (ns: string, tag: string) => InstanceType<Dom['FakeElement']> };
+  doc.createElementNS ??= (_ns, tag) => dom.document.createElement(tag);
+  (dom.document.documentElement as unknown as { dataset?: object }).dataset ??= {};
+  // What the screen and the bubble reach for that the fake DOM lacks: focus, a box, no layout to fit into, animation
+  // frames (none run) and a mutation observer.
+  const proto = dom.FakeElement.prototype as unknown as { focus(): void; getBoundingClientRect(): object; closest(): null };
+  proto.focus = () => {};
+  proto.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 });
+  proto.closest = () => null;
+  class Observer {
+    observe() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
     }
-    Object.assign(globalThis, { requestAnimationFrame: () => 0, cancelAnimationFrame: () => {}, MutationObserver: Observer });
-  });
+  }
+  Object.assign(globalThis, { requestAnimationFrame: () => 0, cancelAnimationFrame: () => {}, MutationObserver: Observer });
+}
+
+function element(node: InstanceType<Dom['FakeElement']>, testid: string): InstanceType<Dom['FakeElement']> | null {
+  if (node.getAttribute('data-testid') === testid) return node;
+  for (const c of node.childNodes) {
+    const hit = c instanceof dom.FakeElement ? element(c, testid) : null;
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** The React props of a mounted element, to press it as a person would. */
+const propsOf = (el: InstanceType<Dom['FakeElement']>) => Object.entries(el).find(([k]) => k.startsWith('__reactProps$'))?.[1] as { onClick?: () => void; onPointerDown?: () => void };
+
+describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)', () => {
+  beforeAll(installFakeDom);
 
   /** A client whose chat grows as the table speaks, telling its listeners as the real one does. */
   function talkingClient(view: MuleView) {
@@ -874,15 +947,6 @@ describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)
       for (const l of [...listeners]) l();
     };
     return { client, say };
-  }
-
-  function element(node: InstanceType<Dom['FakeElement']>, testid: string): InstanceType<Dom['FakeElement']> | null {
-    if (node.getAttribute('data-testid') === testid) return node;
-    for (const c of node.childNodes) {
-      const hit = c instanceof dom.FakeElement ? element(c, testid) : null;
-      if (hit) return hit;
-    }
-    return null;
   }
 
   /** Mounts Lena's phone where `me` stands, lets `from` say a line, and returns the screen. */
@@ -982,6 +1046,58 @@ describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)
   it('C11 (AM-31): on the laptop, at the colonist on its map', () => {
     const { host, unmount } = speak(mine(5.5, 4.5), 's2', () => createElement(LaptopArcade, { frame: { w: 1440, h: 900 } }));
     expect(element(element(element(host, 'walkers-map')!, 'colonist-s2')!, 'chat-bubble-s2')).not.toBeNull();
+    unmount();
+  });
+});
+
+describe("needs B-AC-14, phone half (mounted): the hall's long press and the pace line's tap", () => {
+  beforeAll(installFakeDom);
+
+  /** Lena's household ate half its 2 Food; her stock, 2 under the 4 her household and crews need, says otherwise. */
+  /** Lena's household ate 1 of its 2 Food; `wholeNeed` is her Food need with her crews' (4: 2 for the crews). */
+  function halfFed(wholeNeed = 4) {
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, foodShare: 0.5, foodNeed: 2, conditionPace: 0.8 } } : p));
+    const me = lenasMe();
+    return devView(lenasMe({ hungry: true, stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: wholeNeed } }), { players });
+  }
+
+  function mount(view: MuleView, me: NonNullable<Live['me']>) {
+    const host = dom.document.createElement('div');
+    const root = createRoot(host as unknown as HTMLElement);
+    // One state object, as the real client keeps: a fresh one each read never settles.
+    const state = clientFor(view).getState();
+    const client = { ...clientFor(view), getState: () => state } as unknown as TableClient;
+    act(() => root.render(seated(view, live(me), createElement(PhoneLandscape, { frame: { w: FRAMES[844].w, h: FRAMES[844].h } }), client)));
+    return { host, unmount: () => act(() => root.unmount()) };
+  }
+
+  it('needs B-AC-14 (negative): her household ate half its meal: the long press on her colonist in the hall says "ate 1 of the 2", not "of the 4"', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { host, unmount } = mount(halfFed(), mine(4, 6, { space: 'hall' }));
+      const tagEl = element(element(host, 'visitor-s1')!, 'condition-s1')!;
+      act(() => propsOf(tagEl).onPointerDown!());
+      act(() => vi.advanceTimersByTime(1000));
+      const said = element(host, 'rule-s1')?.textContent ?? '';
+      expect(said).toContain('You ate 1 of the 2 Food you need.');
+      expect(said).not.toMatch(/of the 4/);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("needs B-AC-14 (negative): her household ate half its meal: the pace line's tap says to buy the Food that feeds household and crews, 4, split 2 for her and 2 for her crews", () => {
+    const { host, unmount } = mount(halfFed(), mine(5.5, 4.5));
+    act(() => propsOf(element(host, 'pace-line')!).onClick!());
+    expect(element(host, 'pace-next')?.textContent).toBe('Next month: buy 4 Food at the auction (2 for you, 2 for your crews), or put a Food MULE on a plot');
+    unmount();
+  });
+
+  it("needs B-AC-14 (negative): with no crews to feed, the pace line's tap names only her household's Food, as before", () => {
+    const { host, unmount } = mount(halfFed(2), mine(5.5, 4.5));
+    act(() => propsOf(element(host, 'pace-line')!).onClick!());
+    expect(element(host, 'pace-next')?.textContent).toBe('Next month: buy 2 Food at the auction, or put a Food MULE on a plot');
     unmount();
   });
 });
