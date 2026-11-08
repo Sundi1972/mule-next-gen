@@ -940,7 +940,8 @@ SheriffHand (only the sitting Sheriff)
                Rookie: the standard fine
 VoteHand (in place)
   run          unchanged: runSheriff per persona once the office is elected (RULE-8 / RULE-63)
-  law vote     sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0, after the Governor and Rookie rows
+  law vote     sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0 on an enact, > 0 on a repeal (AM-6),
+               after the Governor and Rookie rows
                (lawWorth replaces lawCost for every law, WS7's ruling; the ban's duties are in §10)
   propose      unchanged rule; the ban enters the candidates through POLITICS.laws, valued by lawWorth
 examples  a Tycoon Saboteur, second on Worth, the leader's Crystite plot worth 400 a month: net 1.5 × 240 −
@@ -1291,6 +1292,20 @@ did       monthsPlayed = max(1, month − 1): laws are voted in planning, when m
           politics.sabotage: a (month, orderer) pair is unique, so another clash would need a hash collision
           (about 1 in 2 billion).
 because   each was a choice the build had to make; recorded so the server, the hands and the screens read the same
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-6 · 2026-11-08 · WS7 (build: S4-PR-4's logic review, finding I1) · the ban's vote breaks a tie for the law in
+                    force
+
+target    S4-RULE-13, VoteHand's law-vote row
+said      "sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0", for an enact and a repeal alike
+did       an enact passes on lawWorth ≥ 0, a repeal only on lawWorth > 0: a seat the ban costs nothing votes for
+          the ban and against its repeal. This is RULE-46's median rule's tie (enact ≥, repeal >).
+because   a repeal's worth is ≥ 0 for every seat the ban never fines, so "≥ 0" passed both the ban and its repeal:
+          measured at month 3 with one seat caught twice, the enact went 2 to 1 and the repeal 3 to 0, so a caught
+          Governor could repeal the ban the month after it passed
 goal      S4-1, S4-2 — unchanged
 ```
 
