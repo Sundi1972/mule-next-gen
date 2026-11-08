@@ -603,6 +603,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         const chat = this.chats.get(seat);
         if (chat) this.ctx.schedule(0, () => chat({ ...said, by: 'llm' }));
       },
+      say: (seat, text, to) => this.aiSays(seat, text, to),
     });
     this.playbooks.ask(this.state, this.state.month);
     this.news = [{ text: 'Welcome to the colony. Talk tactics, then grab land.', who: [] }];
@@ -851,8 +852,28 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** A player's line reaches the AI seats it was for: a public line every other AI seat, a whisper only its addressee. Never throws. */
   heard(from: string, text: string, to?: string): void {
+    this.reachAi(from, text, to);
+  }
+
+  /** A line reaches every other AI seat, or as a whisper its addressee alone, marked as one. */
+  private reachAi(from: string, text: string, to?: string): void {
     const line = { from: this.nameOf(from), text };
-    for (const seat of this.ai.values()) if (to === undefined ? seat.id !== from : seat.id === to) seat.hear(line);
+    for (const seat of this.ai.values()) if (to === undefined ? seat.id !== from : seat.id === to) seat.hear(to === undefined ? line : { ...line, to: 'me' });
+  }
+
+  /**
+   * An AI seat's message: said through the room, and handed to the other AI seats it reaches as `heard` hands a
+   * player's, since the room hands the game no line the game says itself. It opens no step and no timer: the record
+   * keeps no message, so a replay must play the same without it. Never throws.
+   */
+  private aiSays(from: string, text: string, to?: string): void {
+    try {
+      this.ctx.say?.(from, text, to);
+    } catch (err) {
+      console.error(`AI seat ${from}'s message could not be said: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    this.reachAi(from, text, to);
   }
 
   connectionChanged(seatId: string, connected: boolean): void {
@@ -979,6 +1000,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const { month, phase } = at ?? this.requireState();
     const notice: Notice = { ...fact, month, phase };
     this.notices.push(notice);
+    try {
+      // The seats' memories read only what every seat may know: a notice private to its parties never reaches them.
+      for (const known of publicNotices([notice])) this.playbooks?.notice(known);
+    } catch (err) {
+      console.error(`AI memory could not keep a notice: ${err instanceof Error ? err.message : String(err)}`);
+    }
     try {
       this.options.notice?.(notice);
     } catch (err) {
