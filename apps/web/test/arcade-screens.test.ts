@@ -1054,10 +1054,11 @@ describe("needs B-AC-14, phone half (mounted): the hall's long press and the pac
   beforeAll(installFakeDom);
 
   /** Lena's household ate half its 2 Food; her stock, 2 under the 4 her household and crews need, says otherwise. */
-  function halfFed() {
+  /** Lena's household ate 1 of its 2 Food; `wholeNeed` is her Food need with her crews' (4: 2 for the crews). */
+  function halfFed(wholeNeed = 4) {
     const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, foodShare: 0.5, foodNeed: 2, conditionPace: 0.8 } } : p));
     const me = lenasMe();
-    return devView(lenasMe({ hungry: true, stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 4 } }), { players });
+    return devView(lenasMe({ hungry: true, stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: wholeNeed } }), { players });
   }
 
   function mount(view: MuleView, me: NonNullable<Live['me']>) {
@@ -1086,10 +1087,17 @@ describe("needs B-AC-14, phone half (mounted): the hall's long press and the pac
     }
   });
 
-  it("needs B-AC-14 (negative): her household ate half its meal: the pace line's tap says to buy the Food that feeds household and crews, 4", () => {
+  it("needs B-AC-14 (negative): her household ate half its meal: the pace line's tap says to buy the Food that feeds household and crews, 4, split 2 for her and 2 for her crews", () => {
     const { host, unmount } = mount(halfFed(), mine(5.5, 4.5));
     act(() => propsOf(element(host, 'pace-line')!).onClick!());
-    expect(element(host, 'pace-next')?.textContent).toBe('Next month: buy 4 Food at the auction, or put a Food MULE on a plot');
+    expect(element(host, 'pace-next')?.textContent).toBe('Next month: buy 4 Food at the auction (2 for you, 2 for your crews), or put a Food MULE on a plot');
+    unmount();
+  });
+
+  it("needs B-AC-14 (negative): with no crews to feed, the pace line's tap names only her household's Food, as before", () => {
+    const { host, unmount } = mount(halfFed(2), mine(5.5, 4.5));
+    act(() => propsOf(element(host, 'pace-line')!).onClick!());
+    expect(element(host, 'pace-next')?.textContent).toBe('Next month: buy 2 Food at the auction, or put a Food MULE on a plot');
     unmount();
   });
 });
