@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CONSUMPTION,
   advancePhase,
   auctionDone,
   cloneForSim,
@@ -379,15 +380,15 @@ describe("price C6: the colony's Energy demand counts the MULEs it will add", ()
     expect(monthlyDemand(state).energy - colonists).toBeCloseTo(8 * PER_NEW_MULE, 9);
   });
 
-  it('price C6: the Energy a new MULE needs follows UPKEEP.energyUse as a run sets it', () => {
-    const saved = UPKEEP.energyUse.smithore;
+  it('price C6: the Energy a new MULE needs follows CONSUMPTION as a run sets it', () => {
+    const saved = CONSUMPTION.smithore.energy;
     const state = game();
     const base = monthlyDemand(state).energy;
     try {
-      UPKEEP.energyUse.smithore = 4; // the mean over Food 1, Water 1, Smithore 4, Crystite 2, Rare Earth 2 is 2
+      CONSUMPTION.smithore.energy = 4; // the mean over Food 1, Water 1, Smithore 4, Crystite 2, Rare Earth 2 is 2
       expect(monthlyDemand(state).energy - base).toBeCloseTo(8 * (2 - PER_NEW_MULE), 9);
     } finally {
-      UPKEEP.energyUse.smithore = saved;
+      CONSUMPTION.smithore.energy = saved;
     }
   });
 
