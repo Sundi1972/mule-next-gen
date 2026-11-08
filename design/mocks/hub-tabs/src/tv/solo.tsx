@@ -4,7 +4,10 @@ import '../mock.css';
 import '../../review-loop/select-client';
 import { beatOf, BEATS } from '../steps';
 import { TV_NOTE, TvScreenView } from './TvFor';
-import { tvScreen, type Seats } from './world';
+import { EVENT_SHOW } from '@mule/engine';
+import type { EventView } from '@mule/protocol';
+import { baseWorld } from '../fixture';
+import { productionOf, tvScreen, type Seats } from './world';
 
 /*
  * MOCK PLUMBING: the TV alone, for this builder's own checks (TV-FIT, page errors); the prototype itself is the phone
@@ -66,7 +69,35 @@ function Beat({ id }: { id: string }) {
   );
 }
 
+/**
+ * STUB until mock-hub-tabs' Sheriff fixture lands (?stub=caught): #p10's guarded catch in the shape showEventsOf will
+ * give (ShowEventView + sabotage), on a plot of Brix's, Lena caught. For the layer's alignment and the show's key only.
+ */
+function Stub() {
+  const seats = (Number(Q.get('seats')) || 4) as Seats;
+  const screen = useMemo(() => {
+    const s = tvScreen(baseWorld(), { seats });
+    const caught = {
+      key: 'powerCut', kind: 'sabotage', title: 'Sabotage: power cut', line: 'Caught at a guarded plot: the power stays on.', sign: 'bad', scope: 'personal',
+      origin: { x: 9, y: 2 }, hits: [], phase: 'production', weight: 'spotlight', playMs: EVENT_SHOW.playMs.spotlight,
+      sabotage: { order: 'stub', culprit: 'lena', worked: false, guarded: true },
+    } as unknown as EventView;
+    const game = productionOf(s.game, [caught]);
+    return { ...s, game, table: { ...s.table, game } };
+  }, [seats]);
+  return (
+    <div className="flex flex-col gap-2 bg-table text-ink">
+      <div className="flex items-center gap-4 px-2">
+        <span className="font-mono text-sm">STUB · production-caught · {seats} seats</span>
+        <FitReadout />
+      </div>
+      <TvScreenView screen={screen} focus="planning" />
+    </div>
+  );
+}
+
 function Solo() {
+  if (Q.get('stub') === 'caught') return <Stub />;
   const beat = Q.get('beat');
   if (beat) return <Beat id={beat} />;
   return (

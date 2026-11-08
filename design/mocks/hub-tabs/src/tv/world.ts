@@ -1,4 +1,5 @@
-import type { MuleView, NewsLine, PlayerView, TableView } from '@mule/protocol';
+import { EVENT_SHOW, productionShowMs } from '@mule/engine';
+import type { EventView, MuleView, NewsLine, PlayerView, TableView } from '@mule/protocol';
 import type { TableClient } from '../../../../../apps/web/src/net/client';
 import { aPlayer } from '../../../../../apps/web/test/fixtures/views';
 import { boardViewFor, type MockWorld } from '../fixture';
@@ -11,11 +12,18 @@ import { brokenIn, brokenWho, brokenWords } from './copied/deals-words';
 
 export type { MockWorld };
 
-export type TvFocus = 'planning' | 'deal-offered' | 'deal-broken' | 'budget-set' | 'overrule-called' | 'overrule-reveal' | 'guarding' | 'waiting' | 'month-end';
+export type TvFocus =
+  | 'planning' | 'deal-offered' | 'deal-broken' | 'budget-set' | 'overrule-called' | 'overrule-reveal' | 'guarding' | 'waiting' | 'month-end'
+  // The Sheriff month (?path=sheriff): production's catch, the fine, its month end; optional: an unseen cut, an investigation.
+  | 'production-caught' | 'fine-set' | 'month-end-fine' | 'production-dark' | 'investigation';
+
+/** An investigation's public result this planning (the fixture's world.investigation): which case, and whether solved. */
+export type Investigation = { order: string; solved: boolean } | null;
 
 export interface TvScreen {
   table: TableView<MuleView>;
   game: MuleView;
+  investigation: Investigation;
   /** The public chat: the TV never sees a whisper. */
   chat: MockWorld['chat'];
 }
@@ -31,7 +39,9 @@ export type Seats = 2 | 4 | 6;
 export function tvScreen(world: MockWorld, { seats = 4 }: { seats?: Seats } = {}): TvScreen {
   const { view, table } = boardViewFor(world);
   const game: MuleView = { ...view, players: seatsOf(view.players, seats), newsLines: newsLinesOf(view) };
-  return { table: { ...table, game }, game, chat: world.chat.filter((m) => !m.to) };
+  // TODO(fixture): world.investigation lands with mock-hub-tabs' Sheriff fixture; read through the type until then.
+  const investigation = (world as { investigation?: Investigation }).investigation ?? null;
+  return { table: { ...table, game }, game, chat: world.chat.filter((m) => !m.to), investigation };
 }
 
 /**
@@ -50,13 +60,21 @@ function seatsOf(players: PlayerView[], seats: Seats): PlayerView[] {
 }
 
 /**
- * What the TV announces as a moment (TV_EVENT_HOLD_S), by a stable id: each card broken this month, and an overrule
- * call while it is held for planning's end.
+ * What the TV announces as a moment (TV_EVENT_HOLD_S), by a stable id: each card broken this month, an overrule call
+ * while it is held for planning's end, and an investigation's result.
  */
-export function eventsOf(game: MuleView): string[] {
+export function eventsOf(game: MuleView, investigation: Investigation = null): string[] {
   const breaks = brokenIn(game, game.month).map((c) => `break:${c.id}`);
   const o = game.politics?.overrule;
-  return o?.stage === 'called' ? [...breaks, `call:${o.target}:${o.caller}`] : breaks;
+  const call = o?.stage === 'called' ? [`call:${o.target}:${o.caller}`] : [];
+  const found = investigation ? [`investigation:${investigation.order}`] : [];
+  return [...breaks, ...call, ...found];
+}
+
+/** Whom a solved case names: the incident's culprit, public once solved. */
+export function culpritOf(game: MuleView, order: string) {
+  const id = game.politics?.sabotage?.incidents.find((i) => i.id === order)?.culprit;
+  return id ? (game.players.find((p) => p.id === id) ?? null) : null;
 }
 
 /** The news's seats by id, for SeatWords: a line that is a broken card's public words names its seats (finding F-11's stand-in). */
@@ -74,7 +92,8 @@ export function tvClient(screen: TvScreen): TableClient {
   return {
     subscribe: () => () => {},
     getState: () => state,
-    serverNow: () => 0,
+    // The mock's server clock is the page's: production's show runs off phaseEndsAt against it (productionOf).
+    serverNow: () => performance.now(),
     intent: () => {},
     chat: () => {},
     emote: () => {},
@@ -85,3 +104,15 @@ export function tvClient(screen: TvScreen): TableClient {
 
 /** This month's broken cards, the one rule the banner and the month end share. */
 export const brokenThisMonth = (game: MuleView) => brokenIn(game, game.month);
+
+/**
+ * Production as the server would send it for these events: the phase, its show (the events, the intro, its length by
+ * the engine's own timeline), and when it ends, from now on the mock's clock, so the show plays from the screen's start.
+ * `lines` (the harvest) are the world's plots that make something: none in the fixture, whose plots have no MULEs.
+ */
+export function productionOf(game: MuleView, events: EventView[], lines: NonNullable<MuleView['production']>['lines'] = []): MuleView {
+  const introMs = events.length > 0 ? EVENT_SHOW.introMs : 0;
+  const eventsMs = events.length > 0 ? events.reduce((n, e) => n + e.playMs, introMs) : 0;
+  const lengthMs = productionShowMs(new Set(lines.map((l) => l.good)).size, eventsMs);
+  return { ...game, phase: 'production', phaseEndsAt: performance.now() + lengthMs, production: { lines, events, lengthMs, introMs, hurry: null } };
+}
