@@ -240,6 +240,17 @@ describe('the reputation chip (S3-C19)', () => {
   });
 });
 
+describe('the reputation chip in the ready bar (S3-C19)', () => {
+  it("S3-B-AC-6: the ready bar's waiting names on the phone carry their chips, as labels a stray tap cannot open; your own name none", () => {
+    mount(gameFor(myView(LENA)), () => createElement(Planning));
+    const chip = byTestid(`waiting-${OSSA}-rep`);
+    expect(chip.textContent).toBe(String(repHigh - 1));
+    expect(chip.tagName, 'a label, not a button').toBe('SPAN');
+    expect(byTestid(`waiting-${BRIX}-rep`).getAttribute('data-band')).toBe('low');
+    expect(findTestid(`waiting-${LENA}-rep`)).toBeUndefined();
+  });
+});
+
 // ---- S3-C17 · the composer ---------------------------------------------------------------------------------------
 
 /** Lena's whole planning hub. */
