@@ -184,7 +184,7 @@ function electionView(state: GameState): ElectionView | null {
  * One player's own side of politics, for their phone only: their candidacy (the election's from the ballot until the
  * result, else Politics'), their ballot, and the tax paid and reputation that weigh their vote.
  */
-export function myPoliticsView(state: GameState, playerId: string): MyPoliticsView | null {
+export function myPoliticsView(state: GameState, playerId: string, voids: readonly SabotageOrder[] = []): MyPoliticsView | null {
   const p = state.politics;
   if (!p) return null;
   const e = p.election;
@@ -198,7 +198,7 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
     promised: structuredClone(promisedVotes(state, playerId)),
-    sabotage: mySabotageView(state, playerId),
+    sabotage: mySabotageView(state, playerId, voids),
     ...sheriffDesk(state, playerId),
     ...(p.governor === playerId && state.phase === 'planning' && !votesOpen(state) ? { candidates: candidates(state) } : {}),
   };
@@ -393,7 +393,7 @@ export function sabotageView(state: GameState): NonNullable<PoliticsView['sabota
 }
 
 /** A player's own sabotage for their phone: this month's order, what it will cost, and every order they made. */
-export function mySabotageView(state: GameState, playerId: string): NonNullable<MyPoliticsView['sabotage']> | null {
+export function mySabotageView(state: GameState, playerId: string, voids: readonly SabotageOrder[] = []): NonNullable<MyPoliticsView['sabotage']> | null {
   const p = state.politics;
   if (!p || !POLITICS.sabotage.on) return null;
   const mine = p.sabotage.filter((o) => orderSight(o, playerId) === 'whole');
@@ -403,10 +403,18 @@ export function mySabotageView(state: GameState, playerId: string): NonNullable<
     order: standing ? structuredClone(standing.target) : null,
     canOrder: canOrder(state, playerId),
     owed: charged ? 0 : mine.filter((o) => o.month === state.month).reduce((sum, o) => sum + o.cost, 0),
-    mine: mine.flatMap((o) => {
-      const view = incidentView(state, o, playerId);
-      return view ? [{ ...view, public: isPublicOrder(o), outcome: o.outcome }] : [];
-    }),
+    // A void order is gone from the engine's list; the server keeps it (voidedOrders) and it reaches the same test as any other:
+    // only its orderer sees it, and as one entry that was never public and never charged.
+    mine: [
+      ...mine.flatMap((o) => {
+        const view = incidentView(state, o, playerId);
+        return view ? [{ ...view, public: isPublicOrder(o), outcome: o.outcome }] : [];
+      }),
+      ...voids.filter((o) => orderSight(o, playerId) === 'whole').flatMap((o) => {
+        const view = incidentView(state, o, playerId);
+        return view ? [{ ...view, public: false, outcome: 'void' as const }] : [];
+      }),
+    ].sort((a, b) => a.month - b.month),
   };
 }
 
@@ -474,6 +482,11 @@ export function sabotageNotices(state: GameState, before: readonly SabotageOrder
     if (orderSight(o, EVERYONE) === 'none') return { ...base, outcome: 'failed', culprit: o.by, parties: [o.by!] };
     return { ...base, outcome: o.outcome as 'done' | 'caught', culprit: culpritSeen(o, EVERYONE) ? o.by : null };
   });
+}
+
+/** The orders that went void between two lists, as they stood while pending: the server's own record of them (S4-RULE-3 row 1). */
+export function voidedOrders(state: GameState, before: readonly SabotageOrder[], after: readonly SabotageOrder[]): SabotageOrder[] {
+  return changes(state, before, after).flatMap((change) => (change.what === 'void' ? [structuredClone(change.was)] : []));
 }
 
 const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1);
