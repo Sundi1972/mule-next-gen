@@ -46,6 +46,17 @@
   <h1>The colony grounds: walking colonists, and can every place be seen?</h1>
   <p class="sub">WS10 spike, 8 Nov. Two questions from Heiko: nicer colonists with a real walk, and whether the one fixed view makes any building's place hard to see. Rotation and zoom are parked (zoom is Jira SA-1379).</p>
 
+  <h2 id="in-the-game">In the game: Astronaut A, as Heiko picked it (8 Nov)</h2>
+  <div class="verdict"><strong>Built</strong> on branch <code>ws10-walker</code>: the real <code>ColonyGrounds</code> and TV opener, the shipped pictures, the colonists from their sheets. Suits in the four player colours, helmets and trims in warm white, graphite or sand, walking at <strong>1.3 m/s</strong>. A colonist behind a building is hidden by it and shows as a faint white outline (#776). The phone at dusk loads <strong>804 KB</strong> of art (budget 1 MB): the colonists add about 12.5 KB per sheet in view.</div>
+  <figure><img src="spike/game/opener-1920-dusk.webp" alt="The TV opener at dusk, 1920 px, with colonists on the paths"><figcaption>TV opener, 1920 × 1080, dusk. Colonists are about 28 px tall here, true to scale beside the buildings.</figcaption></figure>
+  <figure><img src="spike/game/zoom-dusk.webp" alt="Close-up of the TV opener at dusk, enlarged twice"><figcaption>The same shot, a 900 × 420 crop enlarged twice. Colonists in orange, blue and yellow suits on the paths; faint white outlines where the Hospital and the hall hide one.</figcaption></figure>
+  <figure><img src="spike/game/zoom-day.webp" alt="Close-up of the TV opener by day, enlarged twice"><figcaption>The same crop by day.</figcaption></figure>
+  <div class="pair">
+    <figure><img src="spike/game/phone-390-dusk.webp" alt="The phone view at dusk"><figcaption>Phone, 390 px wide, dusk: the colonists are specks at this size, as the buildings' people would be.</figcaption></figure>
+    <figure><img src="spike/game/montage-day.webp" alt="All twelve suit and trim variants by day, enlarged"><figcaption>The twelve sheets, one frame each, enlarged 2× from the full-resolution render (the TV shows them at a quarter of this): rows p1–p4, columns white / graphite / sand trims.</figcaption></figure>
+  </div>
+  <figure><img src="spike/game/opener-1920-day.webp" alt="The TV opener by day, 1920 px"><figcaption>TV opener, 1920 × 1080, by day.</figcaption></figure>
+
   <h2 id="visibility">Can every place be seen in the one view?</h2>
   <div class="verdict"><strong>Yes, enough to find it: no place is ever fully hidden.</strong> Nobody picks a place in the game. When the Governor commissions a building, it takes the first free block nearest the town hall (rule RULE-32b), so a building in front can never get in the way of a choice. What can happen is that a new building's site lands behind a tall one. At worst two thirds of its ground is covered, and its chip on the phone always shows.</div>
 

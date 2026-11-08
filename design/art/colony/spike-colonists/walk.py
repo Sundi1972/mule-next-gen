@@ -27,6 +27,10 @@ HEIGHT = float(a[6]) if len(a) > 6 else 1.75
 SAMPLES = int(a[7]) if len(a) > 7 else 32
 YAW0 = float(a[8]) if len(a) > 8 else 0.0  # the model's own facing, so heading "+x" really walks along +x
 SPIN = float(a[9]) if len(a) > 9 else 1.0  # -1 where a rig turns the other way about z (the Quaternius human's .blend)
+# COLONY_WALK_TINT="<suit material>,<trim material>": render those two neutral, so the page's palettes tint them true,
+# and add a mask sheet (suit in red, trim in green) the tints are laid through (Heiko, 8 Nov: coloured suits)
+TINT = [m for m in os.environ.get("COLONY_WALK_TINT", "").split(",") if m]
+NEUTRAL = (0.62, 0.62, 0.62, 1.0)
 # a cell 2.5 m wide and 2.9 m tall at the shared scale, the feet 0.35 m above its bottom edge
 CELL = {"width": 192, "height": 224, "centre": [96, 197]}
 # the grid's two axes both ways: +x runs down-right on screen, +y up-right (x = 12 (col - 2), y = -12 (row - 2))
@@ -98,35 +102,74 @@ root.scale = (s, s, s)
 root.location = (-(x0 + x1) / 2 * s, -(y0 + y1) / 2 * s, -z0 * s)
 print(f"COLONY walk: {NAME} action {act.name} frames {f0}-{f1}, model {z1 - z0:.2f} units tall -> {HEIGHT} m", flush=True)
 
-frame.shadow_catcher()  # the contact shadow comes with the frame, as with a building layer
+
+def principled(m):
+    return next((n for n in (m.node_tree.nodes if m.use_nodes else []) if n.type == "BSDF_PRINCIPLED"), None)
+
+
+for m in bpy.data.materials:  # the tinted parts render neutral grey: the palette is laid on in the page's sheets
+    if m.name in TINT and principled(m):
+        b = principled(m).inputs["Base Color"]
+        for link in list(b.links):
+            m.node_tree.links.remove(link)
+        b.default_value = NEUTRAL
+
+catcher = frame.shadow_catcher()  # the contact shadow comes with the frame, as with a building layer
 light.rig()
 frame.camera(CELL)
 frame.setup(SAMPLES, 100, CELL)
 light.apply(LIGHT)
 os.makedirs(OUT, exist_ok=True)
 cells = []
-for h, yaw in HEADINGS.items():
-    root.rotation_euler = (0, 0, math.radians(SPIN * yaw + YAW0))
-    row = []
-    for k in range(FRAMES):
-        f = f0 + (f1 - f0) * k / FRAMES
-        scene.frame_set(int(f), subframe=f - int(f))
-        p = os.path.join(OUT, f"{NAME}-{LIGHT}-{h}-{k:02d}.png")
-        scene.render.filepath = p
-        bpy.ops.render.render(write_still=True)
-        im = bpy.data.images.load(p)
-        px = np.empty(CELL["width"] * CELL["height"] * 4, np.float32)
-        im.pixels.foreach_get(px)
-        row.append(px.reshape(CELL["height"], CELL["width"], 4))
-        bpy.data.images.remove(im)
-    cells.append(np.concatenate(row, axis=1))
-    print(f"COLONY render walk {NAME} {LIGHT} {h}: {FRAMES} frames", flush=True)
-sheet = np.concatenate(cells[::-1], axis=0)  # pixels are bottom-up: reverse so the first heading is the top row
-img = bpy.data.images.new("sheet", sheet.shape[1], sheet.shape[0], alpha=True)
-img.pixels.foreach_set(sheet.ravel())
-img.filepath_raw = os.path.join(OUT, f"{NAME}-{LIGHT}-sheet.png")
-img.file_format = "PNG"
-img.save()
+
+
+def sheet_of(prefix):
+    cells = []
+    for h, yaw in HEADINGS.items():
+        root.rotation_euler = (0, 0, math.radians(SPIN * yaw + YAW0))
+        row = []
+        for k in range(FRAMES):
+            f = f0 + (f1 - f0) * k / FRAMES
+            scene.frame_set(int(f), subframe=f - int(f))
+            p = os.path.join(OUT, f"{prefix}-{h}-{k:02d}.png")
+            scene.render.filepath = p
+            bpy.ops.render.render(write_still=True)
+            im = bpy.data.images.load(p)
+            px = np.empty(CELL["width"] * CELL["height"] * 4, np.float32)
+            im.pixels.foreach_get(px)
+            row.append(px.reshape(CELL["height"], CELL["width"], 4))
+            bpy.data.images.remove(im)
+        cells.append(np.concatenate(row, axis=1))
+        print(f"COLONY render walk {prefix} {h}: {FRAMES} frames", flush=True)
+    return np.concatenate(cells[::-1], axis=0)  # pixels are bottom-up: reverse so the first heading is the top row
+
+
+def save(sheet, path):
+    img = bpy.data.images.new(os.path.basename(path), sheet.shape[1], sheet.shape[0], alpha=True)
+    img.pixels.foreach_set(sheet.ravel())
+    img.filepath_raw = path
+    img.file_format = "PNG"
+    img.save()
+
+
+save(sheet_of(f"{NAME}-{LIGHT}"), os.path.join(OUT, f"{NAME}-{LIGHT}-sheet.png"))
+if TINT and LIGHT == "day":  # the mask is the same in any light: once, with the day sheet
+    for m in bpy.data.materials:
+        if not m.use_nodes or m.name.startswith(("catcher", "shadow")):
+            continue
+        nt = m.node_tree
+        out = next(n for n in nt.nodes if n.type == "OUTPUT_MATERIAL")
+        em = nt.nodes.new("ShaderNodeEmission")
+        em.inputs["Color"].default_value = (1, 0, 0, 1) if m.name == TINT[0] else (0, 1, 0, 1) if len(TINT) > 1 and m.name == TINT[1] else (0, 0, 0, 1)
+        nt.links.new(em.outputs[0], out.inputs["Surface"])
+    catcher.hide_render = True
+    scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.0
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.look = "None"
+    scene.view_settings.exposure = 0.0
+    scene.cycles.samples = 8
+    scene.cycles.use_denoising = False
+    save(sheet_of(f"{NAME}-mask"), os.path.join(OUT, f"{NAME}-mask-sheet.png"))
 json.dump({"cell": CELL, "px_per_m": frame.PX_PER_M, "frames": FRAMES, "headings": list(HEADINGS), "seconds": (f1 - f0) / scene.render.fps,
            "height_m": HEIGHT, "model": os.path.basename(MODEL), "action": act.name}, open(os.path.join(OUT, f"{NAME}-{LIGHT}.json"), "w"), indent=1)
-print(f"COLONY walk sheet {img.filepath_raw}", flush=True)
+print(f"COLONY walk sheets for {NAME} {LIGHT}", flush=True)
