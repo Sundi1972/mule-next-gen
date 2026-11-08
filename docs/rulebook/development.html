@@ -71,16 +71,16 @@
 <div class="table-wrap"><table>
 <thead><tr><th>What</th><th>Pace factor</th></tr></thead>
 <tbody>
-<tr><td>Fed (holding the month's Food)</td><td class="n">1</td></tr>
-<tr><td>Hungry</td><td>falls in a straight line from <span class="num">1</span> (all the Food you need) to <span class="num">0.6</span> (none)</td></tr>
+<tr><td>Fed (your household ate in full at the last month end)</td><td class="n">1</td></tr>
+<tr><td>Hungry</td><td>falls in a straight line from <span class="num">1</span> (all the Food your household needed) to <span class="num">0.6</span> (none)</td></tr>
 <tr><td>Sick, with no Medicine</td><td class="n">0.5</td></tr>
 <tr><td>Zipwing (species perk)</td><td class="n">1.25</td></tr>
 </tbody>
 </table></div>
 <h3 id="hunger">Hunger</h3>
-<p>The Food you need this month is <span class="num">2</span>, plus <span class="num">1</span> for every <span class="num">4</span> crew or part of four (a working raw plot has a crew of <span class="num">1</span>, a factory <span class="num">2</span>, a green belt none). At the start of development, if you hold less Food than that, you are hungry. The screens name how hungry by the share of Food missing:</p>
+<p>Your household eats <span class="num">2</span> Food at each month end, before your crews (see <a href="production.html#upkeep-and-crew">Upkeep and crew</a>). If it went short, you are hungry all next development, whatever you hold when development starts (see <a href="#hunger-last-meal">Hunger read from your household's last meal</a>). The screens name how hungry by the share of its Food your household went without:</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Share of the month's Food missing</th><th>Shown as</th></tr></thead>
+<thead><tr><th>Share of the household's Food missing</th><th>Shown as</th></tr></thead>
 <tbody>
 <tr><td>none</td><td>fed</td></tr>
 <tr><td>under 30%</td><td>peckish</td></tr>
@@ -88,19 +88,19 @@
 <tr><td>70% or more</td><td>starving</td></tr>
 </tbody>
 </table></div>
-<p>The words are bands only; the pace itself slides smoothly with the Food you hold. Hunger and sickness are public: everyone can see who is hungry or sick.</p>
+<p>The words are bands only; the pace itself slides smoothly with the share missing. Before the first month end nobody is hungry. Hunger and sickness are public: everyone can see who is hungry or sick.</p>
 <h3 id="sickness">Sickness</h3>
 <p>At the start of each development every player rolls for sickness: <span class="num">3</span>% at base, more in dirty air (<span class="num">+15</span>% from Smoggy, <span class="num">+30</span>% from Toxic, <span class="num">+50</span>% in Collapse) and <span class="num">+3</span>% for every air point your own plots caused last month (at most <span class="num">+40</span>%; a filter halves your points), never above <span class="num">90</span>%. A rare epidemic (<span class="num">0.5</span>% a month) makes everyone sick this development and the next. If you are sick and hold a Medicine, you take one and are well; otherwise you walk at half pace this turn.</p>
-<div class="box example"><h4>Example</h4><p>Brix has five working raw plots: a crew of <span class="num">5</span>, so he needs <span class="num">2 + 2</span> = <span class="num">4</span> Food. He holds <span class="num">1</span>: three quarters missing, "starving". His hunger factor is <span class="num">1 − 0.4 × 0.75</span> = <span class="num">0.7</span>. He is also sick with no Medicine: <span class="num">0.7 × 0.5</span> = <span class="num">0.35</span>. On plains he walks <span class="num">2.5 × 0.35</span> = under <span class="num">0.9</span> plots a second. A Zipwing in the same state would walk at <span class="num">0.35 × 1.25</span> = about <span class="num">0.44</span> of full pace.</p></div>
+<div class="box example"><h4>Example</h4><p>Brix held <span class="num">1</span> Food at the last month end. His household ate it and went without the other <span class="num">1</span> of its <span class="num">2</span>: half missing, "hungry". His hunger factor is <span class="num">1 − 0.4 × 0.5</span> = <span class="num">0.8</span>. He is also sick with no Medicine: <span class="num">0.8 × 0.5</span> = <span class="num">0.4</span>. On plains he walks <span class="num">2.5 × 0.4</span> = <span class="num">1</span> plot a second. A Zipwing in the same state would walk at <span class="num">0.4 × 1.25</span> = <span class="num">0.5</span> of full pace.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>The slowest hunger pace, <span class="num">0.6</span>, is Heiko's of 4 Nov ("Yes, 60%"). It is the strongest slowdown with which a starving colony can still recover: at <span class="num">0.2</span> a starving colonist could not reach Food and the pub inside the turn, and the colony went short in 58% of months; from <span class="num">0.6</span>, under 15%. Sick pace <span class="num">0.5</span> and the sickness odds are Heiko's catalogue numbers (28 Oct). The Zipwing perk is <span class="num">1.25</span> because at <span class="num">1.5</span> Zipwings won 37% of four-player games instead of a fair 25%.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/dev-walk.ts::pace</code> · <code>dev-walk.ts::hungerPace</code> · <code>config.ts::DEV_WALK</code> (<code>hungerPaceMin</code>, <code>sickPace</code>, <code>hungerLevels</code>) · <code>config.ts::SPECIES_PERK.zipwingSpeed</code> · <code>config.ts::EVENTS.player.sickness</code> · <code>packages/engine/src/production.ts::needsOf</code></p>
+<p class="code-ref">In the code: <code>packages/engine/src/dev-walk.ts::pace</code> · <code>dev-walk.ts::hungerPace</code> · <code>config.ts::DEV_WALK</code> (<code>hungerPaceMin</code>, <code>sickPace</code>, <code>hungerLevels</code>) · <code>config.ts::SPECIES_PERK.zipwingSpeed</code> · <code>config.ts::EVENTS.player.sickness</code> · <code>dev-walk.ts::foodShare</code> · <code>upkeep.ts::runUpkeep</code> (<code>Player.householdShort</code>)</p>
 <p class="owner">Kept current by: the Strategy team (WS1), with the Events team (WS1/WS8) for sickness.</p>
 
-<h3 id="hunger-last-meal">Hunger read from your household's last meal <span class="pill designed">Designed, not in the game yet, WS5</span></h3>
-<p>Heiko approved on 6 Nov (decision 7): you will be hungry when your household went short at the last month end, not when you start development holding less Food than you need. The walking pace and the words for how hungry stay as above.</p>
-<p>Why: today's check reads your stock after half the Food has spoiled and before the month's market, so a player whose farms make twice their need still counts as hungry; 83 of every 100 player-months read hungry today. A player who bought Food late in the month still walks fed, which is the cost.</p>
-<div class="box next"><h4>Ships as one package</h4><p>Heiko's decision 1 (6 Nov): the colonists' hardship and sickness ship together with the Food and Medicine supply change, tuned in one pass. This hunger rule is part of that pass, with Food spoiling a quarter a month (see <a href="production.html#food-spoilage-quarter">Food will spoil a quarter a month</a>).</p></div>
-<p class="owner">Designed, not in the game yet, WS5 (a named edit in WS1's and WS3's code) · Spec: <code>docs/specs/2026-11-06-colony-needs.md</code>, C15.</p>
+<h3 id="hunger-last-meal">Hunger read from your household's last meal <span class="pill built">In the game</span></h3>
+<p>You are hungry when your household went short at the last month end, not when you start development holding less Food than you need. A household that ate in full walks fed, even when what was left then spoiled below next month's need. The Food you hold when development starts does not change it: your hunger was settled at the month end. The walking pace and the words for how hungry are as above.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko approved this on 6 Nov (decision 7), as part of the supply pass with Food spoiling a quarter a month (see <a href="production.html#food-spoilage-quarter">Food spoils a quarter a month</a>). The old check read your stock after half the Food had spoiled and before the month's market, so a player whose farms made twice their need still counted as hungry: 83 of every 100 player-months read hungry.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> (<code>Player.householdShort</code>) · <code>game.ts::startDevelopment</code> · <code>dev-walk.ts::foodShare</code> · Spec: <code>docs/specs/2026-11-06-colony-needs.md</code>, C15</p>
+<p class="owner">Built by WS5 (PR-8) as a named edit in WS1's and WS3's code; kept current by the Strategy team (WS1).</p>
 <h3 id="sickness-from-colony">The colony's sickness reaches players <span class="pill designed">Designed, not in the game yet, WS5</span></h3>
 <p>Heiko approved on 6 Nov (decision 24): when colonists are sick (see <a href="colony-and-politics.html#colony-health">Colony health</a>), your chance of falling sick at the start of development rises with the share of them who are sick, by up to <span class="num">10</span> points at the worst. It is added to the chance above, never multiplied. Medicine cures you as today.</p>
 <p>Why an addition: as a multiple, dirty air made players sick in 387 of 480 player-months in ten simulated games. Added, it stays under a third even in dirty air. Hunger does not raise a player's own sickness chance yet (decision 8): no simulation has tested that link, so it is decided when it can be measured.</p>
