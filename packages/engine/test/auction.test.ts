@@ -171,8 +171,8 @@ describe('the live auction: goods one at a time', () => {
     });
     startAuction(state, ['food']);
     const row = a(state).status.find((r) => r.id === 'p0')!;
-    // The need to hold: 2 eaten at upkeep, plus 3 so that 2 are left after a quarter spoils (auctionNeed; needs C16).
-    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 5 });
+    // The need to hold: the 2 upkeep eats; no factory, so nothing is carried past spoilage (auctionNeed, PM ruling (a)).
+    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 2 });
     // Upkeep eats 2 first; a quarter of the other 5 spoils: 3.75 kept, rounded down, so 2 are lost.
     expect(row.spoils).toBe(2);
     expect(a(state).status.find((r) => r.id === 'p1')).toMatchObject({ had: 4, made: 0, now: 0, used: 4 });
