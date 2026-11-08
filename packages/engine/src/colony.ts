@@ -3,7 +3,7 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, GAME, HAPPINESS, POLITICS, PRESTIGE } from './config.js';
+import { COLONY, GAME, HAPPINESS, HARDSHIP, HEALTH, POLITICS, PRESTIGE, UPKEEP } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { budgetCredits, taxAsPlanningEnds, votesOpen } from './politics.js';
@@ -227,8 +227,87 @@ export function repair(state: GameState, playerId: string, id: PrestigeId): void
   colony.projects.find((p) => p.id === id)!.stage = 'standing';
 }
 
-/** At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is funded, oldest first. See G-5 RULE-21. */
-export function runColony(state: GameState, shortages: readonly Good[]): void {
+/**
+ * How hard a shortfall bites, 0..1, from the share of a need that went missing: nothing up to HARDSHIP.tolerance, then
+ * rising along a curve to 1 at a total miss. See needs RULE-2.
+ */
+export function hardship(short: number): number {
+  const { tolerance, power } = HARDSHIP;
+  return short <= tolerance ? 0 : ((short - tolerance) / (1 - tolerance)) ** power;
+}
+
+/**
+ * How the colonists fared at an upkeep: each need's share they went without (0..1), the share of their Electronics
+ * want met, and the growth sickness can slow: the colony's size before it grew and the rate it grew at. No `growth`
+ * when Collapse air overrode it.
+ */
+export interface ColonistMonth {
+  short: { food: number; water: number; medicine: number };
+  comfort: number;
+  growth?: { from: number; rate: number };
+}
+
+/** A month with nothing missing and no Electronics. */
+export const WELL_MONTH: ColonistMonth = { short: { food: 0, water: 0, medicine: 0 }, comfort: 0 };
+
+/** The colony's health as the gauge shows it, 0..100: the share of colonists who are well. */
+export function healthOf(sick: number): number {
+  return Math.round(PERCENT * (1 - sick));
+}
+
+/**
+ * The health gauge's marks, read from the rule so the gauge never keeps its own copy: well from HEALTH.gaugeWellFrom,
+ * at the limit at the cap's health, and the health at and below which players' crews fall sick too.
+ */
+export function healthGauge(): { wellFrom: number; atLimit: number; crewSickAt: number } {
+  return { wellFrom: HEALTH.gaugeWellFrom, atLimit: healthOf(HEALTH.cap), crewSickAt: healthOf(HEALTH.crewSickFrom) };
+}
+
+/** The share of the colonists who are sick: 0 while colony health is off, null without a colony (politics off). */
+export function sickShare(state: GameState): number | null {
+  if (!state.colony) return null;
+  return HEALTH.enabled ? (state.colony.sick ?? 0) : 0;
+}
+
+/**
+ * Next month's sick share from this month's: the well fall sick from hunger, missing Medicine and contagion, and the
+ * sick recover, more slowly without their Medicine. Recovery always outruns contagion, so a fed and treated colony
+ * heals whatever its start. See needs RULE-7.
+ */
+export function nextSickShare(h: number, short: ColonistMonth['short']): number {
+  const fallSick =
+    HEALTH.base + HEALTH.perHunger * hardship(Math.max(short.food, short.water)) + HEALTH.perMedicine * hardship(short.medicine) + HEALTH.contagion * h;
+  const recover = h * HEALTH.recovery * (1 - HEALTH.medicineCut * short.medicine);
+  return Math.min(HEALTH.cap, Math.max(0, h + (1 - h) * fallSick - recover));
+}
+
+/** The colonists' Medicine need this month: one per UPKEEP.colonistsPerMedicine, more by the share already sick (needs RULE-8). */
+export function colonistMedicineNeed(state: GameState): number {
+  return (state.colonists / UPKEEP.colonistsPerMedicine) * (1 + (sickShare(state) ?? 0));
+}
+
+/** The colony's size after a month's growth at `rate`, slowed by the share sick (needs RULE-8), rounded once. */
+export function grownColonists(from: number, rate: number, sick: number): number {
+  return Math.round(from * (rate - HEALTH.growthPerSick * sick));
+}
+
+/**
+ * The colonists' Electronics: they want one per UPKEEP.colonistsPerElectronics and take what the shelf holds of it.
+ * `met` is the share of the want they got, 0 when they want none: a comfort when met, never a penalty. See needs RULE-9.
+ */
+export function electronicsComfort(colonists: number, stock: number): { took: number; met: number } {
+  const want = colonists / UPKEEP.colonistsPerElectronics;
+  if (want <= 0) return { took: 0, met: 0 };
+  const took = Math.min(want, Math.max(0, stock));
+  return { took, met: took / want };
+}
+
+/**
+ * At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and every project being paid for is
+ * funded, oldest first (G-5 RULE-21). Then, with colony health on, the sick share moves by how the colonists fared at
+ * this upkeep's meal and slows the month's growth, and the month's mood steps.
+ */
+export function runColony(state: GameState, shortages: readonly Good[], month: ColonistMonth = WELL_MONTH): void {
   if (!state.colony) return;
   const colony = edit(state);
   for (const p of colony.projects) {
@@ -252,7 +331,12 @@ export function runColony(state: GameState, shortages: readonly Good[]): void {
   // (C48) (RULE-21 row 4).
   let limit = credits.projects;
   for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) limit -= fund(state, colony, p, limit);
-  colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages)));
+  if (HEALTH.enabled) {
+    colony.sick = nextSickShare(colony.sick ?? 0, month.short);
+    // Upkeep grew the colony as if all were well; it grows again from the same size, slowed by the new share.
+    if (month.growth) state.colonists = grownColonists(month.growth.from, month.growth.rate, colony.sick);
+  }
+  colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages, month.comfort)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
 }
@@ -390,22 +474,35 @@ export interface MoodInputs {
   welfare: number;
 }
 
-/** The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done. */
-export function moodInputs(state: GameState, shortages: readonly Good[]): MoodInputs {
+/** Colony health's part of a month's mood inputs, present only while it plays. See needs RULE-8, RULE-9. */
+export interface HealthMood {
+  /** The colony's sick share after this upkeep, 0..HEALTH.cap. */
+  sick: number;
+  /** The share of the colonists' Electronics want met this upkeep, 0..1. */
+  comfort: number;
+}
+
+/**
+ * The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done;
+ * `comfort` is the share of the colonists' Electronics want met at it.
+ */
+export function moodInputs(state: GameState, shortages: readonly Good[], comfort = 0): MoodInputs & Partial<HealthMood> {
   const brokeNow = state.colony?.promises.some((p) => p.month === state.month && !p.kept) ?? false;
   return {
-    short: shortages.length,
+    // Missing Medicine reaches the mood through sickness alone, so it is not one of the goods short here.
+    short: shortages.filter((g) => g !== 'medicine').length,
     air: state.air,
     tax: Math.round(state.treasury.salesTax * PERCENT),
     broken: brokeNow ? 1 : 0,
     prestige: colonyPrestige(state),
     gap: wealthGap(state),
     welfare: state.colony?.welfare?.month === state.month ? state.colony.welfare.paid : 0,
+    ...(HEALTH.enabled && state.colony ? { sick: sickShare(state)!, comfort } : {}),
   };
 }
 
 /** The mood a month aims for, 0..100. See G-5 RULE-20. */
-export function moodTarget(i: MoodInputs): number {
+export function moodTarget(i: MoodInputs & Partial<HealthMood>): number {
   const w = HAPPINESS.weights;
   const target =
     HAPPINESS.base -
@@ -415,7 +512,9 @@ export function moodTarget(i: MoodInputs): number {
     w.broken * i.broken +
     w.prestige * Math.min(i.prestige, w.prestigeCap) +
     w.welfare * Math.min(i.welfare / w.welfareUnit, w.welfareCap) -
-    w.gap * Math.min(i.gap / w.gapUnit, w.gapCap);
+    w.gap * Math.min(i.gap / w.gapUnit, w.gapCap) -
+    HEALTH.moodPerSick * (i.sick ?? 0) +
+    HEALTH.electronicsBonus * (i.comfort ?? 0);
   return clampMood(target);
 }
 

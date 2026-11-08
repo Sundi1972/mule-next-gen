@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1367 settings in 53 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1382 settings in 55 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>b0561fa4dbab</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>fb6ad1287cc3</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1339,6 +1339,37 @@
 <tr><td><code>HAPPINESS.weights.welfare</code></td><td class="n">1</td><td>Onto the target for each <code>welfareUnit</code> credits of Welfare paid this upkeep, up to <code>welfareCap</code> units (slice 5, S5-RULE-5). Placeholders.</td></tr>
 <tr><td><code>HAPPINESS.weights.welfareUnit</code></td><td class="n">50</td><td>Explained in the note on <code>HAPPINESS.weights.welfare</code>.</td></tr>
 <tr><td><code>HAPPINESS.weights.welfareCap</code></td><td class="n">4</td><td>Explained in the note on <code>HAPPINESS.weights.welfare</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="hardship"><code>HARDSHIP</code> <span class="pill built">In the game</span></h2>
+<p>How hard a shortfall bites (needs RULE-2): a share short up to <code>tolerance</code> is shrugged off, beyond it the bite grows.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>HARDSHIP.tolerance</code></td><td class="n">0.1</td><td>Share of a need the colonists can go without, 0..1, before it hurts at all.</td></tr>
+<tr><td><code>HARDSHIP.power</code></td><td class="n">1.5</td><td>The curve&#39;s exponent above the tolerance: above 1, a small miss bites little and a large one much more.</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="health"><code>HEALTH</code> <span class="pill built">In the game</span></h2>
+<p>Colony health (needs C7-C9, RULE-7 to RULE-9): hunger and missing Medicine make colonists sick, and Electronics comfort them. Ships switched off until the Medicine supply can carry it; switch on with <code>--set HEALTH.enabled=true</code>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>HEALTH.enabled</code></td><td class="n">false</td><td>Whether colony health plays at all. Off, nobody falls sick and the colonists take no Medicine or Electronics.</td></tr>
+<tr><td><code>HEALTH.base</code></td><td class="n">0.01</td><td>Share of the well colonists who fall sick in a month with nothing wrong.</td></tr>
+<tr><td><code>HEALTH.perHunger</code></td><td class="n">0.2</td><td>Added to that share at full hunger (the hardship of the worse of Food and Water at 1).</td></tr>
+<tr><td><code>HEALTH.perMedicine</code></td><td class="n">0.2</td><td>Added to that share with all of the colonists&#39; Medicine missing (its hardship at 1).</td></tr>
+<tr><td><code>HEALTH.contagion</code></td><td class="n">0.15</td><td>Added to that share per unit of the sick share last month: the sick infect the well.</td></tr>
+<tr><td><code>HEALTH.recovery</code></td><td class="n">0.5</td><td>Share of the sick who recover in a month with all their Medicine.</td></tr>
+<tr><td><code>HEALTH.medicineCut</code></td><td class="n">0.3</td><td>Share of that recovery lost with all their Medicine missing, in proportion to the share missing.</td></tr>
+<tr><td><code>HEALTH.cap</code></td><td class="n">0.4</td><td>The most of the colony that is ever sick at once, 0..1.</td></tr>
+<tr><td><code>HEALTH.moodPerSick</code></td><td class="n">10</td><td>Mood points off the month&#39;s target per unit of sick share (all sick: this many).</td></tr>
+<tr><td><code>HEALTH.growthPerSick</code></td><td class="n">0.05</td><td>Off the colony&#39;s monthly growth factor per unit of sick share.</td></tr>
+<tr><td><code>HEALTH.electronicsBonus</code></td><td class="n">4</td><td>Mood points onto the month&#39;s target with the colonists&#39; whole Electronics want met; in proportion when part.</td></tr>
+<tr><td><code>HEALTH.crewSickFrom</code></td><td class="n">0.2</td><td>The sick share from which players&#39; crews fall sick too (read by the crews&#39; rule).</td></tr>
+<tr><td><code>HEALTH.gaugeWellFrom</code></td><td class="n">90</td><td>The health gauge reads &quot;well&quot; from this health (0..100) up; below it, a sick spell, down to the limit at the cap.</td></tr>
 </tbody>
 </table></div>
 

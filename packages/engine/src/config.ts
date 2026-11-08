@@ -1258,6 +1258,47 @@ export const HAPPINESS = {
   },
 };
 
+/** How hard a shortfall bites (needs RULE-2): a share short up to `tolerance` is shrugged off, beyond it the bite grows. */
+export const HARDSHIP = {
+  /** Share of a need the colonists can go without, 0..1, before it hurts at all. */
+  tolerance: 0.1,
+  /** The curve's exponent above the tolerance: above 1, a small miss bites little and a large one much more. */
+  power: 1.5,
+};
+
+/**
+ * Colony health (needs C7-C9, RULE-7 to RULE-9): hunger and missing Medicine make colonists sick, and Electronics
+ * comfort them. Ships switched off until the Medicine supply can carry it; switch on with `--set HEALTH.enabled=true`.
+ */
+export const HEALTH = {
+  /** Whether colony health plays at all. Off, nobody falls sick and the colonists take no Medicine or Electronics. */
+  enabled: false as boolean,
+  /** Share of the well colonists who fall sick in a month with nothing wrong. */
+  base: 0.01,
+  /** Added to that share at full hunger (the hardship of the worse of Food and Water at 1). */
+  perHunger: 0.2,
+  /** Added to that share with all of the colonists' Medicine missing (its hardship at 1). */
+  perMedicine: 0.2,
+  /** Added to that share per unit of the sick share last month: the sick infect the well. */
+  contagion: 0.15,
+  /** Share of the sick who recover in a month with all their Medicine. */
+  recovery: 0.5,
+  /** Share of that recovery lost with all their Medicine missing, in proportion to the share missing. */
+  medicineCut: 0.3,
+  /** The most of the colony that is ever sick at once, 0..1. */
+  cap: 0.4,
+  /** Mood points off the month's target per unit of sick share (all sick: this many). */
+  moodPerSick: 10,
+  /** Off the colony's monthly growth factor per unit of sick share. */
+  growthPerSick: 0.05,
+  /** Mood points onto the month's target with the colonists' whole Electronics want met; in proportion when part. */
+  electronicsBonus: 4,
+  /** The sick share from which players' crews fall sick too (read by the crews' rule). */
+  crewSickFrom: 0.2,
+  /** The health gauge reads "well" from this health (0..100) up; below it, a sick spell, down to the limit at the cap. */
+  gaugeWellFrom: 90,
+};
+
 /** The colony fund's own rules. Placeholders until the colony's sim tuning. */
 export const COLONY = {
   /** Projects commissioned or building at the same time: 3 (pace set C, Heiko, 6 Nov). */

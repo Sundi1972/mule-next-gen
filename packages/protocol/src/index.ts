@@ -818,6 +818,8 @@ export interface ColonyHealthView {
   medicineShort: boolean;
   /** Consecutive upkeeps with medicineShort; 0 when it is false. */
   shortMonths: number;
+  /** `health` as it stood one upkeep earlier, so the gauge can show the month's move; null at the first upkeep with health on. */
+  lastHealth?: number | null;
 }
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */

@@ -592,12 +592,12 @@ export function advancePhase(state: GameState): void {
     endRumours(state);
     state.auction = null;
     firePhase(state, 'upkeep');
-    const { shortages, hungry } = runUpkeep(state);
+    const { shortages, hungry, colonistMonth } = runUpkeep(state);
     collectLawTaxes(state);
     settleSabotage(state);
     payGrant(state);
     payOffices(state);
-    runColony(state, shortages);
+    runColony(state, shortages, colonistMonth);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;
