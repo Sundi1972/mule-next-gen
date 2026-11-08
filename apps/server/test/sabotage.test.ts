@@ -142,6 +142,7 @@ describe('S4-B-AC-6: a pending order and the guards reach nobody but their party
     // A pending order's plot loses its MULE: building any view still must not throw.
     w.state.tiles[w.ossaPlot]!.outfit = null;
     for (const viewer of VIEWERS) expect(() => wire(w.game, viewer), String(viewer)).not.toThrow();
+    expect(w.game.viewFor('lena').me!.politics!.sabotage!.mine[0], 'a pending cut with no crop to name sends null, not a missing field').toHaveProperty('good', null);
     w.state.tiles[w.ossaPlot]!.outfit = 'food';
 
     // Production resolves it; the crew is still owed, not paid, until upkeep.

@@ -369,8 +369,7 @@ function incidentView(state: GameState, order: SabotageOrder, viewerId: string |
     kind: target.kind,
     victim: order.victim ?? null,
     at: tile && { x: tile.x, y: tile.y },
-    // IncidentView.good is typed Good: with no crop to name it is left out rather than sent as null.
-    good: (target.kind === 'rumour' ? target.good : cutGood(state, order)) as Good,
+    good: target.kind === 'rumour' ? target.good : cutGood(state, order),
     ...(target.kind === 'rumour' ? { dir: target.dir } : {}),
     worked: order.worked === true,
     culprit: culpritSeen(order, viewerId) ? order.by : null,
