@@ -72,6 +72,13 @@ function counted(seed: number): Rng & { draws: () => number } {
   return { next: tally(rng.next), int: tally(rng.int), pick: tally(rng.pick), chance: tally(rng.chance), weighted: tally(rng.weighted), draws: () => draws } as Rng & { draws: () => number };
 }
 
+/** The overrule moves a VoteHand tick sends on the raw state, as the server and the sim tick it (so a hand handed the seed would show). */
+const tickBy = (state: GameState, me: string, persona: AiPersonaId, level: AiLevelId = 'trader') => {
+  const { sent, act } = recorder(state, me);
+  new VoteHand(mindOf(me, persona, level), createRng(1)).tick(state, 0, act);
+  return sent.filter((a) => a.type === 'callOverrule' || a.type === 'voteOverrule');
+};
+
 const split = (state: GameState, me: string, persona: AiPersonaId, level: AiLevelId = 'trader') => {
   const { sent, act } = recorder(state, me);
   const acted = new BudgetHand(mindOf(me, persona, level)).split(observe(state, me), act);
@@ -96,6 +103,11 @@ describe('S5-C6: the AI Governor splits the fund (S5-RULE-11)', () => {
     line.mockImplementation((_obs, _me, l, amount) => (l === 'welfare' ? amount * 10 : 0));
     const { sent } = split(state, 'ai0', 'trader');
     expect(sent).toEqual([{ type: 'setBudget', shares: { projects: covering, welfare: 100 - covering, security: 0 } }]);
+
+    // The base obeys it too: the Park alone takes the whole spare (cover 100), so a cautious Rookie's base Welfare of 10% is cut to 0, not added to 100%.
+    const full = governed(100 + PRESTIGE.park.credits);
+    commission(full, 'ai0', 'park');
+    expect(split(full, 'ai0', 'cautious', 'rookie').sent).toEqual([]);
   });
 
   it('S5-T-AC-13: a split equal to the budget in force sends nothing (a no-op change would invite an overrule)', () => {
@@ -176,6 +188,8 @@ describe('S5-C6: the AI calls and votes on the tax (S5-RULE-12)', () => {
   it('S5-T-AC-14: call row 2 - a change that costs the seat less than minGain is not called, however many would gain', () => {
     worth.mockReturnValue(POLITICS.ai.overrule.minGain - 1);
     expect(callBy(taxed(), 'ai1', 'trader')).toEqual([]);
+    worth.mockReturnValue(POLITICS.ai.overrule.minGain); // exactly minGain is enough (the rule says "less than")
+    expect(callBy(taxed(), 'ai1', 'trader')).toEqual([{ type: 'callOverrule', target: 'tax' }]);
   });
 
   it('S5-T-AC-14: call row 3 - it calls when the players it judges would gain hold a majority of the votes', () => {
@@ -185,11 +199,14 @@ describe('S5-C6: the AI calls and votes on the tax (S5-RULE-12)', () => {
   });
 
   it('S5-T-AC-14: call rows 4 and 5 - short of a majority it calls only as a protest, when its draw falls under longShot', () => {
-    const gains = (who: string) => (who === 'ai1' ? POLITICS.ai.overrule.minGain + 1 : 0);
+    // ai1 and ai2 would gain, and so would the Governor: counted, the Governor would tip the three of four seats into a majority; it votes no, so it is not counted.
+    const gains = (who: string) => (['ai1', 'ai2', 'ai0'].includes(who) ? POLITICS.ai.overrule.minGain + 1 : 0);
     worth.mockImplementation((_obs, who) => gains(who));
     const state = taxed();
-    const weights = state.players.map((p) => voteWeight(state, p.id).total);
-    expect(voteWeight(state, 'ai1').total * 2, 'the fixture: one seat is not a majority').toBeLessThanOrEqual(weights.reduce((a, b) => a + b, 0));
+    const weight = (ids: string[]) => ids.reduce((sum, id) => sum + voteWeight(state, id).total, 0);
+    const total = weight(SEATS);
+    expect(weight(['ai1', 'ai2']) * 2, 'the fixture: two seats are not a majority').toBeLessThanOrEqual(total);
+    expect(weight(['ai0', 'ai1', 'ai2']) * 2, 'the fixture: with the Governor they would be').toBeGreaterThan(total);
     POLITICS.ai.overrule.longShot.trader = 1;
     expect(callBy(state, 'ai1', 'trader')).toEqual([{ type: 'callOverrule', target: 'tax' }]);
     POLITICS.ai.overrule.longShot.trader = 0;
@@ -266,40 +283,59 @@ describe('S5-C6: the AI calls and votes on the tax (S5-RULE-12)', () => {
     expect(first.sent).toEqual(cast(true));
   });
 
-  it("S5-T-AC-14: no hand reads state.seed: a copy with a scrambled seed gets the same call and the same ballots", () => {
+  it("S5-T-AC-14: no hand reads state.seed: VoteHand.tick on a raw state with a scrambled seed sends the same call and the same ballots, and the draw moves with the month", () => {
     POLITICS.ai.overrule.longShot.aggressive = 0.5;
     POLITICS.ai.overrule.rookieYes = 0.5;
     worth.mockImplementation((_obs, who) => (who === 'ai1' ? 50 : 0));
-    for (const month of [2, 3, 4, 5, 6, 7]) {
+    const calls: boolean[] = [];
+    const votes: boolean[] = [];
+    for (const month of [2, 3, 4, 5, 6, 7, 8, 9]) {
       const a = taxed();
       a.month = month;
       const b = structuredClone(a);
       b.seed = a.seed ^ 0x5bd1e995;
-      expect(callBy(b, 'ai1', 'aggressive'), `month ${month}`).toEqual(callBy(a, 'ai1', 'aggressive'));
+      const called = tickBy(a, 'ai1', 'aggressive');
+      expect(tickBy(b, 'ai1', 'aggressive'), `month ${month}`).toEqual(called);
+      calls.push(called.length > 0);
       const c = open();
       c.month = month;
+      c.politics!.overrule!.month = month;
       const d = structuredClone(c);
       d.seed = c.seed ^ 0x5bd1e995;
-      expect(voteBy(d, 'ai2', 'trader', 'rookie'), `month ${month}`).toEqual(voteBy(c, 'ai2', 'trader', 'rookie'));
+      const cast = tickBy(c, 'ai2', 'trader', 'rookie');
+      expect(tickBy(d, 'ai2', 'trader', 'rookie'), `month ${month}`).toEqual(cast);
+      votes.push((cast[0] as { yes: boolean }).yes);
     }
+    expect(new Set(calls).size, 'a protest is drawn per month, not the same coin every month').toBe(2);
+    expect(new Set(votes).size, 'a Rookie ballot is drawn per month').toBe(2);
   });
 
-  it("S5-T-AC-14: the overrule stream leaves the election's and the council's draws unchanged", () => {
+  it("S5-T-AC-14: the overrule stream leaves the election's and the council's draws unchanged, on one shared state", () => {
     POLITICS.ai.overrule.rookieYes = 0.5;
-    const rookie = (draw: boolean) => {
-      const state = taxed();
-      if (draw) for (let m = 2; m < 12; m++) voteBy(open(), 'ai2', 'trader', 'rookie');
+    const councilAfter = (overruleFirst: boolean) => {
+      const state = open();
       state.politics!.council = { stage: 'ballot', clockMs: 0, proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 'ai0', ballots: { ai0: true }, done: [], result: null };
       const rng = counted(5);
+      const hand = new VoteHand(mindOf('ai2', 'trader', 'rookie'), rng);
       const { sent, act } = recorder(state, 'ai2');
-      new VoteHand(mindOf('ai2', 'trader', 'rookie'), rng).tick(state, 0, act);
-      return { sent, draws: rng.draws() };
+      // With the overrule ballot open the hand votes it and returns; closed, the same hand votes the council's ballot.
+      if (overruleFirst) hand.tick(state, 0, act);
+      else sent.push({ type: 'voteOverrule', yes: false }, { type: 'done', done: true });
+      const overruleMoves = sent.splice(0);
+      state.politics!.overrule = null;
+      state.politics!.council!.done = []; // Done is the seat's, whichever ballot was open: the fixture opens the council's as if the overrule had never been
+      hand.tick(state, 0, act);
+      return { overruleMoves: overruleMoves.length, council: sent, draws: rng.draws() };
     };
-    expect(rookie(true)).toEqual(rookie(false));
-    expect(rookie(true).draws, "the hand's election rng is not touched by a council ballot or an overrule").toBe(0);
+    const withOverrule = councilAfter(true);
+    const without = councilAfter(false);
+    expect(withOverrule.council).toEqual(without.council);
+    expect(withOverrule.council.map((a) => a.type)).toEqual(['voteLaw', 'done']);
+    expect(withOverrule.draws, "the hand's election rng is never touched by either ballot").toBe(0);
+    expect(withOverrule.overruleMoves).toBe(2);
   });
 
-  it('S5-T-AC-14: every input is observe(state, me): the hands refuse a mind with no seat salt, as every politics hand does', () => {
+  it('S5-T-AC-14: a mind with no seat salt cannot draw the overrule stream: the hand throws rather than share a coin (INV-41)', () => {
     const bare: Mind = { ...mindOf('ai1', 'trader') };
     delete bare.salt;
     worth.mockImplementation((_obs, who) => (who === 'ai1' ? POLITICS.ai.overrule.minGain : 0)); // short of a majority: the draw is reached
@@ -335,8 +371,13 @@ describe('S5-C6: VoteHand drives the hands (S5-RULE-13)', () => {
 
   it('S5-T-AC-15: the Governor sets the tax, then the budget, then proposes and commissions', () => {
     POLITICS.ai.budget.base.aggressive.welfare = 10;
-    const sent = tick(governed(5_000), 'ai0');
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+    const state = governed(5_000);
+    for (const t of state.tiles.filter((t) => t.owner === null && t.terrain !== 'store').slice(0, 12)) t.owner = 'ai1'; // a leader to propose against
+    const sent = tick(state, 'ai0');
     const order = types(sent);
+    expect(order.indexOf('propose'), 'the fixture proposes a law').toBeGreaterThan(-1);
+    expect(order.indexOf('setBudget')).toBeLessThan(order.indexOf('propose'));
     expect(order.indexOf('setBudget')).toBeGreaterThan(-1);
     expect(order.indexOf('setTax')).toBeLessThan(order.indexOf('setBudget'));
     expect(order.indexOf('setBudget')).toBeLessThan(order.indexOf('commission'));
