@@ -12,6 +12,8 @@ export interface HandsDevelopment {
   installed: { plot: number; outfit: Outfit | null }[];
   /** Each buy refused at the corral, in the brief's words. */
   refused: string[];
+  /** Each MULE bought whose outfit or install did not happen, in the brief's words. */
+  unfinished: string[];
 }
 
 /**
@@ -44,7 +46,7 @@ function buyRefusal(state: GameState, why: string | undefined): string {
  * to the corral starts, and an empty corral shows only as the outfit refused, as the route's hand reads it (RULE-9).
  */
 export function handsDevelopment(state: GameState, me: PlayerId, log: readonly DevLogEntry[]): HandsDevelopment {
-  const hands: HandsDevelopment = { month: state.month, bought: 0, installed: [], refused: [] };
+  const hands: HandsDevelopment = { month: state.month, bought: 0, installed: [], refused: [], unfinished: [] };
   for (const { action, ok, why } of log) {
     if ((action.type === 'buyMule' || action.type === 'outfit') && !ok) hands.refused.push(buyRefusal(state, why));
     else if (action.type === 'outfit') hands.bought++;

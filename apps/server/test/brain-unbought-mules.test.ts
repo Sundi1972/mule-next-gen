@@ -9,8 +9,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, AI_HANDS, createGame, DEV_STEER, MS_PER_SECOND, type GameState } from '@mule/engine';
+import { advancePhase, AI_HANDS, createGame, DEV_STEER, DEVELOPMENT, floorConfig, MS_PER_SECOND, type GameState } from '@mule/engine';
 import { AiSeat, applyAction, arrive, outfitName, playbookSource, TopPickDecider, type AiAction, type AiSeatOptions, type DevClock } from '@mule/ai';
+import { playFloorPhase } from '../../../packages/ai/src/floor-turn.js';
 import { createBrain } from '../src/brain/index.js';
 import { Playbooks } from '../src/brain/playbooks.js';
 import { fakeSdk, KEY, promptOf, sdkMessage, type SdkParams } from './brain-fakes.js';
@@ -28,6 +29,7 @@ const HANDS_HEAD = 'Last time (month 1) you kept the draft development, so your 
 
 let dir: string;
 let steer: boolean;
+const fullSeconds = DEVELOPMENT.fullSeconds;
 beforeEach(() => {
   vi.useFakeTimers();
   steer = DEV_STEER.on;
@@ -37,6 +39,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   DEV_STEER.on = steer;
+  DEVELOPMENT.fullSeconds = fullSeconds;
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -44,7 +47,7 @@ const advanceTo = (state: GameState, phase: GameState['phase']) => {
   while (state.phase !== phase) advancePhase(state);
 };
 
-/** One Smart seat, `options` its own, whose model keeps every draft; its land briefs as sent. The seat owns a free plains plot. */
+/** One Smart seat, `options` its own, whose model keeps every draft; its land and auction briefs as sent. The seat owns a free plains plot. */
 function table(options: Partial<AiSeatOptions> = {}) {
   const asked: SdkParams[] = [];
   const sdk = fakeSdk((_n, params) => (asked.push(params), Promise.resolve(sdkMessage(KEEPS, USED))));
@@ -55,7 +58,8 @@ function table(options: Partial<AiSeatOptions> = {}) {
   const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1, ...options });
   const playbooks = new Playbooks({ brain, source: playbookSource([seat]), seats: [seat] });
   const landBriefs = () => asked.map((p) => promptOf(p).user).filter((u) => u.includes('Land plans for this month'));
-  return { state, seat, playbooks, landBriefs };
+  const auctionBriefs = () => asked.map((p) => promptOf(p).user).filter((u) => u.includes('before the auction'));
+  return { state, seat, playbooks, landBriefs, auctionBriefs };
 }
 
 /** The seat's development turn on tap-to-walk, as play.ts's loop runs it; `before` sees each action first. */
@@ -69,8 +73,26 @@ function developTurn(state: GameState, seat: AiSeat, before: (a: AiAction) => vo
   }
 }
 
+/**
+ * The seat's development turn on the floor (steered walking, the live mode), as play.ts runs it. With `spareAfterBuy`,
+ * once the hand has bought its first MULE the clock is cut to that many seconds from then, as a pack or a slow walk
+ * eats it: the hand hurries to the pub and gives up the step it was walking to ('hurry').
+ */
+function floorTurn(state: GameState, seat: AiSeat, spareAfterBuy?: number): void {
+  DEV_STEER.on = true;
+  const tickMs = floorConfig().steer.tickMs;
+  const ticks = playFloorPhase(state, [seat]);
+  let cut = spareAfterBuy === undefined;
+  for (let run = 1, step = ticks.next(); !step.done; run++, step = ticks.next()) {
+    if (!cut && seat.developLog().some((e) => e.action.type === 'buyMule' && e.ok)) {
+      DEVELOPMENT.fullSeconds = (run * tickMs) / MS_PER_SECOND + spareAfterBuy!;
+      cut = true;
+    }
+  }
+}
+
 /** Month 1 played as the game asks and takes the plans, its development by the seat's hands; month 2's land brief asked. */
-async function monthOne(t: ReturnType<typeof table>, before?: (a: AiAction) => void): Promise<void> {
+async function monthOne(t: ReturnType<typeof table>, before?: (a: AiAction) => void, develop?: (state: GameState, seat: AiSeat) => void): Promise<void> {
   const { state, seat, playbooks } = t;
   playbooks.ask(state, 1);
   await vi.advanceTimersByTimeAsync(10);
@@ -78,7 +100,8 @@ async function monthOne(t: ReturnType<typeof table>, before?: (a: AiAction) => v
   playbooks.takeEffect(state);
   advanceTo(state, 'development');
   playbooks.takePhase(state, 'development');
-  developTurn(state, seat, before);
+  if (develop) develop(state, seat);
+  else developTurn(state, seat, before);
   advanceTo(state, 'production');
   // The production show: the auction's plan is asked, as the trial and the game ask it once development has run.
   playbooks.askPhase(state, 'auction', []);
@@ -134,5 +157,40 @@ describe("unbought-mules fix: the next land brief says what the seat's own hands
 
     expect(t.state.tiles.some((tile) => tile.owner === 'p0' && tile.outfit)).toBe(false);
     expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought no MULE; a buy refused: the corral was sold out.`);
+  });
+
+  it('unbought-mules fix: FM-dev-outcome-today (floor): on steered walking, the live mode, the next land brief says what the hands bought and where they installed it', async () => {
+    const t = table();
+    await monthOne(t, undefined, (state, seat) => floorTurn(state, seat));
+
+    const fitted = t.state.tiles.flatMap((tile, i) => (tile.owner === 'p0' && tile.outfit ? [{ plot: i, outfit: tile.outfit }] : []));
+    expect(fitted).toHaveLength(1);
+    expect(t.landBriefs()[1]!).toContain(`${HANDS_HEAD} bought 1 MULE; installed a ${outfitName(fitted[0]!.outfit)} on plot ${fitted[0]!.plot}.`);
+  });
+
+  it('unbought-mules fix: FM-dev-outcome-today (floor, clock cut): a MULE bought before the clock cut the walk to its outfit is told as bought, with time run out, never as a refused buy', async () => {
+    const t = table();
+    await monthOne(t, undefined, (state, seat) => floorTurn(state, seat, 1));
+
+    // Ground truth: the buy went through, the outfit was given up as the clock ran short, and nothing was installed.
+    const log = t.seat.developLog();
+    expect(log.find((e) => e.action.type === 'buyMule')?.ok).toBe(true);
+    expect(log.find((e) => e.action.type === 'outfit')).toMatchObject({ ok: false, why: 'hurry' });
+    expect(t.state.tiles.some((tile) => tile.owner === 'p0' && tile.outfit)).toBe(false);
+    const next = t.landBriefs()[1]!;
+    expect(next).toContain(`${HANDS_HEAD} bought 1 MULE; time ran out before a bought MULE was outfitted.`);
+    expect(next).not.toContain('a buy refused');
+  });
+
+  it("unbought-mules fix: FM-report-throws: a hands report that cannot be read drops only the report; the seat's auction plan is still asked", async () => {
+    const t = table();
+    vi.spyOn(t.seat, 'developLog').mockImplementation(() => {
+      throw new Error('the log is unreadable');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await monthOne(t);
+
+    expect(t.auctionBriefs()).toHaveLength(1);
+    expect(t.landBriefs()[1]!).not.toContain(HANDS_HEAD);
   });
 });
