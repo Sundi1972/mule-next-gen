@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { ElectionView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { ElectionView, MuleView, MyView, OverruleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -181,6 +181,18 @@ describe('the tabbed planning hub (SB-2)', () => {
     expect(text('tab-politics')).toBe('Governor');
     rerender(game({ pol: null }));
     expect(tabs()).toEqual(['tab-overview', 'tab-colony', 'tab-talk']);
+  });
+
+  it.each<[string, OverruleView['stage'], string | null]>([
+    ['an open overrule ballot badges it VOTE', 'ballot', 'VOTE'],
+    ['a call still waiting for its ballot does not', 'called', null],
+    ['nor does its reveal', 'reveal', null],
+  ])('B-AC-14 (D3, D8, I-4): while another tab is open, the Council tab carries a ballot open: %s', (_, stage, badge) => {
+    const overrule: OverruleView = { target: 'tax', caller: 's3', stage, restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: ['s1', 's2'], clockMs: 0, revealMs: 0, total: 3, needed: 2, result: null };
+    mount(game({ pol: politics({ tax: { percent: 9, start: 5, low: 0, high: 10 }, overrule }) }));
+    expect(findTestid('politics-badge')?.textContent ?? null).toBe(badge);
+    tap('tab-politics');
+    expect(findTestid('politics-badge'), 'the open tab carries no badge').toBeUndefined();
   });
 
   it("B-AC-14 (D5): This month has a row for each door into a tab (what you are short of into Colony) and none for a map tool's own door; a row opens its tab", () => {
