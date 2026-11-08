@@ -239,8 +239,13 @@ sprites are used, the phone's heaviest colony measured < 1 MB in the PR body.
 **Files:** `packages/ui/src/grounds/live.ts` (air.ts lifted as is), `packages/ui/src/grounds/LiveLayer.tsx`, `ColonyGrounds.tsx`
 (passes `gauges.environment`), `packages/ui/test/grounds-air.test.tsx`.
 - [x] Mock: smoke A (light puffs) / B (dark column), haze by air band, day/dusk, TV/phone, reduced motion; SVG gradients only.
-- [ ] Test first, `T-AC-15`, at the rendered SVG: no haze at a clean colony (environment < 30); haze opacity rises with the
-  gauge; smoke over a `damaged` place only; reduced motion → the plume still. Run: FAIL. Implement. Run: PASS. Commit.
+- [x] PM look check passed 8 Nov: **smoke A** (B read as fire, lost at dusk; kept out of the code). PR body: a phone shot at
+  Collapse 90 by day.
+- [x] Test first, `T-AC-15`, at the rendered SVG: no haze at a clean colony (environment < 30, or no reading); haze opacity
+  rises with the gauge; drawn under the chips; smoke over a `damaged` place only; reduced motion → the plume still. Red
+  3db1bc56d (3 of 5). Implement: `live.ts` (RULE-7/8, bands from `POLLUTION`), `LiveLayer.tsx::AirLayer` (its own clock, the
+  walkers' clock extracted as `useSeconds`), `ColonyGrounds` (`gauges.environment?`, the layer under the chips). Green; mutants
+  (haze on clean, closed smokes, reduced ignored, haze over chips) each fail one test. ui 294/294.
 - [ ] Shots TV and phone, day and dusk; review; PR into ws10-visual.
 
 **Tasks 2.1–2.2 MERGED** as PR #603 → 71555ddd (`Review: APPROVE` at 5599ad02). Task 2.2b is still open (after Heiko's session).
