@@ -90,7 +90,7 @@ describe('the colony at the table', () => {
     expect(text).not.toMatch(/ballot|stock|drone|analysed/i);
   });
 
-  it('B-AC-24: from 60, a month ending with two goods short and the air at 70 shows every screen happiness 55, Restless: the mood falls, by no more than maxStep', () => {
+  it('B-AC-24: from 60, a month ending a fifth short of Food and Water with the air at 70 shows every screen happiness 55, Restless: the mood falls by the capped step alone', () => {
     const { game, state } = governed();
     expect(state.colony!.happiness).toBe(60);
     while (state.phase !== 'auction') advancePhase(state);
