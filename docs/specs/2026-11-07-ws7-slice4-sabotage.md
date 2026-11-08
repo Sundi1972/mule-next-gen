@@ -1433,6 +1433,16 @@ because   Heiko's rulings; the bounty makes the guards worth placing where sabot
 goal      S4-1, S4-2 — unchanged; S4-UBER-AC-1 is now judged with a Sheriff who has a reason to guard others
 fines     Heiko considered a narrower range and kept it (8 Nov): S4-RULE-8 stands, 50 to 300 in steps of 50, × the ban
 folded    §3 Config gains POLITICS.sheriff.bounty and .ownPlotDetectBonus; the PR split is in the plan's S4-PR-9..11
+
+AM-12 · 2026-11-08 · WS7 (S4-PR-9's boundary review, #793) · a guard never stands on a plot the Sheriff came to own
+target    S4-RULE-6 (standing guards), AM-11 item 1
+said      the Sheriff can't guard its own plots (setGuards refuses them)
+did       the standing guards are the listed tiles the Sheriff may guard when the orders resolve: a tile the Sheriff
+          has come to own since planning (it bought the plot at the land auction) stands down, and guardsMax counts
+          only the tiles that stand. No refusal and no news: the guard simply isn't there
+because   guards are posted in planning but the land auction runs before production, so without this a Sheriff could
+          guard Brix's plot, buy it, and collect a bounty on its own plot, the case AM-11 item 1 rules out
+goal      S4-1 — unchanged; Heiko's own-plot rule now holds at production, not only at planning
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
