@@ -404,3 +404,23 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(text('my-deals-active')).not.toContain('Pact · 3 months · Binds until the end of month 4');
   });
 });
+
+// ---- The break words' seats, for SeatWords on every screen ----------------------------------------------------------
+
+describe("the break words' seats (S3-C20)", () => {
+  it('S3-B-AC-2: brokenWho gives the seats brokenWords names, in its words’ order, for each kind of card, with and without the breaker', async () => {
+    const { brokenWho, brokenWords } = await import('../src/phone/hub/politics/deals-words');
+    const view = { players: PLAYERS };
+    const broken = (over: Partial<DealCard> & Pick<DealCard, 'id' | 'from' | 'to'>) => card({ status: 'broken', settled: 2, ...over });
+    const rows: [DealCard, boolean, string, string[]][] = [
+      [broken({ id: 'p1', from: LENA, to: BRIX, brokenBy: BRIX }), true, 'Brix broke a pact with Lena', [BRIX, LENA]],
+      [broken({ id: 'p2', from: LENA, to: BRIX, brokenBy: LENA }), false, 'Broke a pact with Brix', [BRIX]],
+      [broken({ id: 'v1', from: BRIX, to: KAI_LEE, terms: { kind: 'vote', office: 'governor', candidate: KAI }, brokenBy: BRIX }), true, 'Brix broke a promise to Kai Lee: a vote for Kai', [BRIX, KAI_LEE, KAI]],
+      [broken({ id: 'l1', from: OSSA, to: LENA, terms: { kind: 'vote', law: true, yes: false }, brokenBy: OSSA }), true, 'Ossa broke a promise to Lena: a no on the law', [OSSA, LENA]],
+    ];
+    for (const [c, named, words, who] of rows) {
+      expect(brokenWords(view, c, named), c.id).toBe(words);
+      expect(brokenWho(c, named), c.id).toEqual(who);
+    }
+  });
+});
