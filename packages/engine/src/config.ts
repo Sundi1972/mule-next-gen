@@ -277,11 +277,11 @@ export const UPKEEP = {
    * Factories use what their recipe says. The household's drink is kept back first; an owner short of the rest turns
    * plots off after the Energy pass, biggest use first, until the rest fit, and a plot off makes offOutputShare. A well
    * pays its use from its own output and is never turned off; a plant takes its Water last, from what the others leave.
-   * `food`, the farm's Water, is AM-18's switch (production.ts::plotWaterOn): 2 turns it on (Heiko's number); at 0 no
-   * plot or factory uses Water and the farm halving below is the rule, as before AM-18. It stays 0 until PR-12 turns it
-   * on with a Food lever on corrected Water prices (PM ruling, 8 Nov: at 2 the colony made about half the Food).
+   * `food`, the farm's Water, is AM-18's switch (production.ts::plotWaterOn): 2 (Heiko's number), on in full (Heiko,
+   * 8 Nov: "each plot should consume water"). At 0 no plot or factory uses Water and the farm halving below is the rule,
+   * as before AM-18. Food may suffer if players don't adapt: that is the design (Heiko, 8 Nov).
    */
-  waterUse: { food: 0, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
+  waterUse: { food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
   /**
    * Water a factory uses a month with AM-18 on (AM-18 W1, Heiko 5 Nov: every plot drinks; Alloy and Electronics gain 1,
    * Medicine's is the 1 already in its recipe). Off, Medicine takes its recipe's Water as an input, as before.
@@ -319,24 +319,23 @@ export const START = {
   storeMules: 10,
   storeCapital: 4000,
   /**
-   * Little enough Water that the AI's outlook (STRATEGIST.horizon, outlook.ts) sees the store run dry from month 1 and
-   * prices Water at what colonists pay, so the seats build wells early. A few units more put the dry month past the
-   * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
-   * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
-   * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
+   * Water 100: four months of the colony's opening use (Heiko, 8 Nov: "the store should have enough water for 4 months,
+   * then the players need to adapt"). A month's opening use is about 25: the colonists 100 / colonistsPerUnit 20 = 5,
+   * four households of 1 + 1 for their crews = 8, and four seats' first two plots at about 1.5 each (farm 2, others
+   * 1; a well pays its own) = 12. Measured: the store's Water runs out in month 4 and colonists go short from month 5 on
+   * seeds 1, 101 and 201. Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
    * storeStockFor adds them. Medicine 40, up from 4: spike S2's lever B with STRATEGIST.medicineDespiteInputs (PM
    * ruling, 8 Nov), so the colonists start with a Medicine supply while the first works are built.
    */
-  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
+  storeStock: { water: 100, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 40 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
   /**
-   * The store's Energy at the start, for each seat: 12, so 48 in a 4-seat game. Raised from 5 (Heiko, 5 Nov) by spike
-   * S1's lever (c) with STRATEGIST.energyFirst (PM ruling, 7 Nov), first to 10, then to 12 once C49 (a waiting
-   * building's missing goods count in the store's demand) put seed 1 at 16.4% (PM ruling, 8 Nov): farms then turn off
-   * for Energy in under 15% of farm-months on seeds 1, 101 and 201.
+   * The store's Energy at the start, for each seat: 18, so 72 in a 4-seat game (Heiko, 8 Nov: "the store should start
+   * with 18 energy that gives players enough time to adapt"; per seat, as the 5, 10 and 12 before it). Raised from 5
+   * (Heiko, 5 Nov) to 10 and 12 with STRATEGIST.energyFirst (PM rulings, 7 and 8 Nov), which Heiko then switched off.
    */
-  storeEnergyPerPlayer: 12,
+  storeEnergyPerPlayer: 18,
 };
 
 /** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
@@ -1888,10 +1887,10 @@ export const STRATEGIST = {
   },
   /**
    * Energy first: while a seat has no Energy plant and may install one, every other install and "Keep the cash" are
-   * ruled out, so its next MULE is that plant. Spike S1's lever (c) with START.storeEnergyPerPlayer 12 (PM rulings,
-   * 7 and 8 Nov): farms turn off for Energy in under 15% of farm-months. A switch: `--set STRATEGIST.energyFirst=false`.
+   * ruled out, so its next MULE is that plant. Spike S1's lever (c) (PM rulings, 7 and 8 Nov). OFF (Heiko, 8 Nov: "the
+   * colony can choose [its own] approach"): kept as a switch, `--set STRATEGIST.energyFirst=true`.
    */
-  energyFirst: true as boolean,
+  energyFirst: false as boolean,
   /**
    * Medicine despite its inputs: canFeed never refuses a Medicine works for want of Food or Water, so a hungry seat can
    * still build the colony's Medicine (blocked, hungry seats never built one: a spiral). Spike S2's lever B with
