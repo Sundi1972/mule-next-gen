@@ -11,25 +11,25 @@ export const TV_FLOOR = 0.7;
 
 type BySeats = { 2: number; 4: number; 6: number };
 
-/** Steady states, by the beat measured. Under the floor: waiting at 4 seats (the box and the host's line), 0.658. */
+/** Steady states, by the beat measured: every one holds the floor at 2, 4 and 6 seats (TV_WAITING_BOX_MAX_SEATS = 3). */
 export const TV_FIT: Record<string, { beat: string; fit: BySeats }> = {
-  planningBeforeBreak: { beat: '1-head', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
+  planningBeforeBreak: { beat: '1-head', fit: { 2: 0.835, 4: 0.85, 6: 0.793 } },
   /** Every planning beat from 2.1 on: the break folded into the news. */
-  breakFolded: { beat: '2-look', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
-  budgetUnset: { beat: '4-budget-a', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
+  breakFolded: { beat: '2-look', fit: { 2: 0.835, 4: 0.85, 6: 0.793 } },
+  budgetUnset: { beat: '4-budget-a', fit: { 2: 0.835, 4: 0.85, 6: 0.793 } },
   /** 4.4: Brix's budget set this month, the moved shares marked ▲/▼. */
-  budgetSet: { beat: '4-commission', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
-  guarding: { beat: '6-guard', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
-  /** The host's line at the ready list's foot at every size; the waiting box up to 4 seats. In the box it read 0.662 at 4. */
-  waiting: { beat: '8-waiting', fit: { 2: 0.835, 4: 0.658, 6: 0.727 } },
+  budgetSet: { beat: '4-commission', fit: { 2: 0.835, 4: 0.85, 6: 0.793 } },
+  guarding: { beat: '6-guard', fit: { 2: 0.835, 4: 0.85, 6: 0.793 } },
+  /** The box at 2 seats only; the host's line at the ready list's foot at every size. */
+  waiting: { beat: '8-waiting', fit: { 2: 0.835, 4: 0.787, 6: 0.727 } },
   /** 5.2 after the Call tap (solo &call=1): "Overrule called: tax frozen", where the budget was. */
-  callFolded: { beat: '5-call', fit: { 2: 0.835, 4: 0.711, 6: 0.793 } },
+  callFolded: { beat: '5-call', fit: { 2: 0.835, 4: 0.85, 6: 0.793 } },
   overruleBallot: { beat: '5-ballot', fit: { 2: 0.908, 4: 0.894, 6: 0.88 } },
   overruleReveal: { beat: '5-reveal', fit: { 2: 0.953, 4: 0.953, 6: 0.953 } },
   monthEnd: { beat: '9-month-end', fit: { 2: 0.78, 4: 0.708, 6: 0.768 } },
 };
 
-/** The moved-share mark, AM-9: ▲/▼ with the accent colour vs the colour alone, same beats. Equal: the arrow is built. */
+/** The moved-share mark, AM-9: ▲/▼ with the accent colour vs the colour alone, same beats, measured with the box at 4 seats (TV_WAITING_BOX_MAX_SEATS was 4 then). Equal: the arrow is built. */
 export const TV_FIT_SHARE_MARK: Record<'arrow' | 'styleOnly', { budgetSet: BySeats; guarding: BySeats }> = {
   arrow: { budgetSet: { 2: 0.835, 4: 0.711, 6: 0.793 }, guarding: { 2: 0.835, 4: 0.711, 6: 0.793 } },
   styleOnly: { budgetSet: { 2: 0.835, 4: 0.711, 6: 0.793 }, guarding: { 2: 0.835, 4: 0.711, 6: 0.793 } },
@@ -40,15 +40,14 @@ export const TV_FIT_SHARE_MARK: Record<'arrow' | 'styleOnly', { budgetSet: BySea
  * flow. Break: beat 1.3 ('deal-broken'). Call: beat 5.2 with the call made (&call=1). [moment, steady].
  */
 export const TV_MOMENT_VS_STEADY: Record<'break' | 'call', Record<keyof BySeats, [number, number]>> = {
-  break: { 2: [0.835, 0.835], 4: [0.711, 0.711], 6: [0.793, 0.793] },
-  call: { 2: [0.835, 0.835], 4: [0.711, 0.711], 6: [0.793, 0.793] },
+  break: { 2: [0.835, 0.835], 4: [0.85, 0.85], 6: [0.793, 0.793] },
+  call: { 2: [0.835, 0.835], 4: [0.85, 0.85], 6: [0.793, 0.793] },
 };
 
 /**
- * What binds where it is still under the floor: waiting at 4 seats has both the waiting box (TV_WAITING_BOX_MAX_SEATS)
- * and the host's line, over a side column the market already fills. The line costs the same wherever it sits: in the
- * box 0.711 → 0.662, at the list's foot 0.711 → 0.658 (its own gap). Without the box (6 seats) it costs 0.793 → 0.727 and
- * holds. Planning at 4 seats, with the box and no host line (nobody ready yet), is 0.711.
+ * The waiting box's cut-off (PM ruling 8 Nov for the prototype; WS4 rules the real placement by 9 Nov 12:00Z): with the
+ * box at 4 seats (TV_WAITING_BOX_MAX_SEATS = 4) waiting measured 0.658 at 4 seats (its host's line in the box: 0.662) and
+ * planning 0.711; at 3, 0.787 and 0.850. The box and the host's line together ran past the map column there.
  *
  * Before the PM's 8 Nov rulings (options 1 and 2; the chips in planning stay), the same beats measured, 2 / 4 / 6:
  * planning and the folded break 0.796 / 0.678 / 0.631, budget unset and the folded call 0.835 / 0.711 / 0.662, waiting

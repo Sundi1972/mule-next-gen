@@ -24,8 +24,10 @@ export const TV_EVENT_HOLD_S = 8;
 /**
  * The most seats at which planning keeps its waiting box (PM ruling 8 Nov, option 2): from one more, the ready list
  * alone says who is still planning, with their chips. The host's "can continue" line is the list's foot at any size.
+ * 3, not 4: PM ruling 8 Nov for the prototype; WS4 rules the real placement by 9 Nov 12:00Z. With the box at 4 seats,
+ * waiting measured 0.658, under TV-FIT's 0.7 floor (measured.ts).
  */
-export const TV_WAITING_BOX_MAX_SEATS = 4;
+export const TV_WAITING_BOX_MAX_SEATS = 3;
 
 /*
  * GRAFT TARGET: apps/web/src/table/TableApp.tsx, TvGame's planning branch (WS4), which TableApp.tsx does not export:
