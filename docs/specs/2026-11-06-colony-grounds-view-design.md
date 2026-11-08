@@ -266,6 +266,14 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
   (ruled 7 Nov; @800 is half the full-res frame, so the TV upscales nothing).
   Top-level `"plate": { "3" | "5": { "day", "dusk", "glow": "… | null", "frame": { "width", "height", "hall": [x, y] } } }`
   (AM-7): one base plate per RULE-4 extent — "3" covers ring 1, "5" the whole 5×5; the hall pixel anchors the layers.
+  Each stage entry may carry `"skyline": { "column": 40, "top": [...], "bottom": [...] }` · ADDED · non-breaking: the
+  picture's opaque pixels column by column (40 frame px each), top and bottom row as fractions of its height, written by
+  `design/art/colony/skyline.py`; the live layer hides a colonist only where it covers the figure (C4, T-AC-13).
+  Top-level `"walker"` · ADDED · non-breaking (absent → today's SVG figure) (AM-8):
+  `{ "cell": { "width": 192, "height": 224, "feet": [96, 197] }, "px_per_m": 76.19, "frames": 12, "seconds": 1.333,
+     "headings": ["+x", "+y", "-x", "-y"], "sheets": { "<suit>-<trim>": { "day": "walker/…@800.webp", "dusk": "…" } },
+     "outline": "walker/outline@800.webp" }` — a sheet's rows are the headings top to bottom, its columns the frames;
+  `+x` is c rising (screen down-right), `+y` r falling (up-right). suit ∈ p1–p4; trim ∈ white, graphite, sand.
 - **Open gap (small):** `ColonyProjectView.place` is on trunk and `plot` was removed (#605); the entry above still
   describes it as WS7's to produce. Reconcile when C6's PR is recorded here.
 
@@ -303,6 +311,9 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-7 (serves C5) | RULE-5: a stage change between two month ends leans in on that place; a first view leans in on none | C5 |
 | T-AC-10 (serves B-AC-4, AM-7) | the plate fit: on the shipped manifest every place of the plate's extent, and every kind's frame at its place, lies inside the plate's frame | C1 C2 |
 | T-AC-11 (serves G-2, AM-7) | the framing: a building's scale is 0.9–1.1× of 17.5 px/m; empty places fill ≤ 1/3 of the view; the view lies inside the plate; it is centred across on the hall, shifted only as much as keeps a building whole | C2 |
+| T-AC-13 (serves B-AC-3, G-2) | a colonist standing shallower than a building (col + row) is drawn before it, and where that building's picture covers its figure on screen (by the picture's silhouette, §3 `skyline`) its faint outline is drawn after every building; one in front draws over it with no outline; one behind a building but above its picture on screen has no outline; a site hides a colonist only where its picture's pixels cover the figure (Heiko, 8 Nov: a figure on the Hospital's upper floor) | C4 |
+| T-AC-14 (serves C4, AM-8) | a walker is drawn from the `walker` sheet: the row is its route leg's heading, the column advances with the cycle (frame 0 at reduced motion), the suit variant is its owner's colour; behind a building its ghost is the outline sheet faded on the image itself; with no `walker` entry, today's SVG figure | C4 |
+| T-AC-12 (serves C5, B-AC-6) | during the opener's lean-in, a building nearer the camera than a place the caption names and across it on screen fades to 1 − ⅔ × lean (a third at full lean); the named place, a level or off-to-the-side building, and a view that leans on nothing do not fade (PM, 8 Nov, from the visibility spike: a new site is up to ⅔ covered) | C5 |
 
 Invariant: the grounds never write state (HC-1).
 
@@ -420,6 +431,20 @@ because   G-2 (city-builder polish): measured causes — 2.8× smaller framing, 
           contact shadows, placeholder trees
 goal      G-2, G-1
 folded    C1, C2, C3; plan PR-3 (re-render), PR-4 (now the plate + compositor), PR-5 (framing)
+```
+
+```
+AM-8 · 2026-11-08 · lead · Heiko's colonist ruling and pick (relayed by the PM)
+target    §1 C4 (colonists on the paths), §3 manifest, §6
+said      colonists as small SVG figures in the player colours, walking the gaps between places
+did       Heiko: a colonist behind a building is hidden by it, with a faint outline; in front it draws over it (#776,
+          plan Task 2.2c). From the walking-colonists spike he picked **Astronaut A** (CC0), option (a): the light suit
+          panels carry the player colour, or a palette where there is no player; the helmet and trims vary in place of
+          hair; walking pace (1.3 m/s, was 2.9). Rendered as sprite sheets in the shared camera (4 headings × 12 frames),
+          tinted offline through a mask; a new top-level manifest `walker` entry (§3). Kenney has no walk; Mixamo not used.
+because   G-1/G-2: the figures read as people at the table; Heiko, 8 Nov
+goal      G-1, G-2
+folded    C4; plan Task 2.2d; §3; T-AC-14
 ```
 
 ## §9 · Ownership Boundaries  [handoff]

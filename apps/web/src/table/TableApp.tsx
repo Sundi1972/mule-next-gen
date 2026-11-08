@@ -254,7 +254,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        {opener && game.colony ? <GroundsOpener opener={opener} colony={game.colony} month={game.month} Scene={Grounds} /> : <TvMonthEnd game={game} drift={drift} />}
+        {opener && game.colony ? <GroundsOpener opener={opener} colony={game.colony} month={game.month} Scene={Grounds} players={game.players.length} /> : <TvMonthEnd game={game} drift={drift} />}
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;

@@ -148,9 +148,16 @@ manifest = {
 }
 if plates:
     manifest["plate"] = plates
+# the colonists' sheets are published by walker/publish.py, not rendered here: keep their entry
+old = os.path.join(pub, "manifest.json")
+if os.path.exists(old) and "walker" in json.load(open(old)):
+    manifest["walker"] = json.load(open(old))["walker"]
 with open(os.path.join(pub, "manifest.json"), "w") as f:
     json.dump(manifest, f, indent=2)
     f.write("\n")
 n = sum(1 for k in pictures.values() for s, e in k.items() if s != "frame" for v in e.values() if v)
 print(f"publish: {n} pictures + {3 * len(plates)} plate pictures x {len(SIZES)} sizes = {(n + 3 * len(plates)) * len(SIZES)} WebP, {total / 1e6:.2f} MB, manifest at {pub}/manifest.json")
 PY
+
+# each picture's silhouette, for the live layer's occlusion (spec C4, T-AC-13)
+python3 -I "$HERE/skyline.py" "$PUB"
