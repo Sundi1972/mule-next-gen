@@ -23,14 +23,15 @@ const shift = `${Math.round(POLITICS.sabotage.orders.rumour.shift * 100)}%`;
 export function sabotageNewsLine(view: MuleView, incident: IncidentView): string {
   const name = (id: string) => view.players.find((p) => p.id === id)?.name ?? 'someone';
   const culprit = incident.culprit === null ? null : name(incident.culprit);
-  const good = GOOD_NAME[incident.good];
+  // WS7: `good` is null on the wire only in an orderer's own list; guarded anyway, the words then name no good.
+  const good: string | null = incident.good ? GOOD_NAME[incident.good] : null;
   if (incident.kind === 'rumour') {
-    const moved = `moved ${good}’s opening price ${shift} ${incident.dir === 'down' ? 'down' : 'up'}`;
+    const moved = `moved ${good ? `${good}’s` : 'an'} opening price ${shift} ${incident.dir === 'down' ? 'down' : 'up'}`;
     if (culprit === null) return `Sabotage: a rumour ${moved}.`;
-    return incident.worked ? `Sabotage: ${culprit}’s rumour ${moved}, and was seen.` : `Sabotage: ${culprit} was caught starting a rumour on ${good}.`;
+    return incident.worked ? `Sabotage: ${culprit}’s rumour ${moved}, and was seen.` : `Sabotage: ${culprit} was caught starting a rumour${good ? ` on ${good}` : ''}.`;
   }
   const whose = incident.victim === null ? 'a' : `${name(incident.victim)}’s`;
-  const plot = `${whose} ${good.toLowerCase()} plot`;
+  const plot = good ? `${whose} ${good.toLowerCase()} plot` : `${whose} plot`;
   if (culprit === null) return `Sabotage: someone cut the power to ${plot}.`;
   if (incident.how === 'guard') return `Sabotage: ${culprit} was caught by a guard at ${whose} plot. The power stayed on.`;
   return incident.worked ? `Sabotage: ${culprit} cut the power to ${plot}, and was seen.` : `Sabotage: ${culprit} was seen at ${whose} plot. The power stayed on.`;
@@ -51,6 +52,7 @@ export function withSabotageDetail<E extends ShowEventView>(events: E[], inciden
   const byId = new Map(incidents.filter((i) => i.kind === 'rumour').map((i) => [i.id, i]));
   return events.map((e) => {
     const i = e.key === 'marketRumour' && e.sabotage ? byId.get(e.sabotage.order) : undefined;
-    return i ? { ...e, good: i.good, ...(i.dir ? { dir: i.dir } : {}) } : e;
+    // No good (WS7: possible on the wire), no detail: the whisper reads "…psst…" alone.
+    return i?.good ? { ...e, good: i.good, ...(i.dir ? { dir: i.dir } : {}) } : e;
   });
 }

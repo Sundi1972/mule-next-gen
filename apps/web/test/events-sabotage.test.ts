@@ -146,3 +146,20 @@ describe('S4-C17 · a rumour’s good and direction, joined from the public inci
     expect(withSabotageDetail(events, [])).toBe(events);
   });
 });
+
+describe('S4-C17 · an incident with no good (WS7: `good` may be null on the wire)', () => {
+  const noGood = null as unknown as IncidentView['good'];
+
+  it('the join gives the rumour no good, so the whisper draws no icon and no tag', () => {
+    const ev = { key: 'marketRumour', sabotage: { order: 'sab-d', culprit: null, worked: true, guarded: false } } as unknown as ShowEventView;
+    const [out] = withSabotageDetail([ev], [rumour({ id: 'sab-d', good: noGood })]);
+    expect(out).not.toHaveProperty('good');
+  });
+
+  it('the month end still words it, without a good', () => {
+    const line = (i: IncidentView) => sabotageNewsLine(atMonthEnd([i]), i);
+    expect(line(rumour({ good: noGood }))).toBe('Sabotage: a rumour moved an opening price 25% up.');
+    expect(line(rumour({ good: noGood, worked: false, culprit: 'lena', how: 'caught' }))).toBe('Sabotage: Lena was caught starting a rumour.');
+    expect(line(incident({ good: noGood }))).toBe('Sabotage: someone cut the power to Ossa’s plot.');
+  });
+});
