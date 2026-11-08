@@ -412,7 +412,7 @@ export function mySabotageView(state: GameState, playerId: string, voids: readon
       }),
       ...voids.filter((o) => orderSight(o, playerId) === 'whole').flatMap((o) => {
         const view = incidentView(state, o, playerId);
-        return view ? [{ ...view, public: false, outcome: 'void' as const }] : [];
+        return view ? [{ ...view, good: o.good ?? null, public: false, outcome: 'void' as const }] : [];
       }),
     ].sort((a, b) => a.month - b.month),
   };
@@ -486,7 +486,14 @@ export function sabotageNotices(state: GameState, before: readonly SabotageOrder
 
 /** The orders that went void between two lists, as they stood while pending: the server's own record of them (S4-RULE-3 row 1). */
 export function voidedOrders(state: GameState, before: readonly SabotageOrder[], after: readonly SabotageOrder[]): SabotageOrder[] {
-  return changes(state, before, after).flatMap((change) => (change.what === 'void' ? [structuredClone(change.was)] : []));
+  // Frozen at the void: its crop is read now (into `good`), and the view reads only that, so a MULE put back on the plot
+  // later cannot rewrite the orderer's entry.
+  return changes(state, before, after).flatMap((change) => {
+    if (change.what !== 'void') return [];
+    const good = cutGood(state, change.was);
+    const { good: _was, ...order } = structuredClone(change.was);
+    return [{ ...order, ...(good ? { good } : {}) }];
+  });
 }
 
 const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1);
