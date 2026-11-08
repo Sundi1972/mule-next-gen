@@ -375,6 +375,30 @@
     "seconds": 1.333,
     "headings": ["+x", "+y", "-x", "-y"],
     "sheets": {
+      "c1-graphite": {
+        "day": "walker/c1-graphite-day@800.webp",
+        "dusk": "walker/c1-graphite-dusk@800.webp"
+      },
+      "c1-sand": {
+        "day": "walker/c1-sand-day@800.webp",
+        "dusk": "walker/c1-sand-dusk@800.webp"
+      },
+      "c1-white": {
+        "day": "walker/c1-white-day@800.webp",
+        "dusk": "walker/c1-white-dusk@800.webp"
+      },
+      "c2-graphite": {
+        "day": "walker/c2-graphite-day@800.webp",
+        "dusk": "walker/c2-graphite-dusk@800.webp"
+      },
+      "c2-sand": {
+        "day": "walker/c2-sand-day@800.webp",
+        "dusk": "walker/c2-sand-dusk@800.webp"
+      },
+      "c2-white": {
+        "day": "walker/c2-white-day@800.webp",
+        "dusk": "walker/c2-white-dusk@800.webp"
+      },
       "p1-graphite": {
         "day": "walker/p1-graphite-day@800.webp",
         "dusk": "walker/p1-graphite-dusk@800.webp"

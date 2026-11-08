@@ -29,7 +29,7 @@ def publish(png, name):
 
 sheets = {}
 for png in sorted(os.listdir(SRC)):
-    m = re.fullmatch(r"(p\d)-(\w+)-(day|dusk)\.png", png)
+    m = re.fullmatch(r"([pc]\d)-(\w+)-(day|dusk)\.png", png)
     if m:
         sheets.setdefault(f"{m[1]}-{m[2]}", {})[m[3]] = publish(png, png[:-4])
 assert sheets and all(set(v) == {"day", "dusk"} for v in sheets.values()), "a variant is missing a light"

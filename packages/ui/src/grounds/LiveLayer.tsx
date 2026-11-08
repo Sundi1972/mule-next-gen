@@ -89,9 +89,13 @@ export function frameAt(i: number, seconds: number, reduced: boolean, { frames, 
   return Math.floor((seconds / cycle + i * STEP_OFFSET) * frames + 1e-9) % frames;
 }
 
-/** Colonist i's sheet: its suit one of the player colours in turn, its helmet and trims the next of its suit's variants. */
-function sheetOf(i: number, { entry }: WalkerSprite): { day: string; dusk: string } | undefined {
-  const suit = `p${(i % 4) + 1}-`;
+/**
+ * Colonist i's sheet: its suit the next of the four player colours in turn, or where that colour has no player seated, one
+ * of the colony's own two (white, grey); its helmet and trims the next of its suit's variants.
+ */
+function sheetOf(i: number, { entry }: WalkerSprite, players: number): { day: string; dusk: string } | undefined {
+  const k = i % 4;
+  const suit = k < players ? `p${k + 1}-` : `c${((k - players) % 2) + 1}-`;
   const variants = Object.keys(entry.sheets).filter((k) => k.startsWith(suit)).sort();
   return variants.length ? entry.sheets[variants[Math.floor(i / 4) % variants.length]!] : undefined;
 }
@@ -122,9 +126,9 @@ function Sprite({ spot, href, heading, frame, entry, ghost, onError }: { spot: S
 }
 
 /** A colonist from its sheet where the manifest has one, else today's SVG figure (never blank; a sheet that fails falls back too). */
-function Walker({ i, spot, leg, seconds, reduced, sprite, ghost = false }: { i: number; spot: Spot; leg: [Spot, Spot]; seconds: number; reduced: boolean; sprite?: WalkerSprite; ghost?: boolean }) {
+function Walker({ i, spot, leg, seconds, reduced, sprite, players, ghost = false }: { i: number; spot: Spot; leg: [Spot, Spot]; seconds: number; reduced: boolean; sprite?: WalkerSprite; players: number; ghost?: boolean }) {
   const [failed, setFailed] = useState(false);
-  const sheet = sprite && sheetOf(i, sprite);
+  const sheet = sprite && sheetOf(i, sprite, players);
   if (!sprite || !sheet || failed) return <Colonist i={i} spot={spot} seconds={seconds} ghost={ghost} />;
   const href = sprite.href(ghost ? sprite.entry.outline : sheet[sprite.light]);
   return <Sprite spot={spot} href={href} heading={headingOf(...leg)} frame={frameAt(i, seconds, reduced, sprite.entry)} entry={sprite.entry} ghost={ghost} onError={() => setFailed(true)} />;
@@ -153,6 +157,7 @@ export function WalkingScene({
   occluders = [],
   routes: given,
   sprite,
+  players = 4,
 }: {
   scene: Placed[];
   walkers: number;
@@ -164,6 +169,8 @@ export function WalkingScene({
   routes?: Spot[][];
   /** The colonists' walk sheets; without them the colonists are SVG figures. */
   sprite?: WalkerSprite;
+  /** The players seated: colonists wear only their colours, the rest the colony's. Unknown: all four player colours. */
+  players?: number;
 }) {
   const reduced = useEventReducedMotion();
   const [seconds, setSeconds] = useState(0);
@@ -184,7 +191,7 @@ export function WalkingScene({
   const people = routes.map((route, i) => {
     const { spot, leg } = walkerOn(i, t, route);
     const hidden = hiddenBy(spot, occluders);
-    const walker = (ghost: boolean) => <Walker key={`${ghost ? 'ghost' : 'walker'}-${i}`} i={i} spot={spot} leg={leg} seconds={t} reduced={reduced} sprite={sprite} ghost={ghost} />;
+    const walker = (ghost: boolean) => <Walker key={`${ghost ? 'ghost' : 'walker'}-${i}`} i={i} spot={spot} leg={leg} seconds={t} reduced={reduced} sprite={sprite} players={players} ghost={ghost} />;
     return { depth: spot[0] + spot[1], node: walker(false), ghost: hidden ? walker(true) : null };
   }).sort((a, b) => a.depth - b.depth);
   const drawn: ReactElement[] = [];

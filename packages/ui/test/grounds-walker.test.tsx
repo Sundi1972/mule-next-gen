@@ -58,6 +58,13 @@ describe('T-AC-14: the colonists are Astronaut A, from the walker sheets, in the
     expect(new Set(suits.map((m) => m[2])).size).toBeGreaterThan(1);
   });
 
+  it('T-AC-14: with two players seated, colonists wear only their two colours, the rest a colony white or grey (PM ruling (b), 8 Nov)', () => {
+    const routes = Array.from({ length: 8 }, () => [[2.5, 2.5], [2.5, 1.5]] as Spot[]);
+    const html = renderToStaticMarkup(<svg><WalkingScene scene={SCENE} walkers={8} rim={2.85} blocks={[]} routes={routes} sprite={sprite} players={2} /></svg>);
+    const suits = new Set([...html.matchAll(/walker\/([pc]\d)-\w+-dusk@800\.webp/g)].map((m) => m[1]));
+    expect(suits).toEqual(new Set(['p1', 'p2', 'c1', 'c2']));
+  });
+
   it('T-AC-14: behind a building the outline is the outline sheet\'s same crop, faded on the image itself (never a group opacity)', () => {
     const html = layer([[[-0.5, 1], [-0.5, 2]]]);
     expect(crops(html, 'walker-ghost')).toEqual(crops(html));
@@ -79,6 +86,13 @@ describe('T-AC-14 on the grounds', () => {
     expect(tv).toMatch(/href="\/art\/colony\/walker\/p\d-\w+-dusk@800\.webp"/);
     expect(phone).toMatch(/href="\/art\/colony\/walker\/p\d-\w+-day@400\.webp"/);
     expect(phone).not.toMatch(/walker\/[^"]*@800/);
+  });
+
+  it('T-AC-14: ColonyGrounds hands the live layer the seated players, and shows the count on the grounds', () => {
+    const html = renderToStaticMarkup(<ColonyGrounds colony={COLONY} size="tv" manifest={manifest} light="dusk" players={1} />);
+    expect(html).toContain('data-players="1"');
+    expect(html).not.toMatch(/walker\/p[234]-/);
+    expect(html).toMatch(/walker\/c[12]-/);
   });
 
   it('T-AC-14 (negative): with no walker entry in the manifest, the colonists are today\'s SVG figures, never blank', () => {

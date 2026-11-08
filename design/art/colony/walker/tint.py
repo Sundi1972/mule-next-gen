@@ -15,9 +15,10 @@ import numpy as np
 a = sys.argv[sys.argv.index("--") + 1 :]
 SRC, NAME, OUT = a[0], a[1], a[2]
 
-# The suits: the four player colours (packages/ui theme.css, dark theme: the TV's). The trims, helmet included,
+# The suits: the four player colours (packages/ui theme.css, dark theme: the TV's), then the colony's two. The trims, helmet included,
 # vary from colonist to colonist in place of hair: a warm white, a graphite, a sand.
-SUITS = {"p1": "#ff7a45", "p2": "#4d9dff", "p3": "#3ddc84", "p4": "#ffd23f"}
+# A colonist past the seated players' colours wears a colony suit, white or grey (Heiko, PM ruling 8 Nov).
+SUITS = {"p1": "#ff7a45", "p2": "#4d9dff", "p3": "#3ddc84", "p4": "#ffd23f", "c1": "#e4e1d8", "c2": "#8a9099"}
 TRIMS = {"white": "#ece8df", "graphite": "#6a717d", "sand": "#cdb48a"}
 NEUTRAL = 0.62  # walk.py's neutral albedo
 OUTLINE_PX = 4  # the outline's width at the full-resolution sheet
