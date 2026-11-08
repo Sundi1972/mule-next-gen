@@ -125,3 +125,18 @@ describe("PR-8 (needs C15): a factory's Food units are worth the factory's run, 
     for (let k = v.floorUnits; k < v.block; k++) expect(v.keep[k], `keep[${k}]: the works' share`).toBeCloseTo(each, 6);
   });
 });
+
+describe("PR-8 (needs C15): the buy side prices the household's Food unit by unit", () => {
+  it("with a works that makes nothing, the meal's units buy at their hunger worth, not the meal's and the crews' average", () => {
+    const m = mind();
+    const state = development(undefined);
+    Object.assign(state.tiles[0]!, { outfit: 'medicine', pollution: 2 });
+    const obs = observe(state, ME);
+    const o = outlook(obs, ME, { lookAhead: m.level.lookAhead });
+    const units = foodUnits(obs, m, (g) => o.price(g));
+    const hunger = units[0]!;
+    expect(units.slice(UPKEEP.baseFood).every((x) => x < hunger), "the case: the crews' units are worth less than the meal's").toBe(true);
+    const v = unitValues(obs, o, 'food', m);
+    expect(v.buy.filter((x) => x >= hunger - 1e-9).length, "the meal's units buy at their hunger worth").toBeGreaterThanOrEqual(UPKEEP.baseFood);
+  });
+});
