@@ -396,9 +396,9 @@ describe('the validator holds every playbook to RULE-1', () => {
         expect(r.playbook, `led, ${level}`).toEqual(r.draft);
       }
       // With a plains plot beside it the MULE isn't lost: the draft takes its next pick, as the hands' own pick did.
-      const plain = state.tiles.findIndex((t) => t.terrain === 'plains' && t.owner === null);
-      state.tiles[plain]!.owner = 'ai2';
-      const both = run('development', [], { state, mind: mindOf(2, 'rookie') });
+      const plain = led.tiles.findIndex((t) => t.terrain === 'plains' && t.owner === null);
+      led.tiles[plain]!.owner = 'ai2';
+      const both = run('development', [], { state: led, mind: mindOf(2, 'rookie') });
       expect(both.draft.development!.route).toContainEqual({ act: 'install', plot: plain });
       expect(both.rejected).toEqual([]);
     } finally {
