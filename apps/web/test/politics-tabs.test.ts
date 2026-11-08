@@ -81,13 +81,13 @@ function draw(id: string, game: MuleView): string {
 const at = (html: string, testid: string) => html.indexOf(`data-testid="${testid}"`);
 
 describe('SB-3: the politics sub-tabs', () => {
-  it('SB-3: the sub-tabs are Laws, Budget, Elections, in that order, with no Badge (the tab row is SB-2)', () => {
+  it('SB-3: the sub-tabs are Laws, Budget, Elections, in that order, with no Badge (the tab row is SB-2)', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     expect(POLITICS_TABS.map((t) => t.id)).toEqual(['laws', 'budget', 'elections']);
     expect(POLITICS_TABS.map((t) => t.label(seatOf(view(politics()))))).toEqual(['Laws', 'Budget', 'Elections']);
     expect(POLITICS_TABS.every((t) => t.Badge === undefined)).toBe(true);
   });
 
-  it('SB-3: politics off, no sub-tab is shown', () => {
+  it('SB-3: politics off, no sub-tab is shown', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
     const seat = seatOf(view(null));
     for (const t of POLITICS_TABS) expect(t.show?.(seat), t.id).toBe(false);
   });
@@ -95,7 +95,7 @@ describe('SB-3: the politics sub-tabs', () => {
   describe('on the Governor’s phone', () => {
     const game = view(politics({ governor: 's1' }));
 
-    it('SB-3: Laws shows the Governor’s desk and the laws in force, and no pending law', () => {
+    it('SB-3: Laws shows the Governor’s desk and the laws in force, and no pending law', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       const html = draw('laws', view(politics({ governor: 's1', proposal: pending })));
       expect(html).toContain('data-testid="gov-tax"');
       expect(html).toContain('data-testid="laws-in-force"');
@@ -103,7 +103,7 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(html).not.toContain('data-testid="council-tax"');
     });
 
-    it('SB-3: Budget is shown and holds the Commission button', () => {
+    it('SB-3: Budget is shown and holds the Commission button', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       expect(sub('budget').show?.(seatOf(game))).toBe(true);
       expect(draw('budget', game)).toContain('data-testid="commission-open"');
     });
@@ -112,7 +112,7 @@ describe('SB-3: the politics sub-tabs', () => {
   describe('on another phone', () => {
     const game = view(politics({ governor: 's2', proposal: pending }));
 
-    it('SB-3: Laws shows the tax line, the laws in force and the pending law, with no Governor’s desk and no overrule call', () => {
+    it('SB-3: Laws shows the tax line, the laws in force and the pending law, with no Governor’s desk and no overrule call', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       const html = draw('laws', game);
       expect(html).toContain('data-testid="council-tax"');
       expect(html).toContain('data-testid="laws-in-force"');
@@ -121,11 +121,11 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(html).not.toMatch(/overrule/i);
     });
 
-    it('SB-3: Budget is not shown until S5-PR-6 gives it a body', () => {
+    it('SB-3: Budget is not shown until S5-PR-6 gives it a body', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       expect(sub('budget').show?.(seatOf(game))).toBe(false);
     });
 
-    it('SB-3: Elections shows the offices and running for office', () => {
+    it('SB-3: Elections shows the offices and running for office', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       const html = draw('elections', view(politics({ governor: 's2' })));
       expect(html).toContain('data-testid="run-any-month"');
     });
@@ -134,7 +134,7 @@ describe('SB-3: the politics sub-tabs', () => {
   describe('an open law ballot', () => {
     const game = view(politics({ council: council() }));
 
-    it('SB-3: Laws opens first, and the ballot is the first thing in it', () => {
+    it('SB-3: Laws opens first, and the ballot is the first thing in it', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       expect(sub('laws').first?.(seatOf(game))).toBe(true);
       const html = draw('laws', game);
       expect(at(html, 'phone-ballot')).toBeGreaterThan(-1);
@@ -142,13 +142,13 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(at(html, 'phone-ballot')).toBeLessThan(at(html, 'laws-in-force'));
     });
 
-    it('SB-3: with no ballot open Laws does not ask to open first', () => {
+    it('SB-3: with no ballot open Laws does not ask to open first', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       expect(sub('laws').first?.(seatOf(view(politics())))).toBeFalsy();
     });
   });
 
   describe('an open election', () => {
-    it.each(['announce', 'ballot'] as const)('SB-3: in %s Elections opens first and shows election day', (stage) => {
+    it.each(['announce', 'ballot'] as const)('SB-3: in %s Elections opens first and shows election day', (stage) => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       const game = view(politics({ election: election(stage) }));
       expect(sub('elections').first?.(seatOf(game))).toBe(true);
       const html = draw('elections', game);
@@ -156,7 +156,7 @@ describe('SB-3: the politics sub-tabs', () => {
       expect(html).toContain('data-testid="day-title"');
     });
 
-    it('SB-3: once the election is over Elections shows the offices and does not ask first', () => {
+    it('SB-3: once the election is over Elections shows the offices and does not ask first', () => { // trace-allow: SB-3 has no spec AC ids; the PM-ruled scope of 8 Nov, proved against the approved hub-tabs mock
       const game = view(politics({ election: election('over') }));
       expect(sub('elections').first?.(seatOf(game))).toBeFalsy();
       expect(draw('elections', game)).toContain('data-testid="council-result"');
