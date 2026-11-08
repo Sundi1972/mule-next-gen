@@ -16,12 +16,14 @@ import { aMuleView, aPlayer } from './fixtures/views';
 let ClientProvider: typeof import('../src/net/react').ClientProvider;
 let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Who: typeof import('../src/phone/hub/politics/parts').Who;
+let Planning: typeof import('../src/phone/Planning').Planning;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Who } = await import('../src/phone/hub/politics/parts'));
+  ({ Planning } = await import('../src/phone/Planning'));
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
   (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
@@ -235,5 +237,72 @@ describe('the reputation chip (S3-C19)', () => {
     tap(`player-card-${BRIX}-close`);
     tap(`who-${LENA}-rep`);
     expect(text(`player-card-${LENA}-reasons`), 'Lena kept her pact: nothing public').toBe('What moved it, in publicNothing public. A kept card never shows here, only the number rising.');
+  });
+});
+
+// ---- S3-C17 · the composer ---------------------------------------------------------------------------------------
+
+/** Lena's whole planning hub. */
+const hub = () => createElement(Planning);
+const offers = () => sent.filter((i) => (i as { type: string }).type === 'offerDeal');
+
+describe('the deal composer (S3-C17)', () => {
+  it("S3-B-AC-1: the composer opened from Lena's whisper to Brix offers a pact of POLITICS.deals pactMonths lengths or her own vote, sends offerDeal, and shows the engine's refusal words", () => {
+    // The lengths are the view's, not the phone's: a table playing other lengths gets those. Ossa and Lena are running
+    // for Governor; Kai and Brix are not.
+    const lengths = [2, 5];
+    const game = gameFor(myView(LENA, [], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } }));
+    mount(game, hub);
+    // An older refusal, from some other tap, is not this card's.
+    act(() => setState({ toasts: [{ id: 1, message: 'You can run for office in planning' }] }));
+    tap('desk-talk');
+    tap(`chat-to-${BRIX}`);
+    tap('add-deal');
+
+    expect(text('composer-a')).toContain('Card for');
+    expect(text('composer-a')).toContain('Brix');
+    expect(allTestids('composer-a-months-'), 'a pact runs the lengths the view gives').toEqual(lengths.map((m) => `composer-a-months-${m}`));
+    expect(findTestid('composer-a-refusal'), 'nothing refused yet').toBeUndefined();
+    tap('composer-a-months-5');
+    expect(text('composer-a-binds')).toBe('Neither of you sabotages the other, months 2 to 6.');
+    tap('composer-a-send');
+    expect(offers()).toEqual([{ type: 'offerDeal', offer: { to: BRIX, terms: { kind: 'pact' }, months: 5 } }]);
+
+    // The server refuses: its words show in the composer, where the tap was.
+    const refusal: Toast = { id: 2, message: 'Brix has not answered your last card' };
+    act(() => setState({ toasts: [...state.toasts, refusal] }));
+    expect(text('composer-a-refusal')).toContain(refusal.message);
+
+    // Her own vote: only a declared candidate who is not herself, and no law is up.
+    tap('composer-a-kind-vote');
+    expect(allTestids('composer-a-choice-gov:')).toEqual([`composer-a-choice-gov:${OSSA}`]);
+    expect(text('composer-a-ballot-law-no')).toBe('No law is up for a vote');
+    expect(text('composer-a-ballot-gov')).toContain('Governor · month 4');
+    tap(`composer-a-choice-gov:${OSSA}`);
+    sent.length = 0;
+    tap('composer-a-send');
+    expect(offers()).toEqual([{ type: 'offerDeal', offer: { to: BRIX, terms: { kind: 'vote', office: 'governor', candidate: OSSA } } }]);
+    expect(findTestid('composer-a-refusal'), 'a new send clears the last refusal').toBeUndefined();
+
+    // Once the server lists the new card, the sheet has done its job.
+    const listed = card({ id: 'deal-n1', from: LENA, to: BRIX, terms: { kind: 'vote', office: 'governor', candidate: OSSA } });
+    rerender(gameFor(myView(LENA, [listed], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } })));
+    expect(findTestid('composer-a')).toBeUndefined();
+    expect(byTestid('add-deal').getAttribute('disabled'), 'one unanswered card to Brix at a time').not.toBeNull();
+  });
+
+  it("S3-B-AC-1: the composer also opens from a name's player card and from a standings row, in planning", () => {
+    mount(gameFor(myView(LENA)), hub);
+    tap('standing');
+    tap(`standing-${OSSA}-deal`);
+    expect(findTestid('standings-sheet'), 'the standings give way to the composer').toBeUndefined();
+    expect(text('composer-a')).toContain('Ossa');
+    tap('composer-a-close');
+
+    tap(`chat-to-${BRIX}`);
+    tap('whisper-rep');
+    tap(`player-card-${BRIX}-deal`);
+    expect(findTestid(`player-card-${BRIX}`)).toBeUndefined();
+    expect(text('composer-a')).toContain('Brix');
   });
 });
