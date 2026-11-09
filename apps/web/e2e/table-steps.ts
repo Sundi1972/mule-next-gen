@@ -68,15 +68,19 @@ export async function doneThroughTheElection(ctx: GameStepContext, timeout: numb
     const { state } = gameOf(ctx);
     check(state.phase === 'planning', `T-AC-1: the election ends inside planning, but the game is in ${state.phase}`);
     const election = state.politics?.election;
-    if (!election || election.stage === 'over') return `${stages.join(' > ') || 'no election'}, over in ${((Date.now() - started) / 1_000).toFixed(2)} s`;
+    if (!election || election.stage === 'over') {
+      // The steps after the election read Overview's map and tools: back to Overview from the Elections sub-tab.
+      if ((await ctx.phone.getByTestId('tab-overview').count()) > 0) await ctx.phone.getByTestId('tab-overview').click({ timeout: PRESS_MS });
+      return `${stages.join(' > ') || 'no election'}, over in ${((Date.now() - started) / 1_000).toFixed(2)} s`;
+    }
     check(Date.now() < deadline, `T-AC-1: the month-1 election is over within ${timeout} ms, still at ${election.stage}`);
     if (stages.at(-1) !== election.stage) stages.push(election.stage);
     const stage = election.stage;
     await ctx.held(async () => {
       const now = gameOf(ctx).state.politics?.election;
       if (now?.stage !== stage || (stage !== 'announce' && stage !== 'ballot') || now.done.includes(seat.id)) return;
-      // The announce and the ballot are the Elections sub-tab's (SB-3): open it when the card is not on screen.
-      if ((await ctx.phone.getByTestId('ballot-card').count()) === 0 && (await ctx.phone.getByTestId('tab-politics').count()) > 0) {
+      // The ballot is the Elections sub-tab's (SB-3): open it when its card is not on screen.
+      if (stage === 'ballot' && (await ctx.phone.getByTestId('ballot-card').count()) === 0 && (await ctx.phone.getByTestId('tab-politics').count()) > 0) {
         await ctx.phone.getByTestId('tab-politics').click({ timeout: PRESS_MS });
         await ctx.phone.getByTestId('sub-elections').click({ timeout: PRESS_MS });
       }
