@@ -146,6 +146,8 @@ function Ballot({ election }: { election: ElectionView }) {
   useEffect(() => {
     for (const o of offices) serverShows(mine, o, me.politics?.ballot[o]);
   });
+  // Drawn, so seen: a promise counts for Cast my vote from now on, from any tab.
+  useEffect(() => showBallot('election', mine));
   return (
     <DayCard at={2} testid="ballot-card">
       <span className="flex flex-wrap items-center gap-x-1.5 text-xs @min-[1100px]/shell:text-lg" data-testid="voted">
@@ -281,9 +283,39 @@ let heldRoom: string | null = null;
 export function enterRoom(code: string): boolean {
   if (heldRoom === code) return false;
   heldRoom = code;
-  const had = held !== null;
+  const had = held !== null || shownBallots.election !== null || shownBallots.law !== null;
   held = null;
+  shownBallots = { election: null, law: null };
   return had;
+}
+
+/**
+ * The ballots this phone has had on screen, by kind (PM ruling A, 9 Nov): a promise counts as a pick for Cast my vote
+ * and Done only once the seat's ballot for this vote has been drawn, so nobody keeps or breaks a promise unseen.
+ * Client memory only (a reload loses it), noted like the room: module state, idempotent. Only the open sub-tab's body
+ * is mounted, so a ballot that is drawn is a ballot that is visible.
+ */
+let shownBallots: { election: BallotOf | null; law: BallotOf | null } = { election: null, law: null };
+
+/** Notes that this seat's ballot of `kind` is on screen. Idempotent. */
+export function showBallot(kind: 'election' | 'law', ballot: BallotOf): void {
+  const at = shownBallots[kind];
+  if (at && sameBallot(at, ballot)) return;
+  shownBallots = { ...shownBallots, [kind]: ballot };
+  changed();
+}
+
+/** Forgets that a ballot was shown; the vote's close does this. */
+export function forgetShown(kind: 'election' | 'law'): void {
+  if (shownBallots[kind] === null) return;
+  shownBallots = { ...shownBallots, [kind]: null };
+  changed();
+}
+
+/** Whether this seat's ballot of `kind` has been on screen for this vote. */
+export function wasShown(kind: 'election' | 'law', ballot: BallotOf): boolean {
+  const at = shownBallots[kind];
+  return at !== null && sameBallot(at, ballot);
 }
 
 const sameBallot = (a: BallotOf, b: BallotOf) => a.seat === b.seat && a.month === b.month;
@@ -335,7 +367,13 @@ function serverShows(ballot: BallotOf, office: Office, server: string | undefine
 /** Forgets every pick; the ballot does this when it closes, so the next one opens empty. */
 export function forgetPicks(): void {
   held = null;
+  shownBallots = { ...shownBallots, election: null };
   changed();
+}
+
+/** Redraws the caller when a pick or a shown ballot changes; the hub does, since its ready bar reads both. */
+export function useBallotMemory(): void {
+  usePicks();
 }
 
 function usePicks(): void {
@@ -347,16 +385,17 @@ function usePicks(): void {
 }
 
 /** The pick shown for an office: this phone's or the server's, else the candidate this seat promised (S3-RULE-12). */
-function pickOrPromise(ballot: BallotOf, office: Office, politics: MyView['politics']): string | undefined {
-  return shownPick(ballot, office, politics?.ballot[office]) ?? politics?.promised?.election[office]?.candidate;
+function pickOrPromise(ballot: BallotOf, office: Office, politics: MyView['politics'], counted = true): string | undefined {
+  return shownPick(ballot, office, politics?.ballot[office]) ?? (counted ? politics?.promised?.election[office]?.candidate : undefined);
 }
 
 type BallotSeat = { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> };
 
-/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot; a promise counts as one. */
+/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot; a promise counts as one once the ballot has been on screen. */
 export function ballotComplete({ view, me }: BallotSeat, election: ElectionView): boolean {
   const mine: BallotOf = { seat: me.id, month: view.month };
-  return contested(election.candidates).every((o) => pickOrPromise(mine, o, me.politics) !== undefined);
+  const seen = wasShown('election', mine);
+  return contested(election.candidates).every((o) => pickOrPromise(mine, o, me.politics, seen) !== undefined);
 }
 
 /**

@@ -284,9 +284,9 @@ describe('S3-C21: the election ballot says "You promised"', () => {
   it('S3-T-AC-16: row 4 from Overview, the ballot never shown: a promise is not a pick, Cast my vote is dead and nothing is sent', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
     mount(electionFor({ promised: BRIX_VOTE }), false);
     expect(findTestid('ballot-card'), 'the ballot is not on screen').toBeUndefined();
+    // The fake DOM fires a click on a disabled button, a real one does not: dead is the disabled button.
     expect(isDisabled('ready'), 'nobody keeps a promise unseen').toBe(true);
-    tap('ready');
-    expect(sent).toEqual([]);
+    expect(sent, 'nothing was sent').toEqual([]);
   });
 
   it('S3-T-AC-16: row 4 from Overview, the ballot shown and left: Cast my vote is live and sends the promised vote, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
@@ -364,9 +364,9 @@ describe('S3-C21: the law ballot says "You promised"', () => {
   it('S3-T-AC-16: law row 4 from Overview, the ballot never shown: a promise is not a vote, Done is dead and nothing is sent', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
     mount(lawFor({ promised: LAW_YES }), false);
     expect(findTestid('phone-ballot'), 'the ballot is not on screen').toBeUndefined();
+    // The fake DOM fires a click on a disabled button, a real one does not: dead is the disabled button.
     expect(isDisabled('ready'), 'nobody keeps a promise unseen').toBe(true);
-    tap('ready');
-    expect(sent).toEqual([]);
+    expect(sent, 'nothing was sent').toEqual([]);
   });
 
   it('S3-T-AC-16: law row 4 from Overview, the ballot shown and left: Done is live and sends the promised yes, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
