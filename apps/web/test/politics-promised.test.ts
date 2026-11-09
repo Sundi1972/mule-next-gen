@@ -432,6 +432,25 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(sent).toEqual([voteLaw(true), READY]);
   });
 
+  it("S3-RULE-12 (m-1): a room change clears the law memory while an election memory is held too", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2f re-review
+    // Room MULE: month 1's election ballot shown and left, then month 2's law ballot shown, an own No tapped, unmounted.
+    mount(electionFor({ promised: BRIX_VOTE, month: 1 }));
+    toOverview();
+    rerender(lawFor({ promised: LAW_YES, month: 2 }));
+    for (const id of ['tab-politics', 'sub-laws']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    tap('ballot-no');
+    act(() => root!.unmount());
+    root = null;
+    sent.length = 0;
+    room = 'ZORP';
+    mount(lawFor({ promised: LAW_YES, month: 2 }), false);
+    expect(isDisabled('ready'), 'ZORP, never shown').toBe(true);
+    for (const id of ['tab-politics', 'sub-laws']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    expect(isDisabled('ready'), 'shown').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
   it("S3-RULE-12 (m-1): the law ballot shown and closed off-screen in month 2 leaves nothing for month 3's: Done is dead on Overview until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
     mount(lawFor({ promised: LAW_YES, month: 2 }));
     toOverview();
