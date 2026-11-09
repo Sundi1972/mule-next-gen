@@ -199,11 +199,16 @@ function tickAlone(state: GameState, hand: VoteHand): { refused: AiAction[]; sen
 afterEach(() => vi.unstubAllEnvs());
 // S5-C6 pin: these rows predate the budget. With Welfare at 0% an AI Governor's split is the budget in force (Projects 100), so it sends no setBudget and the fund reaches the buildings whole.
 const SAVED_WELFARE_MAX = POLITICS.budget.welfare.maxShare;
+// S5-PR-3 pin: these rows predate the AI's overrule calls. With minGain out of reach no AI seat calls, so none sends
+// callOverrule (S5-B-AC-6 proves the AI's calls).
+const SAVED_MIN_GAIN = POLITICS.ai.overrule.minGain;
 beforeEach(() => {
   POLITICS.budget.welfare.maxShare = 0;
+  POLITICS.ai.overrule.minGain = Infinity;
 });
 afterEach(() => {
   POLITICS.budget.welfare.maxShare = SAVED_WELFARE_MAX;
+  POLITICS.ai.overrule.minGain = SAVED_MIN_GAIN;
 });
 
 /** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */

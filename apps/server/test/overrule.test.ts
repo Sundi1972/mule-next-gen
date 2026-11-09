@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POLITICS, RuleError, WALK, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
@@ -59,6 +59,16 @@ function refusal(run: () => void): string {
   }
   return 'accepted';
 }
+
+// S5-PR-3 pin: these rows predate the AI's overrule calls. With minGain out of reach no AI seat calls, so the call each row
+// makes is the human's (S5-B-AC-6 proves the AI's calls).
+const SAVED_MIN_GAIN = POLITICS.ai.overrule.minGain;
+beforeEach(() => {
+  POLITICS.ai.overrule.minGain = Infinity;
+});
+afterEach(() => {
+  POLITICS.ai.overrule.minGain = SAVED_MIN_GAIN;
+});
 
 describe('S5-C7: the server opens the overrule ballot where planning already ends', () => {
   it('S5-T-AC-10: a call opens the ballot at the last Ready; after the reveal planning ends at once, with no second planning proper', () => {
