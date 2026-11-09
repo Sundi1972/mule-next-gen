@@ -449,5 +449,16 @@
       }
     },
     "outline": "walker/outline@800.webp"
+  },
+  "lamp": {
+    "cell": {
+      "width": 320,
+      "height": 288,
+      "feet": [24, 216]
+    },
+    "px_per_m": 76.19,
+    "day": "lamp/day@800.webp",
+    "dusk": "lamp/dusk@800.webp",
+    "glow": "lamp/glow@800.webp"
   }
 }

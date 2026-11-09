@@ -27,6 +27,16 @@ export interface WalkerEntry {
   outline: string;
 }
 
+/** The walkway lamp the page stands at each inner crossing (spec §3 `lamp`, AM-9): its cell, foot pixel, scale, pictures. */
+export interface LampEntry {
+  cell: { width: number; height: number; feet: [number, number] };
+  px_per_m: number;
+  day: string;
+  dusk: string;
+  /** The globe alone, added over dusk as the buildings' glow is. */
+  glow: string;
+}
+
 /** The four ways along the grid: +x is col rising (down-right on screen), +y row falling (up-right). */
 export type Heading = '+x' | '+y' | '-x' | '-y';
 
@@ -72,6 +82,8 @@ export interface GroundsManifest {
   plate?: Record<PlateExtent, PlateEntry>;
   /** Without it the colonists are SVG figures. */
   walker?: WalkerEntry;
+  /** Without it the inner crossings keep only the plate's pools. */
+  lamp?: LampEntry;
 }
 
 /** A place's state, as the colony view carries it. */

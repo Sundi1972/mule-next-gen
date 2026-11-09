@@ -4,7 +4,7 @@
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type FundLine, type GameState, type PrestigeId } from '@mule/engine';
+import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type DealCard, type FundLine, type GameState, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, IncidentView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Page } from 'playwright';
@@ -497,6 +497,8 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       check(report?.ledger?.month === state.month, `month ${state.month}'s end has its own ledger, got month ${report?.ledger?.month}`);
       report.ledger.out = LONGEST_LEDGER;
       state.treasury.money = 88_888;
+      // And the month's broken cards (S3-C20, PM ruling A): each breaker's league row marks what they cost.
+      state.politics!.deals.push(...mostBrokenCards(state));
       // WS4's named edit (S4-C17, PM ruling 8 Nov): two sabotage incidents this month, so the TV's colony panel carries
       // its "Sabotage ×2" tag while TV-FIT is read. Staged in the view, as claude-seat-tv.ts stages waitingForClaude:
       // the engine builds sabotage off.
@@ -537,6 +539,11 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });
       console.log(`✓ B-AC-27-2: six seats, month 2's end, five projects, ${read}`);
       console.log(`✓ #tv-month-end-paid-out: six seats, the longest ledger, the Wealth note reads ${await theFundPaidOut(page, board())}`);
+      const marks = page.getByTestId('tv-monthend').locator('[data-testid^=league-broke-]');
+      check((await marks.count()) === BROKEN_AT_SIX, `the ${name} TV's league marks the ${BROKEN_AT_SIX} players who broke a card this month, got ${await marks.count()}`);
+      const first = await marks.first().getAttribute('aria-label');
+      check(first?.startsWith('Broke this month: ') && first.includes('broke a promise to'), `the mark's label says the break whole, got "${first}"`);
+      console.log(`✓ S3-C20 (PM ruling A): six seats, ${BROKEN_AT_SIX} breakers' league rows marked "${(await marks.first().textContent())?.trim()}", scale ${await theTvScaleHolds(page, `${name} month end with ${BROKEN_AT_SIX} broken cards`)}`);
     }
     // A late game's other end: all five standing share one line, and every name shows, wrapping rather than cut (review
     // of #672). The fewer lines leave the room.
@@ -567,6 +574,18 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await browser.close();
     await server.close();
   }
+}
+
+/** How many broken cards the six-seat month end stages. */
+const BROKEN_AT_SIX = 2;
+
+/** BROKEN_AT_SIX vote promises broken this month, each by a different seat to the next, for the next again. */
+function mostBrokenCards(state: GameState): DealCard[] {
+  const ids = state.players.map((p) => p.id);
+  return Array.from({ length: BROKEN_AT_SIX }, (_, i): DealCard => {
+    const [from, to, candidate] = [ids[i]!, ids[(i + 1) % ids.length]!, ids[(i + 2) % ids.length]!];
+    return { id: `deal-e2e-${i}`, from, to, terms: { kind: 'vote', office: 'governor', candidate }, offered: 1, until: state.month, status: 'broken', brokenBy: from, settled: state.month };
+  });
 }
 
 /** Every line the fund can pay, in the widest digits: 88,888 in all, beside a fund of 88,888. */

@@ -120,6 +120,12 @@ the meshes its rig moves set its height and feet (Astronaut A carries an unskinn
 suit uses one sheet (its first trim), and the phone's sheets code the shadow's alpha coarser: the phone's heaviest
 colony loads 894 KB by day, 800 KB at dusk (B-AC-5, `review-loop/shoot.mjs`).
 
+**The inner crossings' lamps are a sprite** (spec AM-9). The plate stands lamps only on its outer apron, where no
+building layer can cover a head; at each inner crossing it lights a head-less pool. `lamp.py` renders the apron's own
+lamp (`kits.lamp`, 3 m, 110 W) once, in day, dusk and glow, on a solid catcher in a 320 × 288 cell with its foot at
+(24, 216); its glow is the globe and the post it lights, never a second pool. The page stands it at every inner crossing
+not under a 2 × 2 building, in depth order, its glow at the plate's own opacity. 4.6 KB in all.
+
 ## 8. Stages — one model, derived variants
 
 | Stage | How it is made | Shown when |

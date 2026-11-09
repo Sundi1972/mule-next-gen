@@ -9,7 +9,7 @@ import { occluderOf } from './occlusion';
 import type { Spot } from './walks';
 import { glowOpacity, SMOKE, smokes, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
-import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
+import { pick, type Frame, type GroundsManifest, type LampEntry, type Light, type PictureKind, type PlaceState, type PlateEntry } from './pick';
 import { iso, poly, square, W } from './projection';
 
 export type { Frame, GroundsManifest, Light, PictureStage, PlateEntry, PlateExtent, PlateFrame } from './pick';
@@ -144,6 +144,32 @@ function plateBox({ frame }: PlateEntry, { place }: Frame): PictureBox {
 }
 
 /**
+ * The inner crossings of a plate `extent` places out from the hall (1 for the 3 × 3, 2 for the 5 × 5), in place units:
+ * every corner shared by four places, where the plate lights a head-less pool. A crossing inside a building bigger than one place is under it, so not one.
+ */
+export function crossingsOf(extent: number, blocks: GridPlace[]): [number, number][] {
+  const lines = Array.from({ length: 2 * extent }, (_, k) => k - extent + 0.5);
+  const under = (c: number, r: number) =>
+    blocks.some((b) => c > b.x - 2.5 && c < b.x - 2.5 + b.w && r > b.y - 2.5 && r < b.y - 2.5 + b.h);
+  return lines.flatMap((c) => lines.map((r): [number, number] => [c, r])).filter(([c, r]) => !under(c, r));
+}
+
+/** A walkway lamp standing on the crossing (c, r), its foot pixel on the crossing, at the buildings' scale; lit at dusk. */
+function CrossingLamp({ c, r, lamp, href, light, glow }: { c: number; r: number; lamp: LampEntry; href: (src: string) => string; light: Light; glow: number }) {
+  const k = W / (12 * Math.SQRT2 * lamp.px_per_m);
+  const [x, y] = iso(c, r);
+  const box = { x: x - lamp.cell.feet[0] * k, y: y - lamp.cell.feet[1] * k, width: lamp.cell.width * k, height: lamp.cell.height * k };
+  const id = `${c}_${r}`;
+  return (
+    <g pointerEvents="none">
+      <image href={href(lamp[light])} {...box} data-testid={`lamp-${id}`} />
+      {/* none by day: the glow's opacity is 0 there (RULE-2) */}
+      {glow > 0 && <Glow href={href(lamp.glow)} opacity={glow} box={box} testid={`lamp-glow-${id}`} />}
+    </g>
+  );
+}
+
+/**
  * The grounds as one SVG, back to front (painter's order): the base plate for the rings in use (AM-7), or without one
  * the SVG land and plaza and the far edge's trees; the hall and the places by col + row so nearer buildings cover
  * farther ones (each with its glow at dusk), with the colonists on the paths sorted in among them; without a plate the
@@ -153,7 +179,9 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
   const [failedPlates, setFailedPlates] = useState<ReadonlySet<string>>(() => new Set());
-  const entry = manifest?.plate?.[R <= 1 ? '3' : '5'];
+  // The plate's own extent: the 3 × 3 serves the hall alone too (R = 0), so its pools stand round the hall.
+  const plateR = R <= 1 ? 1 : 2;
+  const entry = manifest?.plate?.[plateR === 1 ? '3' : '5'];
   const named = manifest && entry ? { href: hrefOf(entry[light], manifest, size), glow: entry.glow && hrefOf(entry.glow, manifest, size), box: plateBox(entry, manifest.frame) } : null;
   // A plate that fails to load leaves the grounds as they are without one, never blank (HC-3).
   const plate = named && !failedPlates.has(named.href) ? named : null;
@@ -195,6 +223,14 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
       })
     : [];
 
+  // The plate lights a head-less pool at each inner crossing; the lamp stands there, in depth order with the buildings.
+  const lampEntry = plate && manifest?.lamp;
+  const lamps = lampEntry
+    ? crossingsOf(plateR, placed.map((q) => q.block)).map(([c, r]) => ({
+        depth: c + r,
+        node: <CrossingLamp key={`lamp-${c}_${r}`} c={c} r={r} lamp={lampEntry} href={(src) => hrefOf(src, manifest!, size)} light={light} glow={plateGlow} />,
+      }))
+    : [];
   // A damaged building's smoke leaves the top of its picture (RULE-8).
   const smoke = placed.filter((q) => smokes(q.p.stage)).map(({ n, p, block, col, row }) => {
     const [x, y] = iso(col, row, MASSING[p.id].height * SMOKE.height);
@@ -248,7 +284,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
         </>
       )}
       <WalkingScene
-        scene={scene.map(({ n, p, block, col: c, row: r }) => ({
+        scene={[...scene.map(({ n, p, block, col: c, row: r }) => ({
           depth: c + r,
           node:
             !p || !block ? (
@@ -258,7 +294,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', framing, 
                 {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />, fade(block))}
               </g>
             ),
-        }))}
+        })), ...lamps]}
         walkers={routes ? routes.length : walkers}
         rim={R + 0.85}
         blocks={placed.map((q) => q.block)}
