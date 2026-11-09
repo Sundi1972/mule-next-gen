@@ -965,6 +965,20 @@ did       The tabbed hub opens nothing by itself: the Now line is a door only fo
 goal      P-1 — unchanged
 ```
 
+```
+AM-25 · 2026-11-09 · SB-3 part 2 (ws7-sb3-part2) · C11's desks on the phone
+
+target    C11 (the desks on phone and TV), the phone half; its #hub-council and #hub-governor routes
+did       The phone no longer has a Council desk and a Governor desk as separate screens. The Governor / Council
+          tab holds three sub-tabs: Laws, Budget, Elections. Only the three reveals (election ceremony, council
+          result, tax overrule) take the whole stage; everything else is a sub-tab. The Commission lives in
+          Budget. The election announce's Now line reads "Election day", with "Electing: <offices>." in its
+          detail (997c559f0), and its door opens Elections. A promised vote can be cast from Overview through the
+          ready bar (S3-RULE-12 row 4; the press sends the vote, then the ready). The TV is unchanged.
+          Commits: e59bb1b52, 8d9c5cbbb, 834f60082, 997c559f0, be167fe22.
+goal      P-1 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: politics state
