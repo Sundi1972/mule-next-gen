@@ -308,7 +308,7 @@ describe('the deal composer (S3-C17)', () => {
   it("S3-B-AC-1: a pact's months in the composer stop at the game's last month, as S3-RULE-1's until does: month 11 of 12, month 2 of 2", () => {
     const longest = Math.max(...POLITICS.deals.pactMonths);
     mount(gameFor(myView(LENA, []), politics(), { month: 11, maxMonths: 12 }), hub);
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${OSSA}`);
     tap('add-deal');
     tap(`composer-a-months-${longest}`);
@@ -329,12 +329,13 @@ describe('the deal composer (S3-C17)', () => {
     // for Governor; Kai and Brix are not.
     const lengths = [2, 5];
     const game = gameFor(myView(LENA, [], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } }));
+    listenForKeys();
     mount(game, hub);
     // An older refusal, from some other tap, is not this card's.
     act(() => setState({ toasts: [{ id: 1, message: 'You can run for office in planning' }] }));
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${BRIX}`);
-    tap('add-deal');
+    tapFocused('add-deal');
 
     expect(text('composer-a')).toContain('Card for');
     expect(text('composer-a')).toContain('Brix');
@@ -369,6 +370,9 @@ describe('the deal composer (S3-C17)', () => {
     rerender(gameFor(myView(LENA, [listed], { pactMonths: lengths }), politics({ candidates: { governor: [OSSA, LENA] } })));
     expect(findTestid('composer-a')).toBeUndefined();
     expect(byTestid('add-deal').getAttribute('disabled'), 'one unanswered card to Brix at a time').not.toBeNull();
+    // + Deal, its opener, is off now (SA-1384): the focus goes to the open tab, not to a control that cannot take it.
+    expect(focusInPage(), 'the focus is on an element still in the page').toBe(true);
+    expect(focused(), '+ Deal is off, so the open tab').toBe('tab-talk');
   });
 
   it('S3-B-AC-1: the composer says before the send what the engine would refuse: no offers left, a vote already promised on that ballot, a pact already held; and warns an AI seat turns down a low name', () => {
@@ -381,7 +385,7 @@ describe('the deal composer (S3-C17)', () => {
 
     // A pact already held with Kai, and Lena's vote promised to Ossa: the composer says both in the engine's words.
     mount(game([promisedOssa, pactKai], 2), hub);
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${KAI}`);
     tap('add-deal');
     expect(text('composer-a-pact-no')).toBe('You already have a pact with Kai');
@@ -437,6 +441,9 @@ function listenForKeys(): void {
       [document, 'removeEventListener'],
       [FakeElement.prototype, 'focus'],
       [FakeElement.prototype, 'querySelector'],
+      [FakeElement.prototype, 'isConnected'],
+      [FakeElement.prototype, 'matches'],
+      [document, 'querySelector'],
     ] as [object, string][]
   ).map(([on, key]) => [on, key, Object.getOwnPropertyDescriptor(on, key)] as const);
   unlistenForKeys = () => {
@@ -454,6 +461,26 @@ function listenForKeys(): void {
   doc.removeEventListener = (t, l) => (t === 'keydown' ? void keydown.delete(l as never) : remove(t, l));
   (FakeElement.prototype as unknown as { focus(): void }).focus = function (this: FakeElement) {
     (document as unknown as { activeElement: FakeElement | null }).activeElement = this;
+  };
+  // An element is connected while its parents reach the document: what a closed dialog's opener may no longer be.
+  Object.defineProperty(FakeElement.prototype, 'isConnected', {
+    configurable: true,
+    get(this: FakeElement) {
+      let n: unknown = this;
+      while (n instanceof FakeElement) n = n.parentNode;
+      return n === document;
+    },
+  });
+  // The one selector the dialogs match: :disabled, the element's own or a disabled fieldset's around it.
+  (FakeElement.prototype as unknown as { matches(s: string): boolean }).matches = function (this: FakeElement, s: string) {
+    if (s !== ':disabled') throw new Error(`fake matches: ${s}`);
+    for (let n: unknown = this; n instanceof FakeElement; n = n.parentNode) if ((n === this || n.tagName === 'FIELDSET') && n.getAttribute('disabled') !== null) return true;
+    return false;
+  };
+  // The document's one selector: the open tab, where the focus goes when the opener is gone.
+  (document as unknown as { querySelector(s: string): FakeElement | null }).querySelector = (s: string) => {
+    if (s !== '[role=tab][aria-selected=true]') throw new Error(`fake document.querySelector: ${s}`);
+    return document.body.findAll('button').find((b) => b.getAttribute('role') === 'tab' && b.getAttribute('aria-selected') === 'true') ?? null;
   };
   // The two selectors the dialogs ask: a button marked to take the focus on open, or the first control that can.
   (FakeElement.prototype as unknown as { querySelector(s: string): FakeElement | null }).querySelector = function (this: FakeElement, s: string) {
@@ -473,6 +500,8 @@ function listenForKeys(): void {
 }
 /** The focused element's testid: a failing comparison of the elements themselves would print the whole fake tree. */
 const focused = () => (document.activeElement as unknown as FakeElement | null)?.getAttribute('data-testid') ?? null;
+/** Whether the focused element is still in the document: focus on a removed one is focus lost. */
+const focusInPage = () => (document.activeElement as unknown as { isConnected?: boolean } | null)?.isConnected === true;
 const press = (key: string) => act(() => [...keydown].forEach((l) => l({ key })));
 /** A tap as a browser gives it: the button takes the focus, then its handler runs. */
 const tapFocused = (testid: string) => {
@@ -484,7 +513,7 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
   it('S3-B-AC-1: Escape closes the composer and the incoming sheet, and the focus goes back to the door that opened each', () => {
     listenForKeys();
     mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${OSSA}`);
     tapFocused('add-deal');
     expect(findTestid('composer-a')).toBeDefined();
@@ -493,12 +522,15 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     expect(findTestid('composer-a'), 'Escape closes the composer').toBeUndefined();
     expect(focused(), 'the focus is back on + Deal').toBe('add-deal');
 
+    tap('tab-overview');
     tapFocused('agenda-deals');
     expect(findTestid('incoming-sheet')).toBeDefined();
     expect(focused(), 'the incoming sheet takes the focus, on its first control').toBe('sheet-card-deal-in9-from-open');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'Escape closes the incoming sheet').toBeUndefined();
-    expect(focused(), 'the focus is back on the agenda door').toBe('agenda-deals');
+    // The agenda door is Overview's, gone with the tab switch: the focus goes to the open tab (the ARIA tabs pattern).
+    expect(focusInPage(), 'the focus is on an element still in the page').toBe(true);
+    expect(focused(), 'the agenda door is gone, so the open tab').toBe('tab-talk');
   });
 
   it('S3-B-AC-1: + Deal from the standings closes them, so only the composer is up; Escape gives the focus to the standings door, still on the screen', () => {
@@ -517,7 +549,6 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
   it("S3-B-AC-6: a player card opened over the incoming sheet closes alone on Escape, and the sheet's chip has the focus back", () => {
     listenForKeys();
     mount(gameFor(myView(LENA, [card({ id: 'deal-in9', from: BRIX, to: LENA })])), hub);
-    tap('desk-talk');
     tapFocused('agenda-deals');
     tapFocused('sheet-card-deal-in9-from-rep');
     expect(findTestid(`player-card-${BRIX}`)).toBeDefined();
@@ -527,7 +558,8 @@ describe('the deal sheets and the keyboard (S3-C17, S3-C18)', () => {
     expect(focused()).toBe('sheet-card-deal-in9-from-rep');
     press('Escape');
     expect(findTestid('incoming-sheet'), 'the next Escape closes the sheet').toBeUndefined();
-    expect(focused()).toBe('agenda-deals');
+    expect(focusInPage(), 'the focus is on an element still in the page').toBe(true);
+    expect(focused(), 'the agenda door is gone, so the open tab').toBe('tab-talk');
   });
 
   it("S3-B-AC-6: a name's player card takes the focus on open, closes on Escape and gives the focus back to the chip", () => {
@@ -546,7 +578,7 @@ describe("the player card's door (S3-C17, S3-C19)", () => {
   it("S3-B-AC-1: with one card to Ossa unanswered, his player card's + Deal is off and says why; the composer it opens holds Send in the same words", () => {
     const waiting = card({ id: 'deal-w1', from: LENA, to: OSSA });
     mount(gameFor(myView(LENA, [waiting])), hub);
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${OSSA}`);
     tap('whisper-rep');
     const door = byTestid(`player-card-${OSSA}-deal`);
@@ -601,7 +633,7 @@ describe('the incoming card and My cards (S3-C18)', () => {
   it('S3-B-AC-1: a pact offered says keeping it builds your name, with no figure, and what breaking it costs; its settled line says "Pact kept"', () => {
     const keptPact = card({ id: 'deal-kp1', from: KAI, to: BRIX, terms: { kind: 'pact' }, offered: 1, until: 1, status: 'kept', settled: 1 });
     mount(brixGame([...BRIX_CARDS, keptPact]), hub);
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${LENA}`);
     expect(text(`incoming-${LENAS.id}-stakes`)).toMatch(new RegExp(`^Keeping it builds your name\\. Breaking it costs −${-POLITICS.reputation.moves.pactBroken}, and the table sees\\.`));
     tap('talk-cards');
@@ -612,7 +644,7 @@ describe('the incoming card and My cards (S3-C18)', () => {
   it('S3-B-AC-1: no kept card shows a figure (the gain is capped per partner and term): my vote card says keeping it builds my name, and a kept vote reads "Kept"', () => {
     const keptVote = card({ id: 'deal-kv1', from: BRIX, to: OSSA, terms: { kind: 'vote', office: 'governor', candidate: OSSA }, offered: 1, until: 1, status: 'kept', settled: 1 });
     mount(brixGame([...BRIX_CARDS, keptVote]), hub);
-    tap('desk-talk');
+    tap('tab-talk');
     tap(`chat-to-${KAI}`);
     tap('add-deal');
     tap('composer-a-kind-vote');
@@ -681,7 +713,7 @@ describe('the incoming card and My cards (S3-C18)', () => {
     expect(findTestid('incoming-sheet'), 'two offers: no single card to open').toBeUndefined();
     expect(allTestids('incoming-deal-')).toEqual(expect.arrayContaining(['incoming-deal-in2', 'incoming-deal-in1']));
     expect(text('my-deals-incoming')).toContain('For you to answer');
-    expect(text('talk-cards-badge')).toBe('2');
+    expect(text('talk-cards-badge'), 'the count, then its spoken words').toBe('22 deal offers waiting');
   });
 
   it('S3-B-AC-1 (negative): Brix taps Decline, and the card shows as declined, with nothing active from it', () => {

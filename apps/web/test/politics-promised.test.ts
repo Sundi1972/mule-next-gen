@@ -360,7 +360,7 @@ describe('the AI mark on the deal words (S3-C17, S3-C21, F-11)', () => {
     const pol = politics({});
     mount(withAi(aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, {}), politics: pol }), [fromKai]));
     expect(text('agenda-deals'), 'the agenda').toContain('From Kai · AI · answer before Ready');
-    tap('desk-talk');
+    tap('tab-talk');
     tap('talk-chat');
     tap('chat-to-s3');
     tap('add-deal');

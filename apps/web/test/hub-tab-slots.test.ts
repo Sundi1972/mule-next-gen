@@ -2,11 +2,11 @@ import type { ComponentType } from 'react';
 import { describe, expectTypeOf, it } from 'vitest';
 import type { Now } from '../src/phone/Shell';
 import type { HubNav } from '../src/phone/hub/Hub';
-import type { AgendaSlot, BannerSlot, Door, HubSeat, MapToolSlot, PlotPickSlot, ReadyBarWords, StageSlot, SubTabSlot, TabHubNav, TabHubPlace, TabHubSlots, TabId, TabSlot } from '../src/phone/hub/slots';
+import type { AgendaSlot, BannerSlot, Door, HubPlace, HubSeat, MapToolSlot, PlotPickSlot, ReadyBarWords, StageSlot, SubTabSlot, TabHubNav, TabHubPlace, TabHubSlots, TabId, TabSlot } from '../src/phone/hub/slots';
 
 /*
- * SB-1a: the tabbed hub's slot contract, frozen for the lanes that build against it before anything draws it. These
- * pins are checked by tsc (the web typecheck runs over test/); a change to a frozen shape fails there.
+ * The tabbed hub's slot contract, pinned through the names code was built against. These pins are checked by tsc (the
+ * web typecheck runs over test/); a change to a pinned shape fails there.
  */
 
 const Body: ComponentType = () => null;
@@ -52,7 +52,8 @@ describe('SB-1a: the tabbed hub slot contract', () => {
   it('SB-1a: the frozen shapes are exactly the approved mock\'s', () => {
     expectTypeOf<TabId>().toEqualTypeOf<'overview' | 'politics' | 'colony' | 'talk'>();
     expectTypeOf<Door>().toEqualTypeOf<{ tab: TabId; sub?: string; focus?: string; tool?: string }>();
-    expectTypeOf<TabHubPlace>().toEqualTypeOf<{ tab: TabId; sub: string; tool: string; focus: string | null; pick: string | null; first: string | null }>();
+    expectTypeOf<TabHubPlace>().toEqualTypeOf<{ tab: TabId; sub: string; tool: string; focus: string | null; pick: string | null }>();
+    expectTypeOf<TabHubPlace>().toEqualTypeOf<HubPlace>();
     expectTypeOf<TabSlot>().toEqualTypeOf<{
       show?(seat: HubSeat): boolean;
       id: TabId;
@@ -89,8 +90,12 @@ describe('SB-1a: the tabbed hub slot contract', () => {
       readyWords: ((seat: HubSeat) => ReadyBarWords | null)[];
     }>();
     expectTypeOf(HUB).toExtend<TabHubSlots>();
-    expectTypeOf<TabHubNav>().toExtend<HubNav>();
-    expectTypeOf<Omit<TabHubNav, keyof HubNav>>().toEqualTypeOf<{ tab: TabId; sub: string; pick: string | null; open(door: Door): void; startPick(id: string): void; endPick(): void }>();
+    // The frozen names are the grafted ones: code built on the contract reads the hub's own types.
+    expectTypeOf<TabHubNav>().toEqualTypeOf<HubNav>();
+    // Today's moves, carried unchanged: an inherited field narrowed (tool: 'look' | 'geo') fails here.
+    type TodayNav = { desk: string; tool: string; focus: string | null; openDesk(id: string, focus?: string): void; pickTool(id: string): void; takeFocus(): void };
+    expectTypeOf<Pick<TabHubNav, keyof TodayNav>>().toEqualTypeOf<TodayNav>();
+    expectTypeOf<Omit<TabHubNav, keyof TodayNav>>().toEqualTypeOf<{ tab: TabId; sub: string; pick: string | null; open(door: Door): void; startPick(id: string): void; endPick(): void }>();
     expectTypeOf(NAV).toExtend<TabHubNav>();
 
     // @ts-expect-error a tab is one of the four: "map" is not

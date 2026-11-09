@@ -41,7 +41,7 @@ export async function readyThroughTheElection(phone: Page, timeout: number): Pro
  */
 export async function voteThroughTheElection(phone: Page, timeout: number): Promise<void> {
   const deadline = Date.now() + timeout;
-  const desks = phone.locator('[data-phase=planning] [data-testid=desks]');
+  const desks = phone.locator('[data-phase=planning] [data-testid=tabs]');
   // Stop pressing once the reveal starts: I'm ready during it would end planning as the ceremony does.
   const reveal = phone.locator('[data-testid=phone-reveal-tv], [data-testid=phone-reveal-solo]');
   await pressUntil(phone, desks.or(reveal), timeout);

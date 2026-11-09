@@ -6,9 +6,12 @@ import { createPortal } from 'react-dom';
 import { AiMark } from '../../../chat/Chat';
 import { useEscape } from '../../dialog';
 import { slotOf } from '../../../game/derive';
-import { useHub, type HubNav } from '../Hub';
+import { useHubIfAny } from '../Hub';
 import { SeatWords } from '../../../components/SeatWords';
 import { brokenMove, brokenWho, brokenWords, noNewCard } from './deals-words';
+
+// The hub's navigation, or null outside it: Hub.tsx's, re-exported for the parts drawn both inside and outside it.
+export { useHubIfAny };
 
 export function Section({ title, children, testid }: { title: ReactNode; children: ReactNode; testid?: string }) {
   return (
@@ -176,16 +179,6 @@ export function Who({ view, id, size = 16, me = null, className, testid, rep = f
   );
 }
 
-/** The hub's navigation inside it; null elsewhere (the month end, a screen outside the hub). */
-export function useHubIfAny(): HubNav | null {
-  // useHub throws outside the hub, after the same one useContext call either way, so the hook order holds.
-  try {
-    return useHub();
-  } catch {
-    return null;
-  }
-}
-
 /** The public reasons a player's reputation moved, in the words every screen uses, newest first. Kept cards are never one. */
 export function reasonRows(view: NameView, id: string): { key: string; month: number; words: string; who: string[]; move: number }[] {
   const reasons = view.politics?.reputationReasons?.[id] ?? [];
@@ -220,7 +213,8 @@ const dialogs: object[] = [];
 /**
  * A dialog's keyboard, as the lobby's dialogs keep it: Escape closes it when it is on top; on open the element `first`
  * finds takes the focus (by default its button marked `data-autofocus`), and on close the focus goes back to the element
- * that had it. Put the returned ref on the dialog's box.
+ * that had it. If that element is gone (a tab switch unmounted it) or off (+ Deal after a send), the open tab takes the
+ * focus instead, as ARIA tabs do. Put the returned ref on the dialog's box.
  */
 export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefObject<HTMLDivElement> {
   const box = useRef<HTMLDivElement>(null);
@@ -233,7 +227,9 @@ export function useDialog(onClose: () => void, first = '[data-autofocus]'): RefO
     box.current?.querySelector?.<HTMLElement>(first)?.focus?.();
     return () => {
       dialogs.splice(dialogs.indexOf(self), 1);
-      opener?.focus?.();
+      // :disabled covers a disabled fieldset around the opener too, which its own attribute would not say.
+      const back = opener?.isConnected && !opener.matches(':disabled') ? opener : document.querySelector?.<HTMLElement>('[role=tab][aria-selected=true]');
+      back?.focus?.();
     };
   }, [self, first]);
   return box;

@@ -272,23 +272,26 @@ describe('B-AC-46-9: the reveal on the phone', () => {
   });
 });
 
-describe('B-AC-46-11: the laws in force on the Council desk', () => {
+describe('B-AC-46-11: the laws in force on the Council sub-tab', () => {
   const pending = { by: 's1', month: MONTH, proposal: LAND_TAX_10, impact: IMPACT };
 
   it("B-AC-46-11: a pending proposal is on the Council desk, with this seat's own For you", () => {
     mount(viewFor('s2', politics({ proposal: pending })));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-council');
     expect(text('council-pending')).toContain('Lena proposes Land tax 10 cr a plot');
     expect(text('council-pending-for-you')).toBe('For you: about 50 cr a month.');
     unmount();
     mount(viewFor('s3', politics({ proposal: pending })));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-council');
     expect(text('council-pending-for-you')).toBe('For you: nothing.');
   });
 
   it('B-AC-46-11 (negative): no card with nothing pending, nor while a vote is open', () => {
     mount(viewFor('s2', politics()));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-council');
     expect(findTestid('council-pending')).toBeUndefined();
     unmount();
     mount(viewFor('s2', politics({ proposal: pending, council: council() })));
@@ -297,7 +300,8 @@ describe('B-AC-46-11: the laws in force on the Council desk', () => {
 
   it('B-AC-46-11: each law in force is a chip with its setting and "since month N"', () => {
     mount(viewFor('s2', politics({ laws: { landTax: { setting: 10, since: 3 }, exportTax: { setting: 20, since: 2 } } })));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-council');
     expect(text('law-chip-landTax')).toBe('Land tax 10 cr · since month 3');
     expect(text('law-chip-exportTax')).toBe('Export tax 20% · since month 2');
     expect(findTestid('law-chip-pollutionTax')).toBeUndefined();
@@ -305,7 +309,8 @@ describe('B-AC-46-11: the laws in force on the Council desk', () => {
 
   it('B-AC-46-11: with none in force the strip says so', () => {
     mount(viewFor('s2', politics()));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-council');
     expect(text('laws-none')).toBe('none yet');
     expect(findTestid('law-chip-landTax')).toBeUndefined();
   });
