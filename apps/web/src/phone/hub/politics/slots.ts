@@ -107,7 +107,7 @@ export function electionNow({ view, self }: HubSeat): Now | null {
           // The seat can't tell the host; these words hold for every phone.
           detail: 'The secret ballot opens once everyone is ready, or when the host opens it without someone who is away.',
         };
-      return { step: 1, of: 3, title: `Election day: ${officeNames().join(' and ')}`, detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' };
+      return { step: 1, of: 3, title: 'Election day', detail: `Electing: ${officeNames().join(' and ')}. Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.` };
     case 'ballot':
       if (self.ready)
         return {

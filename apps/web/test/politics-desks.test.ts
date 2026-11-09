@@ -356,7 +356,8 @@ describe('election day on the phone (C66, E-2)', () => {
     const html = inHub(announce(4, 'closed'));
     // The rail's phase name is one word, so it fits whole at 667 px; the stage card carries the full words.
     expect(html).toMatch(/>Election</);
-    expect(html).not.toMatch(/>Election day</);
+    expect(textOf(html, 'phase-title-row'), 'the phase word is one word').toMatch(/^Election(?! day)/);
+    expect(textOf(html, 'now-title')).toBe('Election day');
     expect(textOf(html, 'day-title')).toBe('Election day: Governor');
     expect(tagOf(html, 'election-step-1')).toMatch(/aria-current="step"/);
     expect(textOf(html, 'announce')).toContain('The colony elects its Governor for months 4 to 6. The candidates:');
