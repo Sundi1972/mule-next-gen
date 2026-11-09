@@ -391,6 +391,12 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
     expect(htmlOf(inHub(day({ caught: 3, solved: 1 })), 'sheriff-record')).toBe('Kai was Sheriff: 3 catches, 1 case solved');
   });
 
+  it('S4-B-AC-11: neither line is cut or forced to wrap: no truncate or clamp on the phone, whitespace-nowrap on the TV', () => {
+    const game = day({ caught: 3, solved: 1 });
+    expect(tagOf(inHub(game), 'sheriff-record')).not.toMatch(/truncate|line-clamp|overflow-hidden/);
+    expect(tagOf(onTv(game), 'tv-sheriff-record')).toMatch(/whitespace-nowrap/);
+  });
+
   it.each(SAID)('S4-B-AC-11: the TV says it in the ruled words (%s)', (_, record, words) => {
     expect(textOf(onTv(day(record)), 'tv-sheriff-record')).toBe(words);
   });
