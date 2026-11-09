@@ -828,6 +828,18 @@ export interface ColonistMealView {
   water: { took: number; need: number };
 }
 
+/** The colony's health on MuleView (needs §3, C19). */
+export interface ColonyHealthView {
+  /** round(100 × (1 − h)), 60..100: h is the colonists' sick share, which never passes 0.4. */
+  health: number;
+  /** The colonists took less Medicine than their need at the last upkeep. */
+  medicineShort: boolean;
+  /** Consecutive upkeeps with medicineShort; 0 when it is false. */
+  shortMonths: number;
+  /** `health` as it stood one upkeep earlier, so the gauge can show the month's move; null at the first upkeep with health on. */
+  lastHealth?: number | null;
+}
+
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
   finished: boolean;
@@ -862,6 +874,11 @@ export interface MuleView {
    * rounded down. Null outside the month end or when the report has no meal; absent from an older server.
    */
   colonistMeal?: ColonistMealView | null;
+  /**
+   * The colony's health as the phone's gauge shows it (needs C19). Null exactly while colony health is switched off
+   * (HEALTH.enabled false) or the game has no colony (politics off); absent from a server that does not carry it yet.
+   */
+  colonyHealth?: ColonyHealthView | null;
   ship: ShipView;
   /** The colony fund and the sales tax rate. */
   treasury: { money: number; salesTax: number };

@@ -6,7 +6,7 @@ import { GOODS, type GameState, type Stock } from '@mule/engine';
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
 import { COLOUR_NAME, SLOT_COLOR, type Slot } from '@mule/ui';
-import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, PHONE_SMALL, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
+import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
 
 /** B-AC-9 (WS4, plot look A): a mark's width as a share of its plot's, with slack for rounding and the 2 px minimums. */
 const LOOK_A = { tab: 0.46, disc: 0.62 };
@@ -322,13 +322,17 @@ function inHexagon(x: number, y: number, badge: Rect): boolean {
 /** Whether two boxes overlap by more than SLACK_PX. */
 const covers = (a: Rect, b: Rect) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
 
+
+/** The iPhone SE in landscape, the smallest phone the game supports; its planning plots fall under 24 px, the size the small-plot rules are for. */
+const PHONE_SE = { width: 568, height: 320 };
+
 /**
  * T-AC-3 and B-AC-9 (WS4; PM ruling X on #562), on the hub's Look map at the phone's 844×390, where a 3-seat plot is
  * about 25 px: (a) on every analysed special plot with nothing installed, the right column's and its corner's included,
  * the third dot's centre lies outside the plot's own badge and its box clears the badge's; (b) on an owned plot with a
  * gem, the owner's tab and the gem are clear of the dots; (c) a plot Look-selected under a plot showing its dots draws no
  * pin, and its ring's painted band keeps off those dots, and its glow at half strength stays clear of them, at 844×390
- * and at the small phone's 667×375 (hub plots 12.8 to 15 px). At 667×375 (WS6 ruling, 7 Nov): (d) every analysed plot's dots chip
+ * and at PHONE_SE, where planning's plots fall under 24 px. There (WS6 ruling, 7 Nov): (d) every analysed plot's dots chip
  * lies inside its plot and (e) no two chips overlap, on the plots above and staged around the selection. Each "clear" is
  * within SLACK_PX, the glow's within 0. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and
  * undone inside the hold, before anything due runs.
@@ -478,13 +482,13 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
 
         const phone = await selectionUnderDots(map, x, y, id);
         const sign = await storeSignClearOfTheDots(map, besideStore, id);
-        await ctx.phone.setViewportSize(PHONE_SMALL.viewport);
+        await ctx.phone.setViewportSize(PHONE_SE);
         let small: Awaited<ReturnType<typeof selectionUnderDots>>;
         let fit: Awaited<ReturnType<typeof dotsFitTheirPlots>>;
         let strip: Awaited<ReturnType<typeof marksClearOfTheChips>>;
         let flag: string;
         try {
-          const where = `${id}, ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height}`;
+          const where = `${id}, ${PHONE_SE.width}×${PHONE_SE.height}`;
           small = await selectionUnderDots(map, x, y, where);
           fit = await dotsFitTheirPlots(map, [...specials, owned, ...neighbours].map((t) => `${t.x}-${t.y}`), where);
           strip = await marksClearOfTheChips(map, where);
@@ -505,7 +509,7 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         const third = (sp: (typeof marks.specials)[number]) => `${sp.at} ${px(Math.max(sp.badge!.left - sp.third!.right, sp.badge!.top - sp.third!.bottom))}`;
         const gap = (over: number) => (over > 0 ? `${px(over)} into` : `${px(-over)} under`);
         const c = (r: typeof phone) => `on a ${px(r.plot)} plot no pin, the ring's band ${gap(r.bandOver)} the dots, the glow's half-strength edge ${gap(r.glowOver)}`;
-        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} ${c(small)}; at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}; (f) no mark of ${strip.marks} meets any of the ${fit.chips} chips, (g) the ${strip.strip} tabs, gems and badges in the small strip at least ${px(strip.smallest)}; (h) ${flag}; (i) at ${PHONE.viewport.width}×${PHONE.viewport.height} ${sign}, at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} no STORE sign`;
+        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${PHONE_SE.width}×${PHONE_SE.height} ${c(small)}; at ${PHONE_SE.width}×${PHONE_SE.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}; (f) no mark of ${strip.marks} meets any of the ${fit.chips} chips, (g) the ${strip.strip} tabs, gems and badges in the small strip at least ${px(strip.smallest)}; (h) ${flag}; (i) at ${PHONE.viewport.width}×${PHONE.viewport.height} ${sign}, at ${PHONE_SE.width}×${PHONE_SE.height} no STORE sign`;
       } finally {
         for (const step of undo.reverse()) step();
       }
@@ -513,6 +517,53 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
   } finally {
     room.broadcast();
   }
+}
+
+/**
+ * B-AC-9 (MG-2) at the land grant on the iPhone SE: its plots, about 24 px, are the smallest that draw the full dots
+ * chip, and there a right-column special's chip steps left, clear of its badge, only as far as its plot has room. Stages
+ * a special on a right-column plot the seat has analysed, reads its chip against its plot, and puts the plot back.
+ */
+export async function theRightColumnChipStaysInItsPlot(ctx: GameStepContext, seat = 's1'): Promise<string> {
+  const id = `B-AC-9 (WS4, the map's right column at the land grant, ${PHONE_SE.width}×${PHONE_SE.height})`;
+  type Room = { game: { state: GameState }; broadcast(): void };
+  const room = ctx.server.registry.get(ctx.code) as unknown as Room | undefined;
+  check(room, `${id}: a room ${ctx.code} on the server`);
+  const state = room.game.state;
+  const me = state.players.find((p) => p.id === seat);
+  check(me, `${id}: seat ${seat} in the game`);
+  return await ctx.held(async () => {
+    check(state.phase === 'landGrant', `${id}: the step runs in the land grant, not in ${state.phase}`);
+    const edge = state.tiles.find((t) => t.x === state.width - 1 && t.y > 0 && t.y < state.height - 1 && t.terrain !== 'store');
+    check(edge, `${id}: a plot in the map's right column`);
+    const at = `${edge.x}-${edge.y}`;
+    const was = { special: edge.special, outfit: edge.outfit, food: edge.ground.food, analysed: [...me.analysed] };
+    edge.special = edge.special ?? { kind: 'oasis' };
+    edge.outfit = null;
+    edge.ground.food = Math.max(edge.ground.food, 2);
+    const index = edge.y * state.width + edge.x;
+    if (!me.analysed.includes(index)) me.analysed.push(index);
+    room.broadcast();
+    try {
+      await ctx.phone.setViewportSize(PHONE_SE);
+      const map = ctx.phone.locator('[data-phase=landGrant] [data-testid=holo-map]');
+      await map.getByTestId(`map-dots-${at}`).waitFor({ timeout: PRESS_MS });
+      const [[plot] = []] = await rectsOf(map, [`[data-testid=map-plot-${at}]`]);
+      check(plot, `${id}: plot ${at} is drawn`);
+      const width = plot.right - plot.left;
+      check(width >= 24 && width < 26, `${id}: the land grant draws ${px(width)} plots, not the full chip's narrowest (24 to 26 px) this step is for`);
+      const fit = await dotsFitTheirPlots(map, [at], id);
+      return `on ${px(width)} plots the special ${at}'s chip reaches ${px(fit.out)} past its plot's edge, ${fit.chips} chips, none overlapping`;
+    } finally {
+      await ctx.phone.setViewportSize(PHONE.viewport);
+      if (was.special) edge.special = was.special;
+      else delete edge.special;
+      edge.outfit = was.outfit;
+      edge.ground.food = was.food;
+      me.analysed.splice(0, me.analysed.length, ...was.analysed);
+      room.broadcast();
+    }
+  });
 }
 
 /**

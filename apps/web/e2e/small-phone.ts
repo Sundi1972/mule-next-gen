@@ -29,12 +29,12 @@ const RAIL: AuditScope = { roots: ['[data-testid=guide] > header', '[data-testid
 /** A WS4 screen: all of it, less the table chat. */
 const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-testid=table-chat]'] };
 /**
- * Planning proper, the hub: the rail header (where the standing sits), the tab column and the footer. Not yet the
+ * Planning proper, the hub: the rail header (where the standing sits), the tab column, Governor / Council's sub-tab row and the footer. Not yet the
  * whole stage: at 667 its map tools are 28 px tall and the ballot's ELECTED tag is 9 px, owned by the hub and politics
  * work, so the stage joins this read once those meet B-AC-11.
  */
 const HUB: AuditScope = {
-  roots: [...RAIL.roots, '[data-testid=tabs-a]', '[data-testid=actions]'],
+  roots: [...RAIL.roots, '[data-testid=tabs]', '[data-testid=sub-tabs]', '[data-testid=actions]'],
   skip: RAIL.skip,
   // H-9: folded, the Now card keeps to one line, and that line is its whole title (WS4's sweep A16, 6 Nov: "Plan your
   // month, …" lost the step it names), so no truncation is allowed here.
@@ -112,6 +112,8 @@ try {
   await doneThroughTheElection(ctx, PHASE_SCALE * ELECTION_WAIT_MS + 10_000);
   // Planning proper, the hub after the ballot: its header, desks and footer, read before the phone is ready.
   await voteThroughTheElection(phone, SHOWN_MS);
+  // Governor / Council open, so its sub-tab row is on the screen with the tab column.
+  await phone.locator('[data-phase=planning]').getByTestId('tab-politics').click({ timeout: SHOWN_MS });
   // The audit skips a root that matches nothing, so each is checked here: a renamed one would leave the read quiet.
   for (const root of HUB.roots) check((await phone.locator(root).count()) > 0, `B-AC-11: planning, the hub shows ${root}`);
   await both('planning, the hub', HUB);
@@ -325,8 +327,9 @@ function setAir(code: string, air: number): number {
 }
 
 /**
- * The rail header's month label stays on one line beside the ready count at both phone sizes, read at the widest the
- * game prints ("Month 10 / 12"): the room is held, the month and length set for one view, then put back.
+ * The hub's rail head at both phone sizes, read at the widest month the game prints ("Month 10/12"): the phase stays on
+ * one line beside the ready count, and the phase line's month is whole on its line. The room is held, the month and
+ * length set for one view, then put back.
  */
 async function monthOnOneLine(phone: Page, code: string): Promise<void> {
   const room = server.registry.get(code) as unknown as { game: { state: { month: number; maxMonths: number } }; broadcast(): void };
@@ -336,35 +339,39 @@ async function monthOnOneLine(phone: Page, code: string): Promise<void> {
     Object.assign(state, { month: 10, maxMonths: 12 });
     room.broadcast();
     try {
-      const label = phone.getByTestId('month');
-      await label.filter({ hasText: 'Month 10 / 12' }).waitFor({ timeout: PRESS_MS });
-      check(await phone.getByTestId('ready-count').isVisible(), 'C19: the ready count shows beside the month label');
+      const head = phone.getByTestId('rail-head');
+      await head.getByTestId('month').filter({ hasText: 'Month 10/12' }).waitFor({ timeout: PRESS_MS });
+      check(await head.getByTestId('phase-title-row').getByTestId('ready-count').isVisible(), 'C19: the ready count shows beside the phase');
       for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
         await phone.setViewportSize(size);
-        // The label's own text: its line boxes, and how far right it reaches against the chip beside it.
-        const read = await label.evaluate((el) => {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          const boxes = [...range.getClientRects()];
-          const row = el.parentElement!.parentElement!;
+        const read = await head.evaluate((el) => {
+          const row = el.querySelector('[data-testid=phase-title-row]')!;
+          const phase = row.firstElementChild!;
           const chip = row.querySelector('[data-testid=ready-count]')!;
-          const probe = el.cloneNode(true) as HTMLElement;
-          probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap';
-          el.parentElement!.append(probe);
-          const need = probe.getBoundingClientRect().width;
-          probe.remove();
-          const [w, col, c] = [row, el.parentElement!, chip].map((e) => e.getBoundingClientRect().width.toFixed(1));
+          const month = el.querySelector('[data-testid=phase-line] [data-testid=month]')!;
+          const next = el.querySelector('[data-testid=phase-next]') as HTMLElement;
+          // Each text's line boxes: how many lines, and how far right it reaches.
+          const [phaseText, monthText] = [phase, month].map((e) => {
+            const range = document.createRange();
+            range.selectNodeContents(e);
+            const boxes = [...range.getClientRects()];
+            return { lines: new Set(boxes.map((r) => Math.round(r.top))).size, right: Math.max(...boxes.map((r) => r.right)) };
+          });
           return {
-            lines: new Set(boxes.map((r) => Math.round(r.top))).size,
-            textRight: Math.max(...boxes.map((r) => r.right)),
+            phase: { ...phaseText!, clipped: phase.scrollWidth > phase.clientWidth },
             chipLeft: chip.getBoundingClientRect().left,
-            widths: `row ${w}, label column ${col}, label needs ${need.toFixed(1)}, chip ${c} ("${chip.textContent}"), phase "${el.nextElementSibling?.textContent}"`,
+            month: monthText!,
+            nextRight: next.getBoundingClientRect().right,
+            railRight: el.getBoundingClientRect().right,
+            widths: `row ${row.getBoundingClientRect().width.toFixed(1)}, chip "${chip.textContent}", phase "${phase.textContent}", line "${next.textContent}"`,
           };
         });
         const at = `${size.width}×${size.height}`;
         console.log(`  C19 at ${at}: ${read.widths}`);
-        check(read.lines === 1, `C19 at ${at}: "Month 10 / 12" stays on one line beside the ready count, got ${read.lines} lines`);
-        check(read.textRight <= read.chipLeft, `C19 at ${at}: "Month 10 / 12" ends before the ready count, ${read.textRight.toFixed(1)} past ${read.chipLeft.toFixed(1)}`);
+        check(read.phase.lines === 1 && !read.phase.clipped, `C19 at ${at}: the phase stays whole on one line, got ${read.phase.lines} lines${read.phase.clipped ? ', cut off' : ''}`);
+        check(read.phase.right <= read.chipLeft, `C19 at ${at}: the phase ends before the ready count, ${read.phase.right.toFixed(1)} past ${read.chipLeft.toFixed(1)}`);
+        check(read.month.lines === 1, `C19 at ${at}: "Month 10/12" stays on one line, got ${read.month.lines} lines`);
+        check(read.nextRight <= read.railRight, `C19 at ${at}: the phase line's month ends inside the rail, ${read.nextRight.toFixed(1)} past ${read.railRight.toFixed(1)}`);
       }
     } finally {
       await phone.setViewportSize(PHONE_SMALL.viewport);

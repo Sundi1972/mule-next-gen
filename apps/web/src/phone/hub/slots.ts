@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { PhoneGame } from '../game';
 import type { Now } from '../Shell';
 import type { ReadyWords } from './ready';
@@ -50,7 +50,8 @@ export interface DeskDoor {
 export interface AgendaSlot extends Shown {
   key: string;
   title(seat: HubSeat): string;
-  sub(seat: HubSeat): string;
+  /** Words, or SeatWords where they name seats. */
+  sub(seat: HubSeat): ReactNode;
   /** Only you see what it leads to: the eye-slash and "Only you". */
   locked?: boolean;
   /** The one that matters most this month, drawn strong. */

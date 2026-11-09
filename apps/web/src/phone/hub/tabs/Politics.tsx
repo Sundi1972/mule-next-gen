@@ -11,9 +11,10 @@ import { TabBadge } from './parts';
  */
 
 const isGovernor = ({ view, self }: Pick<HubSeat, 'view' | 'self'>) => view.politics?.governor === self.id;
+/** A ballot this tab badges: a law's, an election's, or an overrule or no-confidence vote's. */
 const ballotOpen = ({ view }: Pick<HubSeat, 'view'>) => {
   const election = view.politics?.election?.stage;
-  return view.politics?.council?.stage === 'ballot' || election === 'announce' || election === 'ballot';
+  return view.politics?.council?.stage === 'ballot' || election === 'announce' || election === 'ballot' || view.politics?.overrule?.stage === 'ballot';
 };
 
 /** Today's politics desk as a sub-tab: its id, label, body, badge, show and first, unchanged. */

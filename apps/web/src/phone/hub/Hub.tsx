@@ -5,7 +5,7 @@ import { PHASE_NAME, secondsUntil } from '../../game/derive';
 import { useServerNow } from '../../net/react';
 import { useEscape } from '../dialog';
 import { usePhoneGame } from '../game';
-import { PhoneShell, type Now } from '../Shell';
+import { NowLine, PhaseLine, PhoneShell, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { NeedsStrip } from './NeedsStrip';
 import { PickNavProvider } from './politics/Sheriff';
@@ -14,7 +14,6 @@ import { ReadyBar, ReadyCount } from './ReadyBar';
 import { Roadmap } from './Roadmap';
 import { firstGiven, goTo, shown, type Door, type HubNav, type HubPlace, type HubSeat, type PlotPickSlot, type SubTabSlot, type TabHubSlots, type TabSlot } from './slots';
 import { StandingsSheet, useStanding } from './Standings';
-import { NowLine, PhaseLine, TabColumn } from './tabs/head';
 
 export type { HubNav } from './slots';
 
@@ -74,23 +73,6 @@ export function useDrawn(): Drawn {
   return drawn;
 }
 
-/**
- * The rail head every tab keeps: the phase line, then the Now line, its "?" and, while a sub-tab asks first, its door.
- * A Now that is its own card (a decision with its buttons, such as the strike's) is drawn whole under the Now line.
- */
-const Head = createContext<{ now: Now; onHelp(): void; onGo: (() => void) | undefined } | null>(null);
-function HubHead() {
-  const head = useContext(Head)!;
-  const Card = head.now.Card;
-  return (
-    <div className="flex flex-col gap-1.5" data-testid="rail-head">
-      <PhaseLine />
-      <NowLine now={head.now} onHelp={head.onHelp} onGo={head.onGo} />
-      {Card && <Card />}
-    </div>
-  );
-}
-
 /** Planning: the month's hub as tabs, from the slots it is given (the approved hub-tabs mock). */
 export function Hub({ slots }: { slots: TabHubSlots }) {
   const { table, view, me, self } = usePhoneGame();
@@ -147,12 +129,20 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
       {/* The Sheriff's sub-tab and Guard pick read the hub's navigation through their own provider. */}
       <PickNavProvider value={nav}>
       <DrawnCtx.Provider value={{ slots: { ...slots, tools, agenda: shown(slots.agenda, seat), banners: shown(slots.banners, seat) }, seat, tabs, subs, pick }}>
-        <Head.Provider value={{ now, onHelp: () => setSheet('help'), onGo: goAsk }}>
           <PhoneShell
             phase={ceremony?.phase?.(seat) ?? PHASE_NAME.planning}
             seconds={secondsUntil(view.phaseEndsAt, serverNow)}
             status={<ReadyCount players={view.players} label={bar?.label} />}
-            now={{ ...now, Card: HubHead }}
+            // Every tab keeps the phase line and the Now line in the rail's head; a Now that is its own card (a decision with
+            // its buttons, such as the strike's) is drawn whole at the top of the rail as well.
+            head={
+              <>
+                <PhaseLine />
+                <NowLine now={now} onHelp={() => setSheet('help')} onGo={goAsk} />
+              </>
+            }
+            now={now.Card ? now : undefined}
+            tabs={ceremony ? undefined : tabs.map((t) => ({ id: t.id, label: t.label(seat), icon: t.icon, on: t.id === tab.id, Badge: t.Badge, onPick: () => go({ tab: t.id }) }))}
             standing={standing}
             fill
             rail={
@@ -173,16 +163,12 @@ export function Hub({ slots }: { slots: TabHubSlots }) {
               </>
             }
           >
-            <div className="flex min-h-0 flex-1 gap-2.5">
-              {!ceremony && <TabColumn tabs={tabs.map((t) => ({ id: t.id, label: t.label(seat), icon: t.icon, on: t.id === tab.id, Badge: t.Badge, onPick: () => go({ tab: t.id }) }))} />}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={ceremony ? 'hub-situation' : `tab-body-${tab.id}`}>
-                <Body />
-              </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={ceremony ? 'hub-situation' : `tab-body-${tab.id}`}>
+              <Body />
             </div>
             {sheet === 'help' && <HelpSheet now={now} slots={slots} seat={seat} onClose={closeSheet} onOpenColony={() => (closeSheet(), go({ tab: 'colony' }))} />}
             {sheet === 'standings' && <StandingsSheet onClose={closeSheet} />}
           </PhoneShell>
-        </Head.Provider>
       </DrawnCtx.Provider>
       </PickNavProvider>
     </Nav.Provider>
@@ -202,8 +188,11 @@ export function HelpSheet({ now, slots, seat, onClose, onOpenColony }: { now: No
   const { view } = usePhoneGame();
   useEscape(onClose);
   const sheet = useRef<HTMLDivElement>(null);
+  // Close takes the focus on open; on close it goes back to what had it, the "?".
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     sheet.current?.querySelector?.<HTMLElement>('[data-testid="help-close"]')?.focus?.();
+    return () => opener?.focus?.();
   }, []);
   return (
     <div ref={sheet} className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="help-title" data-testid="help-sheet">

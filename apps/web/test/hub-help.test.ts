@@ -46,8 +46,11 @@ function markup(n: FakeElement): string {
 const find = (id: string, n: FakeElement): FakeElement | undefined =>
   n.getAttribute('data-testid') === id ? n : n.childNodes.reduce<FakeElement | undefined>((hit, c) => hit ?? (c instanceof FakeElement ? find(id, c) : undefined), undefined);
 
-/** Lena's planning, the "?" tapped: the sheet's markup, or with `whole` the whole phone's under it. */
-function help(game: MuleView, part: 'sheet' | 'whole' = 'sheet'): string {
+/** The tab open under the sheet when `help` last read it. */
+let openUnder: string | null = null;
+
+/** Lena's planning, `from` tapped first (Overview by default), then the "?": the sheet's markup, or with `whole` the whole phone's under it. */
+function help(game: MuleView, part: 'sheet' | 'whole' = 'sheet', from?: string): string {
   const state = { status: 'open', role: 'player', code: 'MULE', seatId: 's1', view: { game }, chat: [], emotes: [], toasts: [], clockOffset: 0 };
   const client = { subscribe: () => () => {}, getState: () => state, serverNow: () => 0, intent: () => {} } as unknown as TableClient;
   const self = game.players.find((p) => p.id === 's1')!;
@@ -55,6 +58,12 @@ function help(game: MuleView, part: 'sheet' | 'whole' = 'sheet'): string {
   const host = document.createElement('div');
   const root = createRoot(host as unknown as HTMLElement);
   act(() => root.render(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view: game, me: game.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) })));
+  const tap = (id: string) => {
+    const el = find(id, host);
+    expect(el, `an element with data-testid="${id}"`).toBeDefined();
+    act(() => (Object.entries(el!).find(([k]) => k.startsWith('__reactProps$'))![1] as { onClick(): void }).onClick());
+  };
+  if (from) tap(from);
   const open = find('help-open', host);
   expect(open, "Now's \"?\"").toBeDefined();
   const props = Object.entries(open!).find(([k]) => k.startsWith('__reactProps$'))![1] as { onClick(): void };
@@ -62,6 +71,7 @@ function help(game: MuleView, part: 'sheet' | 'whole' = 'sheet'): string {
   const sheet = find('help-sheet', host);
   expect(sheet, 'the "?" opens the sheet').toBeDefined();
   const html = markup(part === 'sheet' ? sheet! : host);
+  openUnder = find('tabs', host)?.findAll('button').find((b) => b.getAttribute('aria-selected') === 'true')?.getAttribute('data-testid') ?? null;
   act(() => root.unmount());
   return html;
 }
@@ -103,6 +113,11 @@ describe('the "?" sheet: the month in full (D1, D2, H-1, H-2, H-6)', () => {
     const at = ['roadmap', 'help-now', 'needs-strip', 'help-ship'].map((id) => html.indexOf(`data-testid="${id}"`));
     expect(at[0]).toBeGreaterThan(-1);
     expect(at).toEqual([...at].sort((a, b) => a - b));
+
+    // D8: the sheet's offices line opens nothing, not even for the rest of an election month once its result is out.
+    const over = { stage: 'over' as const, ceremony: null, candidates: {}, promises: {}, voted: [], done: [], waitingFor: [], result: {} };
+    help(month4({ politics: { ...month4().politics!, election: over } }), 'sheet', 'tab-colony');
+    expect(openUnder, 'the "?" leaves Colony open under the sheet').toBe('tab-colony');
   });
 
   it('H-1 (negative): with no lot this month the roadmap draws no land auction step', () => {

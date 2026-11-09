@@ -41,7 +41,7 @@ export async function readyThroughTheElection(phone: Page, timeout: number): Pro
  */
 export async function voteThroughTheElection(phone: Page, timeout: number): Promise<void> {
   const deadline = Date.now() + timeout;
-  const desks = phone.locator('[data-phase=planning] [data-testid=tabs-a]');
+  const desks = phone.locator('[data-phase=planning] [data-testid=tabs]');
   // The tabs are drawn through the whole election now (SB-3): it is over once its result stands in the Elections sub-tab.
   const result = phone.locator('[data-testid=council-result]');
   // Stop pressing once the reveal starts: I'm ready during it would end planning as the ceremony does.
@@ -52,7 +52,7 @@ export async function voteThroughTheElection(phone: Page, timeout: number): Prom
 
 /** The announce and the ballot are the Elections sub-tab's (SB-3): opens it, unless it is open or the stage holds the screen. */
 async function openElections(phone: Page): Promise<void> {
-  if ((await phone.locator('[data-phase=planning] [data-testid=tabs-a]').count()) === 0) return;
+  if ((await phone.locator('[data-phase=planning] [data-testid=tabs]').count()) === 0) return;
   if ((await phone.getByTestId('sub-elections').getAttribute('aria-selected', { timeout: 200 }).catch(() => null)) === 'true') return;
   try {
     await phone.getByTestId('tab-politics').click({ timeout: PRESS_MS });

@@ -1,7 +1,9 @@
 import { GOOD_NAME } from '@mule/ui';
+import { SeatWords } from '../../components/SeatWords';
 import { STRIKE_ALERT, STRIKE_PAY_LINE, strikeNow } from '../../components/Strike';
 import { MarketDesk } from './desks';
 import { needRows } from './needs';
+import { incomingOf } from './politics/Deals';
 import { LookSabotage, MarketSabotage } from './politics/Sabotage';
 import { GuardMap, SHERIFF_DESK, useGuarding } from './politics/Sheriff';
 import { COUNCIL_STAGE, councilNow, councilReadyWords, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, LAW_AGENDA, OFFICES_BANNER, OVERRULE_STAGE, overruleNow, overruleReadyWords, POLITICS_TABS } from './politics/slots';
@@ -11,6 +13,24 @@ import { OverviewTab, TAB_WORD } from './tabs/Overview';
 import { asDeskSub, PoliticsBadge, PoliticsTab } from './tabs/Politics';
 import { TalkBadge, TalkTab } from './tabs/Talk';
 import { DroneMap, DronePanel, DroneSend, ListAction, LookMap, LookPanel, MyPlotsMap, MyPlotsPanel, SellPlotMap } from './tools';
+
+/** "1 deal offer · from Lena": first among the month's doors while a card waits for this player's answer. */
+const DEALS_AGENDA: AgendaSlot = {
+  key: 'deals',
+  show: ({ me }) => incomingOf(me).length > 0,
+  title: ({ me }) => {
+    const n = incomingOf(me).length;
+    return `${n} deal ${n === 1 ? 'offer' : 'offers'}`;
+  },
+  sub: ({ view, me }) => {
+    const from = [...new Set(incomingOf(me).map((c) => c.from))];
+    const names = from.map((id) => view.players.find((p) => p.id === id)?.name ?? '');
+    return <SeatWords text={`From ${names.join(', ')} · answer before Ready`} who={from} players={view.players} />;
+  },
+  locked: true,
+  lead: () => true,
+  opens: { desk: 'talk', focus: 'deals' },
+};
 
 /** Look's map, or while the Sheriff picks guards the same map in Guard mode (S4-C15, P8: one map, the hub's). */
 function LookOrGuardMap() {
@@ -82,7 +102,7 @@ export const TAB_SLOTS: TabHubSlots = {
     { id: 'list', label: 'Sell', hint: () => 'Tap a plot of yours (or one with your MULE) to put it up for the auction.', Map: SellPlotMap, Panel: MarketWithSabotage, Action: ListAction },
   ],
   // The tools' own doors (the drone, selling a plot or MULE) are the tool row's, right above This month.
-  agenda: [LAW_AGENDA, ELECTION_AGENDA, { ...GOVERNOR_AGENDA, show: ({ view, self }) => view.politics?.governor === self.id }, NEEDS_AGENDA],
+  agenda: [DEALS_AGENDA, LAW_AGENDA, ELECTION_AGENDA, { ...GOVERNOR_AGENDA, show: ({ view, self }) => view.politics?.governor === self.id }, NEEDS_AGENDA],
   banners: [],
   lines: [OFFICES_BANNER],
   picks: [],

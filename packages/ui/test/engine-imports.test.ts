@@ -31,6 +31,8 @@ const ALLOWED = new Set([
   'POLLUTION',
   // The social events' shares, such as the walkout's output (WS6 ruling, 6 Nov): SOCIAL_EVENTS read, never restated.
   'SOCIAL_EVENTS',
+  // Sabotage's show words (S4-C17, WS6 ruling 8 Nov): POLITICS.sabotage and reputation.moves read, never computed.
+  'POLITICS',
 ]);
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));

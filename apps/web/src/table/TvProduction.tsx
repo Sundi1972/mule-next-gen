@@ -34,6 +34,7 @@ import {
   type ShowPlayer,
   type Slot,
 } from '@mule/ui';
+import { withSabotageDetail } from '../events/sabotage';
 import { mapTiles, seatSpecies, slotOf } from '../game/derive';
 import { useServerNow } from '../net/react';
 import { connectedIn } from '../phone/hub/ready';
@@ -48,7 +49,8 @@ import { TvBody } from './TvFit';
 export function TvProduction({ table, game, production }: { table?: TableView<MuleView>; game: MuleView; production: ProductionView }) {
   // Who is still at the table: a seat the room doesn't list (no table given) counts as connected.
   const connected = connectedIn(table?.seats ?? []);
-  const show: ShowData = production;
+  // WS8's named edit (S4-C17): a rumour's good and direction, joined from the public incidents.
+  const show: ShowData = useMemo(() => ({ ...production, events: withSabotageDetail(production.events, game.politics?.sabotage?.incidents) }), [production, game.politics]);
   const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const tiles = useMemo(() => mapTiles(game), [game]);
   const slots = Object.fromEntries(game.players.map((p) => [p.id, (slotOf(game, p.id) ?? 0) as Slot]));
@@ -107,9 +109,20 @@ function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t:
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4" data-testid="rail">
       <ol className="flex flex-col gap-1.5" data-testid="acts">
-        {acts.map((a, i) => (
+        {/* The steps already played fold into one line of ✓ names: six seats with the gauges on their own row (PR-11)
+            drew production at 0.613 with a row each (PM ruling 7 Nov, option 3; WS4 named edit). */}
+        {now > 0 && (
+          <li className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 px-3 py-1 font-display text-xl font-semibold text-ink-3" data-testid="acts-done">
+            {acts.slice(0, now).map((a) => (
+              <span key={a.id} className="whitespace-nowrap" data-testid={`act-${a.id}`} data-now={false}>
+                <span className="font-mono text-lg font-bold text-ok">✓</span> {a.title}
+              </span>
+            ))}
+          </li>
+        )}
+        {acts.map((a, i) => i < now ? null : (
           <li key={a.id} className={cx('flex items-baseline gap-3 rounded-control px-3 py-1.5', i === now && 'bg-holo-soft')} data-testid={`act-${a.id}`} data-now={i === now}>
-            <span className={cx('font-mono text-lg font-bold', i === now ? 'text-holo' : i < now ? 'text-ok' : 'text-ink-3')}>{i < now ? '✓' : i + 1}</span>
+            <span className={cx('font-mono text-lg font-bold', i === now ? 'text-holo' : 'text-ink-3')}>{i + 1}</span>
             <span className="flex flex-col gap-1">
               <span className={cx('font-display text-2xl font-semibold leading-none', i === now ? 'text-ink' : 'text-ink-3')}>{a.title}</span>
               {i === now && a.id !== 'events' && (
