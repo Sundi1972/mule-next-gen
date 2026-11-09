@@ -506,7 +506,16 @@ describe('election day on the phone (C66, E-2)', () => {
 
   it('C66, E-2: Now says each step of election day, and once you are done, whom it still waits for', () => {
     const now = (game: MuleView, ready = false) => electionNow({ view: game, me: game.me!, self: { ...game.players[0]!, ready } });
-    expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day: Governor', detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' });
+    // The Now line is one short line in the tabbed rail (667 px): the offices are in the detail; the card's own heading names them.
+    const asked = 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.';
+    expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day', detail: `Electing: Governor. ${asked}` });
+    const saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+    try {
+      expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day', detail: `Electing: Governor and Sheriff. ${asked}` });
+    } finally {
+      POLITICS.offices = saved;
+    }
     expect(now(announce(4, 'closed', { waitingFor: ['s2'] }), true)?.title).toBe("You're ready. Still waiting for Ossa");
     expect(now(ballot())).toMatchObject({ step: 2, title: 'Vote in secret' });
     expect(now(ballot(), true)?.title).toBe('You voted. Still waiting for Ossa, Brix and Pip');
