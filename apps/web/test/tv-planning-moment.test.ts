@@ -150,9 +150,12 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
   });
 
   it('a break the screen opens on is old news: no banner, the news line only', () => {
-    const html = theTv([BROKE]).html();
-    expect(html).not.toContain('data-testid="tv-break-banner"');
-    expect(html).toContain(NEWS);
+    const tv = theTv([BROKE]);
+    expect(tv.html()).not.toContain('data-testid="tv-break-banner"');
+    expect(tv.html()).toContain(NEWS);
+    // Nor a tick later, once the screen's clock has run.
+    tv.at(500);
+    expect(tv.html(), 'a tick after it opened').not.toContain('data-testid="tv-break-banner"');
   });
 
   it('a second card broken while the first shows is a moment of its own, the newest first, and folds on its own time', () => {
@@ -168,7 +171,7 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
     expect(tv.html(), "the second break's time up").not.toContain('data-testid="tv-moment"');
   });
 
-  it("a third break in the month is in the banner, which names the newest two", () => {
+  it("a third break in the month is in the banner, which leads with the newest two breakers", () => {
     const tv = theTv([]);
     tv.show([BROKE]);
     tv.show([BROKE, O]);
