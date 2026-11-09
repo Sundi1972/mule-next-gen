@@ -10,7 +10,6 @@ import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { LandGrant } from '../src/phone/LandGrant';
 import type { HubSeat } from '../src/phone/hub/slots';
-import { HUB_SLOTS } from '../src/phone/hub/today';
 import { droneButtonWords } from '../src/phone/hub/tools';
 import { nextDroneWords } from '../src/phone/plotInfo';
 
@@ -162,20 +161,6 @@ describe('C2: the drone tells the truth: its report comes at Scan, not at the la
     for (let n = 1; n <= DEVELOPMENT.dronePlots; n++) expect(droneButtonWords(n)).toBe(`Scan · ${n} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
   });
 
-  it("the hub's tile says the drone was used this month once it is; before, its plots and fee", () => {
-    const fake = fakeContext({ table: walkers });
-    const game = new MuleGame(fake.ctx, 7);
-    game.start(walkers);
-    const tile = HUB_SLOTS.agenda.find((a) => a.key === 'drone')!;
-    const seat = (): HubSeat => {
-      const view = game.viewFor(LENA);
-      return { view, me: view.me!, self: view.players.find((p) => p.id === LENA)! };
-    };
-    expect(tile.sub(seat())).toBe(`${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
-    const free = (game as unknown as { state: GameState }).state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
-    game.handle(LENA, { type: 'drone', plots: free.slice(-2).map((t) => ({ x: t.x, y: t.y })) });
-    expect(tile.sub(seat())).toBe('Used this month');
-  });
 });
 
 /**

@@ -20,13 +20,14 @@ let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Planning: typeof import('../src/phone/Planning').Planning;
 let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPicks;
 let forgetLawPick: typeof import('../src/phone/hub/politics/LawBallot').forgetLawPick;
+let enterRoom: typeof import('../src/phone/hub/politics/ElectionDay').enterRoom;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Planning } = await import('../src/phone/Planning'));
-  ({ forgetPicks } = await import('../src/phone/hub/politics/ElectionDay'));
+  ({ forgetPicks, enterRoom } = await import('../src/phone/hub/politics/ElectionDay'));
   ({ forgetLawPick } = await import('../src/phone/hub/politics/LawBallot'));
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
@@ -107,10 +108,13 @@ interface Seat {
   ballot?: Partial<Record<'governor', string>>;
   /** Lena's law ballot as the server holds it. */
   lawBallot?: boolean | null;
+  /** Whose phone it is (Lena, s1, by default) and in which month: the same phone sees other seats and months. */
+  id?: string;
+  month?: number;
 }
 
-const me = (pol: PoliticsView, { promised, ballot = {}, lawBallot = null }: Seat): MyView => ({
-  id: 's1',
+const me = (pol: PoliticsView, { promised, ballot = {}, lawBallot = null, id = 's1' }: Seat): MyView => ({
+  id,
   species: 'zipwing',
   stock: { ...NO_GOODS },
   carriedMule: null,
@@ -134,12 +138,12 @@ const me = (pol: PoliticsView, { promised, ballot = {}, lawBallot = null }: Seat
 /** Lena's phone on election day's ballot. */
 const electionFor = (seat: Seat = {}): MuleView => {
   const pol = politics({ election: ballotDay() });
-  return aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
+  return aMuleView({ month: seat.month ?? MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
 };
 /** Lena's phone on the law vote. */
 const lawFor = (seat: Seat = {}): MuleView => {
   const pol = politics({ council: lawDay() });
-  return aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
+  return aMuleView({ month: seat.month ?? MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
 };
 
 const BRIX_VOTE: Promised = { election: { governor: { candidate: 's2', to: ['s2'] } }, law: null };
@@ -157,18 +161,31 @@ const client = {
 let root: Root | null = null;
 let host: FakeElement;
 
+/** The room the phone is in; seat ids and months repeat from room to room. */
+let room = 'MULE';
 const onPhone = (view: MuleView) => {
   const self = view.players.find((p) => p.id === view.me!.id)!;
-  const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
+  const table: TableView<MuleView> = { code: room, status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
   return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) });
 };
 
-function mount(view: MuleView): void {
+function mount(view: MuleView, openBallot = true): void {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
   act(() => root!.render(onPhone(view)));
+  // The ballots are the Governor / Council tab's sub-tabs' since SB-3: the election's in Elections, the law's in Laws.
+  const sub = view.politics?.council?.stage === 'ballot' ? 'sub-laws' : view.politics?.election?.stage === 'ballot' ? 'sub-elections' : null;
+  if (sub && openBallot) {
+    for (const id of ['tab-politics', sub]) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+  }
 }
+
+/** Back to Overview, the ballot's sub-tab left behind (it unmounts; the vote stays open). */
+const toOverview = () => act(() => (props(byTestid('tab-overview')).onClick as (e?: unknown) => void)({ currentTarget: byTestid('tab-overview') }));
+
+/** A reload: the page's memory of what was on screen is gone, the room's code is noted afresh. */
+const reload = () => enterRoom('RELOADED');
 
 /** A new view for the mounted phone, as a broadcast brings. */
 const rerender = (view: MuleView) => act(() => root!.render(onPhone(view)));
@@ -179,6 +196,7 @@ afterEach(() => {
   root = null;
   forgetPicks();
   forgetLawPick();
+  room = 'MULE';
   sent.length = 0;
 });
 
@@ -245,7 +263,7 @@ describe('S3-C21: the election ballot says "You promised"', () => {
   // S3-RULE-12's rows on the election ballot: [row, the seat, the taps before Cast, what the table receives in order,
   // whether the server answers the taps before Cast].
   const ROWS: [string, Seat, string[], unknown[], boolean?][] = [
-    ['row 4: no own pick, no ballot: the promised vote, then Cast', { promised: BRIX_VOTE }, [], [vote('s2'), READY]],
+    ['row 4: Cast after the ballot was shown, no own pick, no ballot: the promised vote, then Cast', { promised: BRIX_VOTE }, [], [vote('s2'), READY]],
     ['row 2: an own pick of another candidate stands; no promised vote', { promised: BRIX_VOTE }, ['s3'], [vote('s3'), READY]],
     ['row 2: an explicit Abstain stands; no promised vote', { promised: BRIX_VOTE }, ['abstain'], [vote(null), READY]],
     ['row 2: an own pick stands even before the server answers it', { promised: BRIX_VOTE }, ['s3'], [vote('s3'), READY], false],
@@ -267,6 +285,62 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     expect(isDisabled('ready'), 'Cast my vote is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);
+  });
+
+  it('S3-T-AC-16: row 4 from Overview, the ballot never shown: a promise is not a pick, Cast my vote is dead and nothing is sent', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(electionFor({ promised: BRIX_VOTE }), false);
+    expect(findTestid('ballot-card'), 'the ballot is not on screen').toBeUndefined();
+    // The fake DOM fires a click on a disabled button, a real one does not: dead is the disabled button.
+    expect(isDisabled('ready'), 'nobody keeps a promise unseen').toBe(true);
+    expect(sent, 'nothing was sent').toEqual([]);
+  });
+
+  it('S3-T-AC-16: row 4 from Overview, the ballot shown and left: Cast my vote is live and sends the promised vote, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(electionFor({ promised: BRIX_VOTE }));
+    expect(findTestid('ballot-card'), 'the ballot is on screen').toBeDefined();
+    toOverview();
+    expect(findTestid('ballot-card'), 'and then it is not').toBeUndefined();
+    expect(isDisabled('ready'), 'seen once, live from any tab').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([vote('s2'), READY]);
+  });
+
+  it("S3-RULE-12 (m-1): the ballot shown and closed off-screen in month 1 leaves nothing for month 4's: Cast my vote is dead on Overview until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(electionFor({ promised: BRIX_VOTE, month: 1 }));
+    toOverview();
+    expect(isDisabled('ready'), 'month 1, seen').toBe(false);
+    rerender(electionFor({ promised: BRIX_VOTE, month: 4 }));
+    expect(isDisabled('ready'), 'month 4, never shown').toBe(true);
+  });
+
+  it("S3-RULE-12 (m-2): Lena's ballot shown, then Kai's view on the same phone in the same month: Kai's Cast my vote is dead until his ballot is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(electionFor({ promised: BRIX_VOTE }));
+    toOverview();
+    expect(isDisabled('ready'), 'Lena, seen').toBe(false);
+    rerender(electionFor({ promised: BRIX_VOTE, id: 's3' }));
+    expect(isDisabled('ready'), 'Kai, never shown').toBe(true);
+  });
+
+  it("S3-RULE-12 (I-1, election): a ballot shown in another room leaves nothing for this room's at the same seat and month", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(electionFor({ promised: BRIX_VOTE }));
+    act(() => root!.unmount());
+    root = null;
+    room = 'ZORP';
+    mount(electionFor({ promised: BRIX_VOTE }), false);
+    expect(isDisabled('ready'), 'another room, never shown').toBe(true);
+  });
+
+  it('S3-T-AC-16: a reload forgets that the ballot was shown: Cast my vote is dead again until it is reopened', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(electionFor({ promised: BRIX_VOTE }));
+    toOverview();
+    expect(isDisabled('ready')).toBe(false);
+    act(() => root!.unmount());
+    root = null;
+    reload();
+    mount(electionFor({ promised: BRIX_VOTE }), false);
+    expect(isDisabled('ready'), 'shown is client memory only').toBe(true);
+    for (const id of ['tab-politics', 'sub-elections']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    expect(isDisabled('ready'), 'reopened').toBe(false);
   });
 
   it('S3-T-AC-16: row 3 shows the server\'s ballot, not the promise', () => {
@@ -302,7 +376,7 @@ describe('S3-C21: the law ballot says "You promised"', () => {
   const voteLaw = (yes: boolean) => ({ type: 'voteLaw', yes });
   // S3-RULE-12's rows on the law ballot: [row, the seat, the taps before Done, what the table receives in order].
   const LAW_ROWS: [string, Seat, string[], unknown[]][] = [
-    ['row 4: no own pick, no ballot: the promised yes, then Done', { promised: LAW_YES }, [], [voteLaw(true), READY]],
+    ['row 4: Done after the ballot was shown, no own pick, no ballot: the promised yes, then Done', { promised: LAW_YES }, [], [voteLaw(true), READY]],
     ['row 2: an own No stands, even before the server shows it', { promised: LAW_YES }, ['ballot-no'], [voteLaw(false), READY]],
     ['row 2: tapping the promised Yes sends it once', { promised: LAW_YES }, ['ballot-yes'], [voteLaw(true), READY]],
     ['row 3: no own pick, a No from another device: it stands', { promised: LAW_YES, lawBallot: false }, [], [READY]],
@@ -316,6 +390,86 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(isDisabled('ready'), 'Done is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);
+  });
+
+  it('S3-T-AC-16: law row 4 from Overview, the ballot never shown: a promise is not a vote, Done is dead and nothing is sent', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(lawFor({ promised: LAW_YES }), false);
+    expect(findTestid('phone-ballot'), 'the ballot is not on screen').toBeUndefined();
+    // The fake DOM fires a click on a disabled button, a real one does not: dead is the disabled button.
+    expect(isDisabled('ready'), 'nobody keeps a promise unseen').toBe(true);
+    expect(sent, 'nothing was sent').toEqual([]);
+  });
+
+  it('S3-T-AC-16: law row 4 from Overview, the ballot shown and left: Done is live and sends the promised yes, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(lawFor({ promised: LAW_YES }));
+    expect(findTestid('phone-ballot'), 'the ballot is on screen').toBeDefined();
+    toOverview();
+    expect(findTestid('phone-ballot'), 'and then it is not').toBeUndefined();
+    expect(isDisabled('ready'), 'seen once, live from any tab').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
+  it("S3-RULE-12 (I-1): a law ballot unmounted while open leaves nothing for another room's law ballot at the same seat and month: Done is dead until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(lawFor({ promised: LAW_YES }));
+    act(() => root!.unmount());
+    root = null;
+    room = 'ZORP';
+    mount(lawFor({ promised: LAW_YES }), false);
+    expect(isDisabled('ready'), 'another room, never shown').toBe(true);
+  });
+
+  it("S3-RULE-12 (I-1): an own No from the last room is not this room's: shown, the press sends the promised vote, then ready", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(lawFor({ promised: LAW_YES }));
+    tap('ballot-no');
+    act(() => root!.unmount());
+    root = null;
+    sent.length = 0;
+    room = 'ZORP';
+    mount(lawFor({ promised: LAW_YES }));
+    expect(isDisabled('ready'), 'shown').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
+  it("S3-RULE-12 (m-1): a room change clears the law memory while an election memory is held too", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2f re-review
+    // Room MULE: month 1's election ballot shown and left, then month 2's law ballot shown, an own No tapped, unmounted.
+    mount(electionFor({ promised: BRIX_VOTE, month: 1 }));
+    toOverview();
+    rerender(lawFor({ promised: LAW_YES, month: 2 }));
+    for (const id of ['tab-politics', 'sub-laws']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    tap('ballot-no');
+    act(() => root!.unmount());
+    root = null;
+    sent.length = 0;
+    room = 'ZORP';
+    mount(lawFor({ promised: LAW_YES, month: 2 }), false);
+    expect(isDisabled('ready'), 'ZORP, never shown').toBe(true);
+    for (const id of ['tab-politics', 'sub-laws']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    expect(isDisabled('ready'), 'shown').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
+  it("S3-RULE-12 (m-1): the law ballot shown and closed off-screen in month 2 leaves nothing for month 3's: Done is dead on Overview until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(lawFor({ promised: LAW_YES, month: 2 }));
+    toOverview();
+    expect(isDisabled('ready'), 'month 2, seen').toBe(false);
+    rerender(lawFor({ promised: LAW_YES, month: 3 }));
+    expect(isDisabled('ready'), 'month 3, never shown').toBe(true);
+  });
+
+  it('S3-T-AC-16: a reload forgets that the law ballot was shown: Done is dead again until it is reopened', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(lawFor({ promised: LAW_YES }));
+    toOverview();
+    expect(isDisabled('ready')).toBe(false);
+    act(() => root!.unmount());
+    root = null;
+    reload();
+    mount(lawFor({ promised: LAW_YES }), false);
+    expect(isDisabled('ready'), 'shown is client memory only').toBe(true);
+    for (const id of ['tab-politics', 'sub-laws']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    expect(isDisabled('ready'), 'reopened').toBe(false);
   });
 
   it('S3-T-AC-16: row 2 · an own No outlives the ballot unmounting and mounting again (another sub-tab), before the server answers: Done sends no promised Yes', () => {
@@ -360,7 +514,7 @@ describe('the AI mark on the deal words (S3-C17, S3-C21, F-11)', () => {
     const pol = politics({});
     mount(withAi(aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, {}), politics: pol }), [fromKai]));
     expect(text('agenda-deals'), 'the agenda').toContain('From Kai · AI · answer before Ready');
-    tap('desk-talk');
+    tap('tab-talk');
     tap('talk-chat');
     tap('chat-to-s3');
     tap('add-deal');

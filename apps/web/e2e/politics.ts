@@ -30,6 +30,18 @@ const MONTH_END_MS = 10_000;
 /** B-AC-6: Lena's promise, stepped up from today's tax. */
 const LENA_CAP = 8;
 
+/** Opens planning's "?" sheet (D2: the roadmap and its offices line live there), runs `read`, and shuts it again. */
+async function inTheSheet(page: Page, read: () => Promise<void>): Promise<void> {
+  const planning = page.locator('[data-phase=planning]');
+  await planning.getByTestId('help-open').click({ timeout: PRESS_MS });
+  try {
+    await read();
+  } finally {
+    await planning.getByTestId('help-close').click({ timeout: PRESS_MS });
+    await planning.getByTestId('help-sheet').waitFor({ state: 'detached', timeout: PRESS_MS });
+  }
+}
+
 type Phone = { page: Page; name: string; runs: MuleIntent[]; offers: MuleIntent[] };
 
 const within = (ms: number) => ms * SCALE + 3_000;
@@ -81,8 +93,8 @@ async function main(): Promise<void> {
     const truth = serverTruth(server, code);
     const phones = [lena, ossa];
 
-    // B-AC-63, T-AC-66: month 1's announce is the time to run. Both humans run for Governor from the run block under
-    // Now, each on a promise, while the TV shows the announcement.
+    // B-AC-63, T-AC-66: month 1's announce is the time to run. Both humans run for Governor from the run block in
+    // the Elections sub-tab, each on a promise, while the TV shows the announcement.
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
     const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
     const taxNow = truth.board().politics!.tax.percent;
@@ -93,13 +105,19 @@ async function main(): Promise<void> {
       return politics.election!.stage === 'announce' ? politics.promises : politics.election!.promises;
     };
     await tv.getByTestId('tv-announce').waitFor({ timeout: 5_000 });
+    // The announce and the ballot are Elections' sub-tab on a phone (SB-3); the law ballot is Laws'. Both phones open it.
+    const openSub = async (p: Phone, sub: string) => {
+      await p.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+      await p.page.getByTestId(`sub-${sub}`).click({ timeout: PRESS_MS });
+    };
+    await everyone(phones, (p) => openSub(p, 'elections'));
     // Every tap below lands in announce; the game clock is held until the look-around is over, so the AI seat, which
     // acts on that clock, runs (if it does) only after the release.
     await held(server, code, async () => {
       await Promise.all([
         (async () => {
           // The cap starts at today's tax; plus steps it to her cap, and Run's label follows it.
-          await lena.page.locator('[data-phase=planning] [data-testid=guide]').getByTestId('run-governor').click({ timeout: 5_000 });
+          await lena.page.getByTestId('run-governor').click({ timeout: 5_000 });
           check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
           for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
           await lena.page.getByTestId('promise-run').filter({ hasText: `Run · up to ${LENA_CAP}%` }).click({ timeout: PRESS_MS });
@@ -177,6 +195,7 @@ async function main(): Promise<void> {
     check(JSON.stringify(election().waitingFor) === JSON.stringify([ossaId]), `B-AC-63: every screen is told it waits for Ossa, got ${JSON.stringify(election().waitingFor)}`);
     // She comes back and abstains: picking is still not Done, so nothing closes until her Cast.
     await ossa.page.goto(ossaUrl);
+    await openSub(ossa, 'elections');
     await untilServer(lena.page, () => seatOf(ossaId)?.connected === true || null, "Ossa's phone is back", within(PRESS_MS));
     await ossa.page.getByTestId('ballot-governor-abstain').locator('input').check({ timeout: PRESS_MS * 2 });
     await ossa.page.waitForTimeout(STILL_OPEN_MS);
@@ -205,23 +224,33 @@ async function main(): Promise<void> {
     check((await tv.locator('[data-testid^="reveal-row-sheriff-"]').count()) === 0 && ![reveal.lena, reveal.ossa].some((t) => t.includes('Sheriff')), 'T-AC-62: no screen names a Sheriff');
     console.log(`✓ B-AC-63: every screen showed the Governor's ceremony: the TV's title, candidates, bars and winner at ticks ${reveal.tvTicks.join(', ')}; both phones the result at ticks ${reveal.phoneTicks.join(', ')}, never before the server's winner beat`);
 
-    // The winner's phone opens the tax desk with her promise above it; the other phone has no Governor's desk and keeps
-    // the whole result in its Council desk (E-6).
+    // The winner reaches the tax desk through the Governor tab's Laws sub-tab, with her promise above it. The other phone's
+    // Laws holds the tax line, not the desk; the whole result stays on its Elections sub-tab (E-6).
     const taxValue = lena.page.getByTestId('tax-value');
-    await taxValue.waitFor({ timeout: within(ELECTION_WAIT_MS) });
+    await lena.page.getByTestId('tab-politics').click({ timeout: within(ELECTION_WAIT_MS) });
+    await lena.page.getByTestId('sub-laws').click({ timeout: PRESS_MS });
+    await taxValue.waitFor({ timeout: PRESS_MS });
     const start = truth.board().politics!.tax.percent;
     check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-63: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
     await lena.page.getByTestId('gov-promise').filter({ hasText: `You promised: no higher than ${LENA_CAP}%` }).waitFor({ timeout: PRESS_MS });
-    check((await ossa.page.getByTestId('desk-governor').count()) === 0, 'B-AC-63 (negative): Ossa, not Governor, has no Governor desk');
-    // E-9: a human holding an office gets its desk first, on one row; everyone else's tabs are today's. CI's pinned
-    // whole-game seed never makes a human Governor, so this is where the office-first order is guarded on every run.
-    const tabs = async (page: Page) => page.locator('[data-testid=desks] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-    const lenaTabs = await tabs(lena.page);
-    check(lenaTabs[0] === 'desk-governor' && lenaTabs.filter((t) => t === 'desk-governor').length === 1, `E-9: the Governor's desk is Lena's first tab, got ${lenaTabs.join(', ')}`);
-    check(JSON.stringify(lenaTabs.slice(1)) === JSON.stringify(await tabs(ossa.page)), `E-9: after it, Lena's tabs are Ossa's, got ${lenaTabs.join(', ')}`);
+    await ossa.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('sub-laws').click({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('council-tax').waitFor({ timeout: PRESS_MS });
+    check((await ossa.page.getByTestId('gov-tax').count()) === 0, "B-AC-63 (negative): Ossa, not Governor, has the tax line and not the Governor's desk in Laws");
+    // E-9 (D3, D8): a human holding an office finds it in their politics tab, named for it, open on the office's sub-tab;
+    // everyone else's tabs are the same four. CI's pinned whole-game seed never makes a human Governor, so this is
+    // where the office-first open is guarded on every run.
+    const tabs = async (page: Page) => page.locator('[data-testid=tabs] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    const subs = async (page: Page) => page.locator('[data-testid=sub-tabs] [role=tab]').evaluateAll((els) => els.map((e) => `${e.getAttribute('data-testid')}${e.getAttribute('aria-selected') === 'true' ? '*' : ''}`));
+    check((await lena.page.getByTestId('tab-politics').innerText()).trim() === 'Governor', `E-9 (D3): Lena's politics tab reads Governor, got "${await lena.page.getByTestId('tab-politics').innerText()}"`);
+    check((await ossa.page.getByTestId('tab-politics').innerText()).trim() === 'Council', `E-9 (D3): Ossa's reads Council, got "${await ossa.page.getByTestId('tab-politics').innerText()}"`);
+    const lenaSubs = await subs(lena.page);
+    check(lenaSubs.join(',') === 'sub-laws*,sub-budget,sub-elections', `E-9 (D8): Lena's politics tab has Laws open, then Budget and Elections, got ${lenaSubs.join(', ')}`);
+    check(JSON.stringify(await tabs(lena.page)) === JSON.stringify(await tabs(ossa.page)), `E-9: Lena's tabs are Ossa's, got ${(await tabs(lena.page)).join(', ')}`);
+    await ossa.page.getByTestId('sub-elections').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('result-how-governor').waitFor({ timeout: PRESS_MS });
-    // T-AC-70: the promise stands beside the tax on every phone.
-    await everyone(phones, (p) => p.page.getByTestId('office-governor').filter({ hasText: `promised up to ${LENA_CAP}%` }).getByTestId('promise-status').filter({ hasText: `tax ${start}%, kept` }).waitFor({ timeout: PRESS_MS }));
+    // T-AC-70: the promise stands beside the tax on every phone, in the offices line under the "?" sheet's roadmap (D2).
+    await everyone(phones, (p) => inTheSheet(p.page, () => p.page.getByTestId('office-governor').filter({ hasText: `promised up to ${LENA_CAP}%` }).getByTestId('promise-status').filter({ hasText: `tax ${start}%, kept` }).waitFor({ timeout: PRESS_MS })));
     console.log(`✓ B-AC-63: Lena's phone opened the tax desk at ${start}% under her promise; both phones' offices line reads "promised up to ${LENA_CAP}% · tax ${start}%, kept"`);
 
     // UBER-AC-2: the Governor sets 8%, and everyone's Colony desk says so.
@@ -233,8 +262,8 @@ async function main(): Promise<void> {
     await untilServer(lena.page, () => truth.board().politics!.tax.percent === NEW_TAX, `UBER-AC-2: the server's sales tax is ${NEW_TAX}%`);
     await lena.page.getByTestId('gov-done').filter({ hasText: `Done: ${NEW_TAX}% from now on.` }).waitFor({ timeout: PRESS_MS });
     // T-AC-70: the promise stays beside the new tax on every phone.
-    await everyone(phones, (p) => p.page.getByTestId('promise-status').filter({ hasText: `tax ${NEW_TAX}%, kept` }).waitFor({ timeout: PRESS_MS }));
-    await ossa.page.getByTestId('desk-colony').click({ timeout: PRESS_MS });
+    await everyone(phones, (p) => inTheSheet(p.page, () => p.page.getByTestId('promise-status').filter({ hasText: `tax ${NEW_TAX}%, kept` }).waitFor({ timeout: PRESS_MS })));
+    await ossa.page.getByTestId('tab-colony').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('fund-in').filter({ hasText: `the ${NEW_TAX}% sales tax` }).waitFor({ timeout: PRESS_MS });
 
     // B-AC-46-1, B-AC-46-4 (C46): the Governor proposes a law through the picker; its preview is the server's cost for
@@ -251,6 +280,8 @@ async function main(): Promise<void> {
     await untilServer(lena.page, () => JSON.stringify(truth.state().politics!.proposal?.proposal) === JSON.stringify(law) || null, `B-AC-46-1: the server's proposal is Land tax ${setting}`);
     await lena.page.getByTestId('pending-words').filter({ hasText: `You propose Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
     const ossaCost = costs[ossaId]!.cost;
+    // This month is Overview's, under the map (D5); the Governor's own phone, on Overview too, has none.
+    for (const p of [ossa, lena]) await p.page.getByTestId('tab-overview').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('agenda-law').filter({ hasText: `Lena proposes Land tax ${setting} cr a plot. For you: ${ossaCost === 0 ? 'nothing' : `about ${ossaCost} cr a month`}.` }).waitFor({ timeout: PRESS_MS });
     check((await lena.page.getByTestId('agenda-law').count()) === 0, "B-AC-46-4: the Governor's own phone has no agenda line for it");
     console.log(`✓ B-AC-46-1, B-AC-46-4: Lena proposed Land tax ${setting} through the picker; the server holds it; Ossa's This month reads her cost, ${ossaCost} cr`);
@@ -310,6 +341,7 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
     const council = () => truth.board().politics!.council;
     await untilServer(lena.page, () => (truth.board().month === 2 && council()?.stage === 'ballot') || null, "B-AC-46-7: month 2's planning opens with the law ballot", MONTH_END_MS);
+    await everyone(phones, (p) => openSub(p, 'laws'));
     await everyone(phones, (p) => p.page.getByTestId('ballot-proposal').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS }));
     await tv.getByTestId('tv-council-ballot').getByTestId('tv-proposal-words').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
     const ossaWeight = truth.board().politics!.weights.find((w) => w.id === ossaId)!.votes;
@@ -346,9 +378,10 @@ async function main(): Promise<void> {
     await untilServer(lena.page, () => council()?.stage === 'over' || null, 'B-AC-46-11: the reveal ends', within(POLITICS.council.revealMs));
     if (council()!.result!.passed) {
       check(JSON.stringify(truth.board().politics!.laws?.landTax) === JSON.stringify({ setting, since: 2 }), `B-AC-46-11: the server has Land tax ${setting} in force since month 2`);
-      await ossa.page.getByTestId('desk-council').click({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('sub-laws').click({ timeout: PRESS_MS });
       await ossa.page.getByTestId('law-chip-landTax').filter({ hasText: `Land tax ${setting} cr · since month 2` }).waitFor({ timeout: PRESS_MS });
-      console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and on Ossa's Council desk, since month 2`);
+      console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and in Ossa's Laws sub-tab, since month 2`);
     }
 
     // S3-B-AC-1 (UBER-AC-3 leg A): still in month 2's planning, Lena whispers Ossa and attaches a 3-month pact. Ossa
@@ -412,7 +445,7 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
   const pacts = () => (truth.state().politics?.deals ?? []).filter((d) => d.from === fromId && d.to === toId && d.terms.kind === 'pact');
   const offer = async (): Promise<DealCard> => {
     const before = pacts().length;
-    await from.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+    await from.page.getByTestId('tab-talk').click({ timeout: PRESS_MS });
     await from.page.getByTestId('talk-chat').click({ timeout: PRESS_MS });
     await from.page.getByTestId(`chat-to-${toId}`).click({ timeout: PRESS_MS });
     await from.page.getByTestId('chat-input').fill(`A pact, ${PACT_MONTHS} months?`);
@@ -445,7 +478,7 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
   };
   /** `to` answers in the whisper thread with `from`, where the card sits. */
   const answer = async (c: DealCard, accept: boolean) => {
-    await to.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+    await to.page.getByTestId('tab-talk').click({ timeout: PRESS_MS });
     await to.page.getByTestId('talk-chat').click({ timeout: PRESS_MS });
     await to.page.getByTestId(`chat-to-${fromId}`).click({ timeout: PRESS_MS });
     await to.page.getByTestId(`incoming-${c.id}-${accept ? 'accept' : 'decline'}`).click({ timeout: PRESS_MS });
@@ -467,10 +500,12 @@ async function dealCardLegA(truth: Truth, from: Phone, to: Phone, others: string
   check(first.status === 'offered', `S3-B-AC-1: the card is offered, got ${first.status}`);
   // The agenda's count and sender, then this card by its id: an AI seat may offer cards of its own in the same planning.
   const fromWord = new RegExp(`From (.*, )?${from.name}\\b`);
+  // This month lives on Overview.
+  await to.page.getByTestId('tab-overview').click({ timeout: PRESS_MS });
   await to.page.getByTestId('agenda-deals').filter({ hasText: /\d+ deal offers?/ }).filter({ hasText: fromWord }).waitFor({ timeout: PRESS_MS });
   const held = truth.room().viewFor(toId).game?.me?.deals?.cards.find((d) => d.id === first.id);
   check(held?.status === 'offered', `S3-B-AC-1: ${to.name}'s view holds ${first.id} as offered, got ${held?.status}`);
-  await to.page.getByTestId('desk-talk').click({ timeout: PRESS_MS });
+  await to.page.getByTestId('tab-talk').click({ timeout: PRESS_MS });
   await to.page.getByTestId('talk-cards').click({ timeout: PRESS_MS });
   await to.page.getByTestId(`incoming-${first.id}`).waitFor({ timeout: PRESS_MS });
   onlyThePair(first, 'offered');

@@ -165,29 +165,37 @@ function marks(node: FakeElement): string[] {
 }
 const tap = (testid: string) => act(() => (props(byTestid(testid)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(testid) }));
 const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' ').trim();
+/** The law ballot is Laws' first card now (SB-3): open the Governor / Council tab, then Laws. */
+const openLaws = () => {
+  tap('tab-politics');
+  tap('sub-laws');
+};
 const isDisabled = (testid: string) => props(byTestid(testid)).disabled === true;
 
-describe('B-AC-46-7: the law ballot takes the hub’s stage', () => {
+describe('B-AC-46-7: the law ballot is in the Laws sub-tab', () => {
   it("B-AC-46-7: Ossa's phone shows the proposal in words, her own cost and her own weight, and no This month", () => {
     mount(viewFor('s2', politics({ council: council() })));
+    openLaws();
     byTestid('phone-ballot');
     expect(text('ballot-proposal')).toBe('Land tax 10 cr a plot');
     expect(text('ballot-for-you')).toBe('For you: about 50 cr a month.');
     expect(text('ballot-weight')).toBe('Your vote weighs 3');
-    expect(findTestid('agenda'), "the stage holds the phone: no This month").toBeUndefined();
+    expect(findTestid('agenda'), 'Laws is a tab: no This month').toBeUndefined();
     expect(text('ready'), 'the ready bar is Done').toBe('Done');
     expect(isDisabled('ready'), 'Done waits for a vote').toBe(true);
-    expect(text('council-rail')).toContain('Laws in force');
+    expect(text('laws-in-force')).toContain('Laws in force');
   });
 
   it("B-AC-46-7: Kai's For you is his own: nothing; his weight is his own: 1", () => {
     mount(viewFor('s3', politics({ council: council() })));
+    openLaws();
     expect(text('ballot-for-you')).toBe('For you: nothing.');
     expect(text('ballot-weight')).toBe('Your vote weighs 1');
   });
 
   it('B-AC-46-7: Yes and No send voteLaw with yes true and false', () => {
     mount(viewFor('s2', politics({ council: council() })));
+    openLaws();
     tap('ballot-no');
     tap('ballot-yes');
     expect(sent).toEqual([
@@ -198,6 +206,7 @@ describe('B-AC-46-7: the law ballot takes the hub’s stage', () => {
 
   it("B-AC-46-7: the Governor's ballot starts at Yes, so Done is live", () => {
     mount(viewFor('s1', politics({ council: council() }), true));
+    openLaws();
     expect(props(byTestid('ballot-yes'))['aria-pressed']).toBe(true);
     expect(props(byTestid('ballot-no'))['aria-pressed']).toBe(false);
     expect(isDisabled('ready')).toBe(false);
@@ -205,6 +214,7 @@ describe('B-AC-46-7: the law ballot takes the hub’s stage', () => {
 
   it('B-AC-46-7: who has voted shows as marks, never how anyone voted', () => {
     mount(viewFor('s2', politics({ council: council({ voted: ['s1', 's3'], done: ['s3'], waitingFor: ['s1', 's2'] }) })));
+    openLaws();
     const voted = byTestid('ballot-voted');
     expect(marks(voted)).toEqual(['Lena', 'Kai']);
     expect(text('ballot-voted')).toContain('2 of 3');
@@ -215,6 +225,7 @@ describe('B-AC-46-7: the law ballot takes the hub’s stage', () => {
 describe('B-AC-46-8: Done in the ballot, and the host’s Continue', () => {
   it("B-AC-46-8: once Ossa has voted she is Done, and Now is the ballot's own: whom it waits for, not planning's words", () => {
     mount(viewFor('s2', politics({ council: council({ voted: ['s1', 's2'], done: ['s2'], waitingFor: ['s1', 's3'] }) }), false));
+    openLaws();
     expect(text('now-title')).toBe('You voted. Waiting for 2: Lena and Kai');
     expect(text('now')).not.toContain('Plan your month');
     expect(text('now')).not.toContain('Planning has no clock');
@@ -272,23 +283,26 @@ describe('B-AC-46-9: the reveal on the phone', () => {
   });
 });
 
-describe('B-AC-46-11: the laws in force on the Council desk', () => {
+describe('B-AC-46-11: the laws in force in the Laws sub-tab', () => {
   const pending = { by: 's1', month: MONTH, proposal: LAND_TAX_10, impact: IMPACT };
 
-  it("B-AC-46-11: a pending proposal is on the Council desk, with this seat's own For you", () => {
+  it("B-AC-46-11: a pending proposal is in Laws, with this seat's own For you", () => {
     mount(viewFor('s2', politics({ proposal: pending })));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-laws');
     expect(text('council-pending')).toContain('Lena proposes Land tax 10 cr a plot');
     expect(text('council-pending-for-you')).toBe('For you: about 50 cr a month.');
     unmount();
     mount(viewFor('s3', politics({ proposal: pending })));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-laws');
     expect(text('council-pending-for-you')).toBe('For you: nothing.');
   });
 
   it('B-AC-46-11 (negative): no card with nothing pending, nor while a vote is open', () => {
     mount(viewFor('s2', politics()));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-laws');
     expect(findTestid('council-pending')).toBeUndefined();
     unmount();
     mount(viewFor('s2', politics({ proposal: pending, council: council() })));
@@ -297,7 +311,8 @@ describe('B-AC-46-11: the laws in force on the Council desk', () => {
 
   it('B-AC-46-11: each law in force is a chip with its setting and "since month N"', () => {
     mount(viewFor('s2', politics({ laws: { landTax: { setting: 10, since: 3 }, exportTax: { setting: 20, since: 2 } } })));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-laws');
     expect(text('law-chip-landTax')).toBe('Land tax 10 cr · since month 3');
     expect(text('law-chip-exportTax')).toBe('Export tax 20% · since month 2');
     expect(findTestid('law-chip-pollutionTax')).toBeUndefined();
@@ -305,7 +320,8 @@ describe('B-AC-46-11: the laws in force on the Council desk', () => {
 
   it('B-AC-46-11: with none in force the strip says so', () => {
     mount(viewFor('s2', politics()));
-    tap('desk-council');
+    tap('tab-politics');
+    tap('sub-laws');
     expect(text('laws-none')).toBe('none yet');
     expect(findTestid('law-chip-landTax')).toBeUndefined();
   });

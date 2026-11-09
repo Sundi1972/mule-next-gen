@@ -153,7 +153,7 @@ Cost: free.
 ### propose
 In: planning. Args: proposal ({ kind: 'enact', law, setting, replaces? } | { kind: 'repeal', law } | null).
 Does: The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it.
-Legal when: the game plays with a Governor (else: "This game plays without a Governor"); the votes are over (else: "Propose once the votes are over"); you are the Governor (else: "Only the Governor proposes a law"); the law is in the colony's book (else: "That law is not in the colony's book"); it did not fail too recently (else: "That proposal failed in month <month>; it can come back in month <month>"); a repeal names a law in force (else: "That law is not in force"); the setting is one the law has (else: "<law> is set to <settings>"); it changes what is in force (else: "That law is already in force at that setting"); with the book full, it names the law it replaces (else: "<count> laws are in force: pick the one this replaces").
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); the votes are over (else: "Propose once the votes are over"); you are the Governor (else: "Only the Governor proposes a law"); the law is in the colony's book (else: "That law is not in the colony's book"); the game plays with sabotage if the law is the sabotage ban (else: "This game plays without sabotage"); it did not fail too recently (else: "That proposal failed in month <month>; it can come back in month <month>"); a repeal names a law in force (else: "That law is not in force"); the setting is one the law has (else: "<law> is set to <settings>"); it changes what is in force (else: "That law is already in force at that setting"); with the book full, it names the law it replaces (else: "<count> laws are in force: pick the one this replaces").
 Cost: free.
 
 ### voteLaw
@@ -200,7 +200,7 @@ Cost: free.
 
 ### sabotage
 In: planning. Args: target ({ kind: 'powerCut', tile } | { kind: 'rumour', good, dir: 'up' | 'down' } | null to withdraw).
-Does: Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.
+Does: Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it. The crew is paid at upkeep, not when the order is given: 120 cr for a power cut, 60 for a rumour.
 Legal when: the game plays with sabotage (else: "This game plays without sabotage"); it is planning (else: "Orders are given in planning"); a power cut names another player's plot (else: "Pick another player's plot"); that plot has a MULE making a good (else: "That plot makes nothing to cut"); a rumour names a good (else: "Pick a good"); a rumour moves its price up or down (else: "A rumour moves a price up or down"); you can pay the crew (else: "A crew costs <cost> cr; you have <money>").
 Cost: free.
 

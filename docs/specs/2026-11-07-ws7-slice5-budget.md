@@ -1368,10 +1368,12 @@ are **proposed; WS1 owns the final shape**.
 export function lineWorth(obs: GameState, me: string, line: BudgetLine, amount: number): number;
 ```
 It must account for:
-- **projects:** what `amount` more toward the open buildings is worth to `me`: the months it brings each
-  one forward × (its perk's value to `me`, i.e. the park, hospital and stadium event modifiers, + its
-  prestige's mood points × the value of a mood point to `me`). 0 when no building is commissioned, or when
-  every open one waits only for goods (§0's measurement: today it is mostly 0).
+- **projects:** what `amount` more toward the open buildings is worth to `me` (AM-15): for each commissioned
+  building in the fund's order, the share of its cost that `amount` pays × the months left in the game × (its
+  perk's value to `me`, i.e. the park, hospital and stadium event modifiers, + its prestige's mood points × the
+  value of a mood point to `me`). Its cost is its credits plus, while COLONY.fundBuysGoods is on, its missing
+  goods at the store's sell price as far as the store sells them. 0 when no building is commissioned, or when
+  every open one waits only for goods the fund can't buy (COLONY.fundBuysGoods off, or the store has none).
 - **welfare:** `amount` if `me` is `welfareRecipient(obs)` now, else 0. Plus the mood points it buys
   (S5-RULE-5) × the value of a mood point to `me`.
 - **security** [after RC]: the expected sabotage loss on `me`'s plots this month that the guards and
@@ -1392,7 +1394,7 @@ export function overruleWorth(obs: GameState, me: string, target?: OverruleTarge
 // Computed only from facts in obs (WS7, 7 Nov).
 ```
 It must account for:
-- **tax:** (taxAtStart − salesTax) × the sales `me` is expected to make in this month's auctions (the
+- **tax:** (salesTax − taxAtStart) × the sales `me` is expected to make (AM-14: undoing a raise pays the seller) in this month's auctions (the
   seller pays, economy.ts::taxSale), minus the share of the lost tax income that would have reached `me`
   through the budget's lines (lineWorth).
 - **budget** [after RC]: Σ over lines of [lineWorth(at budgetAtStart's credits) − lineWorth(at now's
@@ -1686,6 +1688,89 @@ did       row 1 is "politics off" only: welfareRecipient names the player rows 2
 because   AM-5 is the later decision, made for the Governor's screen; the server cannot rebuild rows 2-4 itself
           (the tie stream is the engine's)
 goal      S5-1 — unchanged
+```
+
+```
+AM-10 · 2026-11-08 · WS7 (build: S5-PR-2; the lead's ruling) · the engine counts passed tax overrules from the RC
+
+target    S5-C6's hold; S5-C15's count (politics.overruled)
+said      the count was after-RC (S5-C15), but the RC's hold needs to see an earlier month's pass
+did       the engine counts passed tax overrules from the RC, in politics.overruled, and a new term (every election,
+          a re-elected Governor's included) resets it to 0. No snap election: S5-C15's snap stays after RC. The AI
+          Governor reads the count (obs.politics.overruled > 0) and holds its tax and budget
+because   the implementer found openPlanning clears `overrule` each month, so a hand could only remember a pass in
+          memory, which is lost if it is rebuilt
+goal      S5-1 — unchanged
+```
+
+```
+AM-11 · 2026-11-08 · WS7 (build: S5-PR-2's logic review, I1 and I2) · the AI Governor keeps no share back; Projects takes the rest
+
+target    §2 S5-RULE-11 (fill), S5-T-AC-13
+said      projects "starts at the share that covers the open buildings", and a fill step costs nothing "while projects would stay above its covering share", which read as if the AI kept the rest in the fund
+did       Projects takes every share the base and the fill leave, and never less than its covering share: projects = max(cover, 100 − the other lines). There is no "kept" from the AI. Each fill step comes from Projects, and its cost is the drop in lineWorth(projects). WS1's §3.2 contract makes that drop flat above the covering share (what Projects is worth is the months it brings forward), so the cost is 0 there, as the old wording meant. Each other line takes min(its base, its maxShare, what is left after the covering share and the lines before it), so the split is always exactly 100
+because   under AM-7 the Projects share is a ceiling, so a share no building needs stays in the fund anyway. Giving it to Projects means a building opened later in the month is not short. That serves S5-UBER-AC-1 (buildings per game)
+goal      S5-1, unchanged
+
+AM-14 · 2026-11-08 · WS1's reading (S5-PR-3, #796), via the PM; WS7 agrees · the sign of overruleWorth's tax term
+target    §3.2 overruleWorth, the tax bullet
+said      (taxAtStart − salesTax) × the sales me is expected to make
+did       (salesTax − taxAtStart) × those sales: the overrule puts the tax back at taxAtStart, so after a raise the
+          seller saves the difference on every sale (a gain), and after a cut it pays it (a loss). The rest of the
+          term (less the share of the fund's lost income reaching me through the lines) is unchanged
+because   overruleWorth is a gain to me (as the budget term's lineWorth(start) − lineWorth(now) already is); the old
+          sign made every seat oppose undoing a raise
+goal      S5-1 — unchanged; S5-B-AC-6 reads the corrected sign
+
+AM-15 · 2026-11-08 · WS7, from #796's review (WS1, S5-PR-3) M1 and M2, via the PM · what a Projects credit is worth
+target    §3.2 lineWorth, the projects bullet
+said      "the months it brings each one forward × …; 0 when … every open one waits only for goods"
+did       M1: while COLONY.fundBuysGoods is on (the default), the fund's credits buy a building's missing goods from
+          the store (colony.ts::fund), so credits toward a building that waits only for goods are worth what they buy;
+          it is 0 only when the fund can't buy them (the switch off, or the store has none). The building's cost in
+          the share is its credits plus those goods at the store's sell price. M2: the share of the building's cost
+          the amount pays × the months left, as #796 builds it and the rulebook's Park example states (100/210 × 9 ×
+          4 × 5 ≈ 86), not the months it brings the building forward
+because   M1: the old words assumed the fund pays credits only, which colony.ts stopped being true of with
+          fundBuysGoods. M2: "months brought forward" needs a forecast of the fund's later income and of every other
+          seat's funding, which no hand sees; the share of the building × the months left is computable from public
+          facts, non-decreasing in amount (§3.2's contract) and an upper bound of the forward reading, so it leans
+          the AI Governor toward Projects at most as far as the building is worth. Judged in the 13 Nov play-test:
+          if AI Governors starve Welfare for Projects, the forward reading comes back with a named income estimate
+code      M1 changes politics-value.ts's projects body (need = credits only today): WS1, a follow-up to #796, in
+          the 12 Nov batch. M2 needs no code change
+goal      S5-1 — unchanged
+```
+
+```
+AM-12 · 2026-11-08 · Heiko (approved the tabbed hub, 8 Nov ~06:10Z, via PM) and PM rulings (8 Nov 06:14Z) · the slice 5 phone screens graft into the politics sub-tabs
+target    §1 S5-C10's tomorrow, ux and graft targets; S5-C11's owner
+said      S5-C10 renders inside Heiko's P0 option A ("no new tab"), grafting into Governor.tsx, Colony.tsx's fund card and
+          LawBallot.tsx; the mock was "WS6, to come"; S5-C11 is WS7's, with one TableApp route as WS4's named edit
+did       the binding scaffold is design/mocks/hub-tabs (origin/ws6-mock-hub-tabs; its SB-0 commit, when WS6 opens it,
+          is the one the build is checked against): src/proposed/tabs/Politics.tsx's LawsSub and BudgetSub, and
+          src/copied/budget/ (GovernorBudget, variant A, the steppers, by the PM's ruling; CouncilBudget; OverruleCall;
+          OverruleBallot; words). GRAFT TARGET: apps/web/src/phone/hub/politics/tabs.tsx (SB-3's sub-tab bodies) and
+          new files under apps/web/src/phone/hub/politics/budget/. Laws: an open overrule ballot first; the Governor
+          sees FrozenTax above the desk while a call holds the tax; everyone else sees the tax line with the call
+          under it (D13: the call sits at the tax, not on the fund card). Budget: the Governor sets it (variant A)
+          above the Commission; everyone else sees CouncilBudget. The mock's variant switch, seed and fixture are
+          plumbing and are not built. The TV parts (the budget on the promise row, the call line, the overrule
+          panel) go with the tabbed hub's TV build, SB-5 (WS4); WS7 OKs them by SHA against S5-C11
+because   Heiko replaced the P0 desks with the tabbed hub (8 Nov); its README is the build plan every lane reads
+goal      S5-1, S5-2 — unchanged; S5-B-AC-1/3 and S5-UBER-AC-2 are proved on these screens
+
+AM-13 · 2026-11-08 · WS4's ask via the PM (8 Nov), WS7's ruling · who builds S5-C11's TV components
+target    §1 S5-C11's owner (AM-12's last sentence)
+said      the TV parts go with SB-5 (WS4); WS7 OKs them by SHA
+did       WS7 builds the components, grafted from the scaffold's src/tv/copied/TvBudgetLine.tsx (TvBudgetLine,
+          TvOverruleCall) and src/tv/copied/TvOverrule.tsx: new apps/web/src/table/TvBudgetLine.tsx and
+          apps/web/src/table/TvOverrule.tsx, with render tests. WS4's SB-5b places them: the budget line on the
+          promise row, the call as the map box's 8 s moment, and TableApp's route to TvOverrule while the overrule
+          is open (after the election and the law ballot). TV-FIT stays WS4's
+because   the components exist only in the mock's folder; they read slice 5's views, which WS7 owns, and the plan's
+          frame already gives WS7 the TV parts' content and WS4 their placement
+goal      S5-1, S5-2 — unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

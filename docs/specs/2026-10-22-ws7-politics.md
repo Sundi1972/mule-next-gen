@@ -533,7 +533,7 @@ Code-only; no existing state to reach: games live in the server's memory and a r
 
 | AC | Given / When / Then | Changes | observed_at | negative case |
 |---|---|---|---|---|
-| B-AC-1 | Given month 1 with two humans and AI seats · When both humans run for Governor, vote and press Done · Then after the countdown every screen shows the same totals and winner at the same moment, and the winner's phone opens the tax desk | C3 C9 C11 | the phone and TV views in an e2e (UBER-AC-2) | month 2 opens no election |
+| B-AC-1 | Given month 1 with two humans and AI seats · When both humans run for Governor, vote and press Done · Then after the countdown every screen shows the same totals and winner at the same moment, and the winner's phone reaches the tax desk through the Now line's door (D8, AM-24) | C3 C9 C11 | the phone and TV views in an e2e (UBER-AC-2) | month 2 opens no election |
 | B-AC-2 | Given Lena is Governor and the tax started the month at 5% · When she sets 8% · Then the next sale in the auction is taxed at 8% and every screen shows "8% (+3)" | C5 C9 | the seller's money after the trade, in the server view | 11% is refused with a message |
 | B-AC-3 | Given nobody runs for either office · When the election ends · Then the richest player is Governor and the richest other player is Sheriff, shown as "appointed" | C3 | the view's result | one candidate → "unopposed", no ballot |
 | B-AC-4 | Given a 2-2 tie and the Land Baron voted for the second candidate · When the ballot closes · Then the second candidate wins, shown as broken by the Baron | C3 C4 | engine result | Baron voted for neither → most plots, then seat |
@@ -951,6 +951,34 @@ did       D-S3-1 A (campaign law promises after RC); D-S4-1 B (an investigation 
           records its own (slice 3 AM-4, slice 4 AM-3, slice 5 AM-4). The build plan is
           docs/plans/2026-11-07-ws7-politics-slices-3-5.md.
 goal      P-2, P-3 — designed and ruled, not in the game yet
+```
+
+```
+AM-24 · 2026-11-09 · SB-2's D8 (the tabbed hub, WS6), owed with WS7's OKs on SB-2 · B-AC-1's last leg
+
+target    B-AC-1's Then clause
+did       The tabbed hub opens nothing by itself: the Now line is a door only for a ballot or a decision with
+          a deadline (D8). So after the result the winner's phone no longer opens the tax desk; it reaches it
+          through the Now line's door. Was "the winner's phone opens the tax desk"; now "the winner's phone
+          reaches the tax desk through the Now line's door (D8, AM-24)". Carried by SB-3 part 2
+          (ws7-sb3-part2), which builds the politics sub-tabs on SB-2.
+goal      P-1 — unchanged
+```
+
+```
+AM-25 · 2026-11-09 · SB-3 part 2 (ws7-sb3-part2) · C11's desks on the phone
+
+target    C11 (the desks on phone and TV), the phone half; its #hub-council and #hub-governor routes
+did       The phone no longer has a Council desk and a Governor desk as separate screens. The Governor / Council
+          tab holds three sub-tabs: Laws, Budget, Elections. Only the three reveals (election ceremony, council
+          result, tax overrule) take the whole stage; everything else is a sub-tab. The Commission lives in
+          Budget. The election announce's Now line reads "Election day", with "Electing: <offices>." in its
+          detail (997c559f0), and its door opens Elections. A promised vote can be cast from Overview through the
+          ready bar (S3-RULE-12 row 4; the press sends the vote, then the ready). The TV is unchanged.
+          Commits: e59bb1b52, 8d9c5cbbb, 834f60082, 997c559f0, be167fe22.
+          PM ruling A, 9 Nov: a promise counts as a pick for Cast my vote and Done only once this seat's ballot has been on
+          screen for the vote (client memory, a reload loses it); before that both are dead on every tab.
+goal      P-1 — unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

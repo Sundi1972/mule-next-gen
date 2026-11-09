@@ -8,13 +8,23 @@ import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
 import { OfficesCard, Person, Steps } from './parts';
 import { PhoneRevealSolo, PhoneRevealWithTv, showOf } from './Reveal';
+import { enterRoom, onRoomChange } from './room';
 import { RunBlock } from './Run';
-import { OFFICE_NAME, officeNames, promiseWords, termEnd } from './words';
+import { OFFICE_NAME, officeNames, promiseWords, sheriffRecordWords, termEnd } from './words';
 
 /** Election day on the stage (E-2): the announcement, the secret ballot, then the reveal over the whole phone. */
 export function ElectionDay() {
   const { view, table } = usePhoneGame();
   const election = view.politics?.election;
+  // The picks belong to this room: a ballot of another room (seat ids restart at s1 in each) opens empty, whatever closed the last.
+  const other = enterRoom(table.code);
+  useEffect(() => {
+    if (other) changed();
+  });
+  // The picks are forgotten when the ballot closes, not when it unmounts: a switch to another sub-tab unmounts it too (S3-RULE-12).
+  useEffect(() => {
+    if (election && election.stage !== 'ballot') forgetPicks();
+  }, [election?.stage]);
   if (!election) return null;
   if (election.stage === 'announce') return <Announce />;
   if (election.stage === 'ballot') return <Ballot election={election} />;
@@ -109,11 +119,21 @@ function Field({ candidates, promises, testid }: { candidates: PoliticsView['can
 function Announce() {
   const { view } = usePhoneGame();
   const politics = view.politics!;
+  const record = sheriffRecordWords(politics, view);
   return (
     <DayCard at={1} testid="announce">
       <p className="text-xs text-ink-2 @min-[1100px]/shell:text-lg">
         The colony elects its {officeNames().join(' and ')} for months {view.month} to {termEnd(politics.next, view.maxMonths)}. The candidates:
       </p>
+      {record && (
+        <p className="text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="sheriff-record">
+          {/* Two unbreakable halves: a long name may push the counts to a second line, but never splits a phrase. */}
+          <span className="whitespace-nowrap">
+            <SeatWords text={record.lead} who={record.who} players={view.players} />
+          </span>{' '}
+          <span className="whitespace-nowrap">{record.counts}</span>
+        </p>
+      )}
       <div className="grid grid-cols-2 items-start gap-2 @min-[1100px]/shell:gap-4">
         {/* Until the ballot opens the candidacy is Politics'. */}
         <Field candidates={politics.candidates} promises={politics.promises} testid="announce-field" />
@@ -132,12 +152,13 @@ function Ballot({ election }: { election: ElectionView }) {
   const { view, me } = usePhoneGame();
   const client = useClient();
   usePicks();
-  useEffect(() => forgetPicks, []);
   const mine: BallotOf = { seat: me.id, month: view.month };
   const offices = contested(election.candidates);
   useEffect(() => {
     for (const o of offices) serverShows(mine, o, me.politics?.ballot[o]);
   });
+  // Drawn, so seen: a promise counts for Cast my vote from now on, from any tab.
+  useEffect(() => showBallot('election', mine));
   return (
     <DayCard at={2} testid="ballot-card">
       <span className="flex flex-wrap items-center gap-x-1.5 text-xs @min-[1100px]/shell:text-lg" data-testid="voted">
@@ -241,8 +262,8 @@ const EXTRAS = [
  * answers to the earlier ones come back first and never replace it. Only a pick this phone didn't send in that time
  * (a vote changed on another device) shows the server's instead. The server's view can't tell an abstention from no
  * pick: only this phone knows, for the ballot and for Cast my vote.
- * The picks are a seat's in a month, not a room's: the ready bar has no room code. Closing the ballot forgets them,
- * which keeps another room's ballot from opening with them.
+ * The picks are a seat's in a month; the ready bar has no room code, so drawing a ballot of another room forgets them,
+ * and so does closing the ballot.
  * Votes the server batches into one view can leave a later change elsewhere hidden, until numbered answers exist.
  */
 export interface BallotOf {
@@ -266,6 +287,48 @@ let version = 0;
 function changed(): void {
   version++;
   for (const l of listeners) l();
+}
+
+onRoomChange(() => {
+  const had = held !== null || shownBallots.election !== null;
+  held = null;
+  shownBallots = { ...shownBallots, election: null };
+  return had;
+});
+export { enterRoom };
+
+/**
+ * The ballots this phone has had on screen, by kind (PM ruling A, 9 Nov): a promise counts as a pick for Cast my vote
+ * and Done only once the seat's ballot for this vote has been drawn, so nobody keeps or breaks a promise unseen.
+ * Client memory only (a reload loses it), noted like the room: module state, idempotent. Only the open sub-tab's body
+ * is mounted, so a ballot that is drawn is a ballot that is visible.
+ */
+let shownBallots: { election: BallotOf | null; law: BallotOf | null } = { election: null, law: null };
+
+/** Notes that this seat's ballot of `kind` is on screen. Idempotent. */
+export function showBallot(kind: 'election' | 'law', ballot: BallotOf): void {
+  const at = shownBallots[kind];
+  if (at && sameBallot(at, ballot)) return;
+  shownBallots = { ...shownBallots, [kind]: ballot };
+  changed();
+}
+
+/** Forgets that a ballot was shown; the vote's close does this. */
+export function forgetShown(kind: 'election' | 'law'): void {
+  if (clearShown(kind)) changed();
+}
+
+/** Forgets that a ballot was shown, without notifying; true if one was. */
+export function clearShown(kind: 'election' | 'law'): boolean {
+  if (shownBallots[kind] === null) return false;
+  shownBallots = { ...shownBallots, [kind]: null };
+  return true;
+}
+
+/** Whether this seat's ballot of `kind` has been on screen for this vote. */
+export function wasShown(kind: 'election' | 'law', ballot: BallotOf): boolean {
+  const at = shownBallots[kind];
+  return at !== null && sameBallot(at, ballot);
 }
 
 const sameBallot = (a: BallotOf, b: BallotOf) => a.seat === b.seat && a.month === b.month;
@@ -317,7 +380,13 @@ function serverShows(ballot: BallotOf, office: Office, server: string | undefine
 /** Forgets every pick; the ballot does this when it closes, so the next one opens empty. */
 export function forgetPicks(): void {
   held = null;
+  shownBallots = { ...shownBallots, election: null };
   changed();
+}
+
+/** Redraws the caller when a pick or a shown ballot changes; the hub does, since its ready bar reads both. */
+export function useBallotMemory(): void {
+  usePicks();
 }
 
 function usePicks(): void {
@@ -329,16 +398,17 @@ function usePicks(): void {
 }
 
 /** The pick shown for an office: this phone's or the server's, else the candidate this seat promised (S3-RULE-12). */
-function pickOrPromise(ballot: BallotOf, office: Office, politics: MyView['politics']): string | undefined {
-  return shownPick(ballot, office, politics?.ballot[office]) ?? politics?.promised?.election[office]?.candidate;
+function pickOrPromise(ballot: BallotOf, office: Office, politics: MyView['politics'], counted = true): string | undefined {
+  return shownPick(ballot, office, politics?.ballot[office]) ?? (counted ? politics?.promised?.election[office]?.candidate : undefined);
 }
 
 type BallotSeat = { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politics'> };
 
-/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot; a promise counts as one. */
+/** Whether this seat has a pick, a candidate or Abstain, for every contested office on the ballot; a promise counts as one once the ballot has been on screen. */
 export function ballotComplete({ view, me }: BallotSeat, election: ElectionView): boolean {
   const mine: BallotOf = { seat: me.id, month: view.month };
-  return contested(election.candidates).every((o) => pickOrPromise(mine, o, me.politics) !== undefined);
+  const seen = wasShown('election', mine);
+  return contested(election.candidates).every((o) => pickOrPromise(mine, o, me.politics, seen) !== undefined);
 }
 
 /**

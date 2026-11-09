@@ -599,6 +599,8 @@ export interface Politics {
   overrule: Overrule | null;
   /** Tax and budget overrules passed since termStart. */
   overruled: number;
+  /** The sitting Sheriff's term so far (slice 4 AM-11): culprits named by a guard, investigations solved. Public; reset each election. */
+  sheriffRecord: { caught: number; solved: number };
   /** The month a snap election falls in, or null. */
   snapMonth: number | null;
   /** This term's Sheriff inquiry into the Governor, or null. */
@@ -660,12 +662,16 @@ export interface SabotageOrder {
   culpritPublic: boolean;
   /** Set when it resolves: the tile's owner then; null for a rumour, and while pending. */
   victim?: string | null;
+  /** Set when a power cut resolves: the crop of the plot it hit then. Absent for a rumour (its good is target.good), while pending, and on a void order. */
+  good?: Good;
   /** Set when it resolves: whether the effect happened. */
   worked?: boolean | null;
   /** The month the Sheriff investigated it; null if never. */
   investigated?: number | null;
   /** The fine levied on it, once. */
   fine?: SabotageFine | null;
+  /** The Sheriff's bounty for naming this culprit (slice 4 AM-11): who got it and how much the fund could pay, 0 when it was empty. Absent when none was owed. */
+  bounty?: { to: string; paid: number };
 }
 
 /** A fine the Sheriff (or the standard fine) levied on a sabotage order's culprit (slice 4). */

@@ -1,295 +1,224 @@
 import type { MuleView } from '@mule/protocol';
-import { cx } from '@mule/ui';
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { Button } from '@mule/ui';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { PHASE_NAME, secondsUntil } from '../../game/derive';
 import { useServerNow } from '../../net/react';
+import { useEscape } from '../dialog';
 import { usePhoneGame } from '../game';
-import { PhoneShell, useWide, type Now } from '../Shell';
+import { NowLine, PhaseLine, PhoneShell, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { NeedsStrip } from './NeedsStrip';
-import { EyeOff, OnlyYou } from './OnlyYou';
+import { useBallotMemory } from './politics/ElectionDay';
+import { PickNavProvider } from './politics/Sheriff';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
 import { Roadmap } from './Roadmap';
-import { drawnSlots, firstGiven, goTo, settle, type AgendaSlot, type DeskSlot, type HubPlace, type HubSeat, type HubSlots, type MapToolSlot, type StageSlot } from './slots';
+import { firstGiven, goTo, shown, type Door, type HubNav, type HubPlace, type HubSeat, type PlotPickSlot, type SubTabSlot, type TabHubSlots, type TabSlot } from './slots';
 import { StandingsSheet, useStanding } from './Standings';
 
-/** The hub's open desk and map tool, for any slot's components to read and change. */
-export interface HubNav {
-  desk: string;
-  tool: string;
-  /** What the open desk was opened to show, from a door's `focus`; null once taken, or after a tab or tool. */
-  focus: string | null;
-  /** Opens a desk, with a focus for it, and the map tool it names. */
-  openDesk(id: string, focus?: string): void;
-  /** Switches the map's tool, and opens the desk it names. */
-  pickTool(id: string): void;
-  /** The desk has shown its focus: a later door with the same focus shows it again. */
-  takeFocus(): void;
-}
+export type { HubNav } from './slots';
 
 const Nav = createContext<HubNav | null>(null);
 
+/** Where the hub is and the moves between its places, for any tab's components; throws outside the hub. */
 export function useHub(): HubNav {
   const nav = useContext(Nav);
   if (!nav) throw new Error('Not inside the hub');
   return nav;
 }
 
-/** The export ship and what it is for, in plain words, at the head of "This month". */
-function shipLine(view: Pick<MuleView, 'ship'>): string {
-  return `Export ship ${view.ship.inPort ? 'in port' : `in month ${view.ship.arrives}`}: it buys the colony’s leftovers`;
+/** The hub's navigation, or null outside the hub, for a part drawn both inside and outside it (a player's card). */
+export function useHubIfAny(): HubNav | null {
+  return useContext(Nav);
 }
 
-/** Planning: the month's hub, from the slots it is given. */
-export function Hub({ slots }: { slots: HubSlots }) {
+/**
+ * Every desk id as a door into the tabs: openDesk() and an agenda row reach a tab only through an id this table knows
+ * (any other id has no door, and its row is not drawn).
+ */
+export const DESK_DOORS: Record<string, (focus?: string) => Door> = {
+  colony: () => ({ tab: 'colony' }),
+  talk: (focus) => ({ tab: 'talk', ...withFocus(focus) }),
+  market: () => ({ tab: 'overview', tool: 'list' }),
+  laws: (focus) => ({ tab: 'politics', sub: 'laws', ...withFocus(focus) }),
+  elections: (focus) => ({ tab: 'politics', sub: 'elections', ...withFocus(focus) }),
+  budget: (focus) => ({ tab: 'politics', sub: 'budget', ...withFocus(focus) }),
+  // The Sheriff desk's guard door turns Overview's Look map to Guard (useGuarding).
+  sheriff: (focus) => (focus === GUARD_FOCUS ? { tab: 'overview', tool: 'look', focus } : { tab: 'politics', sub: 'sheriff', ...withFocus(focus) }),
+};
+function withFocus(focus: string | undefined): { focus?: string } {
+  return focus ? { focus } : {};
+}
+const GUARD_FOCUS = 'guard';
+
+/** The desk today's components know a place by: a tab's id, Governor / Council's open sub-tab, or the Sheriff's while it guards on the map. */
+function deskOf(place: Pick<HubPlace, 'tab' | 'sub' | 'focus'>): string {
+  if (place.tab === 'politics') return place.sub;
+  if (place.tab === 'overview') return place.focus === GUARD_FOCUS ? 'sheriff' : 'map';
+  return place.tab;
+}
+
+/** What the open tab and its parts draw from: the slots this seat sees, the seat, and the pick on Overview's map. */
+export interface Drawn {
+  slots: TabHubSlots;
+  seat: HubSeat;
+  tabs: TabSlot[];
+  subs: SubTabSlot[];
+  pick: PlotPickSlot | null;
+}
+const DrawnCtx = createContext<Drawn | null>(null);
+
+export function useDrawn(): Drawn {
+  const drawn = useContext(DrawnCtx);
+  if (!drawn) throw new Error('Not inside the hub');
+  return drawn;
+}
+
+/** Planning: the month's hub as tabs, from the slots it is given (the approved hub-tabs mock). */
+export function Hub({ slots }: { slots: TabHubSlots }) {
   const { table, view, me, self } = usePhoneGame();
   const serverNow = useServerNow();
-  const seat: HubSeat = { view, me, self };
-  const drawn = drawnSlots(slots, seat);
-  const [held, setPlace] = useState<HubPlace>(() => settle({ desk: drawn.desks[0]?.id ?? '', tool: drawn.tools[0]?.id ?? '', focus: null, first: null }, drawn, seat));
-  const place = settle(held, drawn, seat);
-  if (place !== held) setPlace(place);
-  // A slot that stops showing (an office handed on) gives way to the first one drawn.
-  const desk = drawn.desks.find((d) => d.id === place.desk) ?? drawn.desks[0];
-  const tool = drawn.tools.find((t) => t.id === place.tool) ?? drawn.tools[0];
-  const go = (to: AgendaSlot['opens']) => setPlace((p) => goTo(p, to, drawn));
+  // The ready bar reads what the phone has picked and shown (a promise counts once its ballot was on screen): redraw when that changes.
+  useBallotMemory();
+  const seat: HubSeat = { table, view, me, self };
+  const tabs = shown(slots.tabs, seat);
+  const subs = shown(slots.politicsTabs, seat);
+  const tools = shown(slots.tools, seat);
+  const [place, setPlace] = useState<HubPlace>(() => ({ tab: 'overview', sub: subs[0]?.id ?? '', tool: tools[0]?.id ?? '', focus: null, pick: null }));
+  const [sheet, setSheet] = useState<'help' | 'standings' | null>(null);
+  const go = (door: Door) => setPlace((p) => goTo(p, door));
+  // A slot that stops showing (an office handed on), or a door to a sub-tab nobody draws, gives way to the first one drawn.
+  const tab = tabs.find((t) => t.id === place.tab) ?? tabs[0]!;
+  const sub = subs.find((s) => s.id === place.sub) ?? subs[0];
+  const tool = tools.find((t) => t.id === place.tool) ?? tools[0];
+  const pick = place.pick ? (shown(slots.picks, seat).find((x) => x.id === place.pick) ?? null) : null;
   const nav: HubNav = {
-    desk: desk?.id ?? '',
+    desk: deskOf({ tab: tab.id, sub: sub?.id ?? '', focus: place.focus }),
     tool: tool?.id ?? '',
     focus: place.focus,
-    openDesk: (id, focus) => go(focus === undefined ? { desk: id } : { desk: id, focus }),
-    pickTool: (id) => go({ tool: id }),
-    takeFocus: () => setPlace((p) => ({ ...p, focus: null })),
+    openDesk: (id, focus) => go(DESK_DOORS[id]?.(focus) ?? { tab: 'overview' }),
+    pickTool: (id) => go({ tab: 'overview', tool: id }),
+    // Guard on Overview's map (the Sheriff desk's guard door) is the Sheriff's, so its Done (the focus taken) goes back to the Sheriff's sub-tab.
+    takeFocus: () => setPlace((p) => (p.tab === 'overview' && p.focus === GUARD_FOCUS ? goTo(p, DESK_DOORS.sheriff!()) : { ...p, focus: null })),
+    tab: tab.id,
+    sub: sub?.id ?? '',
+    pick: pick?.id ?? null,
+    open: go,
+    startPick: (id) => setPlace((p) => ({ ...p, tab: 'overview', pick: id, focus: null })),
+    endPick: () => setPlace((p) => ({ ...p, pick: null })),
   };
+
+  // The rail's Now: the ready words, then the slots' (a ballot's step), then RULE-8's.
   const others = stillPlanning(view.players, connectedIn(table.seats)).filter((s) => s.id !== self.id);
   const now: Now =
     readyNowIn(view, self.ready, others, table.hostId === self.id) ??
-    firstGiven(drawn.nows, seat) ??
+    firstGiven(slots.nows, seat) ??
     planNow(needRows(me.monthNeeds, me.stock, view.tiles.filter((t) => t.owner === me.id)));
-  const stage = drawn.stage?.[0];
-  const bar = firstGiven(drawn.readyWords ?? [], seat);
-  // While a desk asks first, it and its tabs sit closer, so the desk keeps its room (E-9, E-11).
-  const asked = !stage && place.first !== null;
-  const [sheet, setSheet] = useState(false);
-  const standing = useStanding(() => setSheet(true));
-  const Panel = tool?.Panel;
-  // The tools are off the stage while a situation holds it, so their action leaves the footer.
-  const Action = stage ? undefined : tool?.Action;
-  const Body = desk?.Body;
-  const StageRail = stage?.Rail;
+  const asking = subs.find((s) => s.first?.(seat));
+  const goAsk = asking && !(tab.id === 'politics' && nav.sub === asking.id) ? () => go({ tab: 'politics', sub: asking.id }) : undefined;
+  const bar = firstGiven(slots.readyWords, seat);
+  const ceremony = shown(slots.stage, seat)[0];
+  const standing = useStanding(() => setSheet('standings'));
+  const Body = ceremony?.Body ?? tab.Body;
+  // On Overview the rail and the footer carry the pick's or the open tool's panel and action.
+  const overview = !ceremony && tab.id === 'overview';
+  const RailPart = ceremony ? ceremony.Rail : overview ? (pick ? pick.Panel : tool?.Panel) : tab.Rail;
+  const Action = ceremony ? undefined : overview ? (pick ? pick.Action : tool?.Action) : tab.Action;
+  const hint = overview && !pick ? tool?.hint(seat) : '';
+  const closeSheet = () => setSheet(null);
 
   return (
     <Nav.Provider value={nav}>
-      <PhoneShell
-        phase={stage?.phase?.(seat) ?? PHASE_NAME.planning}
-        seconds={secondsUntil(view.phaseEndsAt, serverNow)}
-        status={<ReadyCount players={view.players} label={bar?.label} />}
-        now={now}
-        // Now is folded to its title from its first render, in any month, and a new title remounts it folded; a tap
-        // opens it. A situation on the stage keeps it whole.
-        foldNow={!stage}
-        standing={standing}
-        fill
-        rail={
-          stage ? (
-            StageRail && <StageRail />
-          ) : (
-            <>
-              {drawn.underNow?.map(({ id, Body }) => (
-                <Body key={id} />
-              ))}
-              {Panel && <Panel />}
-              <DeskGroup tight={asked}>
-                <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />
-                {Body && (
-                  <div className="flex flex-col gap-2.5 @min-[1100px]/shell:gap-4" data-testid={`desk-body-${nav.desk}`}>
-                    <Body />
-                  </div>
-                )}
-              </DeskGroup>
-            </>
-          )
-        }
-        footer={
-          <>
-            {Action && <Action />}
-            <ReadyBar words={bar ?? undefined} canReady={bar?.canReady} />
-          </>
-        }
-      >
-        {stage ? <SituationStage stage={stage} tool={tool} /> : <HubStage drawn={drawn} seat={seat} tool={tool} nav={nav} go={go} />}
-        {sheet && <StandingsSheet onClose={() => setSheet(false)} />}
-      </PhoneShell>
+      {/* The Sheriff's sub-tab and Guard pick read the hub's navigation through their own provider. */}
+      <PickNavProvider value={nav}>
+      <DrawnCtx.Provider value={{ slots: { ...slots, tools, agenda: shown(slots.agenda, seat), banners: shown(slots.banners, seat) }, seat, tabs, subs, pick }}>
+          <PhoneShell
+            phase={ceremony?.phase?.(seat) ?? PHASE_NAME.planning}
+            seconds={secondsUntil(view.phaseEndsAt, serverNow)}
+            status={<ReadyCount players={view.players} label={bar?.label} />}
+            // Every tab keeps the phase line and the Now line in the rail's head; a Now that is its own card (a decision with
+            // its buttons, such as the strike's) is drawn whole at the top of the rail as well.
+            head={
+              <>
+                <PhaseLine />
+                <NowLine now={now} onHelp={() => setSheet('help')} onGo={goAsk} />
+              </>
+            }
+            now={now.Card ? now : undefined}
+            tabs={ceremony ? undefined : tabs.map((t) => ({ id: t.id, label: t.label(seat), icon: t.icon, on: t.id === tab.id, Badge: t.Badge, onPick: () => go({ tab: t.id }) }))}
+            standing={standing}
+            fill
+            rail={
+              <>
+                {!ceremony && shown(slots.underNow, seat).map(({ id, Body: Line }) => <Line key={id} />)}
+                {hint ? (
+                  <p className="text-[11px] leading-snug text-ink-2 @min-[1100px]/shell:text-sm" data-testid="tool-hint">
+                    {hint}
+                  </p>
+                ) : null}
+                {RailPart && <RailPart />}
+              </>
+            }
+            footer={
+              <>
+                {Action && <Action />}
+                <ReadyBar words={bar ?? undefined} canReady={bar?.canReady} />
+              </>
+            }
+          >
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid={ceremony ? 'hub-situation' : `tab-body-${tab.id}`}>
+              <Body />
+            </div>
+            {sheet === 'help' && <HelpSheet now={now} slots={slots} seat={seat} onClose={closeSheet} onOpenColony={() => (closeSheet(), go({ tab: 'colony' }))} />}
+            {sheet === 'standings' && <StandingsSheet onClose={closeSheet} />}
+          </PhoneShell>
+      </DrawnCtx.Provider>
+      </PickNavProvider>
     </Nav.Provider>
   );
 }
 
+/** The export ship and what it is for, in plain words. */
+function shipLine(view: Pick<MuleView, 'ship'>): string {
+  return `Export ship ${view.ship.inPort ? 'in port' : `in month ${view.ship.arrives}`}: it buys the colony’s leftovers.`;
+}
+
 /**
- * The stage: the month's roadmap with its lines, what you need this month, banners, This month, the map with its tools,
- * and from 1100 px what sits under it.
+ * The "?" sheet: the old stage-top card in full (the month's steps, Now and Next, the offices line), Now's own detail,
+ * what you need this month and the ship. Over the whole phone; Close and Escape shut it.
  */
-function HubStage({ drawn, seat, tool, nav, go }: { drawn: HubSlots; seat: HubSeat; tool: MapToolSlot | undefined; nav: HubNav; go(to: AgendaSlot['opens']): void }) {
-  const wide = useWide();
-  const ToolMap = tool?.Map;
-  const openNeeds = (el: Element) => {
-    nav.openDesk('colony');
-    // The full list sits in the Colony desk: bring it into the rail's view once the desk is drawn.
-    requestAnimationFrame(() => el.closest('[data-testid="game-shell"]')?.querySelector('[data-testid="this-month"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
-  };
+export function HelpSheet({ now, slots, seat, onClose, onOpenColony }: { now: Now; slots: TabHubSlots; seat: HubSeat; onClose(): void; onOpenColony(): void }) {
+  const { view } = usePhoneGame();
+  useEscape(onClose);
+  const sheet = useRef<HTMLDivElement>(null);
+  // Close takes the focus on open; on close it goes back to what had it, the "?".
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    sheet.current?.querySelector?.<HTMLElement>('[data-testid="help-close"]')?.focus?.();
+    return () => opener?.focus?.();
+  }, []);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-4">
-      <Roadmap lines={drawn.lines ?? []} />
-      <NeedsStrip onOpen={openNeeds} />
-      {drawn.banners.map(({ id, Body }) => (
-        <Body key={id} />
-      ))}
-      <AgendaRow items={drawn.agenda} seat={seat} note={shipLine(seat.view)} onOpen={go} />
-      <div className="flex min-h-0 flex-1 gap-2 @min-[1100px]/shell:flex-col @min-[1100px]/shell:gap-4" data-testid="tools-and-map">
-        <MapTools tools={drawn.tools} active={nav.tool} onPick={nav.pickTool} hint={wide && tool ? tool.hint(seat) : null} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="hub-map">
-          {ToolMap && <ToolMap />}
-        </div>
+    <div ref={sheet} className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="help-title" data-testid="help-sheet">
+      <div className="flex max-h-full w-full max-w-[600px] flex-col gap-2 overflow-y-auto rounded-sheet border-2 border-holo bg-panel p-3 shadow-glow">
+        <header className="flex items-center justify-between gap-2">
+          <h2 id="help-title" className="font-display text-lg font-semibold">
+            Month {view.month} · {PHASE_NAME.planning}
+          </h2>
+          <Button size="md" variant="ghost" onClick={onClose} data-testid="help-close">
+            Close
+          </Button>
+        </header>
+        <Roadmap lines={shown(slots.lines, seat)} />
+        <section className="flex flex-col gap-0.5 rounded-panel border border-holo-line bg-holo-soft px-2 py-1.5" data-testid="help-now">
+          <span className="label-caps text-[10px]!">Now{now.step !== undefined && now.of !== undefined ? ` · step ${now.step} of ${now.of}` : ''}</span>
+          <strong className="font-display text-sm font-semibold">{now.title}</strong>
+          {now.detail && <p className="text-xs leading-snug text-ink-2">{now.detail}</p>}
+        </section>
+        <NeedsStrip onOpen={onOpenColony} />
+        <p className="text-[11px] text-ink-2" data-testid="help-ship">
+          {shipLine(view)}
+        </p>
       </div>
-      {drawn.beneath.map(({ id, Body }) => (
-        <div key={id} className="hidden @min-[1100px]/shell:block">
-          <Body />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** A situation on the stage, such as election day; from 1100 px the open tool's map stays under it. */
-function SituationStage({ stage: { Body }, tool }: { stage: StageSlot; tool: MapToolSlot | undefined }) {
-  const ToolMap = useWide() ? tool?.Map : undefined;
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto @min-[1100px]/shell:gap-4 @min-[1100px]/shell:overflow-visible" data-testid="hub-situation">
-      <Body />
-      {ToolMap && (
-        <div className="flex min-h-0 flex-1 flex-col" data-testid="hub-map">
-          <ToolMap />
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * The desk tabs and the open desk, as one group. While a desk asks first (E-9, E-11) they sit closer than the rail's gap
- * on a phone, so the desk keeps its room; otherwise at the rail's own gap, as in any month.
- */
-function DeskGroup({ tight, children }: { tight: boolean; children: ReactNode }) {
-  return <div className={cx('flex flex-col @min-[1100px]/shell:gap-4', tight ? 'gap-1' : 'gap-2.5')}>{children}</div>;
-}
-
-function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
-  );
-}
-
-/**
- * The desks' tabs, on one row. `first` is the desk that asked to come first: amber-edged while another is open. On a
- * phone six or more take rows of four, as the hub mock draws them, so every label keeps 10 px and every letter (E-11).
- */
-export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskSlot[]; active: string; first?: string | null; onPick(id: string): void }) {
-  return (
-    <div role="tablist" aria-label="Desks" className="flex gap-0.5 @max-3xl/shell:gap-px @max-3xl/shell:has-[>:nth-child(6)]:grid @max-3xl/shell:has-[>:nth-child(6)]:grid-cols-4 @min-[1100px]/shell:gap-1" data-testid="desks">
-      {desks.map(({ id, label, icon, locked, Badge }) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          aria-selected={active === id}
-          onClick={() => onPick(id)}
-          className={cx(
-            'relative flex min-h-8 min-w-8 flex-auto flex-col items-center justify-center whitespace-nowrap rounded-control border px-0 py-0.5 text-[10px] font-semibold leading-tight @max-3xl/shell:tracking-tight @min-[1100px]/shell:gap-0.5 @min-[1100px]/shell:px-0.5 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xs',
-            active === id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
-            first === id && active !== id && 'border-warn/60',
-          )}
-          data-testid={`desk-${id}`}
-        >
-          <Glyph d={icon} size={14} className="@min-[1100px]/shell:size-4" />
-          {label}
-          {locked && (
-            <span className="absolute left-1 top-1 text-holo" role="img" aria-label="Only you see this">
-              <EyeOff size={9} strokeWidth={2.6} />
-            </span>
-          )}
-          {Badge && <Badge />}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** "This month": everything the month allows, each a door into its desk or tool; `note` is the export ship's line. */
-export function AgendaRow({ items, seat, note, onOpen }: { items: AgendaSlot[]; seat: HubSeat; note: string; onOpen(opens: AgendaSlot['opens']): void }) {
-  return (
-    <section className="flex shrink-0 flex-col gap-1" data-testid="agenda">
-      <span className="flex items-baseline justify-between gap-2">
-        <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-sm!">This month</span>
-        <span className="min-w-0 truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm" data-testid="ship-line">
-          {note}
-        </span>
-      </span>
-      <div className="flex gap-1.5 overflow-x-auto pb-1 @min-[1100px]/shell:grid @min-[1100px]/shell:grid-flow-col @min-[1100px]/shell:grid-cols-[repeat(auto-fit,minmax(0,1fr))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:overflow-visible">
-        {items.map((it) => (
-          <button
-            key={it.key}
-            type="button"
-            onClick={() => onOpen(it.opens)}
-            className={cx(
-              'flex min-w-[124px] shrink-0 flex-col items-start gap-0.5 rounded-control border bg-panel px-2 py-1 text-left hover:border-holo @min-[1100px]/shell:min-w-0 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2',
-              it.lead?.(seat) ? 'border-2 border-holo bg-holo-soft' : 'border-holo-line',
-            )}
-            data-testid={`agenda-${it.key}`}
-          >
-            <span className="flex w-full flex-wrap items-center gap-x-1">
-              <span className="truncate text-xs font-semibold @min-[1100px]/shell:text-base">{it.title(seat)}</span>
-              {it.locked && <OnlyYou />}
-            </span>
-            <span className="truncate text-[10px] text-ink-2 @min-[1100px]/shell:text-sm">{it.sub(seat)}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/**
- * The map's tools. On a phone they stand beside the map, in the room its shape leaves: a column of four 32 px tools, a
- * fifth starting a second column, and on a small phone two to a column, in narrower columns. On a laptop they sit in a
- * row above it, with the open tool's hint.
- */
-export function MapTools({ tools, active, onPick, hint }: { tools: MapToolSlot[]; active: string; onPick(id: string): void; hint: string | null }) {
-  return (
-    <div
-      className="grid shrink-0 grid-flow-col grid-rows-[repeat(4,auto)] content-start justify-start gap-1 @max-3xl/shell:auto-cols-[--spacing(22)] @max-3xl/shell:grid-rows-[repeat(2,auto)] @min-[1100px]/shell:flex @min-[1100px]/shell:flex-row @min-[1100px]/shell:flex-wrap @min-[1100px]/shell:items-center"
-      role="toolbar"
-      aria-label="Map tools"
-      data-testid="map-tools"
-    >
-      {tools.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          aria-pressed={active === t.id}
-          onClick={() => onPick(t.id)}
-          className={cx(
-            'relative flex min-h-8 shrink-0 items-center gap-1 rounded-control border px-2 text-[11px] font-semibold @max-3xl/shell:flex-wrap @max-3xl/shell:py-0.5 @max-3xl/shell:text-left @max-3xl/shell:leading-tight @min-[1100px]/shell:h-9 @min-[1100px]/shell:px-3 @min-[1100px]/shell:text-sm',
-            active === t.id ? 'border-holo bg-holo-soft text-holo' : 'border-holo-line text-ink-2',
-          )}
-          data-testid={`tool-${t.id}`}
-        >
-          {t.label}
-          {t.locked && <OnlyYou text={t.locked === 'icon' ? '' : 'Only you'} />}
-        </button>
-      ))}
-      {hint && <span className="ml-2 text-sm text-ink-2">{hint}</span>}
     </div>
   );
 }

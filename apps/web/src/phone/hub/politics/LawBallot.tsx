@@ -6,9 +6,10 @@ import { SeatWords } from '../../../components/SeatWords';
 import { toSlot } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
-import { YouPromised } from './ElectionDay';
+import { clearShown, forgetShown, showBallot, wasShown, YouPromised } from './ElectionDay';
 import { chipWords, forYouWords, LAW_IDS, LAW_MEANING, proposalWords } from './LawPicker';
 import { Who } from './parts';
+import { enterRoom, onRoomChange } from './room';
 import { listNames, namer } from './words';
 
 /*
@@ -52,14 +53,23 @@ export function thenWords(c: CouncilView, passed: boolean, month: number): strin
 
 /** The ballot's stage body: the proposal and its cost to you, Yes and No, who has voted; then the reveal. */
 export function CouncilBallot() {
-  const { view, self, me } = usePhoneGame();
+  const { view, self, me, table } = usePhoneGame();
   const client = useClient();
   const c = view.politics!.council!;
   useLawPick();
+  // The picks belong to this room, as the election's do; the redraw comes from an effect, never from render.
+  const other = enterRoom(table.code);
+  useEffect(() => {
+    if (other) lawChanged();
+  });
   // The pick outlives this card leaving the screen (another sub-tab) while the vote is open; the vote's close forgets it.
   useEffect(() => {
     if (c.stage !== 'ballot') forgetLawPick();
   }, [c.stage]);
+  // Drawn, so seen: a promised Yes or No counts for Done from now on, from any tab (PM ruling A).
+  useEffect(() => {
+    if (c.stage === 'ballot') showBallot('law', { seat: me.id, month: view.month });
+  });
   if (c.stage === 'reveal' && c.result) return <PhoneReveal view={view} c={c} result={c.result} />;
   const mine = shownLawPick({ view, me });
   const promised = me.politics?.promised?.law ?? null;
@@ -174,8 +184,16 @@ function lawPickOn(ballot: { seat: string; month: number }, yes: boolean): void 
 /** Forgets this phone's law pick; the ballot does this when it closes. */
 export function forgetLawPick(): void {
   lawPick = null;
+  forgetShown('law');
   lawChanged();
 }
+
+// Another room's law pick and shown ballot are not this room's: seat ids and months repeat from room to room.
+onRoomChange(() => {
+  const had = lawPick !== null;
+  lawPick = null;
+  return clearShown('law') || had;
+});
 
 function useLawPick(): void {
   useSyncExternalStore(
@@ -190,16 +208,16 @@ type LawSeat = { view: Pick<MuleView, 'month'>; me: Pick<MyView, 'id' | 'politic
 const ownLawPick = ({ view, me }: LawSeat): boolean | null => (lawPick && lawPick.seat === me.id && lawPick.month === view.month ? lawPick.yes : null);
 
 /** The answer the ballot shows: with a promise, this phone's tap, else the server's vote, else the promised answer. */
-function shownLawPick(seat: LawSeat): boolean | null {
+function shownLawPick(seat: LawSeat, counted = true): boolean | null {
   const server = seat.me.politics?.lawBallot ?? null;
   const promised = seat.me.politics?.promised?.law;
   if (!promised) return server;
-  return ownLawPick(seat) ?? server ?? promised.yes;
+  return ownLawPick(seat) ?? server ?? (counted ? promised.yes : null);
 }
 
-/** Whether Done is live on the law ballot: a vote in, this phone's own, or a promise to send at the press. */
+/** Whether Done is live on the law ballot: a vote in, this phone's own, or a promise to send at the press once the ballot has been on screen. */
 export function lawBallotComplete(seat: LawSeat): boolean {
-  return shownLawPick(seat) !== null;
+  return shownLawPick(seat, wasShown('law', { seat: seat.me.id, month: seat.view.month })) !== null;
 }
 
 /** The vote Done sends before it (S3-RULE-12 row 4): the promised answer, when neither this phone nor the server has one. */

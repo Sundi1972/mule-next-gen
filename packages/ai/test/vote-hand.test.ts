@@ -197,6 +197,19 @@ function tickAlone(state: GameState, hand: VoteHand): { refused: AiAction[]; sen
 }
 
 afterEach(() => vi.unstubAllEnvs());
+// S5-C6 pin: these rows predate the budget. With Welfare at 0% an AI Governor's split is the budget in force (Projects 100), so it sends no setBudget and the fund reaches the buildings whole.
+const SAVED_WELFARE_MAX = POLITICS.budget.welfare.maxShare;
+// S5-PR-3 pin: these rows predate the AI's overrule calls. With minGain out of reach no AI seat calls, so none sends
+// callOverrule (S5-B-AC-6 proves the AI's calls).
+const SAVED_MIN_GAIN = POLITICS.ai.overrule.minGain;
+beforeEach(() => {
+  POLITICS.budget.welfare.maxShare = 0;
+  POLITICS.ai.overrule.minGain = Infinity;
+});
+afterEach(() => {
+  POLITICS.budget.welfare.maxShare = SAVED_WELFARE_MAX;
+  POLITICS.ai.overrule.minGain = SAVED_MIN_GAIN;
+});
 
 /** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
 function bothOffices(): void {
@@ -706,6 +719,45 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
     { fund: 239, want: 5 },
   ])('T-AC-62: by default the fund counts as low under POLITICS.ai.fundMonths of the elected offices\' pay: fund $fund → $want', ({ fund, want }) => {
     expect(nextTax(5, 5, fund, { low: 0, high: 10 }, 2)).toBe(want);
+  });
+});
+
+describe('S4-RULE-13 (G3): the ban is never proposed while sabotage is off', () => {
+  const saved = { on: POLITICS.sabotage.on, chance: { ...POLITICS.ai.council.proposeChance }, offices: [...POLITICS.offices] };
+  beforeEach(() => {
+    POLITICS.offices = ['governor', 'sheriff'];
+    POLITICS.ai.council.proposeChance.aggressive = 1;
+  });
+  afterEach(() => {
+    POLITICS.sabotage.on = saved.on;
+    POLITICS.offices = [...saved.offices];
+    Object.assign(POLITICS.ai.council.proposeChance, saved.chance);
+  });
+
+  /** Month 3, ai0 governing: ai1 leads on Worth and stands revealed twice, so a ban costs ai1 and nobody else. */
+  function banOnTheBook(): GameState {
+    const state = newGame();
+    state.month = 3;
+    state.players.find((p) => p.id === 'ai1')!.money = 90_000;
+    const caught = (id: string, month: number) => ({ id, by: 'ai1', month, target: { kind: 'rumour', good: 'food', dir: 'up' }, cost: 0, outcome: 'caught', culpritPublic: true, victim: null }) as const;
+    state.politics = { ...state.politics!, governor: 'ai0', election: null, council: null, baron: null, sabotage: [caught('sab-aaaaaa', 1), caught('sab-bbbbbb', 2)] };
+    return state;
+  }
+  const proposedBy = (state: GameState): LawProposal | undefined => {
+    const hand = new VoteHand({ ...mindOf('ai0', 'aggressive'), salt: 3 }, createRng(1));
+    const sent: AiAction[] = [];
+    hand.tick(state, 0, (a) => (sent.push(a), false));
+    return sent.find((a) => a.type === 'propose')?.proposal ?? undefined;
+  };
+
+  it('S4-T-AC-9 (G3): with sabotage off the hand never proposes the ban, even where it would cost the leader most', () => {
+    POLITICS.sabotage.on = false;
+    expect(proposedBy(banOnTheBook())?.law).not.toBe('sabotageBan');
+  });
+
+  it('S4-T-AC-9 (G3): with sabotage on the same table proposes the ban, at its middle setting', () => {
+    POLITICS.sabotage.on = true;
+    expect(proposedBy(banOnTheBook())).toEqual({ kind: 'enact', law: 'sabotageBan', setting: POLITICS.laws.sabotageBan.settings[1] });
   });
 });
 

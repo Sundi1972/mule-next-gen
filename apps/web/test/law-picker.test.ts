@@ -4,7 +4,7 @@ import type { MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mul
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { aMuleView, aPlayer } from './fixtures/views';
 
@@ -107,13 +107,19 @@ const client = {
 let root: Root | null = null;
 let host: FakeElement;
 
-function mount(view: MuleView): void {
+function mount(view: MuleView, tab: 'politics' | 'overview' = 'politics'): void {
   const self = view.players.find((p) => p.id === view.me!.id)!;
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
   act(() => root!.render(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) })));
+  // Planning opens on Overview; the desks below are Governor / Council's. The Governor's sub-tab asks first, so the Now
+  // line is the door to it (D8); on any other phone the tab itself.
+  if (tab === 'politics') {
+    if (findTestid('now-go')) tap('now-go');
+    else if (findTestid('tab-politics')) tap('tab-politics');
+  }
 }
 
 afterEach(() => {
@@ -146,7 +152,7 @@ const text = (testid: string) => byTestid(testid).textContent.replace(/\s+/g, ' 
 const isDisabled = (testid: string) => props(byTestid(testid)).disabled === true;
 
 describe("B-AC-46-1: the Governor's law picker", () => {
-  it('B-AC-46-1: lists the four laws, each with the engine\'s settings as chips, in the Governor desk under the sales tax', () => {
+  it('B-AC-46-1: lists the four laws, each with the engine\'s settings as chips, on the Governor sub-tab under the sales tax', () => {
     mount(viewFor('s1', politics()));
     expect(findTestid('gov-tax'), 'the sales tax stays').toBeDefined();
     byTestid('picker-a');
@@ -171,10 +177,31 @@ describe("B-AC-46-1: the Governor's law picker", () => {
     expect(sent).toEqual([{ type: 'propose', proposal: { kind: 'enact', law, setting: s } }]);
   });
 
-  it('B-AC-46-1 (negative): a phone that is not the Governor has no picker and no Governor desk', () => {
+  it('B-AC-46-1 (negative): a phone that is not the Governor has no picker in Laws', () => {
     mount(viewFor('s2', politics()));
-    expect(findTestid('desk-governor')).toBeUndefined();
+    tap('tab-politics');
+    tap('sub-laws');
+    expect(findTestid('gov-tax'), "Laws holds the tax line, not the Governor's desk").toBeUndefined();
     expect(findTestid('picker-a')).toBeUndefined();
+  });
+});
+
+describe('S4-B-AC-10 (screen, contract): the sabotage ban in the law picker', () => {
+  let saved: boolean;
+  beforeEach(() => {
+    saved = POLITICS.sabotage.on;
+    POLITICS.sabotage.on = true;
+  });
+  afterEach(() => {
+    POLITICS.sabotage.on = saved;
+  });
+
+  it('S4-B-AC-10: the ban row shows ×2 and ×3 from config, with its meaning', () => {
+    mount(viewFor('s1', politics()));
+    const settings = POLITICS.laws.sabotageBan.settings;
+    expect(settings.map((s) => text(`law-sabotageBan-${s}`))).toEqual(settings.map((s) => `×${s}`));
+    expect(text('law-row-sabotageBan')).toContain('Sabotage ban');
+    expect(text('law-row-sabotageBan')).toContain(`A caught saboteur’s fine and reputation loss are multiplied: ${settings.map((s) => `×${s}`).join(' or ')}.`);
   });
 });
 
@@ -276,27 +303,27 @@ describe("B-AC-46-4: next month's vote on every other phone", () => {
   const pending = { by: 's1', month: 4, proposal: { kind: 'enact', law: 'landTax', setting: 10 } as const, impact: { s1: { cost: 30 }, s2: { cost: 50 }, s3: { cost: 0 } } };
 
   it("B-AC-46-4: Ossa's This month has the agenda line, with her own For you figure", () => {
-    mount(viewFor('s2', politics({ proposal: pending })));
+    mount(viewFor('s2', politics({ proposal: pending })), 'overview');
     expect(text('agenda-law')).toContain('Next month’s vote');
     expect(text('agenda-law')).toContain('Lena proposes Land tax 10 cr a plot. For you: about 50 cr a month.');
   });
 
   it("B-AC-46-4: Kai's figure is his own: nothing", () => {
-    mount(viewFor('s3', politics({ proposal: pending })));
+    mount(viewFor('s3', politics({ proposal: pending })), 'overview');
     expect(text('agenda-law')).toContain('For you: nothing.');
   });
 
   it("B-AC-46-4 (negative): the Governor's own phone does not duplicate it; with nothing pending no phone has it", () => {
-    mount(viewFor('s1', politics({ proposal: pending })));
+    mount(viewFor('s1', politics({ proposal: pending })), 'overview');
     expect(findTestid('agenda-law')).toBeUndefined();
     act(() => root!.unmount());
     root = null;
-    mount(viewFor('s2', politics()));
+    mount(viewFor('s2', politics()), 'overview');
     expect(findTestid('agenda-law')).toBeUndefined();
     act(() => root!.unmount());
     root = null;
     // The law ballot's reveal holds the stage (law-ballot.test.ts), and no agenda line is drawn under it.
-    mount(viewFor('s2', politics({ proposal: pending, council: { stage: 'reveal', proposal: { kind: 'enact', law: 'exportTax', setting: 10 }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, result: { passed: true, yes: 2, no: 1, tie: false } } })));
+    mount(viewFor('s2', politics({ proposal: pending, council: { stage: 'reveal', proposal: { kind: 'enact', law: 'exportTax', setting: 10 }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, result: { passed: true, yes: 2, no: 1, tie: false } } })), 'overview');
     expect(findTestid('agenda-law'), 'no agenda line while a vote is open').toBeUndefined();
   });
 });
@@ -304,7 +331,8 @@ describe("B-AC-46-4: next month's vote on every other phone", () => {
 describe('B-AC-46-6 (negative): without politics', () => {
   it('B-AC-46-6: with politics off there is no Governor desk, no picker and no agenda line', () => {
     mount(viewFor('s1', null));
-    expect(findTestid('desk-governor')).toBeUndefined();
+    expect(findTestid('tab-politics')).toBeUndefined();
+    expect(findTestid('sub-laws')).toBeUndefined();
     expect(findTestid('picker-a')).toBeUndefined();
     expect(findTestid('agenda-law')).toBeUndefined();
   });

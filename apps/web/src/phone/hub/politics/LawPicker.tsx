@@ -44,7 +44,7 @@ export const LAW_MEANING: Record<LawId, string> = {
   landTax: 'Every player pays for each plot they own, at each month end, into the fund.',
   pollutionTax: 'Each player pays for the air their plots fouled that month, at its end.',
   emissionCap: 'No new Rare earth mine or smelter while the air is above the cap.',
-  sabotageBan: 'A caught saboteur pays the fine and loses the reputation times the setting.',
+  sabotageBan: `A caught saboteur’s fine and reputation loss are multiplied: ${POLITICS.laws.sabotageBan.settings.map((s) => `×${s}`).join(' or ')}.`,
 };
 
 /** "Land tax 10 cr a plot", "Repeal the Export tax". */
