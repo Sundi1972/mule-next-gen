@@ -861,30 +861,6 @@ WS7's path; `TvDeals.tsx` is WS7's own file (PM ruling 7 Nov), so it is built he
 - [ ] S3-B-AC-4's hand-off recorded in slice 4's section (S4-PR-8)
 - [ ] Rulebook "In the game" the same day; one code review once CI is green
 
-### S4-PR-11 · the outgoing Sheriff's record on election day, WS7 part (`ws7-s4-record`, draft #835)
-
-- [x] Built on 8d94ebc5 (the lane merged into f5226eef): 44daf07b S4-T-AC-20 (a guard-caught order cannot then be
-  investigated, so it counts once, in caught), 51067830 red, 100fe98f the line on the phone's announce and the TV's,
-  bbcf982f rulebook, f1a31b84 reads `politics.sabotage.sheriffRecord`, b5807cc5 the two halves, 67ff7938 " · AI" on
-  the phone, ed2e0202 / eab1bee8 / f0847267 the review's minors. **Review: APPROVE at a9310901.**
-- [x] PM rulings, 9 Nov: spot (a), under the sentence saying who the colony elects (the TV: after the title row); the
-  words "Kai was Sheriff: 3 catches, 1 case solved" with singulars, and 0/0 shown; name through SeatWords; the phone
-  breaks only after "Sheriff:", the TV stays one line. Spec slice 4 AM-13 at a9310901 (on the branch, not yet in the
-  lane), with S4-B-AC-11's Then clause "Kai was Sheriff: 1 catch, 0 cases solved".
-- [x] Fit measured in `e2e/small-phone.ts::sheriffRecordFit` (9656df33, WS4 named edit): 667 with an AI name gives
-  2 lines broken at the span, every other case 1 line, nothing clipped, no new scroll; TV-FIT 0.925 with the line
-  (0.956 without, floor 0.7).
-- [ ] Merges after SB-3 part 2: merge the lane in, check `e2e:small` passes in full (its main game's election step
-  waits on SB-3's 90ea7d24), WS4's OK on 9656df33 via the PM, then merge.
-
-### Lane → trunk (#834, draft)
-
-- [ ] Opened 9 Nov for the 12 Nov batch; ready by **11 Nov 18:00Z**. Needs SB-3 part 2 and #835 in the lane, then one
-  trunk sync (feat/strategist into the lane: the rulebook conflicts in `colony-and-politics.html` and
-  `search-index.js`), CI green, then ready for review.
-
----
-
 ### Drift found (for WS7)
 
 Checked against `origin/feat/strategist` e1e4794a and #669 at dbe50e42. The spec is unedited.
@@ -1430,6 +1406,30 @@ S4-UBER-AC-3's first measure moves to the 13 Nov play-test. Step 1's value bodie
 #### S4-PR-8 merge gate
 
 - [ ] S4-UBER-AC-2 and S4-B-AC-10 green in `politics.ts`; S4-UBER-AC-3 and S4-B-AC-9 green on all three seed sets; CI 4/4; one review once CI is green; the rulebook the same day; Heiko's money OK recorded (S4-HC-10) before the PM's batch to main.
+
+---
+
+### S4-PR-11 · the outgoing Sheriff's record on election day, WS7 part (`ws7-s4-record`, draft #835)
+
+- [x] Built on 8d94ebc5 (the lane merged into f5226eef): 44daf07b S4-T-AC-20 (a guard-caught order cannot then be
+  investigated, so it counts once, in caught), 51067830 red, 100fe98f the line on the phone's announce and the TV's,
+  bbcf982f rulebook, f1a31b84 reads `politics.sabotage.sheriffRecord`, b5807cc5 the two halves, 67ff7938 " · AI" on
+  the phone, ed2e0202 / eab1bee8 / f0847267 the review's minors. **Review: APPROVE at a9310901.**
+- [x] PM rulings, 9 Nov: spot (a), under the sentence saying who the colony elects (the TV: after the title row); the
+  words "Kai was Sheriff: 3 catches, 1 case solved" with singulars, and 0/0 shown; name through SeatWords; the phone
+  breaks only after "Sheriff:", the TV stays one line. Spec slice 4 AM-13 at a9310901 (on the branch, not yet in the
+  lane), with S4-B-AC-11's Then clause "Kai was Sheriff: 1 catch, 0 cases solved".
+- [x] Fit measured in `e2e/small-phone.ts::sheriffRecordFit` (9656df33, WS4 named edit): 667 with an AI name gives
+  2 lines broken at the span, every other case 1 line, nothing clipped, no new scroll; TV-FIT 0.925 with the line
+  (0.956 without, floor 0.7).
+- [ ] Merges after SB-3 part 2: merge the lane in, check `e2e:small` passes in full (its main game's election step
+  waits on SB-3's 90ea7d24), WS4's OK on 9656df33 via the PM, then merge.
+
+### Lane → trunk (#834, draft)
+
+- [ ] Opened 9 Nov for the 12 Nov batch; ready by **11 Nov 18:00Z**. Needs SB-3 part 2 and #835 in the lane, then one
+  trunk sync (feat/strategist into the lane: the rulebook conflicts in `colony-and-politics.html` and
+  `search-index.js`), CI green, then ready for review.
 
 ---
 
