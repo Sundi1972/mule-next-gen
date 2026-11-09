@@ -67,10 +67,12 @@ async function openElections(phone: Page): Promise<void> {
   if ((await phone.locator('[data-phase=planning] [data-testid=tabs]').count()) === 0) return;
   // Only while the ready bar still asks for the vote: once the election is over the phone stays where it is.
   if (!(await asksForTheVote(phone))) return;
-  if ((await phone.getByTestId('sub-elections').getAttribute('aria-selected', { timeout: 200 }).catch(() => null)) === 'true') return;
   try {
-    await phone.getByTestId('tab-politics').click({ timeout: PRESS_MS });
-    await phone.getByTestId('sub-elections').click({ timeout: PRESS_MS });
+    // Already on Elections (the result stays up after the ballot closes)? Stay: the check below still has to run.
+    if ((await phone.getByTestId('sub-elections').getAttribute('aria-selected', { timeout: 200 }).catch(() => null)) !== 'true') {
+      await phone.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+      await phone.getByTestId('sub-elections').click({ timeout: PRESS_MS });
+    }
     // "Cast my vote" with no election ballot on screen is a vote of another kind (a tax overrule a computer seat called is
     // held as planning ends): it is Laws', where answering No lets the bar's Cast go live.
     if ((await phone.getByTestId('ballot-card').count()) === 0 && /Cast my vote/.test((await phone.getByTestId('ready').first().textContent({ timeout: 200 }).catch(() => '')) ?? '')) {
