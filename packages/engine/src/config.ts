@@ -1053,8 +1053,12 @@ export const POLITICS = {
     securityDetect: 0.1,
     /** Investigations the Sheriff may open in a month. */
     investigations: 1,
-    /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3). */
-    investigateOdds: 0.5,
+    /** Credits the fund pays the Sheriff for each culprit a guard or a solved investigation names (slice 4 AM-11, Heiko, 8 Nov): a catch on the spot earns none. */
+    bounty: 50,
+    /** Added to a power cut's chance of being seen when the plot is the Sheriff's own (slice 4 AM-11, Heiko, 8 Nov: sabotaging the Sheriff should be a bit harder). */
+    ownPlotDetectBonus: 0.2,
+    /** Chance, 0..1, that an investigation names the culprit (D-S4-1: Heiko ruled B, AM-3; Heiko, 8 Nov: 0.3, was 0.5, AM-10). */
+    investigateOdds: 0.3,
     fine: {
       /** The base fines the Sheriff may levy, in credits, before the ban's multiplier. */
       steps: [50, 100, 150, 200, 250, 300],
@@ -1086,6 +1090,8 @@ export const POLITICS = {
       minEdge: 0,
       /** Weight on a victim who was caught sabotaging this seat, when picking a target. */
       grudge: 2,
+      /** Share, 0..1, of a power cut's damage a seat counts against a victim behind it on Worth (slice 4 §10: "little against a trailing player"); a victim ahead of it counts in full. WS1, S4-PR-3. */
+      behindWeight: 0.25,
     },
     /** How an AI Sheriff fines (slice 4, S4-RULE-13); every other case pays the standard fine. */
     sheriff: {
@@ -1148,11 +1154,15 @@ export const POLITICS = {
         aggressive: { welfare: 0.5, security: 1 },
         saboteur: { welfare: 0.5, security: 0.5 },
       } satisfies Record<AiPersonaId, Record<Exclude<BudgetLine, 'projects'>, number>>,
+      /** Credits a month one point of the colony's mood target is worth to a seat (the unrest it keeps off). WS1, S5-PR-3; judged in play (Heiko, 8 Nov). */
+      moodPoint: 5,
+      /** How many times more a mood point is worth to the sitting Governor, whose re-election it sways. WS1, S5-PR-3; judged in play. */
+      governorMood: 3,
     },
     /** How AI seats call and vote on overrules (slice 5, S5-RULE-12). Placeholders until the sim tunes them. */
     overrule: {
-      /** Credits a month a change must cost the seat before it calls an overrule. */
-      minGain: 20,
+      /** Credits a month a change must cost the seat before it calls an overrule. 5 (WS1, S5-PR-3): with S5-C9's real values a 5-point tax step costs a seller about 5-25 a month, so at 20 no seat ever called (0 in 6 seeded games; 5: one call a game). */
+      minGain: 5,
       /** Chance a persona calls an overrule that cannot win, as a protest. */
       longShot: { trader: 0.1, cautious: 0.05, aggressive: 0.3, saboteur: 0.2 } satisfies Record<AiPersonaId, number>,
       /** A Rookie's chance of a yes: a coin from the overrule's own stream. */
