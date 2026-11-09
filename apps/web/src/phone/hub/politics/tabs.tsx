@@ -2,13 +2,14 @@ import { useEffect } from 'react';
 import { Commission } from '../../../components/ColonyActions';
 import { usePhoneGame } from '../../game';
 import { useHub } from '../Hub';
+import { TabBadge } from '../tabs/parts';
 import type { HubSeat } from '../slots';
 import { GovernorBudget } from './budget/GovernorBudget';
 import { CouncilBudget } from './budget/CouncilBudget';
 import { OverruleBallot } from './budget/OverruleBallot';
 import { OverruleCall } from './budget/OverruleCall';
 import { CouncilBody, PendingLaw } from './Council';
-import { ElectionDay } from './ElectionDay';
+import { ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
 import { CouncilBallot, LawsInForce } from './LawBallot';
 import { Who } from './parts';
@@ -22,6 +23,18 @@ export const electionVoting = ({ view }: Pick<HubSeat, 'view'>) => {
   const stage = view.politics?.election?.stage;
   return stage === 'announce' || stage === 'ballot';
 };
+
+/** VOTE in the tab row, while a ballot is open in this sub-tab. */
+function VoteBadge({ on, id }: { on(seat: Pick<HubSeat, 'view'>): boolean; id: string }) {
+  const { view } = usePhoneGame();
+  return on({ view }) ? (
+    <TabBadge tone="warn" label="A ballot is open: vote here" testid={`sub-badge-${id}`} inline>
+      VOTE
+    </TabBadge>
+  ) : null;
+}
+export const LawsBadge = () => <VoteBadge on={(seat) => lawVoting(seat) || overruleVoting(seat)} id="laws" />;
+export const ElectionsBadge = () => <VoteBadge on={electionVoting} id="elections" />;
 
 /** The tax as everyone but the Governor sees it, with the overrule call under it. */
 function TaxLine() {
@@ -70,10 +83,17 @@ export function BudgetSub() {
 export function ElectionsSub() {
   const { view } = usePhoneGame();
   const { focus, takeFocus } = useHub();
-  // As CouncilDesk does: a door pressed again asks again only once the focus is taken.
+  // A door pressed again asks again only once the focus is taken.
   useEffect(() => {
     if (focus !== null) takeFocus();
   }, [focus]);
-  if (electionVoting({ view })) return <ElectionDay />;
+  // The Rail's run block rides along: month 1's announce is the time to run (AM-21), and the card alone has no way to.
+  if (electionVoting({ view }))
+    return (
+      <>
+        <ElectionDay />
+        <ElectionDayRail />
+      </>
+    );
   return <CouncilBody focus={focus} />;
 }

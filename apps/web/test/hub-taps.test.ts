@@ -143,23 +143,23 @@ function order(testid: string): number {
 }
 
 describe('the planning hub, tapped (UX audit)', () => {
-  it('H-2: a tap on the needs strip opens the Colony desk, where the full list is', () => {
+  it('H-2: a tap on the needs strip, in the "?" sheet, opens the Colony tab, where the full list is', () => {
     mount(VIEW);
-    tap('desk-market');
-    expect(openDesk()).toBe('desk-market');
+    tap('help-open');
     tap('needs-strip');
-    expect(openDesk()).toBe('desk-colony');
-    expect(findTestid('this-month')).toBeDefined();
+    expect(findTestid('help-sheet'), 'the sheet gives way').toBeUndefined();
+    expect(byTestid('tab-colony').getAttribute('aria-selected')).toBe('true');
+    expect(findTestid('this-month', byTestid('tab-body-colony'))).toBeDefined();
   });
 
-  it('H-3: with the drone open the rail says "Tap up to 2 free plots", above the desks; its button counts the plots and says the second costs nothing extra', () => {
+  it('H-3: with the drone open the rail says "Tap up to 2 free plots"; its button counts the plots and says the second costs nothing extra', () => {
     mount(VIEW);
     tap('tool-drone');
     expect(text('drone-hint')).toBe(`Tap up to ${DEVELOPMENT.dronePlots} free plots`);
     expect(text('drone-panel')).toContain('Only you');
     expect(text('drone-panel')).toContain(`The drone reads their ground from orbit, at once, for ${DEVELOPMENT.droneFee} cr. Only you see what it finds.`);
     expect(text('drone-panel'), 'its results come at Scan').not.toMatch(/land grant|on its way/i);
-    expect(order('drone-panel'), 'the drone takes the rail, the desks after it').toBeLessThan(order('desks'));
+    expect(findTestid('drone-panel', byTestid('guide')), 'the drone takes the rail').toBeDefined();
     expect(text('scan')).toBe('Pick a free plot for the drone');
     expect(findTestid('drone-one-more')).toBeUndefined();
 
@@ -302,12 +302,4 @@ describe('the planning hub, tapped (UX audit)', () => {
     expect(findTestid('standings-sheet')).toBeUndefined();
   });
 
-  it('H-7: the folded Now card opens to its whole with one tap and folds again with one more', () => {
-    mount(VIEW);
-    expect(byTestid('now').tagName).toBe('BUTTON');
-    tap('now');
-    expect(byTestid('now').tagName).toBe('SECTION');
-    tap('now-fold');
-    expect(byTestid('now').tagName).toBe('BUTTON');
-  });
 });

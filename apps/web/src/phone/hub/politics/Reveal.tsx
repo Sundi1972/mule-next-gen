@@ -487,12 +487,12 @@ function ToGovernor({ link = false }: { link?: boolean }) {
   const { openDesk } = useHub();
   if (link)
     return (
-      <button type="button" onClick={() => openDesk('governor')} className="min-h-8 text-xs font-semibold text-holo underline" data-testid="to-governor">
+      <button type="button" onClick={() => openDesk('laws')} className="min-h-8 text-xs font-semibold text-holo underline" data-testid="to-governor">
         To your Governor’s desk ›
       </button>
     );
   return (
-    <Button size="md" className="w-full" onClick={() => openDesk('governor')} data-testid="companion-to-governor">
+    <Button size="md" className="w-full" onClick={() => openDesk('laws')} data-testid="companion-to-governor">
       To your Governor’s desk
     </Button>
   );

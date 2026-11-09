@@ -3,14 +3,14 @@
  * store-steps' makeHungry seated the human at 2 Food against a need of 5 (nine farms, which also burn Energy).
  * Quick by design: planning is about 4.5 s at the smoke's phase scale, and listedSale has used part of it.
  * B-AC-19 (AM-16), the host's Continue, is run by auction-steps.ts in its month-2 planning; its six-seat TV case
- * (sixSeatsOnTheTv) by shell.ts, in a room of its own; so is E-11's Governor's desk above the table chat
+ * (sixSeatsOnTheTv) by shell.ts, in a room of its own; so is E-11's Governor's sub-tab beside the table chat
  * (governorsDeskFits), a room per phone size.
  */
 import { join } from 'node:path';
 import { GOODS, monthNeeds, type GameState, type Good, type TaxPromise } from '@mule/engine';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, held as holding, PHONE, TV } from './harness';
+import { check, held as holding, PHONE, PHONE_SMALL, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
 import { LAPTOP, railFits } from './shell-steps';
 import { fitSettled, theTvScaleHolds } from './tv-fit-steps';
@@ -21,12 +21,12 @@ const SEAT = 's1';
 const HUNGRY_FOOD = 2;
 /** RULE-8: these first, in this order; then the rest by need. */
 const FIRST: Good[] = ['food', 'water', 'energy'];
-/** C17: what exists today, and nothing else, is drawn; the Governor's desk only for the Governor. */
-const TODAYS_DESKS = ['colony', 'talk', 'council', 'market'];
-/** Every office's desk. AI seats run in month 1, so whether the smoke's seat holds an office is read from the game. */
+/** SB-2: the planning tabs, in their order; Governor / Council only while the table plays politics. */
+const TABS = (politics: boolean) => ['overview', ...(politics ? ['politics'] : []), 'colony', 'talk'];
+/** Every office's desk, a Governor / Council sub-tab. AI seats run in month 1, so whether the smoke's seat holds an office is read from the game. */
 const OFFICE_DESKS = ['governor', 'sheriff'] as const;
-/** C17: the office desks built today; the Sheriff's is not, so a Sheriff sees no desk for it. */
-const BUILT_OFFICE_DESKS: readonly string[] = ['governor'];
+/** Governor / Council's sub-tabs, in their order: Laws, Budget and Elections for all, the Sheriff's for its holder. */
+const SUBS = (held: readonly string[]) => ['laws', 'budget', 'elections', ...(held.includes('sheriff') ? ['sheriff'] : [])];
 const TODAYS_TOOLS = ['look', 'plots', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
@@ -34,22 +34,22 @@ const FILL = 0.8;
 type Shown = {
   phase: string | null;
   onStage: { agenda: boolean; map: boolean; marketStrip: boolean };
-  desks: string[];
+  tabs: string[];
   tools: string[];
-  needs: { good: string; text: string }[];
-  thisMonthInColony: boolean;
+  /** Where the tool row stands against the map. */
+  toolsAt: 'above' | 'elsewhere';
   nowFirst: boolean;
   nowTitle: string;
-  nowDetail: string;
   /** Review-aid labels the mock carries and the game must not. */
   reviewLabels: string[];
   fill: number;
 };
 
 /**
- * B-AC-14: the hub shows "This month" and the colony map on the stage; the Colony desk's needs say SHORT or OK as
- * the engine's monthNeeds has them; a good with no need has no row; no office desk is drawn without the office.
- * With it, B-AC-12's planning part: `now` opens the rail at 844×390 and at 1440×900. Returns what it saw, to log.
+ * B-AC-14 (SB-2, the tabbed hub): planning opens on Overview, "This month" and the colony map on its stage; the Colony
+ * tab's needs say SHORT or OK as the engine's monthNeeds has them; a good with no need has no row; no office's sub-tab
+ * is drawn without the office. The "?" sheet holds the month in full (H-1, H-2, H-6, D2). With it, B-AC-12's planning
+ * part: `now` opens the rail at 844×390 and at 1440×900. Returns what it saw, to log.
  */
 export async function planningIsTheHub(phone: Page, server: MuleServer, code: string, timeout = 2_000): Promise<string> {
   const room = server.registry.get(code);
@@ -63,34 +63,47 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   const have = { ...me.stock };
 
   const planning = phone.locator('[data-phase=planning]');
-  await planning.getByTestId('desk-colony').click({ timeout });
+  check(await planning.getByTestId('tab-overview').getAttribute('aria-selected') === 'true', 'B-AC-14 (D3): planning opens on Overview');
+  await planning.getByTestId('tab-colony').click({ timeout });
   const verdict = (g: Good) => (have[g] >= need[g] ? 'OK' : `SHORT ${need[g] - have[g]}`);
   await planning.getByTestId('need-food').filter({ hasText: verdict('food') }).waitFor({ timeout });
-  // An office holder's hub opens on the office's desk, which asks first, and folds Now to its title (E-9, E-11): with
-  // the Colony desk open, Now is opened again to be read whole.
-  const folded = planning.locator('button[data-testid=now]');
-  if (await folded.count()) {
-    await folded.click({ timeout });
-    await planning.getByTestId('now-fold').waitFor({ timeout });
-  }
+  const colony = await readColony(phone);
+  check(colony.thisMonthInColony, 'B-AC-14: the Colony tab holds "This month you need"');
 
-  const held = OFFICE_DESKS.filter((o) => state.politics?.[o] === SEAT && BUILT_OFFICE_DESKS.includes(o));
+  const held = OFFICE_DESKS.filter((o) => state.politics?.[o] === SEAT);
+  const politics = state.politics !== null;
+  if (politics) {
+    await planning.getByTestId('tab-politics').click({ timeout });
+    await planning.getByTestId('sub-tabs').waitFor({ timeout });
+    const subs = await planning.locator('[data-testid=sub-tabs] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')!.slice('sub-'.length)));
+    const foreign = subs.filter((d) => (OFFICE_DESKS as readonly string[]).includes(d) && !held.includes(d as (typeof OFFICE_DESKS)[number]));
+    check(foreign.length === 0, `B-AC-14 (negative): a player sees no sub-tab of an office they do not hold, got ${foreign.join(', ')}`);
+    check(JSON.stringify(subs) === JSON.stringify(SUBS(held)), `B-AC-14: Governor / Council's sub-tabs are exactly ${SUBS(held).join(', ')}, got ${subs.join(', ')}`);
+  }
+  await planning.getByTestId('tab-overview').click({ timeout });
+  await planning.getByTestId('hub-map').waitFor({ timeout });
   const narrow = await read(phone);
-  checkHub(narrow, `${PHONE.viewport.width}×${PHONE.viewport.height}`, held);
+  checkHub(narrow, `${PHONE.viewport.width}×${PHONE.viewport.height}`, TABS(politics));
   const expected = GOODS.filter((g) => need[g] > 0);
-  const rows = narrow.needs.map((n) => n.good);
+  const rows = colony.needs.map((n) => n.good);
   check(JSON.stringify([...rows].sort()) === JSON.stringify([...expected].sort()), `B-AC-14: a row for each good she needs this month (${expected.join(', ')}), got ${rows.join(', ')}`);
   const firsts = rows.filter((g) => FIRST.includes(g as Good));
   check(JSON.stringify(rows.slice(0, firsts.length)) === JSON.stringify(FIRST.filter((g) => need[g] > 0)), `B-AC-14 (RULE-8): Food, Water and Energy lead the needs, got ${rows.join(', ')}`);
-  for (const n of narrow.needs) {
+  for (const n of colony.needs) {
     const g = n.good as Good;
     check(n.text.includes(verdict(g)), `B-AC-14: need-${g} says ${verdict(g)} (have ${have[g]}, need ${need[g]}), got "${n.text}"`);
     check(n.text.includes(`HAVE ${have[g]} · NEED ${need[g]}`), `B-AC-14: need-${g} shows have ${have[g]} against need ${need[g]}, got "${n.text}"`);
   }
   check(need.food - have.food === 3, `B-AC-14: the seeded shortfall is Food 2 of 5, got ${have.food} of ${need.food}`);
   check(need.smithore === 0 && !rows.includes('smithore'), `B-AC-14 (negative): with no mine or factory she needs no Smithore and has no row for it, got rows ${rows.join(', ')}`);
-  // The UX audit's hub (H-1…H-7), on the phone held sideways: the roadmap, the needs strip, the rank, the ship's line.
+  // The UX audit's hub (H-1…H-7), on the phone held sideways: the "?" sheet's roadmap, needs strip and ship's line (D2);
+  // the rank in the header. Now's detail is the sheet's too.
+  await planning.getByTestId('help-open').click({ timeout });
+  await planning.getByTestId('help-sheet').waitFor({ timeout });
   const audit = await readAudit(phone);
+  const nowDetail = (await planning.getByTestId('help-now').innerText()).trim();
+  await planning.getByTestId('help-close').click({ timeout });
+  await planning.getByTestId('help-sheet').waitFor({ state: 'detached', timeout });
   const lot = state.listings.length > 0;
   const steps = ['plan', 'grant', ...(lot ? ['land'] : []), 'develop', 'produce', 'auction'];
   check(JSON.stringify(audit.steps) === JSON.stringify(steps), `H-1: the roadmap's steps are ${steps.join(', ')} (${state.listings.length} lots listed), got ${audit.steps.join(', ')}`);
@@ -103,8 +116,8 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   const place = 1 + worths.filter((p) => p.worth > mine).length;
   const label = `${place}${['th', 'st', 'nd', 'rd'][place] ?? 'th'} of ${worths.length}`;
   check(audit.rank === label, `H-4: under the money the header says "${label}" by Worth (${worths.map((p) => `${p.id} ${p.worth}`).join(', ')}), got "${audit.rank}"`);
-  check(audit.ship === `Export ship in month ${state.ship.arrives}: it buys the colony’s leftovers`, `H-6: This month names the ship in plain words, got "${audit.ship}"`);
-  check(audit.tools === 'beside', `H-7: at ${PHONE.viewport.width} px the map's tools stand beside the map, got ${audit.tools}`);
+  check(audit.ship === `Export ship in month ${state.ship.arrives}: it buys the colony’s leftovers.`, `H-6: the "?" sheet names the ship in plain words, got "${audit.ship}"`);
+  check(narrow.toolsAt === 'above', `D4: at ${PHONE.viewport.width} px the map's tools are one row above the map, got ${narrow.toolsAt}`);
   // H-4: a tap on the rank opens the standings, every player's Worth and your own lines; Close shuts them.
   await planning.getByTestId('standing').click({ timeout });
   const sheet = planning.getByTestId('standings-sheet');
@@ -119,41 +132,48 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
   const newGovernor = state.politics?.governor === SEAT && state.politics.election?.stage === 'over';
   if (newGovernor) {
     check(narrow.nowTitle === 'Set the sales tax', `C66 (E-7): the new Governor's Now says "Set the sales tax", got "${narrow.nowTitle}"`);
-    check(/Then plan your month\. You are the new Governor/.test(narrow.nowDetail), `C66 (E-7): the new Governor's Now says to plan the month next, got "${narrow.nowDetail}"`);
+    check(/Then plan your month\. You are the new Governor/.test(nowDetail), `C66 (E-7): the new Governor's Now says to plan the month next, got "${nowDetail}"`);
   } else {
     check(narrow.nowTitle === 'Plan your month', `B-AC-14 (RULE-8): Now says "Plan your month", got "${narrow.nowTitle}"`);
-    check(/^Then press Ready\./m.test(narrow.nowDetail), `B-AC-14 (RULE-8): Now's detail starts "Then press Ready.", got "${narrow.nowDetail}"`);
-    check(/land grant/.test(narrow.nowDetail) && /Food/.test(narrow.nowDetail), `B-AC-14 (RULE-8): Now names the land grant as next and the short Food, got "${narrow.nowDetail}"`);
+    check(/^Then press Ready\./m.test(nowDetail), `B-AC-14 (RULE-8): Now's detail starts "Then press Ready.", got "${nowDetail}"`);
+    check(/land grant/.test(nowDetail) && /Food/.test(nowDetail), `B-AC-14 (RULE-8): Now names the land grant as next and the short Food, got "${nowDetail}"`);
   }
 
   let wide: Shown;
-  let wideTools: Audit['tools'] = 'elsewhere';
   try {
     await phone.setViewportSize(LAPTOP);
     wide = await read(phone);
-    wideTools = (await readAudit(phone)).tools;
   } finally {
     await phone.setViewportSize(PHONE.viewport);
   }
-  checkHub(wide, `${LAPTOP.width}×${LAPTOP.height}`, held);
+  checkHub(wide, `${LAPTOP.width}×${LAPTOP.height}`, TABS(politics));
   check(wide.onStage.marketStrip, `B-AC-14: at ${LAPTOP.width} px the store's prices sit under the map, on the stage`);
-  check(wideTools === 'above', `H-7: at ${LAPTOP.width} px the map's tools sit above the map, got ${wideTools}`);
-  return `roadmap ${audit.steps.join(' > ')}; strip "${audit.food}"; ${audit.rank}; tools beside the map at 844, above at 1440; desks ${narrow.desks.join(', ')} (office desks held: ${held.join(', ') || 'none'}); needs ${narrow.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
+  check(wide.toolsAt === 'above', `D4: at ${LAPTOP.width} px the map's tools sit above the map, got ${wide.toolsAt}`);
+  const plots = await theMapIgnoresTheNeeds(phone, server, code);
+  return `${plots}; roadmap ${audit.steps.join(' > ')}; strip "${audit.food}"; ${audit.rank}; tools above the map at 844 and 1440; tabs ${narrow.tabs.join(', ')} (offices held: ${held.join(', ') || 'none'}); needs ${colony.needs.map((n) => `${n.good} ${verdict(n.good as Good)}`).join(', ')}; now first at 844 and 1440; stage filled ${(narrow.fill * 100).toFixed(0)}% / ${(wide.fill * 100).toFixed(0)}%`;
 }
 
-function checkHub(f: Shown, at: string, held: readonly string[]): void {
+function checkHub(f: Shown, at: string, tabs: readonly string[]): void {
   check(f.phase === 'planning', `B-AC-14: planning still shows at ${at}, got ${f.phase}`);
-  check(f.onStage.agenda, `B-AC-14: at ${at} "This month" (agenda) is on the stage`);
-  check(f.onStage.map, `B-AC-14: at ${at} the colony map (hub-map) is on the stage`);
-  check(f.thisMonthInColony, `B-AC-14: at ${at} the Colony desk holds "This month you need"`);
-  const foreign = f.desks.filter((d) => (OFFICE_DESKS as readonly string[]).includes(d) && !held.includes(d));
-  check(foreign.length === 0, `B-AC-14 (negative): a player sees no desk of an office they do not hold, got ${foreign.join(', ')}`);
-  const expected = [...held, ...TODAYS_DESKS];
-  check(JSON.stringify(f.desks) === JSON.stringify(expected), `B-AC-14: at ${at} the desks drawn are exactly ${expected.join(', ')}, got ${f.desks.join(', ')}`);
+  check(f.onStage.agenda, `B-AC-14: at ${at} "This month" (agenda) is on Overview's stage`);
+  check(f.onStage.map, `B-AC-14: at ${at} the colony map (hub-map) is on Overview's stage`);
+  check(JSON.stringify(f.tabs) === JSON.stringify(tabs), `B-AC-14 (D3): at ${at} the tabs drawn are exactly ${tabs.join(', ')}, got ${f.tabs.join(', ')}`);
   check(JSON.stringify(f.tools) === JSON.stringify(TODAYS_TOOLS), `B-AC-14: at ${at} the map tools drawn are exactly ${TODAYS_TOOLS.join(', ')}, got ${f.tools.join(', ')}`);
   check(f.reviewLabels.length === 0, `C17: unbuilt slots are not drawn, and no SOON or slice label shows; got ${f.reviewLabels.join(' | ')}`);
   check(f.nowFirst, `B-AC-12: at ${at} planning's rail opens with Now`);
   check(f.fill >= FILL, `B-AC-12: at ${at} the hub fills ${(f.fill * 100).toFixed(0)}% of the stage's height, under ${FILL * 100}%`);
+}
+
+/** The Colony tab's This month: its need rows (the build sites carry need-<project>-<good> ids of their own). */
+async function readColony(phone: Page): Promise<{ needs: { good: string; text: string }[]; thisMonthInColony: boolean }> {
+  return phone.evaluate(async () => {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const body = document.querySelector('[data-phase=planning] [data-testid=tab-body-colony]');
+    return {
+      needs: [...(body?.querySelectorAll('[data-testid=this-month] [data-testid^="need-"]') ?? [])].map((n) => ({ good: n.getAttribute('data-testid')!.slice('need-'.length), text: (n as HTMLElement).innerText })),
+      thisMonthInColony: !!body?.querySelector('[data-testid=this-month]'),
+    };
+  });
 }
 
 /** One read of the planning screen, after a paint, in one pass. */
@@ -163,9 +183,10 @@ async function read(phone: Page): Promise<Shown> {
     const screen = document.querySelector('[data-phase]');
     const stage = screen?.querySelector('[data-testid=stage]');
     const guide = screen?.querySelector('[data-testid=guide]');
-    const body = guide?.querySelector('header')?.nextElementSibling;
-    const tabs = screen?.querySelector('[data-testid=desks]');
+    const tabs = screen?.querySelector('[data-testid=tabs]');
     const content = stage?.firstElementChild;
+    const toolRow = screen?.querySelector('[data-testid=map-tools]')?.getBoundingClientRect();
+    const mapBox = screen?.querySelector('[data-testid=hub-map]')?.getBoundingClientRect();
     const stageBox = stage?.getBoundingClientRect();
     const pad = stage ? parseFloat(getComputedStyle(stage).paddingTop) + parseFloat(getComputedStyle(stage).paddingBottom) : 0;
     const shell = screen?.querySelector('[data-testid=game-shell]') as HTMLElement | null;
@@ -176,15 +197,12 @@ async function read(phone: Page): Promise<Shown> {
         map: !!stage?.querySelector('[data-testid=hub-map]'),
         marketStrip: !!stage?.querySelector('[data-testid=market-strip]') && (stage.querySelector('[data-testid=market-strip]') as HTMLElement).offsetParent !== null,
       },
-      desks: [...(tabs?.querySelectorAll('[data-testid^="desk-"]') ?? [])].map((d) => d.getAttribute('data-testid')!.slice('desk-'.length)),
+      tabs: [...(tabs?.querySelectorAll('[role=tab]') ?? [])].map((d) => d.getAttribute('data-testid')!.slice('tab-'.length)),
       tools: [...(screen?.querySelectorAll('[data-testid=map-tools] [data-testid^="tool-"]') ?? [])].map((t) => t.getAttribute('data-testid')!.slice('tool-'.length)),
-      // Only the This-month rows: the colony's build sites carry need-<project>-<good> ids of their own.
-      needs: [...(guide?.querySelectorAll('[data-testid=this-month] [data-testid^="need-"]') ?? [])].map((n) => ({ good: n.getAttribute('data-testid')!.slice('need-'.length), text: (n as HTMLElement).innerText })),
-      thisMonthInColony: !!guide?.querySelector('[data-testid=desk-body-colony] [data-testid=this-month]'),
-      // Now first: the card itself, or the card a folding Now wraps with its fold button (E-9).
-      nowFirst: !!body?.firstElementChild && !!guide?.querySelector('[data-testid=now]') && body.firstElementChild.contains(guide.querySelector('[data-testid=now]')),
+      toolsAt: !toolRow || !mapBox ? 'elsewhere' : toolRow.bottom <= mapBox.top + 0.5 ? 'above' : 'elsewhere',
+      // Now first: in the rail's head, the header (the phase line, then the Now line), above the rail's body.
+      nowFirst: !!guide?.querySelector('header [data-testid=now]'),
       nowTitle: guide?.querySelector('[data-testid=now-title]')?.textContent ?? '',
-      nowDetail: (guide?.querySelector('[data-testid=now]') as HTMLElement | null)?.innerText ?? '',
       reviewLabels: (shell?.innerText ?? '').split('\n').filter((l) => /\bSOON\b|\bSLICE\b|\bWS7\b/.test(l)),
       fill: content && stageBox ? content.getBoundingClientRect().height / (stageBox.height - pad) : 0,
     };
@@ -202,19 +220,16 @@ type Audit = {
   foodRed: boolean;
   rank: string;
   ship: string;
-  /** Where the map's tools stand against the map: beside it, above it, or neither. */
-  tools: 'beside' | 'above' | 'elsewhere';
 };
 
-/** One read of the audit's parts, after a paint. Kept a string: tsx would wrap named functions in a helper the page lacks. */
+/** One read of the audit's parts, the "?" sheet open, after a paint. Kept a string: tsx would wrap named functions in a helper the page lacks. */
 const READ_AUDIT = `(async () => {
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const s = document.querySelector('[data-phase=planning]');
+  const p = document.querySelector('[data-phase=planning]');
+  const s = p?.querySelector('[data-testid=help-sheet]');
   const text = (sel) => s?.querySelector(sel)?.innerText?.trim() ?? '';
   const roadmap = s?.querySelector('[data-testid=roadmap]');
   const food = s?.querySelector('[data-testid=needs-strip] [data-testid=strip-food]');
-  const tools = s?.querySelector('[data-testid=map-tools]')?.getBoundingClientRect();
-  const map = s?.querySelector('[data-testid=hub-map]')?.getBoundingClientRect();
   return {
     steps: [...(roadmap?.querySelectorAll('[data-testid^="step-"]') ?? [])].map((li) => li.dataset.testid.slice('step-'.length)),
     lit: roadmap?.querySelector('[aria-current=step]')?.dataset.testid?.slice('step-'.length) ?? null,
@@ -222,9 +237,8 @@ const READ_AUDIT = `(async () => {
     offices: !!roadmap?.querySelector('[data-testid=roadmap-offices]'),
     food: food?.innerText?.replace(/\\s+/g, ' ').trim() ?? '',
     foodRed: !!food?.classList.contains('text-alert'),
-    rank: text('[data-testid=standing-rank]'),
-    ship: text('[data-testid=ship-line]'),
-    tools: !tools || !map ? 'elsewhere' : tools.right <= map.left + 0.5 && tools.top < map.bottom ? 'beside' : tools.bottom <= map.top + 0.5 ? 'above' : 'elsewhere',
+    rank: p?.querySelector('[data-testid=standing-rank]')?.innerText?.trim() ?? '',
+    ship: text('[data-testid=help-ship]'),
   };
 })()`;
 
@@ -291,22 +305,22 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     await header.filter({ hasText: count }).waitFor({ timeout });
     const waiting = planning(p).getByTestId('waiting-for');
     await waiting.getByTestId(`waiting-${leftId}`).waitFor({ timeout });
-    const named = (await waiting.getByTestId(`waiting-${leftId}`).innerText()).trim();
+    const named = (await waiting.getByTestId(`waiting-${leftId}`).getByTestId('waiting-name').innerText()).trim();
     check(named === (p === left ? 'you' : left.name), `B-AC-19: ${p.name}'s phone names ${p === left ? 'her as "you"' : left.name} as still planning, got "${named}"`);
     const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
     check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);
     if (p === left) continue;
-    // Pressing Ready is a new step, so the Now card re-mounts folded: its title alone, then a tap opens it.
-    const folded = planning(p).locator('button[data-testid=now][aria-expanded=false]');
-    await folded.waitFor({ timeout });
-    const title = (await folded.getByTestId('now-title').innerText()).trim();
-    check(title === "You're ready", `B-AC-19: once Ready, ${p.name}'s folded Now reads exactly "You're ready", no names in it, got "${title}"`);
-    await folded.click();
-    const now = (await planning(p).getByTestId('now').innerText()).trim();
-    check(now.includes(`Waiting for ${left.name}.`), `B-AC-19: once Ready, ${p.name}'s Now, opened, names ${left.name} as who the table waits for, got "${now}"`);
-    // Folded again, so the step's shots show the card as the table sees it.
-    await planning(p).getByTestId('now-fold').click();
-    await folded.waitFor({ timeout });
+    // Once Ready, the Now line is its title alone (D1); its "?" opens the month in full, Now's detail with it (D2).
+    const line = planning(p).getByTestId('now-title').filter({ hasText: "You're ready" });
+    await line.waitFor({ timeout });
+    const title = (await line.innerText()).trim();
+    check(title === "You're ready", `B-AC-19: once Ready, ${p.name}'s Now line reads exactly "You're ready", no names in it, got "${title}"`);
+    await planning(p).getByTestId('help-open').click({ timeout });
+    const now = (await planning(p).getByTestId('help-now').innerText()).trim();
+    check(now.includes(`Waiting for ${left.name}.`), `B-AC-19: once Ready, ${p.name}'s Now, in the "?" sheet, names ${left.name} as who the table waits for, got "${now}"`);
+    // Shut again, so the step's shots show the hub as the table sees it.
+    await planning(p).getByTestId('help-close').click({ timeout });
+    await planning(p).getByTestId('help-sheet').waitFor({ state: 'detached', timeout });
   }
   // The TV's side column at its fullest: the three news lines the server keeps, beside the waiting band.
   busyNews(room);
@@ -463,91 +477,94 @@ const GOV_SIZES = [
   { width: 844, height: 390 },
   { width: 667, height: 375 },
 ] as const;
-/** E-11: at 844 × 390 the tax row and its verdict end at least this far above the footer (the PM's measured floor). */
+/** E-11: at 844 × 390 the tax row and its verdict end at least this far above the Governor sub-tab's visible end (the PM's measured floor). */
 const GOV_MARGIN_844 = 6;
-/** Every desk tab, on the smaller phone: at least this wide and tall. */
+/** Every tab and sub-tab, on the smaller phone: at least this wide and tall. */
 const TAB_MIN = 32;
 
-/** One read of the Governor's rail: where the row and verdict end against the footer, and where the table chat is. */
+/** One read of the Governor's sub-tab and the rail: where the row and verdict end against the body's visible end, and where the table chat is. */
 type GovFit = {
-  footerTop: number;
+  bodyBottom: number;
   rowBottom: number;
   verdictBottom: number;
   verdict: string;
-  railScroll: number;
-  /** The seat row in the rail's body, under the desk (C20 on a phone), not its header. */
+  bodyScroll: number;
+  /** The seat row in the rail's body (C20 on a phone), not its header. */
   seatRow: boolean;
   ticker: number;
   names: boolean;
-  nowFolded: boolean;
+  nowLine: boolean;
   desk: string | null;
   tabs: { id: string; w: number; h: number; clipped: boolean }[];
 };
 
-/** Reads the rail after a paint, in one pass. Kept a string: tsx would wrap named functions in a helper the page lacks. */
+/** Reads the screen after a paint, in one pass. Kept a string: tsx would wrap named functions in a helper the page lacks. */
 const READ_GOV = `(async () => {
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const g = document.querySelector('[data-phase=planning] [data-testid=guide]');
-  const box = (sel) => g?.querySelector(sel)?.getBoundingClientRect() ?? null;
-  const footer = box('[data-testid=actions]');
+  const p = document.querySelector('[data-phase=planning]');
+  const g = p?.querySelector('[data-testid=guide]');
+  const body = p?.querySelector('[data-testid=sub-body-laws]');
+  const box = (sel) => p?.querySelector(sel)?.getBoundingClientRect() ?? null;
   const row = box('[data-testid=governor-tax-row]');
   const verdict = box('[data-testid=governor-verdict]');
-  const tabs = [...(g?.querySelectorAll('[data-testid=desks] [role=tab]') ?? [])].map((t) => {
+  const tabs = [...(p?.querySelectorAll('[data-testid=tabs] [role=tab], [data-testid=sub-tabs] [role=tab]') ?? [])].map((t) => {
     const r = t.getBoundingClientRect();
-    // The label is the tab's own text: whole when its box sits inside the tab's (a badge may overhang by design).
-    const label = document.createRange();
-    const text = [...t.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
-    if (text) label.selectNodeContents(text);
-    const l = text ? label.getBoundingClientRect() : r;
-    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: l.left < r.left - 0.5 || l.right > r.right + 0.5 };
+    // The label is the tab's own words: whole when nothing of them is cut short, and when their box sits inside the
+    // tab's (a truncating span is only as wide as its text, so the box check is the one that fails; a badge may overhang).
+    const label = [...t.querySelectorAll('span')].find((el) => el.textContent.trim() && !el.querySelector('span'));
+    const l = label ? label.getBoundingClientRect() : r;
+    const cut = !!label && label.scrollWidth > label.clientWidth + 0.5;
+    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: cut || l.left < r.left - 0.5 || l.right > r.right + 0.5 };
   });
   return {
-    footerTop: footer?.top ?? NaN,
+    bodyBottom: body?.getBoundingClientRect().bottom ?? NaN,
     rowBottom: row?.bottom ?? NaN,
     verdictBottom: verdict?.bottom ?? NaN,
-    verdict: g?.querySelector('[data-testid=governor-verdict] [aria-hidden]')?.textContent ?? '',
-    railScroll: g?.querySelector('header + div')?.scrollTop ?? -1,
+    verdict: p?.querySelector('[data-testid=governor-verdict] [aria-hidden]')?.textContent ?? '',
+    bodyScroll: body?.scrollTop ?? -1,
     seatRow: !!g?.querySelector('header + div [data-testid=seat-row]') && !g?.querySelector('header [data-testid=seat-row]'),
     ticker: g?.querySelectorAll('[data-testid=chat-ticker] li').length ?? 0,
     // Shown, not just in the markup: a name kept for a screen reader only would not count.
     names: (() => { const w = g?.querySelector('[data-testid=actions] [data-testid=waiting-for]'); return !!w && !w.closest('.sr-only') && w.getBoundingClientRect().height > 1; })(),
-    nowFolded: g?.querySelector('[data-testid=now]')?.tagName === 'BUTTON',
-    desk: g?.querySelector('[data-testid=desks] [aria-selected=true]')?.dataset.testid ?? null,
+    nowLine: !!g?.querySelector('section[data-testid=now] [data-testid=now-title]'),
+    desk: p?.querySelector('[data-testid=sub-tabs] [aria-selected=true]')?.dataset.testid ?? null,
     tabs,
   };
 })()`;
 
 /**
- * E-11 (C66, the Governor's desk with the table chat): Lena, the sitting Governor, plans at `size` with the chat's seat
- * row and a two-line ticker, and Ossa still planning. Under C20's rule on a phone the chat follows the rail's content,
- * so nothing folds: the footer names who is still planning, the ticker keeps both lines, and the seat row sits under the
- * desk. With her desk open the tax row and its verdict end above the footer, without the rail scrolling, as the desk
- * opens over her promise, after −, and after Set (at 844 × 390 by at least GOV_MARGIN_844); railFits reads the tax row
- * as it opens. Every desk tab is at least TAB_MIN square, its label whole. Clicks are DOM clicks, so the page never scrolls the rail to reach a button: what is measured is
- * what shows untouched. With MULE_SHOTS set to a directory, it saves the screen as the desk opens and after Set there.
- * Returns the numbers, to log.
+ * E-11 (C66, SB-2: the Governor's desk on its sub-tab, the table chat in the rail): Lena, the sitting Governor, plans at
+ * `size` with the chat's seat row and a two-line ticker, and Ossa still planning. Her Now line is the door to the
+ * Governor's sub-tab (E-9, D8); its tax row and verdict end inside the sub-tab's visible body, without it scrolling, as
+ * the desk opens over her promise, after −, and after Set (at 844 × 390 by at least GOV_MARGIN_844). The rail keeps
+ * the Now line, the footer names who is still planning, the ticker keeps both lines, and the seat row sits in the rail's
+ * body (C20). Every tab and sub-tab is at least TAB_MIN square, its label whole. Clicks are DOM clicks, so the page
+ * never scrolls to reach a button: what is measured is what shows untouched. With MULE_SHOTS set to a directory, it
+ * saves the screen as the desk opens and after Set there. Returns the numbers, to log.
  */
 async function governorDeskFits(lena: Page, size: { width: number; height: number }, timeout = 3_000): Promise<string> {
   const at = `${size.width}×${size.height}`;
   await lena.setViewportSize(size);
-  const guide = lena.locator('[data-phase=planning] [data-testid=guide]');
-  await guide.getByTestId('governor-tax-row').waitFor({ timeout });
+  const planning = lena.locator('[data-phase=planning]');
+  // The Governor's sub-tab asks first: from Overview the Now line is the door to it (D8); nothing opens it by itself.
+  await planning.getByTestId('now-go').evaluate((el: HTMLElement) => el.click());
+  await planning.getByTestId('governor-tax-row').waitFor({ timeout });
   const read = () => lena.evaluate(READ_GOV) as Promise<GovFit>;
-  const click = (id: string) => guide.getByTestId(id).evaluate((el: HTMLElement) => el.click());
+  const click = (id: string) => planning.getByTestId(id).evaluate((el: HTMLElement) => el.click());
   const floor = size.width === GOV_SIZES[0].width ? GOV_MARGIN_844 : 0;
   const seen: string[] = [];
   const fits = (f: GovFit, state: string, verdict: string) => {
-    check(f.desk === 'desk-governor', `E-11 at ${at} (${state}): the Governor's desk is open, got ${f.desk}`);
-    check(f.seatRow, `E-11 at ${at} (${state}): the chat's seat row is in the rail's body, under the desk (C20)`);
-    check(f.nowFolded, `E-11 at ${at} (${state}): the Now card is folded to its title (E-9)`);
+    check(f.desk === 'sub-laws', `E-11 at ${at} (${state}): the Governor's sub-tab is open, got ${f.desk}`);
+    check(f.seatRow, `E-11 at ${at} (${state}): the chat's seat row is in the rail's body (C20)`);
+    check(f.nowLine, `E-11 at ${at} (${state}): the rail keeps the Now line (D1)`);
     check(f.verdict === verdict, `E-11 at ${at} (${state}): the verdict reads "${verdict}", got "${f.verdict}"`);
-    check(f.railScroll === 0, `E-11 at ${at} (${state}): the rail did not scroll, got scrollTop ${f.railScroll}`);
-    const row = f.footerTop - f.rowBottom;
-    const chip = f.footerTop - f.verdictBottom;
-    seen.push(`${state}: row ${f.rowBottom.toFixed(1)}, verdict ${f.verdictBottom.toFixed(1)}, footer ${f.footerTop.toFixed(1)} (${row.toFixed(1)} / ${chip.toFixed(1)} px clear)`);
-    check(row >= floor && chip >= floor, `E-11 at ${at} (${state}): the tax row and its verdict end at least ${floor} px above the footer, got row ${f.rowBottom.toFixed(1)} and verdict ${f.verdictBottom.toFixed(1)} against footer ${f.footerTop.toFixed(1)}`);
-    check(f.names, `E-11 at ${at} (${state}): with the Governor's desk open the footer still names who is still planning (no fold)`);
-    check(f.ticker === 2, `E-11 at ${at} (${state}): with the Governor's desk open the ticker keeps its two lines (no fold), got ${f.ticker}`);
+    check(f.bodyScroll === 0, `E-11 at ${at} (${state}): the sub-tab did not scroll, got scrollTop ${f.bodyScroll}`);
+    const row = f.bodyBottom - f.rowBottom;
+    const chip = f.bodyBottom - f.verdictBottom;
+    seen.push(`${state}: row ${f.rowBottom.toFixed(1)}, verdict ${f.verdictBottom.toFixed(1)}, body ends ${f.bodyBottom.toFixed(1)} (${row.toFixed(1)} / ${chip.toFixed(1)} px clear)`);
+    check(row >= floor && chip >= floor, `E-11 at ${at} (${state}): the tax row and its verdict end at least ${floor} px inside the sub-tab's visible end, got row ${f.rowBottom.toFixed(1)} and verdict ${f.verdictBottom.toFixed(1)} against ${f.bodyBottom.toFixed(1)}`);
+    check(f.names, `E-11 at ${at} (${state}): with the Governor's sub-tab open the footer still names who is still planning (no fold)`);
+    check(f.ticker === 2, `E-11 at ${at} (${state}): with the Governor's sub-tab open the ticker keeps its two lines (no fold), got ${f.ticker}`);
   };
 
   const shots = process.env.MULE_SHOTS;
@@ -555,26 +572,27 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
   const opened = await read();
   await shot('opens');
   if (size.width === GOV_SIZES[1].width) {
-    const tabs = opened.tabs.map((t) => `${t.id.slice('desk-'.length)} ${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
+    const tabs = opened.tabs.map((t) => `${t.id} ${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
     const small = opened.tabs.filter((t) => t.w < TAB_MIN - 0.01 || t.h < TAB_MIN - 0.01 || t.clipped);
-    check(opened.tabs.length >= 5 && small.length === 0, `E-11 at ${at}: every desk tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${tabs}`);
+    check(opened.tabs.length >= 6 && small.length === 0, `E-11 at ${at}: every tab and sub-tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${tabs}`);
     seen.push(`tabs ${tabs}`);
-    // Test fixture: a sixth desk, as an office holder may have (E-11 sizes the row for six). No game draws six today, so
-    // the Council's tab, the longest word, is drawn twice for one read, then taken away.
-    await guide.getByTestId('desk-council').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'sixth-desk' })));
-    const six = (await read()).tabs;
-    await lena.evaluate(() => document.getElementById('sixth-desk')?.remove());
-    const sixTabs = six.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
-    check(six.length === opened.tabs.length + 1 && six.every((t) => t.w >= TAB_MIN - 0.01 && t.h >= TAB_MIN - 0.01 && !t.clipped), `E-11 at ${at}: six desk tabs each keep at least ${TAB_MIN}×${TAB_MIN} with the label whole, got ${sixTabs}`);
-    seen.push(`six tabs ${sixTabs}`);
+    // Test fixture: a fourth sub-tab beside Laws, Budget and Elections, as the Sheriff's will be for its holder. No game
+    // draws it here, so Elections, the longest label, is drawn twice for one read, then taken away.
+    await planning.getByTestId('sub-elections').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
+    const more = (await read()).tabs.filter((t) => t.id.startsWith('sub-'));
+    await lena.evaluate(() => document.getElementById('extra-sub')?.remove());
+    const moreTabs = more.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
+    check(more.length === opened.tabs.filter((t) => t.id.startsWith('sub-')).length + 1 && more.every((t) => t.w >= TAB_MIN - 0.01 && t.h >= TAB_MIN - 0.01 && !t.clipped), `E-11 at ${at}: one sub-tab more, each keeps at least ${TAB_MIN}×${TAB_MIN} with the label whole, got ${moreTabs}`);
+    seen.push(`one more sub-tab ${moreTabs}`);
   }
   fits(opened, 'as it opens', 'breaks it');
-  seen.push(`railFits ${await railFits(lena, { key: 'governor-tax-row', clear: { [GOV_SIZES[0].width]: GOV_MARGIN_844 }, sizes: [size] })}`);
+  // C20 in the rail beside it: its key element (Now) above the footer, the seat row under it in order, each seat tall enough.
+  seen.push(`railFits ${await railFits(lena, { key: 'now', sizes: [size] })}`);
   await click('tax-down');
-  await guide.getByTestId('gov-within').waitFor({ timeout });
+  await planning.getByTestId('gov-within').waitFor({ timeout });
   fits(await read(), 'after −', 'within');
   await click('tax-confirm');
-  await guide.getByTestId('gov-done').waitFor({ timeout });
+  await planning.getByTestId('gov-done').waitFor({ timeout });
   await shot('set');
   fits(await read(), 'after Set', 'done');
   return `${at}: ${seen.join('; ')}`;
@@ -653,7 +671,7 @@ export async function governorsDeskFits({ browser, base, server }: { browser: Br
       await holding(server, code, async () => {
         seatGovernor(room, lenaId);
         const guide = lena.locator('[data-phase=planning] [data-testid=guide]');
-        await guide.getByTestId('desk-governor').waitFor({ timeout });
+        await lena.locator('[data-phase=planning]').getByTestId('tab-politics').filter({ hasText: 'Governor' }).waitFor({ timeout });
         await guide.getByTestId('ready-count').filter({ hasText: '2 / 4 READY' }).waitFor({ timeout });
         const chat = room as unknown as { chat: (from: string, text: string) => void };
         for (const line of GOV_LINES) chat.chat(ossaId, line);
@@ -667,4 +685,98 @@ export async function governorsDeskFits({ browser, base, server }: { browser: Br
     }
   }
   return seen.join(' | ');
+}
+
+/**
+ * B-AC-14 (PM rulings on #723 and #751, carried to SB-2's Overview): Overview's map plot is the same size whatever the
+ * needs say, at 844×390 and at 667×375: everything OK on small figures (no Short row in This month), Water short, all
+ * three short (the longest Short row), two- and three-digit holdings, and short goods beside a three-digit one. The
+ * needs strip is the "?" sheet's now (D2): there, at 844 it is one line in every case, and at both sizes no good is cut
+ * off at its edge. Prints what it measured, so CI's log, in CI's fonts, is the evidence. Seeded on the server with the
+ * clock held, and undone.
+ */
+export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, code: string, timeout = 2_000): Promise<string> {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState }; broadcast(): void } | undefined;
+  check(room, `a room ${code} on the server`);
+  return holding(server, code, async () => {
+    const state = room.game.state;
+    const me = state.players.find((p) => p.id === SEAT);
+    check(me, `seat ${SEAT} in the game`);
+    const need = monthNeeds(state, SEAT);
+    check(need.food > 0 && need.water > 0 && need.energy > 0, `B-AC-14: the seat needs Food, Water and Energy this month, got ${need.food}, ${need.water} and ${need.energy}`);
+    const before = { food: me.stock.food, water: me.stock.water, energy: me.stock.energy };
+    const planning = phone.locator('[data-phase=planning]');
+    type Stocks = { food: number; water: number; energy: number };
+    const each = (n: number): Stocks => ({ food: n, water: n, energy: n });
+    const cases: [string, Stocks][] = [
+      ['all OK', { food: need.food, water: need.water, energy: need.energy }],
+      ['Water short', { food: need.food, water: 0, energy: need.energy }],
+      ['all short', each(0)],
+      ['20 of each', each(20)],
+      ['120 of each', each(120)],
+      ['Food and Energy short, 120 Water', { food: 0, water: 120, energy: 0 }],
+    ];
+    type Read = { plot: number; strip: number; rows: number; label: number; cut: string[] };
+    /** The plot's side and the strip's shape with the seat's stock at `stock`, once the strip shows it. */
+    const readWith = async (stock: Stocks): Promise<Read> => {
+      Object.assign(me.stock, stock);
+      room.broadcast();
+      // The strip in the "?" sheet first: it shows the new stock's figures, so once it does, the stock has drawn (20 of
+      // each and 120 of each leave This month alike).
+      await planning.getByTestId('help-open').click({ timeout });
+      for (const g of ['food', 'water', 'energy'] as const) {
+        const shows = stock[g] >= need[g] ? '✓' : `short ${need[g] - stock[g]}`;
+        await planning.getByTestId(`strip-${g}`).filter({ hasText: `${stock[g]} of ${need[g]}` }).filter({ hasText: shows }).waitFor({ timeout });
+      }
+      const strip = await phone.evaluate(async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const strip = document.querySelector('[data-phase=planning] [data-testid=help-sheet] [data-testid=needs-strip]')!;
+        const box = strip.getBoundingClientRect();
+        const goods = [...strip.querySelectorAll('[data-testid^=strip-]')];
+        const label = strip.firstElementChild as HTMLElement;
+        const tops = new Set([label, ...goods].map((g) => Math.round(g.getBoundingClientRect().top)));
+        return {
+          strip: box.height,
+          rows: tops.size,
+          label: label.getBoundingClientRect().width,
+          // A good whose box reaches past the strip's is cut off where the strip clips it.
+          cut: goods.filter((g) => g.getBoundingClientRect().right > box.right + 0.5 || g.getBoundingClientRect().bottom > box.bottom + 0.5).map((g) => g.getAttribute('data-testid')!),
+        };
+      });
+      await planning.getByTestId('help-close').click({ timeout });
+      await planning.getByTestId('help-sheet').waitFor({ state: 'detached', timeout });
+      // Then Overview: This month's Short row, or none, as the stock says, and the plot as it stands.
+      const short = (['food', 'water', 'energy'] as const).filter((g) => stock[g] < need[g]);
+      const row = planning.getByTestId('agenda-needs');
+      if (short.length > 0) await row.filter({ hasText: `Short ${need[short[0]!] - stock[short[0]!]}` }).waitFor({ timeout });
+      else await row.waitFor({ state: 'detached', timeout });
+      const plot = await phone.evaluate(async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const p = document.querySelector('[data-phase=planning] [data-testid=hub-map] [data-testid^=map-plot-]')!.getBoundingClientRect();
+        return Math.min(p.width, p.height);
+      });
+      return { plot, ...strip };
+    };
+    const lines: string[] = [];
+    try {
+      for (const size of [PHONE.viewport, PHONE_SMALL.viewport]) {
+        await phone.setViewportSize(size);
+        const at = `${size.width}×${size.height}`;
+        const reads: Read[] = [];
+        for (const [, stock] of cases) reads.push(await readWith(stock));
+        const seen = cases.map(([name], i) => `${name}: plot ${reads[i]!.plot.toFixed(1)} px, strip ${reads[i]!.strip.toFixed(1)} px in ${reads[i]!.rows} row(s), label ${reads[i]!.label.toFixed(0)} px`).join('; ');
+        console.log(`B-AC-14 at ${at}: ${seen}`);
+        const plots = reads.map((r) => r.plot);
+        check(Math.max(...plots) - Math.min(...plots) < 0.05, `B-AC-14: at ${at} Overview's map plot must not change with the needs: ${seen}`);
+        for (const [i, r] of reads.entries()) check(r.cut.length === 0, `B-AC-14: at ${at} with ${cases[i]![0]} no good is cut off at the strip's edge, got ${r.cut.join(', ')}`);
+        if (size === PHONE.viewport) for (const [i, r] of reads.entries()) check(r.rows === 1, `B-AC-14: at ${at} the needs strip is one line with ${cases[i]![0]}, got ${r.rows} rows`);
+        lines.push(`${plots[0]!.toFixed(1)} px at ${at}`);
+      }
+    } finally {
+      Object.assign(me.stock, before);
+      room.broadcast();
+      await phone.setViewportSize(PHONE.viewport);
+    }
+    return `the plot holds ${lines.join(' and ')} whatever the needs say`;
+  });
 }

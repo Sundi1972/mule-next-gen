@@ -72,6 +72,9 @@ export const EVENT_ENTRY = {
   walkout: { key: 'walkout', motion: 'plot', look: `The player’s plots of one good are struck in turn, each down to ${percent(SOCIAL_EVENTS.player.walkout.output)}.` },
   loyalCrew: { key: 'loyalCrew', motion: 'plot', look: 'One plot glows and makes 1 more.' },
   blamedForUnrest: { key: 'blamedForUnrest', motion: 'ledger', look: 'The player’s reputation chip drops: fewer votes.' },
+  // Slice 4's sabotage, the approved mock's look (design/mocks/politics-p2 src/show/SabotageFx.tsx, Heiko 8 Nov).
+  powerCut: { key: 'powerCut', motion: 'plot', look: 'A spark runs into one plot; it flickers and goes dark, and stays dark this production. Caught: a guard’s shield or a searchlight flashes on it, then the “Caught!” stamp names the saboteur.' },
+  marketRumour: { key: 'marketRumour', motion: 'store', look: 'A whisper bubble at the store; the good’s price tag tips 25% up or down once it takes. Caught: the “Caught!” stamp names the saboteur.' },
 } satisfies { [K in ShowEventKey]?: EventEntry & { key: K } };
 
 /** How an event moves: its entry's motion, or 'plot' (no travel) for a key with no entry yet. */

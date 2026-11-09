@@ -10,18 +10,18 @@ import { loadGroundsManifest } from '../src/components/Grounds';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { ColonyDesk } from '../src/phone/hub/desks';
-import { AgendaRow, Hub } from '../src/phone/hub/Hub';
+import { Hub } from '../src/phone/hub/Hub';
 import { ColonyWithFacts } from '../src/phone/hub/politics/Colony';
 import { CouncilBody } from '../src/phone/hub/politics/Council';
 import { ElectionDay, forgetPicks, pickOn } from '../src/phone/hub/politics/ElectionDay';
 import { GovernorDesk, setState, type SentTax } from '../src/phone/hub/politics/Governor';
 import { OfficesLine } from '../src/phone/hub/politics/Offices';
 import { PromiseSheet } from '../src/phone/hub/politics/Run';
-import { electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
+import { ELECTION_DAY_STAGE, electionNow, electionReadyWords } from '../src/phone/hub/politics/slots';
+import type { HubSeat } from '../src/phone/hub/slots';
 import { howWords } from '../src/phone/hub/politics/words';
-import { HUB_SLOTS } from '../src/phone/hub/today';
+import { TAB_SLOTS } from '../src/phone/hub/today';
 import { TvElection } from '../src/table/TvElection';
-import { drawnSlots } from '../src/phone/hub/slots';
 
 const player = (id: string, name: string, slot: number, plots = 0): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1), player('s3', 'Kai', 2), player('s4', 'Brix', 3), player('s5', 'Pip', 4)];
@@ -138,7 +138,11 @@ function onPhone(game: MuleView, desk: () => ReactElement | null, boards = 1, co
 
 /** Lena's whole planning hub, as the game draws it. */
 function inHub(game: MuleView, boards = 1, code = 'MULE'): string {
-  const hub = () => createElement(Hub, { slots: HUB_SLOTS });
+  // Election day's announce and ballot are Elections' sub-tab's now, and a static render opens Overview: these rows read the card, its
+  // Rail, Now and the ready bar, so the hub is drawn with the stage as host for them. The sub-tab itself is tested in politics-tabs.
+  const open = ({ view }: HubSeat) => view.politics?.election !== null && view.politics?.election?.stage !== 'over';
+  const slots = { ...TAB_SLOTS, stage: [{ ...ELECTION_DAY_STAGE, show: open }, ...TAB_SLOTS.stage.slice(1)] };
+  const hub = () => createElement(Hub, { slots });
   return onPhone(game, hub, boards, code);
 }
 
@@ -346,26 +350,14 @@ describe('election day on the phone (C66, E-2)', () => {
   const announce = (month: number, canRun: CanRun, extra: Partial<ElectionView> = {}) =>
     view(politics({ next: 7, pay: { governor: 50 }, candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, election: election({ waitingFor: SEATS, ...extra }) }), me({ running: 'governor', canRun: { governor: canRun } }), { month });
 
-  it("T-AC-66: month 1's announce takes a run: the rail under Now holds the run block, its button live", () => {
-    const html = inHub(announce(1, true));
-    const guide = html.slice(html.indexOf('data-testid="guide"'));
-    expect(guide).toContain('data-testid="run-office"');
-    expect(guide.indexOf('data-testid="now"')).toBeLessThan(guide.indexOf('data-testid="run-office"'));
-    expect(disabled(html, 'change-promise')).toBe(false);
-    expect(textOf(html, 'running')).toBe("You run for Governor, promising up to 8% (it's 5% now).Withdraw");
-  });
+  // T-AC-66 and T-AC-67 are proved on the real hub, in the Elections sub-tab: hub-tabs.test.ts (SB-3 part 2).
 
-  it('T-AC-67: from month 4 announce shows no Run: no run block, no run or promise button anywhere on the phone', () => {
-    const html = inHub(announce(4, 'closed'));
-    expect(tagOf(html, 'announce')).toBeDefined();
-    for (const gone of ['run-office', 'run-governor', 'change-promise', 'promise-run', 'withdraw', 'agenda-run']) expect(html, gone).not.toContain(`data-testid="${gone}"`);
-  });
-
-  it('C66, E-2, E-4: the announcement takes the stage: election day, step 1, who runs on which promise, what the Governor does, then vote on your phone', () => {
+  it('C66, E-2, E-4: the announce card (drawn on the stage as host here): election day, step 1, who runs on which promise, what the Governor does, then vote on your phone', () => { // trace-allow: an existing test retitled when the announce and the ballot left the stage (SB-3)
     const html = inHub(announce(4, 'closed'));
     // The rail's phase name is one word, so it fits whole at 667 px; the stage card carries the full words.
     expect(html).toMatch(/>Election</);
-    expect(html).not.toMatch(/>Election day</);
+    expect(textOf(html, 'phase-title-row'), 'the phase word is one word').toMatch(/^Election(?! day)/);
+    expect(textOf(html, 'now-title')).toBe('Election day');
     expect(textOf(html, 'day-title')).toBe('Election day: Governor');
     expect(tagOf(html, 'election-step-1')).toMatch(/aria-current="step"/);
     expect(textOf(html, 'announce')).toContain('The colony elects its Governor for months 4 to 6. The candidates:');
@@ -400,7 +392,7 @@ describe('election day on the phone (C66, E-2)', () => {
       { month: 4, players: PLAYERS.map((p) => (p.id === 's3' ? { ...p, ready: true } : p.id === 's1' ? { ...p, plots: 7 } : p)) },
     );
 
-  it('C66, E-2, E-4: the ballot takes the stage: step 2, each candidate on a promise, Abstain, who has voted and never for whom', () => {
+  it('C66, E-2, E-4: the ballot card (drawn on the stage as host here): step 2, each candidate on a promise, Abstain, who has voted and never for whom', () => { // trace-allow: an existing test retitled when the announce and the ballot left the stage (SB-3)
     const html = inHub(ballot());
     expect(tagOf(html, 'election-step-2')).toMatch(/aria-current="step"/);
     expect(textOf(html, 'ballot-governor-s1')).toBe("Youup to 8% (it's 5% now)");
@@ -515,7 +507,16 @@ describe('election day on the phone (C66, E-2)', () => {
 
   it('C66, E-2: Now says each step of election day, and once you are done, whom it still waits for', () => {
     const now = (game: MuleView, ready = false) => electionNow({ view: game, me: game.me!, self: { ...game.players[0]!, ready } });
-    expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day: Governor', detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' });
+    // The Now line is one short line in the tabbed rail (667 px): the offices are in the detail; the card's own heading names them.
+    const asked = 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.';
+    expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day', detail: `Electing: Governor. ${asked}` });
+    const saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+    try {
+      expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day', detail: `Electing: Governor and Sheriff. ${asked}` });
+    } finally {
+      POLITICS.offices = saved;
+    }
     expect(now(announce(4, 'closed', { waitingFor: ['s2'] }), true)?.title).toBe("You're ready. Still waiting for Ossa");
     expect(now(ballot())).toMatchObject({ step: 2, title: 'Vote in secret' });
     expect(now(ballot(), true)?.title).toBe('You voted. Still waiting for Ossa, Brix and Pip');
@@ -835,21 +836,16 @@ describe("the new Governor's promise (C68, E-7)", () => {
 });
 
 describe('the hub door (E-1)', () => {
-  it('C66, E-1: "Throw your hat in the ring" leads This month in any month before an election, and names your candidacy once you run', () => {
-    /** "This month" as the hub draws it for Lena from HUB_SLOTS. */
-    const agenda = (game: MuleView) => {
-      const seat = { view: game, me: game.me!, self: game.players[0]! };
-      return onPhone(game, () => createElement(AgendaRow, { items: drawnSlots(HUB_SLOTS, seat).agenda, seat, note: '', onOpen: () => {} }));
-    };
-    const game = view(politics({ election: null }), me(), { month: 2 });
-    expect(textOf(agenda(game), 'agenda-run')).toBe('Throw your hat in the ringRun for Governor · election in month 4');
-    expect(agenda(game).match(/data-testid="agenda-([^"]+)"/)?.[1], 'first, and drawn strong').toBe('run');
-    expect(tagOf(agenda(game), 'agenda-run')).toMatch(/border-2 border-holo/);
-    expect(HUB_SLOTS.agenda.find((a) => a.key === 'run')?.opens).toEqual({ desk: 'council', focus: 'run' });
+  it('C66, E-1: "Throw your hat in the ring" is in This month in any month before an election, a door into Elections, and names your candidacy once you run (drawn: hub-tabs.test.ts)', () => { // trace-allow: an existing test whose title changed with SB-3 (its door or stage moved into a sub-tab); its id was never an AC id
+    const run = TAB_SLOTS.agenda.find((a) => a.key === 'run')!;
+    const seat = (game: MuleView) => ({ view: game, me: game.me!, self: game.players[0]! });
+    const words = (game: MuleView) => (run.show?.(seat(game)) ?? true ? `${run.title(seat(game))} · ${run.sub(seat(game))}` : null);
+    expect(words(view(politics({ election: null }), me(), { month: 2 }))).toBe('Throw your hat in the ring · Run for Governor · election in month 4');
+    expect(run.lead?.(seat(view(politics({ election: null }), me(), { month: 2 }))), 'drawn strong').toBe(true);
+    expect(run.opens).toEqual({ desk: 'elections', focus: 'run' });
     const running = view(politics({ election: null, candidates: { governor: ['s1'] }, promises: { s1: CAP_4 } }), me({ running: 'governor' }), { month: 2 });
-    expect(textOf(agenda(running), 'agenda-run')).toBe('Throw your hat in the ringYou run for Governor · up to 4%');
-    const last = view(politics({ election: null, next: null }), me(), { month: 11 });
-    expect(agenda(last), 'no election ahead').not.toContain('agenda-run');
+    expect(words(running)).toBe('Throw your hat in the ring · You run for Governor · up to 4%');
+    expect(words(view(politics({ election: null, next: null }), me(), { month: 11 })), 'no election ahead').toBeNull();
   });
 });
 
@@ -909,6 +905,8 @@ describe('the Colony desk (C11, H-5, A-3)', () => {
     expect(on).toContain('data-testid="colony-grounds"');
     expect(on, 'the standing Park in its phone-size picture').toContain('href="/art/colony/park/standing-day@400.webp"');
     expect(on.indexOf('data-testid="colony-grounds"'), 'above the colony card').toBeLessThan(on.indexOf('data-testid="colony-desk-card"'));
+    const seated = view(politics({ governor: 's2', fund: 840 }), me(), { colony }).players.length;
+    expect(on, "T-AC-14 (phone): the seated players, for the colonists' suits").toContain(`data-players="${seated}"`);
     const off = onPhone(view(null, { ...me(), politics: null }, { colony }), ColonyWithFacts);
     expect(off).not.toContain('data-testid="colony-grounds"');
   });

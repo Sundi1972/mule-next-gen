@@ -1,33 +1,29 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { PhoneGame } from '../game';
 import type { Now } from '../Shell';
-import type { HubNav } from './Hub';
 import type { ReadyWords } from './ready';
 
 /**
- * The hub's slots (C17). Planning is the hub for the month: the stage holds the month's roadmap and the lines under
- * it, what you need this month, banners, "This month" (the agenda: each item a door into a desk or a map tool), the
- * map tools and the colony map; the rail holds Now, the open tool's panel, the desks and the open desk's body. The
- * hub draws only the entries present in its HubSlots, and of those only the ones whose `show(seat)` says yes
- * (omitted: always); an agenda item whose door is not drawn is not drawn.
+ * The hub's slots (C17). Planning is the hub for the month, as four tabs (the approved hub-tabs mock): Overview
+ * holds the one map with its tool row and "This month" as doors into the other tabs; Governor (Council on every other
+ * phone) holds the politics sub-tabs; Colony and Talk the colony and the table's talk. The rail keeps the phase line,
+ * Now with its "?", the open tool's panel and Ready on every tab. The hub draws only the entries present in its
+ * TabHubSlots, and of those only the ones whose `show(seat)` says yes (omitted: always).
  *
- * Today's entries are in ./today.tsx (HUB_SLOTS). WS7 adds its own to those lists, in the order they should show:
- * the Council, Secret, Governor's and Sheriff's desks (an office desk's `show` asks whether this seat holds the
- * office), their agenda items, map tools such as Guard and Target, the offices line under the roadmap, and a Now for
- * the election's steps. An entry keeps its own state in its components (they may use hooks, and read or change
- * the open desk and tool with useHub() from ./Hub.tsx); `show` and the agenda's texts are plain functions of the
- * seat, called on every render.
+ * Today's entries are in ./today.tsx (TAB_SLOTS): the politics sub-tabs (politicsTabs) and the Sheriff's Guard, a plot
+ * pick (picks), among them. An entry keeps its own state in its components and reads or changes where the hub is with useHub()
+ * from ./Hub.tsx; `show` and the agenda's texts are plain functions of the seat, called on every render; a ready-words function may also note the room (idempotent, but it writes module state).
  */
 
-/** Who is looking: what every `show` decides on. */
-export type HubSeat = Pick<PhoneGame, 'view' | 'me' | 'self'>;
+/** Who is looking: what every `show` decides on. `table` is the room: the hub gives it; a bare seat built for a test may leave it out. */
+export type HubSeat = Pick<PhoneGame, 'view' | 'me' | 'self'> & Partial<Pick<PhoneGame, 'table'>>;
 
 interface Shown {
   /** Whether this seat sees the slot now; omitted, always. */
   show?(seat: HubSeat): boolean;
 }
 
-/** A desk in the rail: a tab, and the body the rail shows while it is open. */
+/** A politics desk as politics/slots.ts registers it, drawn as a Governor / Council sub-tab through asDeskSub. */
 export interface DeskSlot extends Shown {
   id: string;
   label: string;
@@ -54,7 +50,8 @@ export interface DeskDoor {
 export interface AgendaSlot extends Shown {
   key: string;
   title(seat: HubSeat): string;
-  sub(seat: HubSeat): string;
+  /** Words, or SeatWords where they name seats. */
+  sub(seat: HubSeat): ReactNode;
   /** Only you see what it leads to: the eye-slash and "Only you". */
   locked?: boolean;
   /** The one that matters most this month, drawn strong. */
@@ -76,8 +73,6 @@ export interface MapToolSlot extends Shown {
   Panel?: ComponentType;
   /** In the footer, above Ready, while the tool is on. */
   Action?: ComponentType;
-  /** The desk to open with the tool. */
-  desk?: string;
 }
 
 /** A strip across the stage, or a line under the month's roadmap, such as the offices. */
@@ -102,67 +97,13 @@ export interface ReadyBarWords extends ReadyWords {
   label?: string;
 }
 
-export interface HubSlots {
-  banners: BannerSlot[];
-  /** Folded in under the month's roadmap, such as the offices line. */
-  lines?: BannerSlot[];
-  /** Under the map, from 1100 px only (on a phone they live in a desk), such as the store's prices. */
-  beneath: BannerSlot[];
-  agenda: AgendaSlot[];
-  tools: MapToolSlot[];
-  desks: DeskSlot[];
-  /** The first that gives a Now wins, such as an election's step; with none, RULE-8's "Plan your month". */
-  nows: ((seat: HubSeat) => Now | null)[];
-  /** Lines in the rail right under Now, such as a general strike's alert; not while a situation holds the stage. */
-  underNow?: BannerSlot[];
-  /** The first shown takes the stage (on a phone all of it, from 1100 px above the map) and the rail under Now. */
-  stage?: StageSlot[];
-  /** The first that gives words wins; with none, planning's. */
-  readyWords?: ((seat: HubSeat) => ReadyBarWords | null)[];
-}
-
-const shown = <T extends Shown>(slots: readonly T[], seat: HubSeat): T[] => slots.filter((s) => s.show?.(seat) ?? true);
+/** The slots this seat sees now. */
+export const shown = <T extends Shown>(slots: readonly T[], seat: HubSeat): T[] => slots.filter((s) => s.show?.(seat) ?? true);
 
 /** The first answer any of them gives this seat. */
 export const firstGiven = <T>(gives: readonly ((seat: HubSeat) => T | null)[], seat: HubSeat): T | null => gives.reduce<T | null>((t, give) => t ?? give(seat), null);
 
-/** What the hub draws for this seat: the slots present whose show() says yes, a desk that asks first first, and the doors to those. */
-export function drawnSlots(slots: HubSlots, seat: HubSeat): HubSlots {
-  const asks = (d: DeskSlot) => d.first?.(seat) ?? false;
-  const all = shown(slots.desks, seat);
-  const desks = [...all.filter(asks), ...all.filter((d) => !asks(d))];
-  const tools = shown(slots.tools, seat);
-  const agenda = shown(slots.agenda, seat).filter(({ opens }) => ('desk' in opens ? desks.some((d) => d.id === opens.desk) : tools.some((t) => t.id === opens.tool)));
-  const stage = shown(slots.stage ?? [], seat).slice(0, 1);
-  return { banners: shown(slots.banners, seat), lines: shown(slots.lines ?? [], seat), underNow: shown(slots.underNow ?? [], seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows, stage, readyWords: slots.readyWords ?? [] };
-}
-
-/** Where the hub is: the open desk and map tool, the focus the desk was opened with, and the desk that last asked first. */
-export interface HubPlace {
-  desk: string;
-  tool: string;
-  focus: string | null;
-  first: string | null;
-}
-
-/** The place after a door, tab or tool: a desk brings its map tool, a tool its desk, and only a door's focus is kept. */
-export function goTo(place: HubPlace, to: AgendaSlot['opens'], drawn: HubSlots): HubPlace {
-  if ('desk' in to) return { ...place, desk: to.desk, tool: drawn.desks.find((d) => d.id === to.desk)?.tool ?? place.tool, focus: to.focus ?? null };
-  return { ...place, tool: to.tool, desk: drawn.tools.find((t) => t.id === to.tool)?.desk ?? place.desk, focus: null };
-}
-
-/** The place once a desk starts asking to come first: it opens, once, so a tab away from it stays. Unchanged, the same object. */
-export function settle(place: HubPlace, drawn: HubSlots, seat: HubSeat): HubPlace {
-  const head = drawn.desks[0];
-  const first = head?.first?.(seat) ? head.id : null;
-  if (first === place.first) return place;
-  return first ? { ...goTo(place, { desk: first }, drawn), first } : { ...place, first };
-}
-
-/*
- * The tabbed hub's slots (SB-1a, the approved hub-tabs mock): types only, frozen for the lanes that build against
- * them. HubSlots above stays in use until the tabbed hub replaces it; TabHubPlace then takes HubPlace's name.
- */
+/* The tabbed hub's slots. */
 
 /** The four tabs, in order; `politics` is "Governor" on the Governor's phone and "Council" on every other. */
 export type TabId = 'overview' | 'politics' | 'colony' | 'talk';
@@ -196,7 +137,7 @@ export interface SubTabSlot extends Shown {
   label(seat: HubSeat): string;
   Body: ComponentType;
   Badge?: ComponentType;
-  /** Opens first, once, as it starts asking: an open ballot (as a desk's `first` did). */
+  /** While another tab is open, the Now line is a door to this sub-tab: an open ballot. */
   first?(seat: HubSeat): boolean;
 }
 
@@ -208,7 +149,7 @@ export interface PlotPickSlot extends Shown {
   /** One line under it: what a tap does. */
   hint(seat: HubSeat): string;
   back: Door & { label: string };
-  /** The pick draws its own bar inside Map (WS8's Guard: "Guarding · 1 of 2 · Done · back to Sheriff"). */
+  /** The pick draws its own bar inside Map (the Sheriff's Guard: "Guarding · 1 of 2 · Done · back to Sheriff"). */
   ownBar?: boolean;
   Map: ComponentType;
   Panel?: ComponentType;
@@ -232,24 +173,31 @@ export interface TabHubSlots {
   readyWords: ((seat: HubSeat) => ReadyBarWords | null)[];
 }
 
-/**
- * Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, the plot pick, and the sub-tab that last asked first.
- * Replaces HubPlace (and takes its name) when SB-2 grafts the tabbed hub.
- */
-export interface TabHubPlace {
+/** Where the tabbed hub is: the open tab, sub-tab and map tool, the door's focus, and the plot pick. */
+export interface HubPlace {
   tab: TabId;
   sub: string;
   tool: string;
   focus: string | null;
   pick: string | null;
-  first: string | null;
 }
 
-/**
- * The tabbed hub's navigation: today's HubNav plus the tab, sub-tab and plot pick, and the moves between them.
- * Replaces HubNav (and takes its name) when SB-2 grafts the tabbed hub.
- */
-export interface TabHubNav extends HubNav {
+/** The SB-1a name; kept so code built on the frozen contract compiles. Removed after the 12 Nov batch. */
+export type TabHubPlace = HubPlace;
+
+/** The tabbed hub's navigation: where it is, and the moves between tabs, sub-tabs, tools and picks. */
+export interface HubNav {
+  /** The desk today's components know the open place by: a tab's id, or on Governor / Council the open sub-tab's. */
+  desk: string;
+  tool: string;
+  /** What the open tab was opened to show, from a door's `focus`; null once taken, or after a tab or tool. */
+  focus: string | null;
+  /** Opens today's desk `id` through its door (Hub.tsx's DESK_DOORS), with a focus for it. */
+  openDesk(id: string, focus?: string): void;
+  /** Switches Overview's map tool, and opens Overview. */
+  pickTool(id: string): void;
+  /** The tab has shown its focus: a later door with the same focus shows it again. */
+  takeFocus(): void;
   tab: TabId;
   /** The open sub-tab of the Governor / Council tab. */
   sub: string;
@@ -258,4 +206,12 @@ export interface TabHubNav extends HubNav {
   open(door: Door): void;
   startPick(id: string): void;
   endPick(): void;
+}
+
+/** The SB-1a name; kept so code built on the frozen contract compiles. Removed after the 12 Nov batch. */
+export type TabHubNav = HubNav;
+
+/** The place after a door: its tab, its sub-tab and tool where it names them, and only its focus. A door away from Overview ends a pick. */
+export function goTo(place: HubPlace, door: Door): HubPlace {
+  return { ...place, tab: door.tab, sub: door.sub ?? place.sub, tool: door.tool ?? place.tool, focus: door.focus ?? null, pick: door.tab === 'overview' ? place.pick : null };
 }

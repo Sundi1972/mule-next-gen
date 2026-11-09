@@ -1,28 +1,25 @@
 import type { ReadyWords } from '../ready';
 import type { Now } from '../../Shell';
-import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
-import { ballotOpen, OverruleBallot, OverruleRail } from './budget/OverruleBallot';
-import { CouncilDesk } from './Council';
-import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
-import { GovernorDesk } from './Governor';
-import { CouncilBallot, CouncilRail } from './LawBallot';
+import type { AgendaSlot, BannerSlot, HubSeat, ReadyBarWords, StageSlot, SubTabSlot } from '../slots';
+import { OverruleBallot, OverruleRail } from './budget/OverruleBallot';
+import { ballotComplete, contested, ElectionDay, ElectionDayRail, enterRoom, promisedFirst } from './ElectionDay';
+import { CouncilBallot, CouncilRail, lawBallotComplete, lawPromisedFirst } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
-import { BudgetSub, electionVoting, ElectionsSub, isGovernor, lawVoting, LawsSub, overruleVoting } from './tabs';
+import { BudgetSub, ElectionsBadge, electionVoting, ElectionsSub, LawsBadge, lawVoting, LawsSub, overruleVoting } from './tabs';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
 /* The politics entries in HUB_SLOTS (../today.tsx). Each is drawn only while the table plays politics. */
 
 const politicsOn = ({ view }: HubSeat) => view.politics !== null;
-const electionOpen = ({ view }: HubSeat) => {
-  const stage = view.politics?.election?.stage;
-  return stage !== undefined && stage !== 'over';
-};
+/** An election is under way: announced, balloting or being revealed. */
+const electionOpen = (politics: NonNullable<HubSeat['view']['politics']>) => politics.election !== null && politics.election !== undefined && politics.election.stage !== 'over';
+const electionCeremony = ({ view }: HubSeat) => view.politics?.election?.stage === 'ceremony';
 
 export const OFFICES_BANNER: BannerSlot = { id: 'offices', Body: Offices, show: politicsOn };
 
-/** Election day takes the stage from the announcement through the reveal (E-2). */
-export const ELECTION_DAY_STAGE: StageSlot = { id: 'election-day', show: electionOpen, phase: () => 'Election', Body: ElectionDay, Rail: ElectionDayRail };
+/** The election's reveal takes the stage, as the table watches it together (E-2); the announce and the ballot are Elections' (./tabs.tsx). */
+export const ELECTION_DAY_STAGE: StageSlot = { id: 'election-day', show: electionCeremony, phase: () => 'Election', Body: ElectionDay, Rail: ElectionDayRail };
 
 /** E-1: running for office, any month an election is still to come; the door asks for a promise, or shows your candidacy. */
 export const ELECTION_AGENDA: AgendaSlot = {
@@ -35,8 +32,9 @@ export const ELECTION_AGENDA: AgendaSlot = {
     return `Run for Governor · election in month ${politics.next}`;
   },
   lead: () => true,
-  opens: { desk: 'council', focus: 'run' },
-  show: ({ view, me }) => view.politics?.next != null && (me.politics?.running != null || me.politics?.canRun.governor === true),
+  opens: { desk: 'elections', focus: 'run' },
+  // While an election is open the Elections sub-tab's Now door carries it.
+  show: ({ view, me }) => view.politics?.next != null && !electionOpen(view.politics) && (me.politics?.running != null || me.politics?.canRun.governor === true),
 };
 
 /** The proposal pending for next month's vote while no vote is open, on a phone other than its Governor's; else null. */
@@ -54,22 +52,11 @@ export const LAW_AGENDA: AgendaSlot = {
     const p = pendingFor(seat)!;
     return `${namer(seat.view)(p.by)} proposes ${proposalWords(p.proposal)}. For you: ${forYouWords(p.proposal, p.impact[seat.self.id], seat.view.air.level)}.`;
   },
-  opens: { desk: 'council' },
+  opens: { desk: 'laws' },
   show: (seat) => pendingFor(seat) !== null,
 };
 
-export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'governor' } };
-
-export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
-
-export const GOVERNOR_DESK: DeskSlot = {
-  id: 'governor',
-  label: 'Governor',
-  icon: 'M4 18h16 M5 18l-1-9 5 4 3-7 3 7 5-4-1 9',
-  Body: GovernorDesk,
-  show: isGovernor,
-  first: isGovernor,
-};
+export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'laws' } };
 
 /** E-10: the host's line is the same in every stage that waits for people; only what you finish differs. */
 const STILL = 'Still waiting for';
@@ -91,12 +78,14 @@ const BALLOT_WORDS: ReadyWords = {
 };
 
 /** The ready bar's words on election day: Ready to vote, then Cast my vote, live once every office is picked. */
-export function electionReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
+export function electionReadyWords({ table, view, me }: HubSeat): ReadyBarWords | null {
   const politics = view.politics;
   const election = politics?.election;
   if (!election) return null;
   if (election.stage === 'announce') return contested(politics.candidates).length > 0 ? ANNOUNCE_WORDS : NO_BALLOT_WORDS;
-  if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete({ view, me }, election) };
+  // Another room's picks are forgotten before they can make Cast live; the ready bar draws before the ballot does.
+  if (table) enterRoom(table.code);
+  if (election.stage === 'ballot') return { ...BALLOT_WORDS, label: 'VOTED', canReady: ballotComplete({ view, me }, election), first: () => promisedFirst({ view, me }, election) };
   return null;
 }
 
@@ -118,7 +107,7 @@ export function electionNow({ view, self }: HubSeat): Now | null {
           // The seat can't tell the host; these words hold for every phone.
           detail: 'The secret ballot opens once everyone is ready, or when the host opens it without someone who is away.',
         };
-      return { step: 1, of: 3, title: `Election day: ${officeNames().join(' and ')}`, detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' };
+      return { step: 1, of: 3, title: 'Election day', detail: `Electing: ${officeNames().join(' and ')}. Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.` };
     case 'ballot':
       if (self.ready)
         return {
@@ -138,13 +127,10 @@ export function electionNow({ view, self }: HubSeat): Now | null {
   }
 }
 
-/** C46: next month's law ballot takes the stage, as election day does, through its reveal. */
-const councilOpen = ({ view }: HubSeat) => {
-  const stage = view.politics?.council?.stage;
-  return stage === 'ballot' || stage === 'reveal';
-};
+/** C46: next month's law vote takes the stage only for its reveal; the ballot is in Laws. */
+const councilReveal = ({ view }: HubSeat) => view.politics?.council?.stage === 'reveal';
 
-export const COUNCIL_STAGE: StageSlot = { id: 'council-ballot', show: councilOpen, phase: () => 'Law vote', Body: CouncilBallot, Rail: CouncilRail };
+export const COUNCIL_STAGE: StageSlot = { id: 'council-ballot', show: councilReveal, phase: () => 'Law vote', Body: CouncilBallot, Rail: CouncilRail };
 
 const LAW_BALLOT_WORDS: ReadyWords = {
   ready: 'Done',
@@ -155,10 +141,12 @@ const LAW_BALLOT_WORDS: ReadyWords = {
   confirm: () => 'Close the vote now? The votes as they stand are counted, and the result is shown.',
 };
 
-/** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes). */
-export function councilReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
+/** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes) or a promised one. */
+export function councilReadyWords({ table, view, me }: HubSeat): ReadyBarWords | null {
   if (view.politics?.council?.stage !== 'ballot') return null;
-  return { ...LAW_BALLOT_WORDS, label: 'VOTED', canReady: (me.politics?.lawBallot ?? null) !== null };
+  // Another room's law pick is forgotten before it can make Done live; the ready bar draws before the ballot does.
+  if (table) enterRoom(table.code);
+  return { ...LAW_BALLOT_WORDS, label: 'VOTED', canReady: lawBallotComplete({ view, me }), first: () => lawPromisedFirst({ view, me }) };
 }
 
 /** Now through the law ballot and its reveal; a Done seat is told whom the vote waits for, not planning's words. */
@@ -177,8 +165,8 @@ export function councilNow({ view, self }: HubSeat): Now | null {
   return { step: 1, of: 2, title: 'Vote on the law', detail: 'Yes or No, then Done. Nobody sees how you voted. No clock: it closes once everyone is Done.' };
 }
 
-/** The overrule vote is the month's last, so its stage follows the law vote's: it takes the stage from the ballot through its reveal. */
-export const OVERRULE_STAGE: StageSlot = { id: 'overrule-ballot', show: ballotOpen, phase: () => 'Overrule vote', Body: OverruleBallot, Rail: OverruleRail };
+/** The overrule's reveal takes the stage; its ballot is in Laws. */
+export const OVERRULE_STAGE: StageSlot = { id: 'overrule-ballot', show: ({ view }) => view.politics?.overrule?.stage === 'reveal', phase: () => 'Overrule vote', Body: OverruleBallot, Rail: OverruleRail };
 
 const OVERRULE_WORDS: ReadyWords = {
   ready: 'Cast my vote',
@@ -221,7 +209,7 @@ export function overruleNow({ view, self }: HubSeat): Now | null {
 
 /** The Governor / Council tab's sub-tabs (Sheriff is WS8's). A ballot, when open, sits first in its sub-tab. */
 export const POLITICS_TABS: SubTabSlot[] = [
-  { id: 'laws', label: () => 'Laws', Body: LawsSub, show: politicsOn, first: (seat) => lawVoting(seat) || overruleVoting(seat) },
+  { id: 'laws', label: () => 'Laws', Body: LawsSub, Badge: LawsBadge, show: politicsOn, first: (seat) => lawVoting(seat) || overruleVoting(seat) },
   { id: 'budget', label: () => 'Budget', Body: BudgetSub, show: politicsOn },
-  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, show: politicsOn, first: electionVoting },
+  { id: 'elections', label: () => 'Elections', Body: ElectionsSub, Badge: ElectionsBadge, show: politicsOn, first: electionVoting },
 ];

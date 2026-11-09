@@ -6,6 +6,7 @@ import { fmt, secondsUntil, standings } from '../game/derive';
 import { inCollapse, league, leaderWords, ordinal } from '../game/month-end';
 import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
+import { BrokenCards } from './hub/politics/broken-cards';
 import { WaitingFor } from './hub/ReadyBar';
 import { connectedIn, hostMayContinue, namesOf, press, readyFooter, type Press } from './hub/ready';
 import { NewsPanel, ShipLine, StockPanel } from './parts';
@@ -39,6 +40,7 @@ function MonthEnd() {
       <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'gap-2' : 'gap-1.5')} data-testid={tv ? 'phone-monthend' : 'phone-only-monthend'}>
         {inCollapse(view) && <CollapseBanner density={density} donations={!!view.colony} />}
         <LeagueTable view={view} density={density} selfId={self.id} />
+        <BrokenCards view={view} month={view.month} density={density} />
         {tv ? (
           <PhoneMonthScoreNote view={view}>
             <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">

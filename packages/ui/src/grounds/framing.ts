@@ -121,3 +121,32 @@ export function leaning(area: Box, { leanOn = [], lean = 0 }: Framing): Box {
   const k = Math.min(1, lean);
   return { x: area.x + (close.x - area.x) * k, y: area.y + (close.y - area.y) * k, w: area.w + (close.w - area.w) * k, h: area.h + (close.h - area.h) * k };
 }
+
+/** How far a building in front of a leaned-on place fades at full lean: to a third, so the place shows through. */
+export const FRONT_FADE = 2 / 3;
+
+/** A block's span across the screen, in place units: the left and right corners of its footprint. */
+function across({ x, y, w, h }: GridPlace): [number, number] {
+  const { col, row } = centreOf({ x, y, w, h });
+  return [col - w / 2 - (row + h / 2), col + w / 2 - (row - h / 2)];
+}
+
+/**
+ * Whether `block` stands in front of any of the places leaned on: nearer the camera (its centre's col + row is greater)
+ * and across them on screen, so its picture can cover them. A block that is itself leaned on never is.
+ */
+export function inFrontOf(block: GridPlace, leanOn: GridPlace[]): boolean {
+  const near = (b: GridPlace) => centreOf(b).col + centreOf(b).row;
+  const [l, r] = across(block);
+  return leanOn.every((t) => t.x !== block.x || t.y !== block.y) && leanOn.some((t) => {
+    const [tl, tr] = across(t);
+    return near(block) > near(t) && Math.min(r, tr) - Math.max(l, tl) > 0.05;
+  });
+}
+
+/** The opacity a building is drawn at during the lean-in: 1 unless it stands in front of a place leaned on. */
+export function frontOpacity(block: GridPlace, framing: Framing | undefined): number {
+  const lean = Math.min(1, Math.max(0, framing?.lean ?? 0));
+  if (!framing?.leanOn?.length || lean === 0 || !inFrontOf(block, framing.leanOn)) return 1;
+  return 1 - FRONT_FADE * lean;
+}

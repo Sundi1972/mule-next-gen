@@ -1,10 +1,11 @@
 import { COLONY, SOCIAL_EVENTS } from '@mule/engine';
 import { GOOD_NAME, type Good } from '../components/tokens';
 import { percent } from './catalogue';
+import { sabotageYou } from './copy-sabotage';
 import { signLook, type ShowCast } from './frame';
 import { epidemicSick, sickBecause } from './sick';
 import type { EventSegment } from './timing';
-import type { ShowEffect, ShowEventKey, ShowEventView, ShowHit, ShowPhase } from './types';
+import type { EventSabotageSeat, ShowEffect, ShowEventKey, ShowEventView, ShowHit, ShowPhase } from './types';
 
 /** The show's words, the gallery's own (design/mocks/ws8-events src/copy.ts). */
 
@@ -216,10 +217,16 @@ export interface EventYouSummary {
   change: Partial<Record<Good, number>>;
   /** It made you sick: the sick tag goes beside the headline. */
   sick?: boolean;
+  /** The headline's colour when the event's sign does not give it: a sabotage line can be good news for you. */
+  tone?: 'ok' | 'alert' | 'ink';
 }
 
 /** What one event did to one player, or null when it passed them by. */
-function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary | null {
+function youFor(ev: ShowEventView, id: string, cast: ShowCast, seat?: EventSabotageSeat): EventYouSummary | null {
+  if (ev.sabotage) {
+    const you = sabotageYou(ev, id, cast, seat);
+    return you && { headline: you.line, short: you.short, detail: '', change: {}, tone: you.tone };
+  }
   if (ev.key === 'sickness') {
     if (cast.playerOf(ev) !== id) return null;
     const why = sickBecause(ev.line);
@@ -266,9 +273,9 @@ function goodsOf(fx: readonly ShowEffect[]): Partial<Record<Good, number>> {
 }
 
 /** What the segment did to one player, for their phone; null when it missed them. */
-export function eventYouSummary(seg: EventSegment, id: string, cast: ShowCast): EventYouSummary | null {
+export function eventYouSummary(seg: EventSegment, id: string, cast: ShowCast, seat?: EventSabotageSeat): EventYouSummary | null {
   for (const ev of seg.events) {
-    const you = youFor(ev, id, cast);
+    const you = youFor(ev, id, cast, seat);
     if (you) return you;
   }
   return null;

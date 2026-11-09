@@ -1,9 +1,8 @@
 import { Button, cx, GOOD_NAME, GoodIcon } from '@mule/ui';
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { NewsWords } from '../../components/SeatWords';
-import { useClientState } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { Chat, ShipLine } from '../parts';
+import { ShipLine } from '../parts';
 import { SellRail } from '../Sell';
 import { useHub } from './Hub';
 import { needRows } from './needs';
@@ -79,28 +78,6 @@ export function News() {
       </ul>
     </section>
   );
-}
-
-/** Talk: the table chat. Opening it reads what was said. */
-export function TalkDesk() {
-  const { chat } = useClientState();
-  const { setSeenChat } = useToday();
-  useEffect(() => setSeenChat(chat.length), [chat.length, setSeenChat]);
-  return (
-    <div className="flex h-[240px] flex-col @min-[1100px]/shell:h-[420px]" data-testid="channels">
-      <Chat />
-    </div>
-  );
-}
-
-/** Unread table chat, on the Talk desk's tab. */
-export function ChatBadge() {
-  const { chat } = useClientState();
-  const { seenChat } = useToday();
-  const { desk } = useHub();
-  const unread = desk === 'talk' ? 0 : chat.length - seenChat;
-  if (unread <= 0) return null;
-  return <span className="absolute -right-1 -top-1 size-4 rounded-full bg-holo text-center font-mono text-[10px] font-bold leading-4 text-on-holo">{unread}</span>;
 }
 
 /** Market: put a plot or a MULE up for the auction after planning; the month's line-up; on a phone, the prices. */

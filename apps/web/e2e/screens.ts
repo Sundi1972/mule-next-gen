@@ -15,7 +15,7 @@ import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
 import { check, hallPlace, launch, PHONE, PHONE_SMALL, PHONE_WIDE, pressAct, startServer, steerTo, throughDoor, TV } from './harness';
 import { pressOnward, watchShow } from './production-steps';
-import { voteThroughTheElection } from './politics-steps';
+import { readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { arcadeTable, installSpot } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
@@ -79,14 +79,15 @@ try {
   await free.nth(9).click();
   await phoneShot(phone, '2-drone');
   await phone.getByRole('button', { name: /^Scan · / }).click();
-  await phone.getByTestId('desk-talk').click();
+  await phone.getByTestId('tab-talk').click();
   await phone.getByPlaceholder('Say something to everyone').fill('Anyone need Water? Cheap today.');
   await phone.getByRole('button', { name: 'Send' }).click();
   await phone.getByText('Anyone need Water?').first().waitFor();
   await phoneShot(phone, '2-chat');
   await tv.getByText('Anyone need Water?').waitFor();
   await shot(tv, 'tv-2-planning');
-  await phone.getByRole('button', { name: "I'm ready" }).click();
+  // Ready, and a tax overrule a computer seat called is held as planning ends: readyThroughTheElection answers it.
+  await readyThroughTheElection(phone, 120_000);
 
   // Land grant: try to claim whatever is lit.
   await phase(phone, 'landGrant');
