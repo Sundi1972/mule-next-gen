@@ -272,7 +272,7 @@ When each slice's W1 PR is pushed, WS7 tells the PM, who passes it to WS1 (the w
 | Decision | Built as | If Heiko picks otherwise |
 |---|---|---|
 | D-S3-1 campaign law promises | A: after RC (nothing built) | B: one more PR after S3-PR-1: the election picker's law promise and its break rule, about +1 day, mostly WS6's picker |
-| D-S4-1 does an investigation find the culprit | B: `POLITICS.sheriff.investigateOdds` 0.5 | A: the value 1.0 (config only); C: S4-RULE-7 gains a "latest month only" row in S4-PR-1 |
+| D-S4-1 does an investigation find the culprit | B: `POLITICS.sheriff.investigateOdds` 0.5 (0.3 since Heiko's 8 Nov ruling, slice 4 AM-10) | A: the value 1.0 (config only); C: S4-RULE-7 gains a "latest month only" row in S4-PR-1 |
 | D-S4-2 a separate sabotage switch | A: none; `POLITICS.sabotage.on` for the sim | B: one more PR (lobby, createGame and server options; the Sheriff leaves the ballot when off) |
 | D-S5-2 when the overrule vote is held | A: as planning ends | B: the overrule ballot moves beside the law ballot when the next planning opens; S5-PR-1's timing rows and S5-PR-4's flow change |
 | D-S5-3, D-S5-4 | after RC | decided before S5-PR-8 |
@@ -897,12 +897,15 @@ switch). Steps a different ruling changes carry **[ruling: D-S4-1]** or **[rulin
 | S4-PR-0 contract | — (#662) | **partly landed #662 e1e4794a (types/protocol); the held-out members, config keys and stubs move to S4-PR-1.** Task S4-0.1 (S4-C20 tracking) | S4-T-AC-16 (base half) | §3 types, protocol intents and views, NoticeEntry kinds | — | No | WS3 + WS7 |
 | S4-PR-1 engine | `ws7-s4-engine` | Tasks S4-1.0 … S4-1.13 (S4-C20 remainder, S4-C1 … S4-C8; S4-C12's AiAction half) | S4-UBER-AC-1; S4-B-AC-3, S4-B-AC-5, S4-B-AC-8; engine legs of S4-B-AC-1, -2, -6, -7; S4-T-AC-1 … -6, -11, -12, -14 (engine), -15, -16 | sabotage.ts's §3 exports; the five held-out union members; POLITICS.sabotage, .sheriff, .laws.sabotageBan, .ai.sabotage, .ai.sheriff, .reputation.moves.caught; `events.ts::storeEvent`; AiAction `sabotage`/`guard`/`investigate`/`fine` | #662; slice 3's `pactBreach`, `pactBetween`, `sabotagePossible`, `reputationReasons`, `reputation.moves` (S3-PR-1); `securitySpend` (S5-PR-1 exports it returning 0, slice 5 AM-3; a local stub only if S5-PR-1 is not in the lane) | Minimal, nothing visible: LawPicker.tsx words the type forces, words.ts JOB line. Defaults stay off (AM-2): `POLITICS.offices` ['governor'], `POLITICS.sabotage.on` false | WS7 (+ WS3, WS1, WS2 named edits) |
 | S4-PR-2 observe | `ws1-politics-observe` (#669) | Task S4-2.1 (S4-C9, tracking) | S4-T-AC-7 | observe()'s sabotage, guards and rumoured filter | #662 | No | WS1 |
-| S4-PR-3 values + sim | WS1's branch | Task S4-3.1 (S4-C11, S4-C12 sim half, tracking) | S4-T-AC-13, S4-B-AC-9, S4-UBER-AC-3 (first measure), S4-T-AC-11 (sim half) | value bodies in `politics-value.ts`; the sim's sabotage row | S4-PR-1, S4-PR-4 | No | WS1 |
+| S4-PR-3 values + sim — **MERGED #770 (e8c65180)**; sim half dropped (PM ruling B, Heiko 8 Nov "test this in real games") | WS1's branch | Task S4-3.1 (S4-C11; S4-C12's sim half dropped) | S4-T-AC-13, S4-B-AC-9; S4-UBER-AC-3's first measure → the 13 Nov play-test; S4-T-AC-11's sim half dropped | value bodies in `politics-value.ts`; the sim's sabotage row | S4-PR-1, S4-PR-4 | No | WS1 |
 | S4-PR-4 AI hands | `ws7-s4-hands` | Task S4-4.1 (S4-C10) | S4-T-AC-9, S4-T-AC-10 | SabotageHand, SheriffHand; VoteHand's ban vote | S4-PR-1 exports; #669's value stubs | No | WS7 (+ WS1 test named edit) |
 | S4-PR-5 server | `ws7-s4-server` | Tasks S4-5.1, S4-5.2 (S4-C13) | S4-B-AC-1, -2, -4, -6 (server); S4-T-AC-8; S4-T-AC-14 (server) | the four intents on the wire; PoliticsView.sabotage, MyPoliticsView.sabotage/.sheriff, EventView.sabotage filled; news; the three notices | S4-PR-1; #662 protocol; S4-PR-2 | No | WS7 (+ WS3 named edits) |
 | mocks | the mock owner's design branch | Task S4-M.1 (P6-P11, tracking) | — | the approved mock under `design/mocks/<slug>/` at a SHA | §3 views | mock only | WS6 per spec; the PM confirms the mock and screen builders (SEAMS 7 Nov 11:02Z relays a P2 mock to WS8) |
 | S4-PR-6 desks | `ws7-s4-desks` | Tasks S4-6.0 … S4-6.5 (S4-C14, S4-C15, S4-C16, S4-C18; the defaults flipped on, AM-2) | S4-B-AC-10 (screen legs, contract), S4-B-AC-7 (screen leg, e2e month 1) | `POLITICS.offices` ['governor', 'sheriff'] and `POLITICS.sabotage.on` true as defaults | S4-PR-5 views; the approved mock | Yes | WS7 files (+ WS6, WS4, WS1 named edits); the PM confirms the builder |
 | S4-PR-7 show | WS8's branch | Task S4-7.1 (S4-C17, tracking) | screen legs of S4-B-AC-1, -2, -3 | EVENT_SHOW rows; kind 'sabotage' stories | S4-PR-1 events; S4-PR-5 EventView.sabotage; the approved mock | Yes | WS8 (+ WS6, WS4 named edits) |
+| S4-PR-9 Sheriff incentives, engine + server (AM-11) — **MERGED #793 (82d0db8b) + follow-up #799 (e8ba0a80, slice 4 AM-12)** | `ws7-s4-bounty` | canGuard + S4-RULE-6 own-plot row; bounty at a guard catch and a solved investigation (officePay, as far as the fund reaches; order.bounty); captureOdds + ownPlotDetectBonus; politics.sheriffRecord reset in takeOffice; config bounty 50, ownPlotDetectBonus 0.2; the election view carries the record; rulebook | S4-B-AC-11 (engine+server legs), S4-B-AC-12, S4-T-AC-17..20 | — | S4-PR-1, S4-PR-5 | No | WS7 (protocol + mule-game/politics-view named edits as before: WS3 OKs by SHA) |
+| S4-PR-10 Sheriff incentives, AI values — due **10 Nov 18:00Z**, after S4-PR-9 (merged) | WS1's | guardValue never offers the Sheriff's own plots and weighs the bounty (value × chance targeted + bounty × chance caught); sabotage values read the new captureOdds (no change expected: they call it) | S4-T-AC-9 rows extended | — | S4-PR-9's config keys + canGuard | No | WS1 |
+| S4-PR-11 Sheriff incentives, screens | WS8's + WS7's | WS8: GUARD_PICK offers only canGuard plots; the desk shows the bounty (order.bounty, POLITICS.sheriff.bounty). WS7: ElectionDay + TvElection show the outgoing Sheriff's record line | S4-B-AC-11 (record leg) | — | S4-PR-9 | **Yes** | WS8, WS7 |
 | S4-PR-8 e2e + rows | `ws7-s4-e2e` | Tasks S4-8.1 … S4-8.3 (S4-C19; rows to Heiko) | S4-UBER-AC-2, S4-B-AC-10, S4-UBER-AC-3 (final), S4-B-AC-9 | — | every PR above | e2e only | WS7, WS1 |
 
 ### Per-PR authority
@@ -1189,7 +1192,11 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
 
 ---
 
-### S4-PR-3 · values and the sim (WS1)
+### S4-PR-3 · values and the sim (WS1) — MERGED #770 (e8c65180)
+
+**Amended 8 Nov (PM ruling B, from Heiko's 8 Nov "test this in real games"):** the sim half is dropped. Steps 1b,
+2's sim row, 3 and 4 are not done; S4-T-AC-11's sim half is dropped (its engine half stands, Task S4-1.11), and
+S4-UBER-AC-3's first measure moves to the 13 Nov play-test. Step 1's value bodies landed in #770.
 
 #### Task S4-3.1 — S4-C11, S4-C12: what WS7 needs from WS1, and its check
 
@@ -1402,6 +1409,30 @@ Before suggesting merge of `ws7-s4-engine` into `ws7-politics`:
 
 ---
 
+### S4-PR-11 · the outgoing Sheriff's record on election day, WS7 part (`ws7-s4-record`, draft #835)
+
+- [x] Built on 8d94ebc5 (the lane merged into f5226eef): 44daf07b S4-T-AC-20 (a guard-caught order cannot then be
+  investigated, so it counts once, in caught), 51067830 red, 100fe98f the line on the phone's announce and the TV's,
+  bbcf982f rulebook, f1a31b84 reads `politics.sabotage.sheriffRecord`, b5807cc5 the two halves, 67ff7938 " · AI" on
+  the phone, ed2e0202 / eab1bee8 / f0847267 the review's minors. **Review: APPROVE at a9310901.**
+- [x] PM rulings, 9 Nov: spot (a), under the sentence saying who the colony elects (the TV: after the title row); the
+  words "Kai was Sheriff: 3 catches, 1 case solved" with singulars, and 0/0 shown; name through SeatWords; the phone
+  breaks only after "Sheriff:", the TV stays one line. Spec slice 4 AM-13 at a9310901 (on the branch, not yet in the
+  lane), with S4-B-AC-11's Then clause "Kai was Sheriff: 1 catch, 0 cases solved".
+- [x] Fit measured in `e2e/small-phone.ts::sheriffRecordFit` (9656df33, WS4 named edit): 667 with an AI name gives
+  2 lines broken at the span, every other case 1 line, nothing clipped, no new scroll; TV-FIT 0.925 with the line
+  (0.956 without, floor 0.7).
+- [ ] Merges after SB-3 part 2: merge the lane in, check `e2e:small` passes in full (its main game's election step
+  waits on SB-3's 90ea7d24), WS4's OK on 9656df33 via the PM, then merge.
+
+### Lane → trunk (#834, draft)
+
+- [ ] Opened 9 Nov for the 12 Nov batch; ready by **11 Nov 18:00Z**. Needs SB-3 part 2 and #835 in the lane, then one
+  trunk sync (feat/strategist into the lane: the rulebook conflicts in `colony-and-politics.html` and
+  `search-index.js`), CI green, then ready for review.
+
+---
+
 ### Drift found (for WS7)
 
 Measured on `origin/feat/strategist` e1e4794a and `origin/ws1-politics-observe` dbe50e42, 7 Nov. The spec is not edited.
@@ -1475,11 +1506,12 @@ their own branches and reach `feat/strategist` through the PM's batches.
 | S5-PR-0 · contract [RC] | — (#662, landed e1e4794a) | Task S5-0.1 (check only): §3's types, intents, views | none | §3 types and protocol | — | No | WS3 (landed) |
 | S5-PR-1 · engine [RC] | `ws7-s5-engine` | Tasks S5-1.0-1.9 (S5-C1, C2, C3, C4, C5; config; S5-C9's AiAction part as WS1 named edits) | S5-B-AC-2, S5-T-AC-1..8, S5-T-AC-12 (engine half) | politics.ts: `setBudget`, `budgetLines`, `budgetShares`, `budgetCredits`, `callOverrule`, `canOverrule`, `openOverrule`, `voteOverrule`, `securitySpend` (0 in RC); colony.ts: `welfareRecipient`; config: `POLITICS.budget`, `.overrule`, `.ai.budget`, `.ai.overrule`, `HAPPINESS.weights.welfare/welfareUnit/welfareCap`; AiAction `setBudget`, `callOverrule`, `voteOverrule` | §3 types (#662); S3-PR-1's politics.ts | No | WS7 (+ WS1 named edits) |
 | S5-PR-2 · AI hands [RC] | `ws7-s5-hands` | Tasks S5-2.0-2.4 (S5-C6) | S5-T-AC-13, S5-T-AC-14, S5-T-AC-15 | `BudgetHand`, `OverruleHand` (hands/budget.ts) | S5-PR-1; #669's `lineWorth` / `overruleWorth` stubs | No | WS7 (+ WS1 named edit: the test file) |
-| S5-PR-3 · values, sim, observe [RC] | WS1's branch, plus #669 | Tasks S5-3.1-3.3, tracking (S5-C9's values, play loop, sim row; observe via #669) | S5-T-AC-16, S5-T-AC-17, S5-T-AC-12 (sim half), S5-B-AC-6, S5-UBER-AC-1 | `lineWorth`, `overruleWorth` real bodies (projects, welfare, tax); the sim's budget-and-overrule row | S5-PR-1, S5-PR-2 | No | WS1 |
+| S5-PR-3 · values, play loop, observe [RC] — **#796** | WS1's branch, plus #669 | Tasks S5-3.1-3.3, tracking (S5-C9's values, play loop and parity row; observe via #669; the sim row dropped 8 Nov) | S5-T-AC-17, S5-T-AC-12 (sim half), S5-B-AC-6, S5-UBER-AC-1 | `lineWorth`, `overruleWorth` real bodies (projects, welfare, tax); the sim's budget-and-overrule row | S5-PR-1, S5-PR-2 | No | WS1 |
 | S5-PR-4 · server [RC] | WS3's branch | Tasks S5-4.1-4.3, tracking (S5-C7, incl. continuePlanning's null-election fix) | S5-T-AC-10, S5-B-AC-4, S5-B-AC-5 | the three intents accepted; the overrule ballot at planning's end; Ready cleared on a Governor's change | S5-PR-1; S5-PR-5's `overruleNews` | No | WS3 |
 | S5-PR-5 · views [RC] | `ws7-s5-views` | Tasks S5-5.0-5.2 (S5-C8) | S5-T-AC-11 | `PoliticsView.budget/.overrule`, `MyPoliticsView.overruleBallot/.canOverrule`, `ColonyView.welfare`, `overruleNews(state)` | S5-PR-1 | No | WS7 |
 | S5-mocks [RC] | WS6's branch | Tasks S5-M.1-M.2, tracking: P12, P13, P14, P15 → Heiko | none | the approved mocks under `design/mocks/<slug>/` | the RC views' shape (§3) | mock only | WS6 |
-| S5-PR-6 · desks and TV [RC] | `ws7-s5-desks`, based on the approved-mock commit | Tasks S5-6.0-6.5 (S5-C10, S5-C11; TableApp route as WS4 named edit) | S5-B-AC-1, S5-B-AC-3, S5-UBER-AC-2 | — | S5-PR-4, S5-PR-5, S5-PR-7, approved P12-P14 | **Yes** | WS7 (+ WS4 named edit) |
+| S5-PR-6 · phone desks [RC] | `ws7-s5-desks` (phone part approved at a0669e2a) | Tasks S5-6.0-6.5 as re-scoped by spec AM-12/AM-13 (S5-C10 on the phone; S5-C11's TV components on `ws7-s5-tv`, placed by WS4's SB-5b) | S5-B-AC-1, S5-B-AC-3, S5-UBER-AC-2 | engine `lineCredits`, `spareOf` | S5-PR-4, S5-PR-5, S5-PR-7, SB-2, SB-3 | **Yes** | WS7 |
+| SB-3 · politics as sub-tabs [RC] | part 1 `ws7-sb3-tabs` (approved e9ff1bea); part 2 `ws7-sb3-part2` (on a0669e2a + WS6's SB-2 451a4549) | the hub-tabs scaffold's SB-3 row: Laws · Budget · Elections sub-tabs, reveals as stages, today.tsx 3-line WS6 named edit (63df1358) | S5-B-AC-3 (hub), T-AC-66, T-AC-67 | `POLITICS_TABS`, `OVERRULE_STAGE`, `overruleNow`, `overruleReadyWords` | SB-2 | **Yes** | WS7 (+ WS6 named edit) |
 | S5-PR-7 · month end [RC] | WS4's branch | Task S5-7.1, tracking (S5-C12) | S5-B-AC-1's month-end leg (component); TV-FIT pin | the P15 colony panel | S5-PR-5, approved P15 | **Yes** | WS4 |
 | S5-PR-8 · full engine [after RC] | `ws7-s5-full-engine` | Tasks S5-8.0-8.5 (S5-C13, C14, C15, C16) | S5-T-AC-9, S5-T-AC-18, S5-T-AC-19, S5-T-AC-20, S5-B-AC-7; engine halves of S5-B-AC-8, -9, -10 | `securitySpend` real; `inquiryRecord`, `openInquiry`; `POLITICS.inquiry`, `.ai.inquiry`; AiAction `openInquiry` | the RC engine | No | WS7 (+ WS1 named edits) |
 | S5-PR-9 · full hands [after RC] | `ws7-s5-full-hands` | Tasks S5-9.1-9.2 (S5-C17) | S5-T-AC-21 (hands) | `InquiryHand` | S5-PR-8 | No | WS7 |
@@ -1504,7 +1536,8 @@ votes tick calls `overruleNews` (freeze point: its signature, `overruleNews(stat
 | S5-PR-4 | WS3's: `apps/server/src/mule-game.ts`, `apps/server/src/server.ts`, WS3's new server test file | — | `apps/server/src/politics-view.ts`, `colony-view.ts` (WS7, S5-PR-5); `packages/engine/**` |
 | S5-PR-5 | `apps/server/src/politics-view.ts`, `apps/server/src/colony-view.ts` (WS7 per spec §3.3, PM to confirm: Task S5-5.0), `apps/server/test/politics.test.ts` | — | `mule-game.ts` (WS3, S5-PR-4: `viewFor` already calls both view functions, so no edit is needed); `packages/protocol/**` (landed) |
 | S5-mocks | WS6's `design/mocks/<slug>/` | — | every `apps/**` file (no screen before approval) |
-| S5-PR-6 | `apps/web/src/phone/hub/politics/{Governor,Council,Colony,LawBallot}.tsx`, `words.ts`, new `OverruleBallot.tsx`, `apps/web/src/table/TvGovernorPromise.tsx`, new `apps/web/src/table/TvOverrule.tsx`, `apps/web/e2e/politics.ts`, `apps/web/test/politics-*.test.ts*`, the rulebook; named edit: one route line in `apps/web/src/table/TableApp.tsx` (WS4) | the approved P12, P13, P14 mock files under `design/mocks/<slug>/`: data flow and wiring only, never composition, route or tokens | `apps/web/src/components/MonthEnd.tsx`, `apps/web/src/game/month-end.ts` (WS4, S5-PR-7); `apps/web/src/phone/hub/{desks,today,tools}.tsx` (WS6: slice 5 needs no line there; a need is a stop-and-report); `TvCouncil.tsx` beyond reusing its frame (serialised S4 → S5, frame) |
+| S5-PR-6 | new `apps/web/src/phone/hub/politics/budget/{GovernorBudget,CouncilBudget,OverruleCall,OverruleBallot}.tsx` and `budget/words.ts`; `politics/slots.ts` (OVERRULE_STAGE, overruleNow, overruleReadyWords); `packages/engine/src/politics.ts` (`lineCredits`, `spareOf`); `apps/web/e2e/politics.ts` (Task S5-6.4); `apps/web/test/politics-*.test.ts*`; the rulebook | the hub-tabs scaffold (`origin/ws6-mock-hub-tabs` 24d31ebd: `src/proposed/tabs/Politics.tsx`, `src/copied/budget/*`): data flow and wiring only | TV placement: `TableApp.tsx`, `TvPlanning`/promise row (WS4, SB-5b, spec AM-13); the TV components are WS7's on `ws7-s5-tv`; `apps/web/src/phone/hub/today.tsx` beyond SB-3's 3-line WS6 named edit; `MonthEnd.tsx`, `month-end.ts` (WS4, S5-PR-7) |
+| SB-3 | `apps/web/src/phone/hub/politics/**`, `apps/web/test/{politics-*,law-ballot,law-picker}.test.ts*`, `apps/web/e2e/politics.ts`; named edits: `today.tsx` (WS6, 63df1358), `hub-tabs.test.ts` pins (WS6), `colony-actions.test.ts` (WS8) | the hub-tabs scaffold, as for S5-PR-6; named deviation: ElectionDayRail stays in ElectionsSub (AM-21 run block) | `Hub.tsx`, `tabs/*` (WS6, SB-2); `e2e/hub-steps.ts` (not WS7's: changes listed and routed via the PM) |
 | S5-PR-7 | WS4's: `apps/web/src/components/MonthEnd.tsx`, `apps/web/src/game/month-end.ts`, `apps/web/test/month-end.test.ts` | the approved P15 mock | the hub's politics files (WS7) |
 | S5-PR-8 | as S5-PR-1 (politics.ts, colony.ts, POLITICS block, engine tests, rulebook); named edits: `actions.ts`, `play.ts::applyAction`, `moves.test.ts` (WS1, `openInquiry`) | — | types.ts, protocol (PR-0 carries every after-RC type); `sabotage.ts`, `diplomacy.ts` (slices 4 and 3 own their fields) |
 | S5-PR-9 | `hands/budget.ts`, `hands/vote.ts`; named edit `packages/ai/test/budget-hand.test.ts` | — | WS1's values and sim |
@@ -1871,7 +1904,11 @@ Before suggesting merge of `ws7-s5-engine` into `ws7-politics`:
   `pnpm --filter @mule/ai test budget-hand` stays green with the real bodies, and the hands now call (B-AC-6 needs
   calls, which the 0 stubs never make).
 
-#### Task S5-3.3 — the sim plays and reports slice 5 [ruling: D-S5-2]
+#### Task S5-3.3 — the sim plays and reports slice 5 [ruling: D-S5-2] — S5-PR-3 is #796
+
+**Amended 8 Nov:** Steps 2 and 5 and S5-T-AC-16 are dropped: S5-UBER-AC-1 is proven in play (Heiko, 8 Nov). Steps 1, 3
+and 4 stand; the parity row (play.ts plays the overrule as the server does, red on the old play.ts) is the merge gate.
+#796 merges into `ws7-politics` on APPROVE, per the #770 precedent.
 
 - [ ] **Step 1: WS1's `play.ts` planning case** (line 409): after the Governor's tick, tick every hand once more;
   after `planMonth`, call `openOverrule` and, if it opened, loop the votes as before (S5-C9).
@@ -1887,7 +1924,7 @@ Before suggesting merge of `ws7-s5-engine` into `ws7-politics`:
 
 #### S5-PR-3 merge gate (WS1's PR; WS7's checks)
 
-- [ ] S5-T-AC-16, S5-T-AC-17, S5-B-AC-6 and S5-T-AC-12 (sim half) green by id; S5-UBER-AC-1 holds on both sets
+- [ ] S5-T-AC-17, S5-B-AC-6 and S5-T-AC-12 (sim half) green by id; the parity row green (S5-T-AC-16 and the sim leg of S5-UBER-AC-1 dropped, 8 Nov: proven in play)
 - [ ] CI 4/4; one review once CI is green; WS7 confirms the hands' tests unchanged at WS1's head SHA
 
 ---
@@ -1975,73 +2012,87 @@ Before suggesting merge of `ws7-s5-engine` into `ws7-politics`:
 
 ---
 
-### S5-PR-6 · the desks and the TV (`ws7-s5-desks`, WS7) [ruling: D-S5-2]
+### S5-PR-6 · the phone desks (`ws7-s5-desks`, WS7) [ruling: D-S5-2; re-scoped by spec AM-12, 8 Nov]
+
+**MERGED 9 Nov as #833 (e391e1de).** Head `ws7-s5-pr6` 35de6df7 = `ws7-s5-tv` 133feda9 plus a merge of the lane
+(fde0acfb). Phone part APPROVE a0669e2a, TV part APPROVE 49d9dc01. Spec slice 5 AM-12/AM-13 are in the lane with it.
+Still open below: WS4's placement (SB-5b) and the e2e step (Task S5-6.4).
+
+**Replanned 8 Nov (spec AM-12).** The phone screens graft into the politics sub-tabs of the hub-tabs scaffold
+(`origin/ws6-mock-hub-tabs` 24d31ebd), not into `Governor.tsx` / `Colony.tsx` / `LawBallot.tsx`. The TV
+components (S5-C11) are WS7's on `ws7-s5-tv` (AM-13); WS4's SB-5b places them and owns the `TableApp.tsx` route. The three `today.tsx` lines (the overrule Now line,
+ready words and stage) are a **WS6 named edit inside SB-3 part 2** (63df1358 on `ws7-sb3-part2`), not a line here.
 
 #### Task S5-6.0 — base
 
-- [ ] **Step 1: Branch from the approved-mock commit (Task S5-M.2), then merge `ws7-politics`** (S5-PR-4, S5-PR-5 in
-  it). Record the WS4 named edit (one route line in `TableApp.tsx`) in SEAMS through the PM. The mock is the binding
-  scaffold: an implementer never designs the screen (may_edit_content).
+- [x] Branched `ws7-s5-desks` from the lane with S5-PR-4 and S5-PR-5 in it; AM-12 at 57128ed7.
 
-#### Task S5-6.1 — S5-C10: P12, the Governor's budget
+#### Tasks S5-6.1 / S5-6.2 — S5-C10 on the phone (P12, P13) — built, APPROVED at a0669e2a
 
-- [ ] **Step 1: Write a failing render test in `apps/web/test/politics-desks.test.ts`** for S5-C10's P12 against the
-  mock's fixture: the steppers in steps of `step`, what each line pays at today's fund, "Kept in the fund", Set,
-  the frozen state. Altitude: unit at the component (the promise is S5-B-AC-1's e2e in Task S5-6.4). Trap: the tax
-  and law-ballot tests in this file pass unchanged (the S5-C10 pin).
-- [ ] **Step 2: Implement S5-C10 (P12) per spec §1 S5-C10** in `apps/web/src/phone/hub/politics/Governor.tsx`
-  (`GovernorDesk`), filling the approved scaffold; copy in `words.ts`. Mechanism: fill_scaffold. Run
-  `pnpm --filter @mule/web test politics-desks` — expected PASS. Commit `feat(web): S5-C10 the Governor sets the budget (P12)`.
+- [x] b8371b2b red; dc4724c0 engine `lineCredits(line, share, spareCredits)` and `spareOf(fund)`; 0d9f9813 web:
+  `budget/{GovernorBudget,CouncilBudget,OverruleCall,OverruleBallot}.tsx`, `budget/words.ts`; `politics/slots.ts`
+  exports `OVERRULE_STAGE`, `overruleNow`, `overruleReadyWords` (`OVERRULE_CALL_LINE` exported, not registered:
+  PM, underNow after the RC, SA-1381); b3986ca4 rulebook; fd88cf27 trace-allow; a0669e2a fix round.
+- [x] The scaffold binds over the brief: S5-PR-6's own refusal words were dropped (my ruling, 8 Nov).
 
-#### Task S5-6.2 — S5-C10: P13, the call at the tax line and the overrule ballot
+#### Task S5-6.3 — S5-C11, the TV components (WS7) placed by WS4's SB-5 (spec AM-13, 8 Nov)
 
-- [ ] **Step 1: Write a failing render test** for P13: "Call an overrule vote" at the fund card's tax line
-  (`Colony.tsx`), the caller's Withdraw, the call's banner, and the overrule ballot in the council's ballot place
-  (start vs now, needed, Yes/No, Cast). Altitude: unit at the component. Trap: `MyPoliticsView.canOverrule` decides
-  the button; never restate S5-RULE-6 in the web.
-- [ ] **Step 2: Implement S5-C10 (P13) per spec §1 S5-C10** in `Colony.tsx`, `Council.tsx`, a new
-  `OverruleBallot.tsx` mounted at `LawBallot.tsx`'s `CouncilBallot` place, and `words.ts`. Mechanism: fill_scaffold.
-  Run — PASS. Commit `feat(web): S5-C10 call a tax overrule and cast its ballot (P13)`.
-
-#### Task S5-6.3 — S5-C11: P14 on the TV, and the route (WS4 named edit)
-
-- [ ] **Step 1: Write a failing render test in `apps/web/test/politics-tv.test.ts`** for P14: the budget line under
-  the Governor's promise, the call banner, the overrule panel (who has voted, never how; needed of total) and the
-  reveal. Trap: `TvCouncil` and the TV-FIT tests pass unchanged (the S5-C11 pin).
-- [ ] **Step 2: Implement S5-C11 per spec §1 S5-C11** in `TvGovernorPromise.tsx` and new `TvOverrule.tsx`, reusing
-  `TvCouncil`'s frame. Commit `feat(web): S5-C11 the TV's budget strip and overrule panel (P14)`.
-- [ ] **Step 3: Named edit `apps/web/src/table/TableApp.tsx` (WS4):** one route, the overrule panel while it is open
-  (election first, then the law ballot, then the overrule). Own commit:
-  `feat(web, named edit WS4): TableApp routes to the overrule panel (S5-C11)`. WS4 OKs the SHA through the PM.
+- [x] **WS7 builds the components** on `ws7-s5-tv` (APPROVE 49d9dc01, in the lane via #833) (from a0669e2a), grafted from the scaffold's
+  `src/tv/copied/{TvBudgetLine,TvOverrule}.tsx`: `apps/web/src/table/TvBudgetLine.tsx` (`TvBudgetLine`,
+  `TvOverruleCall`) and `apps/web/src/table/TvOverrule.tsx`, with render tests in `apps/web/test/politics-tv.test.ts`.
+  They read the view and never re-derive a share or a needed count. Due 10 Nov 06:00Z, SHA to WS4 via the PM.
+- [ ] **WS4 places them in SB-5b**: the budget line on the promise row, the call as the 8 s map-box moment, and the
+  `TableApp.tsx` route to `TvOverrule` while the overrule is open (after the election and the law ballot).
 
 #### Task S5-6.4 — the e2e step: S5-UBER-AC-2, S5-B-AC-3, S5-B-AC-1
 
-**Depends on:** S5-PR-7 in the lane (S5-B-AC-1's month-end leg)
+**Depends on:** SB-2 and SB-3 part 2 in the lane (the phone path is the tabbed hub), and S5-PR-7 (WS4's month end:
+S5-B-AC-1's month-end leg). Lands for the 12 Nov 12:00Z batch.
 
-- [ ] **Step 1: Write the failing e2e step `S5-UBER-AC-2: Lena raises the tax 5 → 10, Brix calls, the ballot shows on both phones as planning ends, AI seats cast keyless, both humans cast, every screen shows the totals and "Overruled" at once, and the first sale is taxed at 5%`**
-  in `apps/web/e2e/politics.ts`. Altitude: promise, front to back: the phones' and TV's DOM, and the seller's money
-  in the server view after the first sale. Traps: the e2e command owns its stack (never the integration rig); the
-  e2e file is serialised S3 → S4 → S5, so merge the lane first.
-- [ ] **Step 2: Write `S5-B-AC-3`** in the same step's flow: the ballot opens on every phone after the last Ready,
-  the reveal shows on every screen at once, the next sale is taxed at 5%; negative case: yes below needed → "The
-  Governor's tax stands" and 10% applies.
-- [ ] **Step 3: Write `S5-B-AC-1: Lena sets Projects 80, Welfare 10; every desk and the TV show "Welfare 10% → Kai" with its credits; at the month end every screen shows Welfare paid to Kai, and Kai's money rose by that much at upkeep`**.
-  Observed at: phone, TV and month-end DOM; Kai's money in the server view before and after upkeep. Negative case:
-  with Lena last on Worth, Welfare goes to the next-lowest, never to Lena.
-- [ ] **Step 4: Run** `pnpm --filter @mule/web e2e` — expected: FAIL before Tasks S5-6.1-6.3 are wired, PASS after.
-  Commit `test(e2e): S5-UBER-AC-2, S5-B-AC-1, S5-B-AC-3 the budget and the tax overrule at the table`.
+- [ ] **Step 1: `S5-UBER-AC-2`** in `apps/web/e2e/politics.ts`: Lena raises the tax 5 → 10, Brix calls from the tax
+  line on Laws, the ballot shows on both phones as planning ends (Now line, ready bar, stage), AI seats cast keyless,
+  both humans cast, every screen shows the totals and "Overruled" at once, and the first sale is taxed at 5%.
+  Altitude: promise, front to back. Traps: the e2e command owns its stack (never the integration rig); the file is
+  serialised S3 → S4 → S5, so merge the lane first; reach the desks through the tabs, never `now-go`/`sub-governor`.
+- [ ] **Step 2: `S5-B-AC-3`** in the same flow; negative case: yes below needed → "The Governor's tax stands", 10%.
+- [ ] **Step 3: `S5-B-AC-1`**: Projects 80, Welfare 10; Budget and the TV show "Welfare 10% → Kai" with credits; at
+  the month end Welfare paid to Kai, and Kai's money rose by that much. Negative: Lena last on Worth → next-lowest.
+- [ ] **Step 4: Run** `pnpm --filter @mule/web e2e` — FAIL before wiring, PASS after. Commit
+  `test(e2e): S5-UBER-AC-2, S5-B-AC-1, S5-B-AC-3 the budget and the tax overrule at the table`.
 
 #### Task S5-6.5 — rulebook
 
-- [ ] **Step 1: Update `docs/rulebook/colony-and-politics.html`** with the RC screens (S5-C10, S5-C11), then
-  `node docs/rulebook/build-index.mjs`. Commit `docs(rulebook): where the budget and the overrule show`.
+- [x] b3986ca4: the phone screens in `docs/rulebook/colony-and-politics.html`, index rebuilt. The TV lines follow
+  with SB-5 (WS4).
 
 #### S5-PR-6 merge gate
 
 - [ ] S5-UBER-AC-2, S5-B-AC-1, S5-B-AC-3 green in the e2e by id; the render tests green; the pins unchanged
-- [ ] Built on the approved-mock commit; composition, route and tokens match the mock
-- [ ] WS4's OK on the `TableApp.tsx` SHA; CI 4/4 (e2e and e2e-regression run `politics.ts`)
-- [ ] One review once CI is green; rulebook updated the same day
+- [ ] Composition and testids match the hub-tabs scaffold; the ElectionDayRail deviation recorded in its README
+- [ ] CI 4/4 (e2e and e2e-regression run `politics.ts`); one review once CI is green (phone part: APPROVE a0669e2a)
+
+### SB-3 · politics as sub-tabs (WS7) [the hub-tabs scaffold's build plan]
+
+- [x] **Part 1** (`ws7-sb3-tabs`): approved at e9ff1bea.
+- [ ] **Part 2** (`ws7-sb3-part2`, on a0669e2a + WS6's SB-2 451a4549): built at da04731a (d2d14ba8 red, 63df1358
+  today.tsx WS6 named edit, 215ea232 impl). Review REQUEST CHANGES; fix round 1 closed it.
+  - Round 2 (head f5226eef): 6d69452f DESK_DOORS drops the council and governor doors (WS6); de8ce572 red → 834f6008
+    HubSeat carries the room (WS6, S3-RULE-12); f563fe37 colony-actions reads the Commission in the real Budget (WS8);
+    f5226eef the D8 pin (no sub-tab asks first for the sitting Governor). Smoke failed in `doneThroughTheElection`
+    (the ballot card moved into the Elections sub-tab).
+  - Round 2b (head c3e8a5f0): 90ea7d24 the politics steps open Elections (WS7's helpers; "election over" is now the
+    result card); ef05f5e1 + c3e8a5f0 `table-steps.ts::doneThroughTheElection` opens Elections only for the ballot and
+    returns to Overview after (WS4 named edits); 94fda20e `hub-steps.ts` sub-tab steps (WS4). politics.ts and
+    politics-tie.ts pass. Smoke's plot-marks check still failed: the branch sat on SB-2's stale 451a4549, before SB-2
+    moved that check to the smallest phone (SB-2's afc5d688 passes the same seed).
+  - Round 2c (in progress, 9 Nov): e59bb1b5 merges the lane (e391e1de), 8d9c5cbb merges SB-2's afc5d688, be167fe2
+    re-points the promised-ballot tests. Pending: smoke on seeds 1298373396 and 598186290, the two politics scripts and
+    the seven callers of the shared election helper; the full web suite; trace-check; the report.
+  - Rides this PR: spec slice 1 B-AC-1 (`docs/specs/2026-10-22-ws7-politics.md`) changes "the winner's phone opens the
+    tax desk" to "through the Now line's door (D8)" (owed to SB-2's OKs). Not done yet.
+- [ ] Owner OKs via the PM, by SHA, before it merges into the lane: WS4 94fda20e, ef05f5e1, c3e8a5f0; WS8 f563fe37;
+  WS6 6d69452f, 834f6008, the hub-tabs.test.ts commits and any round 2c resolution touching WS6 files (today.tsx
+  63df1358 already OK'd).
 
 ---
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   callOverrule,
+  COLONY,
   commission,
   createGame,
   createRng,
@@ -9,6 +10,9 @@ import {
   POLITICS,
   PRESTIGE,
   stillNeeds,
+  stillToPay,
+  storeForSale,
+  storeQuotes,
   voteWeight,
   type AiLevelId,
   type AiPersonaId,
@@ -96,7 +100,8 @@ describe('S5-C6: the AI Governor splits the fund (S5-RULE-11)', () => {
   it("S5-T-AC-13: it never takes the share that covers its own open buildings' credits, however much a line is worth", () => {
     const state = governed(100 + 4 * PRESTIGE.park.credits); // spare = 4 x the Park's credits: the Park alone needs 25%
     commission(state, 'ai0', 'park');
-    const need = stillNeeds(state.colony!.projects[0]!).credits;
+    // AM-15: what the open building still costs the fund counts the goods it buys at the store, not its credits alone.
+    const need = stillToPay(state, state.colony!.projects[0]!);
     const covering = Math.ceil((need * 100) / (state.treasury.money - 100) / POLITICS.budget.step) * POLITICS.budget.step;
     POLITICS.budget.welfare.maxShare = 95; // lifted for the case, so only the covering share can stop the fill
     POLITICS.budget.welfare.maxCredits = 1e9;
@@ -108,6 +113,46 @@ describe('S5-C6: the AI Governor splits the fund (S5-RULE-11)', () => {
     const full = governed(100 + PRESTIGE.park.credits);
     commission(full, 'ai0', 'park');
     expect(split(full, 'ai0', 'cautious', 'rookie').sent).toEqual([]);
+  });
+
+  describe('AM-15: a building that waits only for goods the store sells', () => {
+    /** The Park with its credits paid and every good missing; a fund of 4 x what the goods cost at the store, over the reserve. */
+    function goodsOnly() {
+      const probe = governed();
+      commission(probe, 'ai0', 'park');
+      const goods = Object.entries(stillNeeds(probe.colony!.projects[0]!).goods) as [Good, number][];
+      const cost = goods.reduce((n, [g, m]) => n + Math.min(m, storeForSale(probe, g)) * (storeQuotes(probe, g).sell ?? 0), 0);
+      const state = governed(100 + 4 * cost);
+      commission(state, 'ai0', 'park');
+      state.colony!.projects[0]!.funded.credits = PRESTIGE.park.credits;
+      return { state, cost, covering: Math.ceil((cost * 100) / (state.treasury.money - 100) / POLITICS.budget.step) * POLITICS.budget.step };
+    }
+    const welfareFirst = () => {
+      POLITICS.budget.welfare.maxShare = 95;
+      POLITICS.budget.welfare.maxCredits = 1e9;
+      line.mockImplementation((_obs, _me, l, amount) => (l === 'welfare' ? amount * 10 : 0));
+    };
+
+    it('S5-T-AC-13: AM-15: Projects keeps the share whose credits buy the missing goods, not 0', () => {
+      const { state, cost, covering } = goodsOnly();
+      expect(cost).toBeGreaterThan(0);
+      expect(stillNeeds(state.colony!.projects[0]!).credits).toBe(0);
+      welfareFirst();
+      expect(split(state, 'ai0', 'trader').sent).toEqual([{ type: 'setBudget', shares: { projects: covering, welfare: 100 - covering, security: 0 } }]);
+    });
+
+    it('S5-T-AC-13: AM-15: with fundBuysGoods off the goods are nobody\'s to buy and Projects covers 0', () => {
+      const saved = COLONY.fundBuysGoods;
+      COLONY.fundBuysGoods = false;
+      try {
+        const { state } = goodsOnly();
+        welfareFirst();
+        POLITICS.budget.welfare.maxShare = 100; // lifted, so only a covering share could keep Projects above 0
+        expect(split(state, 'ai0', 'trader').sent).toEqual([{ type: 'setBudget', shares: { projects: 0, welfare: 100, security: 0 } }]);
+      } finally {
+        COLONY.fundBuysGoods = saved;
+      }
+    });
   });
 
   it('S5-T-AC-13: a split equal to the budget in force sends nothing (a no-op change would invite an overrule)', () => {
