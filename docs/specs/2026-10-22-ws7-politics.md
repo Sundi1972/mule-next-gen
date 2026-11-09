@@ -976,6 +976,8 @@ did       The phone no longer has a Council desk and a Governor desk as separate
           detail (997c559f0), and its door opens Elections. A promised vote can be cast from Overview through the
           ready bar (S3-RULE-12 row 4; the press sends the vote, then the ready). The TV is unchanged.
           Commits: e59bb1b52, 8d9c5cbbb, 834f60082, 997c559f0, be167fe22.
+          PM ruling A, 9 Nov: a promise counts as a pick for Cast my vote and Done only once this seat's ballot has been on
+          screen for the vote (client memory, a reload loses it); before that both are dead on every tab.
 goal      P-1 — unchanged
 ```
 
