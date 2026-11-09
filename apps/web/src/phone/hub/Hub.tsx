@@ -8,6 +8,7 @@ import { usePhoneGame } from '../game';
 import { NowLine, PhaseLine, PhoneShell, type Now } from '../Shell';
 import { needRows, planNow } from './needs';
 import { NeedsStrip } from './NeedsStrip';
+import { useBallotMemory } from './politics/ElectionDay';
 import { PickNavProvider } from './politics/Sheriff';
 import { connectedIn, readyNowIn, stillPlanning } from './ready';
 import { ReadyBar, ReadyCount } from './ReadyBar';
@@ -77,6 +78,8 @@ export function useDrawn(): Drawn {
 export function Hub({ slots }: { slots: TabHubSlots }) {
   const { table, view, me, self } = usePhoneGame();
   const serverNow = useServerNow();
+  // The ready bar reads what the phone has picked and shown (a promise counts once its ballot was on screen): redraw when that changes.
+  useBallotMemory();
   const seat: HubSeat = { table, view, me, self };
   const tabs = shown(slots.tabs, seat);
   const subs = shown(slots.politicsTabs, seat);
