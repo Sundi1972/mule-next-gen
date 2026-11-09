@@ -75,6 +75,11 @@ export async function doneThroughTheElection(ctx: GameStepContext, timeout: numb
     await ctx.held(async () => {
       const now = gameOf(ctx).state.politics?.election;
       if (now?.stage !== stage || (stage !== 'announce' && stage !== 'ballot') || now.done.includes(seat.id)) return;
+      // The announce and the ballot are the Elections sub-tab's (SB-3): open it when the card is not on screen.
+      if ((await ctx.phone.getByTestId('ballot-card').count()) === 0 && (await ctx.phone.getByTestId('tab-politics').count()) > 0) {
+        await ctx.phone.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+        await ctx.phone.getByTestId('sub-elections').click({ timeout: PRESS_MS });
+      }
       // Cast my vote waits for a pick on every ballot paper: abstain.
       for (const box of await ctx.phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input').all()) await box.check({ timeout: PRESS_MS });
       await ready.click({ timeout: PRESS_MS });
