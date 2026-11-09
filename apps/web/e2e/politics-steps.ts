@@ -42,10 +42,24 @@ export async function readyThroughTheElection(phone: Page, timeout: number): Pro
 export async function voteThroughTheElection(phone: Page, timeout: number): Promise<void> {
   const deadline = Date.now() + timeout;
   const desks = phone.locator('[data-phase=planning] [data-testid=tabs-a]');
+  // The tabs are drawn through the whole election now (SB-3): it is over once its result stands in the Elections sub-tab.
+  const result = phone.locator('[data-testid=council-result]');
   // Stop pressing once the reveal starts: I'm ready during it would end planning as the ceremony does.
   const reveal = phone.locator('[data-testid=phone-reveal-tv], [data-testid=phone-reveal-solo]');
-  await pressUntil(phone, desks.or(reveal), timeout);
+  await pressUntil(phone, result.or(reveal), timeout);
   await desks.waitFor({ timeout: Math.max(1, deadline - Date.now()) });
+}
+
+/** The announce and the ballot are the Elections sub-tab's (SB-3): opens it, unless it is open or the stage holds the screen. */
+async function openElections(phone: Page): Promise<void> {
+  if ((await phone.locator('[data-phase=planning] [data-testid=tabs-a]').count()) === 0) return;
+  if ((await phone.getByTestId('sub-elections').getAttribute('aria-selected', { timeout: 200 }).catch(() => null)) === 'true') return;
+  try {
+    await phone.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+    await phone.getByTestId('sub-elections').click({ timeout: PRESS_MS });
+  } catch (err) {
+    if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+  }
 }
 
 /** Presses through the election until `over` shows. */
@@ -55,7 +69,9 @@ async function pressUntil(phone: Page, over: Locator, timeout: number): Promise<
   const abstain = phone.locator('[data-testid=ballot-card] [data-testid$="-abstain"] input:not(:checked)');
   const deadline = Date.now() + timeout;
   for (;;) {
+    await openElections(phone);
     await ready.or(abstain).or(over).first().waitFor({ timeout: Math.max(1, deadline - Date.now()) });
+    await openElections(phone);
     if (await over.count()) return;
     try {
       for (const box of await abstain.all()) await box.check({ timeout: PRESS_MS });

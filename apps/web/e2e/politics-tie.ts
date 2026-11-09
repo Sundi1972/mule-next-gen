@@ -39,7 +39,11 @@ try {
   await tv.getByTestId('room-code').waitFor();
   await lena.getByRole('button', { name: 'Start game' }).click();
   const phones = [lena, ossa];
-  // Month 1's announce takes a run from the block under Now (T-AC-66).
+  // Month 1's announce is the Elections sub-tab's, and takes a run there (T-AC-66).
+  for (const p of phones) {
+    await p.getByTestId('tab-politics').click({ timeout: 5_000 });
+    await p.getByTestId('sub-elections').click({ timeout: 5_000 });
+  }
   await Promise.all(phones.map((p) => p.locator('[data-phase=planning]').getByTestId('run-governor').waitFor({ timeout: 5_000 })));
 
   // The server's own truth, as in politics.ts.
