@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       state.treasury.money = Math.max(state.treasury.money, 5_000);
       room().broadcast();
     });
-    await throughTheMonth(phone, board, false);
+    await throughTheMonth(phone, board);
 
     // Month 1's end, the first this TV sees (RULE-5): the 3 s still, leaning in on nothing. Everyone Ready during it
     // (the AI seats are; Lena presses) ends it, and the TV goes to planning without the month end.
@@ -157,7 +157,7 @@ async function main(): Promise<void> {
     console.log(`✓ B-AC-6 (negative): everyone Ready during month 1's still → the TV left the opener ${gone} ms after the press (the still is ${STILL_MS} ms) for ${after.map((s) => s.what).join(' → ')}`);
 
     // Month 2's end: the Hospital has just come to stand.
-    await throughTheMonth(phone, board, true);
+    await throughTheMonth(phone, board);
     // Read while its 3 s still is up, beside the main TV's reads: after it the month end shows no grounds.
     const reducedTv = readTheStill(still, board);
     // Awaited below; a failure before then is reported by the check that failed first.
@@ -198,6 +198,8 @@ async function main(): Promise<void> {
 
     // ≈ 6 s, then TvMonthEnd, unchanged.
     await tv.getByTestId('tv-monthend').waitFor({ timeout: FULL_MS + 2_000 });
+    // The timeline samples every 50 ms, so it can still end on the opener the moment the month end shows.
+    await tv.waitForFunction("window.__tvTimeline().at(-1).what !== 'opener:full'", undefined, { timeout: PRESS_MS });
     const month2 = await timeline(tv);
     const from = lastShown(month2, 'opener:full');
     const shownFor = month2[from + 1]!.at - month2[from]!.at;
@@ -266,10 +268,12 @@ async function readTheStill(tv: Page, board: () => MuleView): Promise<{ kind: st
   return { ...read, paving };
 }
 
-/** A month from planning to its end: the election (month 2's ready only), the land, the pub, the goods auction. */
-async function throughTheMonth(phone: Page, board: () => MuleView, ready: boolean): Promise<void> {
-  if (ready) await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
-  else await phone.locator('[data-phase=planning] [data-testid=ready]').click({ timeout: PRESS_MS });
+/**
+ * A month from planning to its end: Ready (through month 2's election, or a vote a computer seat calls as planning
+ * ends), the land, the pub, the goods auction.
+ */
+async function throughTheMonth(phone: Page, board: () => MuleView): Promise<void> {
+  await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
   await doneWithLand(phone);
   await throughTheLandAuction(phone, board);
   await phone.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
