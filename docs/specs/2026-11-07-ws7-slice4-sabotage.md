@@ -1177,7 +1177,7 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-B-AC-8 | Given the ban at 2 in force · When a case is revealed and fined 150 · Then the culprit owes 300 and loses 20 reputation (a fine levied before the ban passed was ×1) | S4-C7 S4-C4 | engine state | — |
 | S4-B-AC-9 | Given only Classic AI seats and no API key · When a game is simulated · Then S4-UBER-AC-3 holds | S4-C10 S4-C11 S4-C12 | `pnpm sim` | Rookie and Trader personas never order |
 | S4-B-AC-10 | Given two phones and AI seats, Brix the Sheriff and Lena not · When the e2e step of S4-UBER-AC-2 runs · Then Lena's order shows on Brix's plot card (where she ordered it), Brix's Sheriff desk and map his guard, the TV the "Caught!" story with Lena's name, and after Brix's fine the month end shows it; the ban shows in the law picker and on the TV council panel | S4-C14 S4-C15 S4-C17 S4-C18 S4-C19 | the phone and TV DOM in apps/web/e2e/politics.ts | Brix's phone never shows Lena's order before production |
-| S4-B-AC-11 | Given Kai is Sheriff and guards Brix's Smithore plot (AM-11) · When Lena's power cut on it resolves · Then Lena is named, Kai's money rises by POLITICS.sheriff.bounty (50) from the fund on the office-pay line, and on the next election day every screen shows "Kai, Sheriff: caught 1, solved 0" | S4-C5 S4-C6 S4-C16 | Kai's money and the fund ledger in the server view; the election-day DOM | Kai trying to guard his own plot → "You can't guard your own plots"; a catch on the spot pays no bounty |
+| S4-B-AC-11 | Given Kai is Sheriff and guards Brix's Smithore plot (AM-11) · When Lena's power cut on it resolves · Then Lena is named, Kai's money rises by POLITICS.sheriff.bounty (50) from the fund on the office-pay line, and on the next election day every election-day announce shows "Kai was Sheriff: 1 catch, 0 cases solved" (AM-13) | S4-C5 S4-C6 S4-C16 | Kai's money and the fund ledger in the server view; the election-day DOM | Kai trying to guard his own plot → "You can't guard your own plots"; a catch on the spot pays no bounty |
 | S4-B-AC-12 | Given Kai is Sheriff · When Lena's power cut on Kai's own Food plot resolves with no Security spent · Then it is seen with chance 0.5 (detect 0.3 + POLITICS.sheriff.ownPlotDetectBonus 0.2), against 0.3 on anyone else's plot (AM-11) | S4-C2 | engine test over seeded draws at the boundary | a rumour's odds are unchanged |
 | S4-T-AC-1 (serves S4-B-AC-6) | S4-RULE-2's eight rows, each verdict and message | S4-C1 | engine test | — |
 | S4-T-AC-2 (serves S4-B-AC-1, S4-B-AC-2) | S4-RULE-3's six rows; both draws are made for every non-void order whatever the guard | S4-C2 | engine test, seeded | — |
@@ -1443,6 +1443,23 @@ did       the standing guards are the listed tiles the Sheriff may guard when th
 because   guards are posted in planning but the land auction runs before production, so without this a Sheriff could
           guard Brix's plot, buy it, and collect a bounty on its own plot, the case AM-11 item 1 rules out
 goal      S4-1 — unchanged; Heiko's own-plot rule now holds at production, not only at planning
+
+AM-13 · 2026-11-09 · PM rulings (9 Nov; WS6's word objection upheld) and WS7 (S4-PR-11's review) · the Sheriff's record line: its words, its spot and its fit
+target    AM-11 item 4; §6 S4-B-AC-11's Then clause
+said      every screen's election view shows the outgoing Sheriff's record, e.g. "Kai, Sheriff: caught 3, solved 1"
+did       the words are "Kai was Sheriff: 3 catches, 1 case solved", with singular forms "1 catch" and "1 case
+          solved". A 0/0 record still shows ("Kai was Sheriff: 0 catches, 0 cases solved"): a Sheriff who caught
+          nobody is information. The name goes through SeatWords, so a computer seat reads "Kai · AI". The counts
+          are catches, not people: one per guard catch and one per solved investigation (sabotage.ts); a chance
+          catch counts nothing, and a guard-caught order can't be investigated, so it counts once (S4-T-AC-20).
+          The line is shown only at the election's announce stage, as one plain line in ink-2 and the existing type:
+          on the phone under "The colony elects its …" and before the candidates; on the TV under the title row
+          and before the candidates. With no outgoing Sheriff, or sabotage off, there is no line. On the phone it
+          may take a second line, breaking only after "Sheriff:" (two spans), so the longest computer names fit at
+          667 px. The TV keeps it on one line (TV-FIT 0.925 at six seats, floor 0.7)
+because   "caught 3 saboteurs" counted people where the record counts catches (WS6); the record covers the term that
+          is ending, which is "was"; the line sits where people vote, so the bounty's incentive is seen there (G-5)
+goal      S4-1 unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
