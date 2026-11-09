@@ -361,6 +361,12 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
       me({ running: 'governor', canRun: { governor: 'closed' } }),
       { month: 4, players: PLAYERS.map((p) => (ai && p.id === 's3' ? { ...p, isAi: true } : p)) },
     );
+  /** A Sheriff in office with sabotage off: the server sends no sabotage block at all. */
+  const sabotageOff = () => {
+    const game = day({ caught: 3, solved: 1 });
+    game.politics!.sabotage = null;
+    return game;
+  };
   const SAID: [string, { caught: number; solved: number }, string][] = [
     ['plural', { caught: 3, solved: 1 }, 'Kai was Sheriff: 3 catches, 1 case solved'],
     ['singular', { caught: 1, solved: 1 }, 'Kai was Sheriff: 1 catch, 1 case solved'],
@@ -384,6 +390,7 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
     ['no Sheriff', day({ caught: 3, solved: 1 }, { sheriff: null })],
     ['no record sent', day(null)],
     ['an older server with no record', day(undefined)],
+    ['sabotage off (block null)', sabotageOff()],
   ])('S4-B-AC-11: the phone has no line with %s', (_, game) => {
     expect(tagOf(inHub(game), 'sheriff-record')).toBeUndefined();
   });
@@ -408,6 +415,8 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
   it.each([
     ['no Sheriff', day({ caught: 3, solved: 1 }, { sheriff: null })],
     ['no record sent', day(null)],
+    ['an older server with no record', day(undefined)],
+    ['sabotage off (block null)', sabotageOff()],
   ])('S4-B-AC-11: the TV has no line with %s', (_, game) => {
     expect(tagOf(onTv(game), 'tv-sheriff-record')).toBeUndefined();
   });
