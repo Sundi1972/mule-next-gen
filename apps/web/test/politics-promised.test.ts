@@ -108,10 +108,13 @@ interface Seat {
   ballot?: Partial<Record<'governor', string>>;
   /** Lena's law ballot as the server holds it. */
   lawBallot?: boolean | null;
+  /** Whose phone it is (Lena, s1, by default) and in which month: the same phone sees other seats and months. */
+  id?: string;
+  month?: number;
 }
 
-const me = (pol: PoliticsView, { promised, ballot = {}, lawBallot = null }: Seat): MyView => ({
-  id: 's1',
+const me = (pol: PoliticsView, { promised, ballot = {}, lawBallot = null, id = 's1' }: Seat): MyView => ({
+  id,
   species: 'zipwing',
   stock: { ...NO_GOODS },
   carriedMule: null,
@@ -135,12 +138,12 @@ const me = (pol: PoliticsView, { promised, ballot = {}, lawBallot = null }: Seat
 /** Lena's phone on election day's ballot. */
 const electionFor = (seat: Seat = {}): MuleView => {
   const pol = politics({ election: ballotDay() });
-  return aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
+  return aMuleView({ month: seat.month ?? MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
 };
 /** Lena's phone on the law vote. */
 const lawFor = (seat: Seat = {}): MuleView => {
   const pol = politics({ council: lawDay() });
-  return aMuleView({ month: MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
+  return aMuleView({ month: seat.month ?? MONTH, players: PLAYERS, me: me(pol, seat), politics: pol });
 };
 
 const BRIX_VOTE: Promised = { election: { governor: { candidate: 's2', to: ['s2'] } }, law: null };
@@ -158,9 +161,11 @@ const client = {
 let root: Root | null = null;
 let host: FakeElement;
 
+/** The room the phone is in; seat ids and months repeat from room to room. */
+let room = 'MULE';
 const onPhone = (view: MuleView) => {
   const self = view.players.find((p) => p.id === view.me!.id)!;
-  const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
+  const table: TableView<MuleView> = { code: room, status: 'playing', hostId: 's1', boards: 1, game: view, seats: PLAYERS.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot })) };
   return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) });
 };
 
@@ -191,6 +196,7 @@ afterEach(() => {
   root = null;
   forgetPicks();
   forgetLawPick();
+  room = 'MULE';
   sent.length = 0;
 });
 
@@ -299,6 +305,31 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     expect(sent).toEqual([vote('s2'), READY]);
   });
 
+  it("S3-RULE-12 (m-1): the ballot shown and closed off-screen in month 1 leaves nothing for month 4's: Cast my vote is dead on Overview until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(electionFor({ promised: BRIX_VOTE, month: 1 }));
+    toOverview();
+    expect(isDisabled('ready'), 'month 1, seen').toBe(false);
+    rerender(electionFor({ promised: BRIX_VOTE, month: 4 }));
+    expect(isDisabled('ready'), 'month 4, never shown').toBe(true);
+  });
+
+  it("S3-RULE-12 (m-2): Lena's ballot shown, then Kai's view on the same phone in the same month: Kai's Cast my vote is dead until his ballot is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(electionFor({ promised: BRIX_VOTE }));
+    toOverview();
+    expect(isDisabled('ready'), 'Lena, seen').toBe(false);
+    rerender(electionFor({ promised: BRIX_VOTE, id: 's3' }));
+    expect(isDisabled('ready'), 'Kai, never shown').toBe(true);
+  });
+
+  it("S3-RULE-12 (I-1, election): a ballot shown in another room leaves nothing for this room's at the same seat and month", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(electionFor({ promised: BRIX_VOTE }));
+    act(() => root!.unmount());
+    root = null;
+    room = 'ZORP';
+    mount(electionFor({ promised: BRIX_VOTE }), false);
+    expect(isDisabled('ready'), 'another room, never shown').toBe(true);
+  });
+
   it('S3-T-AC-16: a reload forgets that the ballot was shown: Cast my vote is dead again until it is reopened', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
     mount(electionFor({ promised: BRIX_VOTE }));
     toOverview();
@@ -377,6 +408,36 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(isDisabled('ready'), 'seen once, live from any tab').toBe(false);
     tap('ready');
     expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
+  it("S3-RULE-12 (I-1): a law ballot unmounted while open leaves nothing for another room's law ballot at the same seat and month: Done is dead until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(lawFor({ promised: LAW_YES }));
+    act(() => root!.unmount());
+    root = null;
+    room = 'ZORP';
+    mount(lawFor({ promised: LAW_YES }), false);
+    expect(isDisabled('ready'), 'another room, never shown').toBe(true);
+  });
+
+  it("S3-RULE-12 (I-1): an own No from the last room is not this room's: shown, the press sends the promised vote, then ready", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(lawFor({ promised: LAW_YES }));
+    tap('ballot-no');
+    act(() => root!.unmount());
+    root = null;
+    sent.length = 0;
+    room = 'ZORP';
+    mount(lawFor({ promised: LAW_YES }));
+    expect(isDisabled('ready'), 'shown').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
+  it("S3-RULE-12 (m-1): the law ballot shown and closed off-screen in month 2 leaves nothing for month 3's: Done is dead on Overview until it is shown", () => { // trace-allow: S3-RULE-12 is a rule id; found in the 2e re-review
+    mount(lawFor({ promised: LAW_YES, month: 2 }));
+    toOverview();
+    expect(isDisabled('ready'), 'month 2, seen').toBe(false);
+    rerender(lawFor({ promised: LAW_YES, month: 3 }));
+    expect(isDisabled('ready'), 'month 3, never shown').toBe(true);
   });
 
   it('S3-T-AC-16: a reload forgets that the law ballot was shown: Done is dead again until it is reopened', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
