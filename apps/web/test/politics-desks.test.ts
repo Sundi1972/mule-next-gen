@@ -422,8 +422,11 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
     expect(tagOf(onTv(game), 'tv-sheriff-record')).toBeUndefined();
   });
 
-  it('S4-B-AC-11: a computer Sheriff carries " · AI" after its name on the TV, through SeatWords', () => {
-    expect(textOf(onTv(day({ caught: 3, solved: 1 }, { ai: true })), 'tv-sheriff-record')).toBe('Kai · AI was Sheriff: 3 catches, 1 case solved');
+  it.each([
+    ['phone', (g: MuleView) => textOf(inHub(g), 'sheriff-record')],
+    ['TV', (g: MuleView) => textOf(onTv(g), 'tv-sheriff-record')],
+  ])('S4-B-AC-11: a computer Sheriff carries " · AI" after its name on the %s, through SeatWords', (_, read) => {
+    expect(read(day({ caught: 3, solved: 1 }, { ai: true }))).toBe('Kai · AI was Sheriff: 3 catches, 1 case solved');
   });
 
   it('S4-B-AC-11: the line never names a guard post or a tile', () => {
