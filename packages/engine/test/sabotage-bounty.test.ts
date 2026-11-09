@@ -329,6 +329,15 @@ describe('S4-T-AC-20: the Sheriff\'s term record', () => {
   });
 });
 
+describe('S4-T-AC-20: one order is counted once', () => {
+  it('S4-T-AC-20: a guard-caught order cannot then be investigated, so it counts in caught only and never in solved', () => {
+    const { state, food } = monthOf();
+    const order = cutAndResolve(state, food, [food]);
+    expect(refusalOf(() => investigate(state, 'ossa', order.id))).toBe('That one is solved');
+    expect(state.politics!.sheriffRecord).toEqual({ caught: 1, solved: 0 });
+  });
+});
+
 describe('S4-B-AC-11 (engine leg): what another seat sees of the bounty', () => {
   it('S4-B-AC-11: the record and a revealed order\'s bounty reach every seat; a hidden order carries none', () => {
     const { state, food, ore } = monthOf();
