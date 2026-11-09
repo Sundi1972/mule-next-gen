@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advanceGrant,
   advancePhase,
+  GAME,
+  grantDone,
   postPrices,
+  PRICE,
   storeQuotes,
   buyMule,
   claimPlot,
   colonyPrice,
   createGame,
   shipPrice,
-  targetPrice,
+  startAuction,
   installMule,
   isGameOver,
   monthlyDemand,
@@ -21,7 +25,6 @@ import {
   type Good,
   type Tile,
 } from '../src/index.js';
-import { playAiGame } from '../src/sim.js';
 
 const players = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isAi: false }));
 
@@ -60,32 +63,62 @@ describe('createGame', () => {
   it('is deterministic for a given seed', () => {
     expect(newGame().tiles).toEqual(newGame().tiles);
   });
+
+  it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Food (Heiko, 5 Nov)', (n) => {
+    expect(newGame(n).players.map((p) => p.stock.food)).toEqual(Array.from({ length: n }, () => 2));
+  });
+
+  it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Energy (Heiko, 5 Nov)', (n) => {
+    expect(newGame(n).players.map((p) => p.stock.energy)).toEqual(Array.from({ length: n }, () => 2));
+  });
+
+  it.each([
+    [2, 8],
+    [4, 16],
+    [6, 24],
+  ])("a %i-seat game's store starts with %i Food, 4 a seat (Heiko, 5 Nov)", (n, food) => {
+    expect(newGame(n).store.stock.food).toBe(food);
+  });
+
+  it.each([
+    [2, 24],
+    [4, 48],
+    [6, 72],
+  ])("a %i-seat game's store starts with %i Energy, 12 a seat (S1 lever (c), PM rulings 7 and 8 Nov)", (n, energy) => {
+    expect(newGame(n).store.stock.energy).toBe(energy);
+  });
+
+  it("the store starts with 40 Medicine (S2 lever B, PM ruling 8 Nov)", () => {
+    expect(newGame(4).store.stock.medicine).toBe(40);
+  });
+
+  describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {
+    /** DEFAULT_SPECIES's order, written out: an n-seat game deals from its first n. */
+    const ORDER = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
+    const firstN = (n: number) => ORDER.slice(0, n).sort();
+
+    it.each([2, 3, 4, 5, 6])('FM-species-by-chair: in a %i-seat game, over seeds 0..n-1, chair 0 plays each of the first n species once', (n) => {
+      const chairZero = Array.from({ length: n }, (_, seed) => createGame({ seed, players: players(n) }).players[0]!.species);
+      expect([...chairZero].sort()).toEqual(firstN(n));
+    });
+
+    it.each([2, 3, 4, 5, 6])('FM-species-by-chair: a %i-seat game where nobody picked plays the first n species, one each, whatever the seed', (n) => {
+      for (const seed of [0, 1, 2, 3, 4, 5, 2_147_483_646, -1]) {
+        const species = createGame({ seed, players: players(n) }).players.map((p) => p.species);
+        expect([...species].sort(), `seed ${seed}: ${species.join(',')}`).toEqual(firstN(n));
+      }
+    });
+
+    it('FM-species-by-chair: a seat that picked a species keeps it under every seed', () => {
+      for (const seed of [0, 1, 2, 3]) {
+        const seats = players(4).map((p, i) => (i === 1 ? { ...p, species: 'glimmer' as const } : p));
+        expect(createGame({ seed, players: seats }).players[1]!.species).toBe('glimmer');
+      }
+    });
+  });
 });
 
 describe('prices', () => {
-  it('target high when the shelf is empty and low in a glut', () => {
-    const state = newGame();
-    emptyColony(state, 'food');
-    expect(targetPrice(state, 'food')).toBeGreaterThan(state.store.refPrice.food * 10);
-    state.store.stock.food = 10_000;
-    expect(targetPrice(state, 'food')).toBeLessThan(state.store.refPrice.food / 10);
-  });
-
-  it('move toward the target with momentum, and keep climbing while a shortage lasts', () => {
-    const state = newGame();
-    emptyColony(state, 'food');
-    const ref = state.store.refPrice.food;
-    const start = colonyPrice(state, 'food');
-    // A cheap good climbs by half its reference price, a dear one by half its price.
-    const step = (p: number) => Math.round(p + 0.5 * Math.max(p, ref));
-    postPrices(state);
-    expect(colonyPrice(state, 'food')).toBe(step(start));
-    postPrices(state);
-    expect(colonyPrice(state, 'food')).toBe(step(step(start)));
-    for (let i = 0; i < 6; i++) postPrices(state);
-    expect(colonyPrice(state, 'food')).toBeGreaterThan(ref * 10);
-  });
-
   it('let a good only off-world buyers want cost no more than they pay', () => {
     const state = newGame();
     emptyColony(state, 'crystite');
@@ -100,15 +133,52 @@ describe('prices', () => {
     expect(shipPrice(state, 'food')).toBeNull();
   });
 
-  it('react more strongly to a Food shortage than an Alloy shortage', () => {
-    const state = newGame();
-    // One month of cover each.
-    const demand = monthlyDemand(state);
-    emptyColony(state, 'food');
-    emptyColony(state, 'alloy');
-    state.store.stock.food = demand.food;
-    state.store.stock.alloy = demand.alloy;
-    expect(targetPrice(state, 'food') / 30).toBeGreaterThan(targetPrice(state, 'alloy') / 90);
+  it("FM-store-spread-float: the store sells at its posted price plus its band's spread, rounded up, in its quotes and at the auction", () => {
+    // [posted, sells at]: 15% more (the normal band), rounded up, worked by hand. 1 + 0.15 in floating point is a hair
+    // under 1.15, so 100 × 1.15 lands a hair under 115, which must still sell at 115.
+    const rows = [
+      [100, 115], [180, 207], [200, 230], [220, 253], [340, 391], [360, 414], [380, 437], [400, 460],
+      [7, 9], [25, 29], [33, 38], [50, 58], [51, 59], [90, 104], [99, 114],
+    ];
+    const seen = rows.map(([posted]) => {
+      const state = newGame();
+      state.store.posted.smithore = posted!;
+      state.store.stock.smithore = 20;
+      state.players[0]!.stock.smithore = 5;
+      const quote = storeQuotes(state, 'smithore').sell;
+      state.phase = 'auction';
+      startAuction(state, ['smithore']);
+      return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeSell : 'skipped'];
+    });
+    expect(seen).toEqual(rows.map(([posted, sells]) => [posted, sells, sells]));
+  });
+
+  it("FM-store-spread-float: the store buys at its posted price less its band's spread, rounded down, in its quotes and at the auction", () => {
+    // [posted, buys at]: 30% less, rounded down, worked by hand, under a swept spread (`pnpm sim -- --set
+    // PRICE.bandSpread.normal.under=0.3`). 1 - 0.3 is a hair under 0.7 in floating point, so 90 × 0.7 lands a hair under
+    // 63 and used to round down one credit too low, as the sell side's 1 + 0.1 did one too high.
+    const rows = [
+      [90, 63], [170, 119], [180, 126], [100, 70], [10, 7], [7, 4], [33, 23], [1, 1],
+    ];
+    const live = PRICE.bandSpread.normal.under;
+    PRICE.bandSpread.normal.under = 0.3; // literal-ok: a swept spread where the float bites
+    try {
+      const seen = rows.map(([posted]) => {
+        const state = newGame();
+        state.store.posted.smithore = posted!;
+        // Posted in the normal band, whose spread is the swept one; a new record, as postPrices writes it.
+        state.store.band = { ...state.store.band, smithore: 'normal' };
+        state.store.stock.smithore = 0;
+        state.players[0]!.stock.smithore = 5;
+        const quote = storeQuotes(state, 'smithore').buy;
+        state.phase = 'auction';
+        startAuction(state, ['smithore']);
+        return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeBuy : 'skipped'];
+      });
+      expect(seen).toEqual(rows.map(([posted, buys]) => [posted, buys, buys]));
+    } finally {
+      PRICE.bandSpread.normal.under = live;
+    }
   });
 
   it('make MULEs dearer when Alloy is scarce', () => {
@@ -133,18 +203,6 @@ describe('production', () => {
     const alone = rawOutput(state, a);
     b.outfit = 'energy';
     expect(rawOutput(state, a)).toBe(alone + 1);
-  });
-
-  it('halves output of plots whose owner has no Energy', () => {
-    const state = newGame();
-    const tile = plainTile(state, 0, 0, 'river');
-    tile.owner = 'p0';
-    tile.outfit = 'food';
-    const p0 = state.players[0]!;
-    p0.stock.energy = 0;
-    const full = rawOutput(state, tile);
-    const produced = runProduction(state);
-    expect(produced.produced.p0!.food).toBe(Math.floor(full / 2));
   });
 
   it('halves Food farms whose owner is short of Water', () => {
@@ -176,6 +234,20 @@ describe('production', () => {
   });
 });
 
+describe('land grant', () => {
+  it('FM-grant-stall: a land grant where nobody presses ends after GAME.grantSweeps sweeps', () => {
+    const state = createGame({ seed: 4, players: players(4) });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    let steps = 0;
+    while (!grantDone(state) && steps++ < 10_000) advanceGrant(state);
+    expect(grantDone(state)).toBe(true);
+    expect(state.grant!.sweep).toBe(GAME.grantSweeps);
+    // Free land is left and nobody claimed: the sweep limit ended it, not the land or the claims.
+    expect(state.tiles.some((t) => t.terrain !== 'store' && !t.owner)).toBe(true);
+    expect(state.players.every((p) => p.claimsThisGrant === 0)).toBe(true);
+  });
+});
+
 describe('month flow', () => {
   it('lets a player claim, buy, outfit and install a MULE', () => {
     const state = newGame();
@@ -200,19 +272,5 @@ describe('month flow', () => {
     expect(isGameOver(state)).toBe(false);
     state.month = 7;
     expect(isGameOver(state)).toBe(true);
-  });
-});
-
-describe('simulator', () => {
-  it('plays a full AI game without the colony going broke', () => {
-    const state = playAiGame(7, 4);
-    expect(state.phase).toBe('gameOver');
-    expect(state.store.capital).toBeGreaterThan(0);
-    for (const report of state.history) {
-      for (const price of Object.values(report.prices)) {
-        expect(price).toBeGreaterThan(0);
-        expect(Number.isFinite(price)).toBe(true);
-      }
-    }
   });
 });

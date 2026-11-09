@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>M.U.L.E. Next Gen rulebook</h1>
+<p class="rb-lede">How the game works today, rule by rule and number by number, and what is designed, being built or still open. It is both our rulebook and our design book.</p>
+
+<h2 id="how-to-read">How to read this book <span class="pill built">In the game</span></h2>
+<p>Each chapter follows one part of a month at the table. Every topic starts with how it works in the game today, in plain words, with its real numbers. Where a rule is about to change, a box says what is changing, who decided it and who is building it.</p>
+<p>Each topic carries one label, so you can see at a glance how settled it is:</p>
+<div class="legend">
+<span><span class="pill built">In the game</span> on the main build today</span>
+<span><span class="pill progress">Being built</span> a change is in a pull request</span>
+<span><span class="pill designed">Designed</span> ruled or approved, not built yet</span>
+<span><span class="pill open">Being designed</span> a design or a question is open</span>
+<span><span class="pill backlog">Backlog</span> wanted, nobody on it yet</span>
+</div>
+<p>Search finds any word in any chapter: type in the box at the top, or press <code>/</code>. Press Enter to jump to the first result.</p>
+
+<h2 id="chapters">Chapters <span class="pill built">In the game</span></h2>
+<div class="chapters" id="rb-chapters"></div>
+
+<h2 id="sources">Where the facts come from <span class="pill built">In the game</span></h2>
+<p>The game's code on the main build is the source of truth. Every number in this book is the value in the game's settings file, and the <a href="numbers.html">Every number</a> page is generated from that file, so it can't drift. Rulings and their reasons come from the programme's decision log: what Heiko decided, and what the programme manager ruled under his authority, each with its date.</p>
+<p>Where this book and the game disagree, the game is right and the book has a bug. Tell the programme manager.</p>
+
+<h2 id="keeping-current">How the book stays current <span class="pill built">In the game</span></h2>
+<p>The rule for every team: <strong>a pull request that changes a rule, a number, a screen or a behaviour updates the chapter that describes it, in the same pull request.</strong> When the change merges, its "Being built" label becomes "In the game". A new design gets its own section the day its goals are agreed. The programme manager publishes the book again after every batch that reaches the main build.</p>
+<p class="owner">Kept current by: the programme manager. How to write a section: <code>docs/rulebook/WRITING.md</code>.</p>
+</article>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var box = document.getElementById('rb-chapters');
+  (window.RULEBOOK_CHAPTERS || []).slice(1).forEach(function (c) {
+    var a = document.createElement('a'); a.href = c[0];
+    var s = document.createElement('strong'); s.textContent = c[1];
+    var p = document.createElement('span'); p.textContent = c[2];
+    a.appendChild(s); a.appendChild(p); box.appendChild(a);
+  });
+});
+</script>
+
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

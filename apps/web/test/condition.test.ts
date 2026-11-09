@@ -1,0 +1,73 @@
+import { DEV_WALK } from '@mule/engine';
+import { feeling, hungerLevel, paceLine, paceRule, sickReason, waddleSeconds, type Condition } from '@mule/ui';
+import { describe, expect, it } from 'vitest';
+
+/** The server's pace for a share of the month's Food, as the engine works it out (T-AC-22): hunger × sickness, from DEV_WALK. */
+const pace = (foodShare: number, sick: boolean) => (1 - (1 - DEV_WALK.hungerPaceMin) * (1 - foodShare)) * (sick ? DEV_WALK.sickPace : 1);
+const FED: Condition = { foodShare: 1, sick: false, conditionPace: 1 };
+const PECKISH: Condition = { foodShare: 0.8, sick: false, conditionPace: pace(0.8, false) };
+const HUNGRY: Condition = { foodShare: 0.5, sick: false, conditionPace: pace(0.5, false) };
+const STARVING: Condition = { foodShare: 0.2, sick: false, conditionPace: pace(0.2, false) };
+const SICK: Condition = { foodShare: 1, sick: true, sickBecause: 'chance', conditionPace: pace(1, true) };
+const HUNGRY_AND_SICK: Condition = { foodShare: 0.5, sick: true, sickBecause: 'air', conditionPace: pace(0.5, true) };
+const STARVING_AND_SICK: Condition = { foodShare: 0, sick: true, sickBecause: 'pollution', conditionPace: pace(0, true) };
+/** A pace as the labels print it. */
+const pct = (c: Condition) => `${Math.round(c.conditionPace * 100)}%`;
+const FOOD = { ate: 5, need: 10 };
+/** The points of walking speed lost per 10% of Food missing, from config. */
+const POINTS = Math.round((1 - DEV_WALK.hungerPaceMin) * 10);
+
+describe('a colonist’s condition, in words (AM-14)', () => {
+  it('T-AC-12: the hunger level comes from foodShare and DEV_WALK.hungerLevels: peckish below hungryFrom, starving from starvingFrom', () => {
+    const level = (foodShare: number) => hungerLevel({ foodShare, sick: false, conditionPace: 1 }, DEV_WALK);
+    const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
+    expect(level(1)).toBe(0);
+    expect(level(0.99)).toBe(1);
+    expect(level(1 - hungryFrom + 0.01)).toBe(1);
+    expect(level(1 - hungryFrom)).toBe(2);
+    expect(level(1 - starvingFrom + 0.01)).toBe(2);
+    expect(level(1 - starvingFrom)).toBe(3);
+    expect(level(0)).toBe(3);
+    // Sickness is not hunger.
+    expect(hungerLevel(SICK, DEV_WALK)).toBe(0);
+  });
+
+  it('T-AC-12: every label carries the pace: fed, peckish, hungry, starving, sick, and both', () => {
+    const title = (c: Condition) => paceLine(c, DEV_WALK, FOOD).title;
+    expect(title(FED)).toBe('Fed: full pace');
+    expect(title(PECKISH)).toBe(`Peckish: ${pct(PECKISH)} pace`);
+    expect(title(HUNGRY)).toBe(`Hungry: ${pct(HUNGRY)} pace`);
+    expect(title(STARVING)).toBe(`Starving: ${pct(STARVING)} pace`);
+    expect(title(SICK)).toBe(`Sick: ${pct(SICK)} pace`);
+    expect(title(HUNGRY_AND_SICK)).toBe(`Hungry and sick: ${pct(HUNGRY_AND_SICK)} pace`);
+    expect(title(STARVING_AND_SICK)).toBe(`Starving and sick: ${pct(STARVING_AND_SICK)} pace`);
+    expect([FED, PECKISH, HUNGRY, STARVING, SICK, STARVING_AND_SICK].map((c) => paceLine(c, DEV_WALK, FOOD).tone)).toEqual(['ok', 'warn', 'warn', 'alert', 'alert', 'alert']);
+    expect(feeling(STARVING_AND_SICK, DEV_WALK)).toBe('Starving and sick');
+    // The short form, for a narrow rail's clock label.
+    expect([FED, HUNGRY, STARVING_AND_SICK].map((c) => paceLine(c, DEV_WALK, FOOD).short)).toEqual(['full pace', `${pct(HUNGRY)} pace`, `${pct(STARVING_AND_SICK)} pace`]);
+  });
+
+  it('T-AC-12: the long-press rule says what hunger and sickness cost, its points from config', () => {
+    expect(paceRule(HUNGRY, DEV_WALK, FOOD)).toEqual([`You ate 5 of the 10 Food you need. You lose ${POINTS} points of walking speed per 10% of Food missing.`]);
+    expect(POINTS).toBeCloseTo((1 - DEV_WALK.hungerPaceMin) * 10);
+    expect(paceRule(SICK, DEV_WALK, FOOD)).toEqual(['Sick this month. Sickness halves your walking speed.']);
+    expect(paceRule(HUNGRY_AND_SICK, DEV_WALK, FOOD)).toEqual([expect.stringMatching(/^You ate 5 of the 10/), 'Sick: the air is toxic. Sickness halves your walking speed.']);
+    expect(paceRule(FED, DEV_WALK, FOOD)).toEqual([]);
+    expect(paceLine(FED, DEV_WALK, FOOD).detail).toBe('You ate the 10 Food you need.');
+    expect(paceLine(HUNGRY, DEV_WALK, FOOD).detail).toContain('Everyone has the same time; you just cover less ground.');
+  });
+
+  it('T-AC-12: the sick line says why from the view: the air, your own pollution, or chance; never the air when it does not know', () => {
+    expect(sickReason('air')).toBe('Sick: the air is toxic.');
+    expect(sickReason('pollution')).toBe('Sick: your own pollution fouled the air.');
+    expect(sickReason('chance')).toBe('Sick this month.');
+    expect(sickReason(null)).toBe('Sick this month.');
+    expect(sickReason(undefined)).toBe('Sick this month.');
+  });
+
+  it('T-AC-12: a walking colonist waddles at 0.36 s divided by its condition pace', () => {
+    expect(waddleSeconds(1)).toBeCloseTo(0.36);
+    expect(waddleSeconds(HUNGRY.conditionPace)).toBeCloseTo(0.36 / HUNGRY.conditionPace);
+    expect(waddleSeconds(STARVING_AND_SICK.conditionPace)).toBeCloseTo(0.36 / STARVING_AND_SICK.conditionPace);
+  });
+});

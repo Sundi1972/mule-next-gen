@@ -1,0 +1,4 @@
+/* The app's own entry: Tailwind, the @mule/ui theme and the app's base styles. Never copy token values here. */
+@import "../../../../apps/web/src/index.css";
+/* The mock composes the app's real phone and table components, so their classes are scanned too. */
+@source "../../../../apps/web/src";

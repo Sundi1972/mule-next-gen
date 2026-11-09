@@ -1,9 +1,10 @@
-import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, OFF_WORLD, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
+import { fundIn, stillNeeds } from './colony.js';
 import { airBand } from './pollution.js';
-import { energyUseOf, needsOf } from './production.js';
-import { createRng } from './rng.js';
+import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput } from './production.js';
+import { createRng, seedOf, type Rng } from './rng.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type ExportShip, type GameState, type Good, type Stock } from './types.js';
+import { GOODS, type ExportShip, type GameState, type Good, type PriceBand, type Stock } from './types.js';
 
 /** True from the month before the export ship calls: its wishlist is public and counts as demand. */
 export function shipAnnounced(state: GameState): boolean {
@@ -16,6 +17,7 @@ export function shipInPort(state: GameState): boolean {
 
 /** Plans the next call of the export ship: when it arrives and the goods it will want, drawn from the seed. */
 export function planShip(seed: number, arrives: number, players: number): ExportShip {
+  // literal-ok: hash constants that mix the seed and the month into the ship's own rng stream
   const rng = createRng((seed * 7 + arrives * 2_654_435) >>> 0);
   const goods = rng.shuffle(Object.keys(EXPORT_DEMAND) as Good[]).slice(0, EXPORT_SHIP.wishlist);
   const hold: Partial<Stock> = {};
@@ -23,35 +25,52 @@ export function planShip(seed: number, arrives: number, players: number): Export
   return { arrives, goods, hold, bought: {} };
 }
 
+/** Energy a new MULE draws from the stock: the mean use of the outfits that buy Energy, a plant's own use being no demand (AM-17 A). Read on every call, so a run's `--set UPKEEP.energyUse` reaches it. */
+function energyPerNewMule(): number {
+  const buyers = Object.entries(UPKEEP.energyUse).filter(([good]) => good !== 'energy');
+  return buyers.reduce((sum, [, use]) => sum + use, 0) / buyers.length;
+}
+
 /**
- * Expected demand for next month, per good, from colonists, players,
- * industry and the export ship's off-world buyers.
+ * Expected demand for next month, per good, from colonists (their Electronics down to its inputs), players,
+ * industry and the export ship's off-world buyers. `festival` is the extra Food the colonists ask this month (G-5 C26);
+ * once upkeep's meal has run it is eaten, and the caller passes 0.
  */
-export function monthlyDemand(state: GameState): Stock {
+export function monthlyDemand(state: GameState, festival = festivalFood(state)): Stock {
   const demand = emptyStock();
   const players = state.players.length;
   const colonistUnits = state.colonists / UPKEEP.colonistsPerUnit;
 
-  // Players must eat and power their plots whatever the price. Colonists buy
-  // less when the store's price is above what their wages pay.
-  const sick = airBand(state.air).devPenalty > 0;
+  // Players must eat and power their plots whatever the price, and so must the colonists: they have no wages, and
+  // their full need counts at any price (needs C2).
+  const sick = airBand(state.air).sickens;
   const own = playersUse(state);
-  demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
-  demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
-  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits / 2);
+  demand.food = own.food + colonistUnits + festival;
+  demand.water = own.water + colonistUnits;
+  demand.energy = own.energy + colonistUnits * UPKEEP.colonistEnergyShare;
+  // The MULEs players are about to install will each need Energy before any plot draws it (C6).
+  demand.energy += mulesWanted(state) * energyPerNewMule();
   // Sick colonists in dirty air need more Medicine.
-  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / 50) * (sick ? POLLUTION.sickMedicineDemand : 1));
+  demand.medicine = (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1);
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
-  // The store builds a MULE from Smithore for every plot that will want one;
-  // smelters need Smithore too, and Electronics works need Alloy.
-  demand.smithore = factories('alloy') * 2 + mulesWanted(state) * MULE.smithorePerMule;
-  demand.alloy = factories('electronics');
-  demand.rareEarth = factories('electronics');
+  // The store builds a MULE from Smithore for every plot that will want one; smelters need Smithore too.
+  demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;
   // Crystite is a pure off-world luxury: only the export ship wants it.
   demand.crystite = 0;
-  demand.electronics = 0;
+  const electronics = state.colonists / UPKEEP.colonistsPerElectronics;
+  demand.electronics = electronics;
+  // The larger, not the sum: the works and the colonists' want are the same Electronics. See needs AM-2.
+  // A works takes one recipe's inputs a month, so the want counts in recipes: E ÷ output.
+  const recipes = Math.max(factories('electronics'), electronics / RECIPES.electronics.output);
+  for (const input of ['rareEarth', 'alloy'] as const) demand[input] = recipes * (RECIPES.electronics.inputs[input] ?? 0);
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
+  // A commissioned building still missing goods asks the store for them, so their price rises while it waits; the
+  // fund buys them at that price at upkeep (G-5 C49, RULE-21 row 3). Politics off, there is no colony and nothing here.
+  for (const p of state.colony?.projects ?? []) {
+    if (p.stage !== 'commissioned') continue;
+    for (const [good, units] of Object.entries(stillNeeds(p).goods) as [Good, number][]) demand[good] += units;
+  }
   return demand;
 }
 
@@ -81,23 +100,38 @@ export function playersUse(state: GameState): { food: number; water: number; ene
     use.food += needs.food;
     use.water += needs.water;
   }
-  for (const t of state.tiles) use.energy += energyUseOf(state, t);
+  // A plant pays its own use from its own output (AM-17 R2, PM ruling A): it asks the store for nothing.
+  for (const t of state.tiles) if (t.outfit !== 'energy') use.energy += energyUseOf(state, t);
   return use;
 }
 
-/** What colonists buy of a good they need this much of, at the store's current selling price. */
-export function colonistDemand(state: GameState, good: Good, need: number): number {
-  const budget = UPKEEP.colonistBudget[good];
-  if (budget === undefined) return need;
-  const price = state.store.posted[good] * (1 + PRICE.storeSpread);
-  return need * Math.min(1, budget / Math.max(1, price));
+/**
+ * The Food the colonists ask this month beyond their need: a festival's extra (G-5 C26), the units its store-Food
+ * effect carries; 0 in any other month. The month's list holds it from planning until the next month opens.
+ */
+export function festivalFood(state: GameState): number {
+  return state.monthEvents
+    .filter((e) => e.key === 'festival')
+    .flatMap((e) => e.effects ?? [])
+    .filter((f) => f.on === 'store' && f.what === 'food')
+    .reduce((sum, f) => sum + f.delta, 0);
 }
 
-/** MULEs the colony will want next month: one for each idle plot, plus the plots still to be granted. */
+/** MULEs a month's new land takes from the corral, by grant and by auction: MULE.corralPerPlayer for every seat. */
+export function newLandMules(players: number): number {
+  return players * MULE.corralPerPlayer;
+}
+
+/** The corral's build target: a month's new land and MULE.spareInCorral more. upkeep builds to it; the AI's outlook reads it. */
+export function corralTarget(players: number): number {
+  return newLandMules(players) + MULE.spareInCorral;
+}
+
+/** MULEs the colony will want next month: one for each idle plot, plus a month's new land while land is still to be granted. */
 export function mulesWanted(state: GameState): number {
   const idle = state.tiles.filter((t) => t.owner && !t.outfit).length;
   const free = state.tiles.some((t) => t.terrain !== 'store' && !t.owner);
-  return idle + (free ? state.players.length * GAME.claimsPerGrant : 0);
+  return idle + (free ? newLandMules(state.players.length) : 0);
 }
 
 /**
@@ -119,53 +153,97 @@ export function cover(state: GameState, good: Good, demand = monthlyDemand(state
   return supply / need;
 }
 
-/** How far scarcity pushes the target above or below the reference: (T / max(C, minCover))^k. */
-export function scarcity(state: GameState, good: Good, demand = monthlyDemand(state)): number {
-  const c = cover(state, good, demand);
-  if (c === Infinity) return 1;
-  return Math.pow(PRICE.targetCover / Math.max(c, PRICE.minCover), GOOD_CONFIG[good].sensitivity);
+/** What every worked plot of a good is set to make this month, before Energy shortfalls and events. */
+export function expectedOutput(state: GameState, good: Good): number {
+  let made = 0;
+  for (const t of state.tiles) {
+    if (!t.owner || t.outfit !== good) continue;
+    made += isFactory(good) ? factoryFit(state, t, good, t.owner).output : rawOutput(state, t);
+  }
+  return made;
 }
 
 /**
- * Where supply and demand would put the price: P = Pref * (T / max(C, 0.25))^k.
- * The posted price moves toward it with momentum. A good nobody in the colony
- * needs (Crystite, or anything without demand) targets its reference price.
+ * How short the colony is of a good (pricing RULE-6, first match wins): off-world when only the export ship wants it;
+ * severe after colonists went short of it at the last upkeep; normal while production keeps up with demand or the
+ * colony holds normalCover months of it; then tight, short and severe by its months of cover.
+ * The store's posting runs it on the colony's true supply and demand; the AI's outlook (nextPostedPrice) on its own observation.
  */
-export function targetPrice(state: GameState, good: Good, demand = monthlyDemand(state)): number {
-  return Math.max(1, state.store.refPrice[good] * scarcity(state, good, demand));
+export function priceBand(
+  state: GameState,
+  good: Good,
+  demand = monthlyDemand(state),
+  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [], // literal-ok: last month's report, a position in the history
+  off = exportDemand(state),
+): PriceBand {
+  const need = demand[good];
+  if (need - off[good] <= 0) return 'offWorld';
+  if (lastShortages.includes(good)) return 'severe';
+  const months = colonySupply(state, good) / need;
+  if (months >= PRICE.normalCover || expectedOutput(state, good) >= need) return 'normal';
+  if (months >= PRICE.tightCover) return 'tight';
+  if (months >= PRICE.shortCover) return 'short';
+  return 'severe';
+}
+
+/** How many times the normal price N a band's target is; 1 for normal and off-world. */
+function bandMultiple(band: PriceBand): number {
+  return band === 'normal' || band === 'offWorld' ? 1 : PRICE.band[band];
+}
+
+/** The mid a band aims at: the off-world price, or the normal price N times the band's multiple. */
+function bandTarget(state: GameState, good: Good, band: PriceBand): number {
+  return band === 'offWorld' ? state.store.offWorld[good] : state.store.refPrice[good] * bandMultiple(band);
 }
 
 /**
- * Posts this month's prices: each moves toward its target by at most +50% or
- * -30%, so a shortage builds over a few months. There is no ceiling: while a
- * good is nearly gone the price keeps climbing month after month.
+ * This month's mid and band for a good (pricing RULE-7): straight up to a higher band target, down at most fallStep a
+ * month, never under the normal price unless off-world; pulled towards a high trade between players and lifted past a sell-out they bid
+ * over; never above the ceiling, which always wins.
  */
+function nextPosting(state: GameState, good: Good, demand: Stock, lastShortages: readonly Good[], off: Stock): { mid: number; band: PriceBand } {
+  const prev = state.store.posted[good];
+  const band = priceBand(state, good, demand, lastShortages, off);
+  const target = bandTarget(state, good, band);
+  let mid = target >= prev ? target : Math.max(target, prev * (1 - PRICE.fallStep));
+  // An export-only good follows the off-world price wherever it goes; the colony's normal price is no floor for it.
+  if (band !== 'offWorld') mid = Math.max(mid, state.store.refPrice[good]);
+  const lesson = state.store.lastWalk?.[good];
+  // Last month's selling line: the store's band and mid are still last month's until postPrices writes them.
+  const highTrade = lesson?.highTrade ?? null;
+  if (highTrade !== null && highTrade > storeLines(state, good).sell) mid = Math.max(mid, prev + PRICE.tradePull * (highTrade - prev));
+  const soldOutHigh = lesson?.soldOutHigh ?? null;
+  if (soldOutHigh !== null) mid = Math.max(mid, soldOutHigh / (1 + PRICE.bandSpread[band].over));
+  mid = Math.min(mid, PRICE.ceiling * GOOD_CONFIG[good].refPrice);
+  return { mid: Math.max(1, Math.round(mid)), band };
+}
+
+/** Posts this month's prices and bands from last month's walk, which it then clears. */
 export function postPrices(state: GameState): void {
   const demand = monthlyDemand(state);
   // This month's report is already open; last month's says what colonists lacked.
-  const lastShortages = state.history.at(-2)?.shortages ?? [];
+  const lastShortages = state.history.at(-2)?.shortages ?? []; // literal-ok: last month's report, a position in the history
   const off = exportDemand(state);
-  for (const good of GOODS) {
-    const prev = state.store.posted[good];
-    // Below the lowest cover, or after colonists went short of it last month,
-    // the price has no target at all: it climbs the full step every month
-    // until supply comes back.
-    const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good);
-    let target = short ? Infinity : targetPrice(state, good, demand);
-    // A good only off-world buyers want is worth no more than they pay.
-    if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
-    const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
-    state.store.posted[good] = Math.max(1, Math.round(next));
-  }
+  const next = GOODS.map((good) => nextPosting(state, good, demand, lastShortages, off));
+  const band: Partial<Record<Good, PriceBand>> = {};
+  GOODS.forEach((good, i) => {
+    state.store.posted[good] = next[i]!.mid;
+    band[good] = next[i]!.band;
+  });
+  // New records, never edits, as auction.ts's teach writes lessons: no reader holds a reference that changes under it.
+  state.store.band = band;
+  state.store.lastWalk = {};
 }
 
-/**
- * The highest the posted price can go next month: up by half of the current
- * price, or of the reference price if the good has become cheap, so a good
- * that crashed can recover in a couple of months.
- */
-export function riseCap(state: GameState, good: Good, prev: number): number {
-  return prev + PRICE.maxRise * Math.max(prev, state.store.refPrice[good]);
+/** The mid the store would post for a good now (nextPosting). AI players use this to price what an extra unit would do. */
+export function nextPostedPrice(
+  state: GameState,
+  good: Good,
+  demand = monthlyDemand(state),
+  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [], // literal-ok: last month's report, a position in the history
+  off = exportDemand(state),
+): number {
+  return nextPosting(state, good, demand, lastShortages, off).mid;
 }
 
 /** The colony price of a good: what the store has posted this month. */
@@ -187,17 +265,122 @@ export function mulePrice(state: GameState): number {
   return Math.round((MULE.labour + MULE.smithorePerMule * state.store.posted.smithore) * state.store.muleFactor);
 }
 
+/** The spread of the band a good was posted in this month; normal for a record that has none. */
+function spreadOf(state: GameState, good: Good): { under: number; over: number } {
+  return PRICE.bandSpread[state.store.band?.[good] ?? 'normal'];
+}
+
+/** What the store sells a good at around a mid price, with its band's spread: rounded up, or unrounded with `exact` for a forecast. */
+export function storeSellAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
+  const line = mid * (1 + spreadOf(state, good).over);
+  if (exact) return line;
+  const whole = Math.round(line);
+  // That close to a whole number, the line is that number, so a float error never rounds it up a credit. It matters
+  // only for a margin whose line lands a hair over a whole number: none of today's does for a whole mid; 0.1 would,
+  // as 50 × (1 + 0.1) is 55.00000000000001.
+  return Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.ceil(line);
+}
+
+/**
+ * What the store pays for a good around a mid price, with its band's spread: rounded down to at least 1, or unrounded
+ * with `exact`. No colonists' cap: they have no wages (needs C2), so pricing HC-4's cap went with their budget.
+ */
+export function storeBuyAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
+  const line = mid * (1 - spreadOf(state, good).under);
+  if (exact) return line;
+  const whole = Math.round(line);
+  // The sell side's float, mirrored: 1 - 0.3 is a hair under 0.7, so 90 × 0.7 lands a hair under 63: that close, it is 63.
+  const rounded = Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.floor(line);
+  return Math.max(1, rounded);
+}
+
+/**
+ * The store's two lines for a good at its posted price, whether or not it trades today: the auction's board is drawn
+ * around both. It never buys above its own selling price.
+ */
+export function storeLines(state: GameState, good: Good): { buy: number; sell: number } {
+  const posted = colonyPrice(state, good);
+  const buy = storeBuyAt(state, good, posted);
+  return { buy, sell: Math.max(storeSellAt(state, good, posted), buy + 1) };
+}
+
 /**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
+ * storeLines' numbers with those nulls: the quotes the server's view sends every screen (pricing §3).
  */
 export function storeQuotes(state: GameState, good: Good): { buy: number | null; sell: number | null } {
-  const price = colonyPrice(state, good);
-  const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
+  const lines = storeLines(state, good);
   return {
-    buy: storeWants(state, good, buy) > 0 ? buy : null,
-    sell: storeForSale(state, good) > 0 ? Math.ceil(price * (1 + PRICE.storeSpread)) : null,
+    buy: storeWants(state, good) > 0 ? lines.buy : null,
+    sell: storeForSale(state, good) > 0 ? lines.sell : null,
   };
+}
+
+interface OffWorldWalk {
+  centre: number;
+  phi: number;
+  sigma: number;
+  min: number;
+  max: number;
+}
+
+/** How a good's off-world price walks (pricing RULE-3); null for a good the export ship never buys. */
+function offWorldWalk(good: Good): OffWorldWalk | null {
+  if (EXPORT_DEMAND[good] === undefined) return null;
+  if (good === 'crystite') return OFF_WORLD.crystite;
+  const centre = GOOD_CONFIG[good].refPrice;
+  const { phi, sigma, band } = OFF_WORLD.others;
+  return { centre, phi, sigma, min: centre * (1 - band), max: centre * (1 + band) };
+}
+
+/** The off-world prices a game opens with: each export good at its walk's centre, the rest at their reference price. */
+export function openingOffWorld(): Stock {
+  const prices = emptyStock();
+  for (const good of GOODS) prices[good] = offWorldWalk(good)?.centre ?? GOOD_CONFIG[good].refPrice;
+  return prices;
+}
+
+/** A standard normal draw (Box–Muller); 1 − u keeps the logarithm's argument above 0. */
+function normal(rng: Rng): number {
+  return Math.sqrt(-2 * Math.log(1 - rng.next())) * Math.cos(2 * Math.PI * rng.next()); // literal-ok: Box–Muller's constants
+}
+
+/**
+ * Moves each export good's off-world price one month along its walk (pricing RULE-3), as the month opens. Each good
+ * draws from its own rng keyed on the seed, the month and the good, so no other draw in the game moves (HC-1).
+ * A what-if month draws nothing: it opens on the expected path, as an AI's forecast should (pricing §3).
+ */
+export function stepOffWorld(state: GameState): void {
+  for (const good of GOODS) {
+    const walk = offWorldWalk(good);
+    if (!walk) continue;
+    if (state.whatIf) {
+      // Unrounded, so months in a row compose to expectedOffWorld's k-month path.
+      state.store.offWorld[good] = expectedPath(walk, state.store.offWorld[good], 1);
+      continue;
+    }
+    const rng = createRng(seedOf(state.seed, state.month, 'offWorld', good));
+    const swing = walk.sigma * Math.sqrt(1 - walk.phi ** 2) * normal(rng); // literal-ok: phi squared, the walk's own formula
+    const log = Math.log(walk.centre) + walk.phi * Math.log(state.store.offWorld[good] / walk.centre) + swing;
+    state.store.offWorld[good] = Math.round(Math.min(walk.max, Math.max(walk.min, Math.exp(log))));
+  }
+}
+
+/**
+ * The off-world price expected `monthsAhead` from now (pricing §3): the walk's mean reversion towards its centre
+ * without its swings, in whole credits rounded down. Pure, never draws. A good that isn't exported keeps today's price.
+ */
+export function expectedOffWorld(state: GameState, good: Good, monthsAhead: number): number {
+  const now = state.store.offWorld[good];
+  const walk = offWorldWalk(good);
+  return walk ? Math.floor(expectedPath(walk, now, monthsAhead)) : now;
+}
+
+/** centre × (now ÷ centre)^(phi^months), unrounded; written so that 0 months gives `now` exactly. */
+function expectedPath(walk: OffWorldWalk, now: number, months: number): number {
+  const f = walk.phi ** months;
+  return now ** f * walk.centre ** (1 - f);
 }
 
 /**
@@ -206,22 +389,21 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
  * first, so a short good runs out for the players, not for the colonists.
  */
 export function storeForSale(state: GameState, good: Good): number {
-  const reserve = good === 'food' || good === 'water' ? Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) : 0;
+  const need = state.colonists / UPKEEP.colonistsPerUnit + (good === 'food' ? festivalFood(state) : 0);
+  const reserve = good === 'food' || good === 'water' ? Math.ceil(need) : 0;
   return Math.max(0, state.store.stock[good] - reserve);
 }
 
 /**
- * How many units the store is willing to buy this month. The store is a
- * merchant, not a bottomless buyer: it fills its shelves up to a few months of
- * demand, plus a ship's load of goods off-world buyers take, and never bets
- * more than a share of its capital on one good.
+ * How many units the store is willing to buy this month: it fills its shelves
+ * up to a few months of demand, plus a ship's load of goods off-world buyers
+ * take. The store never runs out of money, so only shelf room limits it.
  */
-export function storeWants(state: GameState, good: Good, price: number, demand = monthlyDemand(state)): number {
+export function storeWants(state: GameState, good: Good, demand = monthlyDemand(state)): number {
   // For off-world goods it also stocks up a full ship's load, to sell when the ship calls.
   const shipLoad = exportDemand(state)[good] * GAME.exportShipEvery;
   const room = Math.ceil(demand[good] * PRICE.storeMaxCover + shipLoad) - state.store.stock[good];
-  const budget = Math.floor((Math.max(0, state.store.capital) * PRICE.storeBudgetShare) / Math.max(1, price));
-  return Math.max(0, Math.min(room, budget));
+  return Math.max(0, room);
 }
 
 /**
@@ -238,16 +420,16 @@ export function shipPrice(state: GameState, good: Good): number | null {
 }
 
 /**
- * Learns from what players actually paid each other. The reference is the
- * price at normal supply, so a trade at a shortage price only raises it by as
- * much as players paid above what the shortage alone explains. It also drifts
- * a little toward the off-world price, because ships keep bringing that price
- * back into the colony. There is no bound in either direction.
+ * Learns from what players actually paid each other. The reference is the price at normal supply, so a trade counts
+ * scaled by how far this month's posted price sits above it: a trade at the posted price confirms the reference and
+ * moves it nowhere, whatever the band, a recovery or the off-world walk put the posted price at. It also drifts a
+ * little toward the off-world price, because ships keep bringing that price back into the colony.
  */
 export function driftReference(state: GameState, good: Good, clearingPrice: number | null): void {
   const ref = state.store.refPrice[good];
-  const s = scarcity(state, good);
-  const implied = clearingPrice !== null && s > 0 ? clearingPrice / s : ref;
+  // Not the band's multiple: while a price is still falling back after a shortage the band already reads normal but the
+  // posted price does not, and dividing by 1 would read the crisis price as the normal one.
+  const implied = clearingPrice !== null ? (clearingPrice * ref) / Math.max(1, state.store.posted[good]) : ref;
   const next = ref + (implied - ref) * PRICE.refDrift + (state.store.offWorld[good] - ref) * PRICE.worldPull;
   state.store.refPrice[good] = Math.max(1, Math.round(next));
 }
@@ -255,7 +437,7 @@ export function driftReference(state: GameState, good: Good, clearingPrice: numb
 /** Takes the sales tax from a player's sale: the tax goes to the colony fund and the seller keeps the rest. */
 export function taxSale(state: GameState, sellerId: string, total: number): number {
   const tax = Math.round(total * state.treasury.salesTax);
-  state.treasury.money += tax;
+  fundIn(state, 'salesTax', tax);
   state.treasury.paid[sellerId] = (state.treasury.paid[sellerId] ?? 0) + tax;
   return total - tax;
 }

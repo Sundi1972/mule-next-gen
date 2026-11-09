@@ -162,7 +162,7 @@ These are first guesses for the prototype. Playtesting will change them.
 
 Without its Energy a farm or mine makes half and a factory makes nothing. Short of Water, your Food farms make half, because they can't irrigate (decided by Heiko on 21 Oct 2026). Both shortfalls stack: a farm without Energy or Water makes a quarter.
 
-**Colonists** start at 100 and need 1 Food and 1 Water per 20 colonists each month. They buy it from the store out of their wages and pay at most 150 for Food, 120 for Water, 100 for Energy and 400 for Medicine. Above that they buy less and go short. Players and colonists start with enough Food and Water for about 3 months; the store starts with 30 Food and 36 Water. A MULE costs its labour plus 1 Smithore, and more when the corral keeps selling out (see The MULE price above).
+**Colonists** start at 100 and need 1 Food and 1 Water per 20 colonists each month. They buy it from the store out of their wages and pay at most 150 for Food, 120 for Water, 100 for Energy and 400 for Medicine. Above that they buy less and go short. Players and colonists start with enough Food and Water for about 3 months; the store starts with 30 Food and 20 Water, little enough that the colony feels a coming Water shortage from the first month and the players build wells early (decided by Heiko on 29 Oct 2026). A MULE costs its labour plus 1 Smithore, and more when the corral keeps selling out (see The MULE price above).
 
 **How we balance it.** Every number lives in one config file rather than in code. A headless simulator plays thousands of games between AI players and checks four things:
 

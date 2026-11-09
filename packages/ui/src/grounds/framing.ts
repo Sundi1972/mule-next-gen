@@ -1,0 +1,152 @@
+/** The grounds' camera: the occupied extent on its plate, or without one the built area, filling the canvas as look.html's colony render does (AM-7 iv). */
+import { centreOf, MASSING, type GridPlace } from './layout';
+import type { GroundsManifest, PictureKind } from './pick';
+import { iso, W } from './projection';
+
+/** The camera for a full-screen canvas; without it the grounds keep their own framing. */
+export interface Framing {
+  /** The canvas's width over its height. */
+  aspect: number;
+  /** The places the view leans in on. */
+  leanOn?: GridPlace[];
+  /** 0 frames the built area, 1 the places leaned on. */
+  lean?: number;
+}
+
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Room left round the built area, as a share of its size. */
+const MARGIN = 0.05;
+/** Ground left round the occupied extent: a quarter place each way, on screen. */
+const ROOM = { x: W / 4, y: W / 8 };
+/** How much closer the leaned-in view is: the scaffold's month-end move (look/Living.tsx, scale 1.55). */
+const LEAN_ZOOM = 1.55;
+/** Leaning in centres this high over the places' ground, in place units, so the buildings rather than their feet sit mid-screen. */
+const LEAN_LIFT = 0.3;
+
+/**
+ * The highest a thing at (c, r) reaches on screen: its picture frame's top edge, or without art its SVG shape's roof.
+ * The frame is what the picture can fill, so a tall kind (the Spaceport's rocket) is never cut.
+ */
+export function topOf(kind: PictureKind, c: number, r: number, manifest: GroundsManifest | null): number {
+  const frame = manifest ? (manifest.pictures[kind]?.frame ?? manifest.frame) : null;
+  const ground = iso(c, r)[1];
+  return frame ? ground - (frame.centre[1] * W) / frame.place : iso(c, r, MASSING[kind].height)[1];
+}
+
+function toAspect({ x, y, w, h }: Box, aspect: number): Box {
+  if (w / h < aspect) return { x: x - (h * aspect - w) / 2, y, w: h * aspect, h };
+  return { x, y: y - (w / aspect - h) / 2, w, h: w / aspect };
+}
+
+/** The rings in use (`rings` out from the hall) from the highest top down to the plaza's front corner, at the canvas's aspect. */
+function builtArea(rings: number, tops: number[], aspect: number): Box {
+  const half = rings + 0.55;
+  const top = Math.min(-half * (W / 2), ...tops);
+  const bottom = half * (W / 2);
+  const [w, h] = [2 * half * W, bottom - top];
+  return toAspect({ x: -half * W - MARGIN * w, y: top - MARGIN * h, w: w * (1 + 2 * MARGIN), h: h * (1 + 2 * MARGIN) }, aspect);
+}
+
+/** The built area's box narrowed by LEAN_ZOOM round the places' middle, kept inside the built area. */
+function leanedIn(area: Box, places: GridPlace[]): Box {
+  const points = places.map((p) => {
+    const { col, row } = centreOf(p);
+    return iso(col, row, LEAN_LIFT);
+  });
+  const mx = points.reduce((s, [x]) => s + x, 0) / points.length;
+  const my = points.reduce((s, [, y]) => s + y, 0) / points.length;
+  const [w, h] = [area.w / LEAN_ZOOM, area.h / LEAN_ZOOM];
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  return { x: clamp(mx - w / 2, area.x, area.x + area.w - w), y: clamp(my - h / 2, area.y, area.y + area.h - h), w, h };
+}
+
+/** The part of `area` a canvas of `aspect` shows: cropped round its centre, never padded. */
+export function cropTo({ x, y, w, h }: Box, aspect: number): Box {
+  if (w / h > aspect) return { x: x + (w - h * aspect) / 2, y, w: h * aspect, h };
+  return { x, y: y + (h - w / aspect) / 2, w, h: w / aspect };
+}
+
+/**
+ * The blocks' ground and each one's top, with ROOM round them. Footprints rather than picture frames: a flush picture's
+ * frame reaches far past its building for the shadow, and would loosen the view.
+ */
+function occupied(blocks: GridPlace[], tops: number[]): Box {
+  const corners = blocks.flatMap((block) => {
+    const { col, row } = centreOf(block);
+    const [dc, dr] = [block.w / 2, block.h / 2];
+    return [iso(col - dc, row - dr), iso(col + dc, row - dr), iso(col + dc, row + dr), iso(col - dc, row + dr)];
+  });
+  const xs = corners.map(([x]) => x);
+  const top = Math.min(...tops, ...corners.map(([, y]) => y)) - ROOM.y;
+  const left = Math.min(...xs) - ROOM.x;
+  return { x: left, y: top, w: Math.max(...xs) + ROOM.x - left, h: Math.max(...corners.map(([, y]) => y)) + ROOM.y - top };
+}
+
+/** `box` moved inside `plate`, shrunk round its centre first only if it is larger. */
+function within(box: Box, plate: Box): Box {
+  const k = Math.min(1, plate.w / box.w, plate.h / box.h);
+  const [w, h] = [box.w * k, box.h * k];
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  return { x: clamp(box.x + (box.w - w) / 2, plate.x, plate.x + plate.w - w), y: clamp(box.y + (box.h - h) / 2, plate.y, plate.y + plate.h - h), w, h };
+}
+
+/** `view` moved across to centre on the hall, as look.html centres its platform, but never so far that it cuts `kept`. */
+function onTheGrid(view: Box, kept: Box): Box {
+  const hall = iso(0, 0)[0];
+  return { ...view, x: Math.min(kept.x, Math.max(kept.x + kept.w - view.w, hall - view.w / 2)) };
+}
+
+/** The view before any lean-in: the occupied extent at the canvas's aspect, across on the hall, inside the plate; or without a plate the built area. */
+export function viewOf(aspect: number, rings: number, blocks: GridPlace[], tops: number[], plate: Box | null): Box {
+  if (!plate) return builtArea(rings, tops, aspect);
+  const kept = occupied(blocks, tops);
+  return within(onTheGrid(toAspect(kept, aspect), kept), plate);
+}
+
+/** Whether `view` stops short of the plate's edges, where the plate's own vignette fades it out. */
+export function shortOfPlate(view: Box, plate: Box | null): boolean {
+  return !!plate && view.w < cropTo(plate, view.w / view.h).w * (1 - 1e-9);
+}
+
+/** `area` eased towards the places leaned on as `lean` goes to 1. */
+export function leaning(area: Box, { leanOn = [], lean = 0 }: Framing): Box {
+  if (leanOn.length === 0 || lean <= 0) return area;
+  const close = leanedIn(area, leanOn);
+  const k = Math.min(1, lean);
+  return { x: area.x + (close.x - area.x) * k, y: area.y + (close.y - area.y) * k, w: area.w + (close.w - area.w) * k, h: area.h + (close.h - area.h) * k };
+}
+
+/** How far a building in front of a leaned-on place fades at full lean: to a third, so the place shows through. */
+export const FRONT_FADE = 2 / 3;
+
+/** A block's span across the screen, in place units: the left and right corners of its footprint. */
+function across({ x, y, w, h }: GridPlace): [number, number] {
+  const { col, row } = centreOf({ x, y, w, h });
+  return [col - w / 2 - (row + h / 2), col + w / 2 - (row - h / 2)];
+}
+
+/**
+ * Whether `block` stands in front of any of the places leaned on: nearer the camera (its centre's col + row is greater)
+ * and across them on screen, so its picture can cover them. A block that is itself leaned on never is.
+ */
+export function inFrontOf(block: GridPlace, leanOn: GridPlace[]): boolean {
+  const near = (b: GridPlace) => centreOf(b).col + centreOf(b).row;
+  const [l, r] = across(block);
+  return leanOn.every((t) => t.x !== block.x || t.y !== block.y) && leanOn.some((t) => {
+    const [tl, tr] = across(t);
+    return near(block) > near(t) && Math.min(r, tr) - Math.max(l, tl) > 0.05;
+  });
+}
+
+/** The opacity a building is drawn at during the lean-in: 1 unless it stands in front of a place leaned on. */
+export function frontOpacity(block: GridPlace, framing: Framing | undefined): number {
+  const lean = Math.min(1, Math.max(0, framing?.lean ?? 0));
+  if (!framing?.leanOn?.length || lean === 0 || !inFrontOf(block, framing.leanOn)) return 1;
+  return 1 - FRONT_FADE * lean;
+}

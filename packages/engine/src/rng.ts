@@ -2,11 +2,11 @@
 export function createRng(seed: number) {
   let a = seed >>> 0;
   const next = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
+    a = (a + 0x6d2b79f5) >>> 0; // literal-ok: mulberry32's constants
     let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    t = Math.imul(t ^ (t >>> 15), t | 1); // literal-ok: mulberry32's constants
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61); // literal-ok: mulberry32's constants
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296; // literal-ok: mulberry32's constants; 2^32 maps to [0, 1)
   };
   return {
     next,
@@ -39,3 +39,13 @@ export function createRng(seed: number) {
 }
 
 export type Rng = ReturnType<typeof createRng>;
+
+/** A seed from a game's seed, its month and some names: FNV-1a over them. */
+export function seedOf(seed: number, month: number, ...names: string[]): number {
+  let h = 2_166_136_261; // literal-ok: FNV-1a offset basis
+  for (const part of [String(seed), String(month), ...names]) {
+    for (let i = 0; i < part.length; i++) h = Math.imul(h ^ part.charCodeAt(i), 16_777_619); // literal-ok: FNV-1a prime
+    h = Math.imul(h ^ 0, 16_777_619); // literal-ok: FNV-1a prime, a separator between parts
+  }
+  return h >>> 0;
+}

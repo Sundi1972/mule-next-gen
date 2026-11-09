@@ -1,0 +1,627 @@
+/**
+ * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
+ * stalls a game, and stays within its budget. See C6.
+ * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y] [--run label]
+ * The tournament (WS1's bar for UBER-AC-A): --table pair --playbooks 1 --seeds 1,101,201 --games 40, every seat on its
+ * playbook, its ledgers under BRAIN.tournament.capUsd. --games is even there: each seed is played twice, the Claude chairs
+ * on 0 and 2 and then on 1 and 3, so a chair's edge cancels in the pooled result the paid run is judged on (120 games:
+ * seeds 1-20, 101-120, 201-220). That edge is mostly species, not seat order: each chair keeps its default species.
+ * --control 1 plays the same table with engine seats in the Claude chairs and calls nothing. Its two seatings of a seed
+ * are then the same game, so its pooled result is 50% by construction; its gate is that the harness runs clean (0
+ * stalls, every game scored, 0 model calls) and reports the per-seating edge as a number.
+ * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
+ * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
+ * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required; one
+ * unlabelled run per UTC day, or one per --run label (each cleared on its own); and no run may carry the spend of every
+ * trial ledger past BRAIN.proofCapUsd. Each game's Smart seats together spend at most the game budget (default
+ * BRAIN.gameBudgetUsd).
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { BRAIN, score, type GameState, type Playbook } from '@mule/engine';
+import { playbookSource, playGameAsync, type AiSeat, ReplyRejected, simSeats, type Choice, type Decider, type SeatSpec } from '@mule/ai';
+import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
+import type { Spoken } from './chat.js';
+import { CallFailed } from './client.js';
+import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
+import { isCallLine, readLedgerLines, type CallLine, type ModelId } from './ledger.js';
+import { Playbooks } from './playbooks.js';
+import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type SpendTotals, type Seating, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
+
+/** AI seats per trial game. */
+const SEATS = 4;
+
+/** Thrown from `between` to stop a game once the API refused the credentials. */
+class AuthRefused extends Error {
+  constructor() {
+    super('the API refused the credentials');
+    this.name = 'AuthRefused';
+  }
+}
+
+/** The model calls a game's Smart deciders make: which are open, how many settled, and whether a 401/403 came back. */
+function trackCalls() {
+  const inflight = new Set<Promise<Choice>>();
+  let settled = 0;
+  let authRefused = false;
+
+  const track = (decider: Decider): Decider => ({
+    name: decider.name,
+    decide(shortlist, persona, context) {
+      const answer = decider.decide(shortlist, persona, context);
+      if (!(answer instanceof Promise)) return answer;
+      inflight.add(answer);
+      answer.then(
+        () => {
+          inflight.delete(answer);
+          settled += 1;
+        },
+        (err: unknown) => {
+          inflight.delete(answer);
+          // A call was made only if it failed in the client or its reply was rejected; busy, budget and game over made none.
+          if (err instanceof CallFailed || err instanceof ReplyRejected) settled += 1;
+          if (err instanceof CallFailed && err.auth) authRefused = true;
+        },
+      );
+      return answer;
+    },
+  });
+
+  return {
+    track,
+    /** Resolves once every open call has settled, however it settled. */
+    async drain() {
+      if (inflight.size > 0) await Promise.allSettled([...inflight]);
+    },
+    settled: () => settled,
+    authRefused: () => authRefused,
+  };
+}
+
+interface GameSetup {
+  /** The model every write goes to, or null for each kind's own. */
+  writeModel: ModelId | null;
+  game: PlannedGame;
+  id: string;
+  env: Readonly<Record<string, string | undefined>>;
+  logPath: string | null;
+  smart: number;
+  gameBudgetUsd: number;
+  /** Whether the Smart seats write their playbooks. */
+  playbooks: boolean;
+  /** The positive control: the Claude chairs play as engine seats, and nothing is called. */
+  control: boolean;
+  out: (line: string) => void;
+}
+
+/** Adds one to `counts[month - 1]`. */
+const bump = (counts: number[], month: number) => {
+  counts[month - 1] = (counts[month - 1] ?? 0) + 1;
+};
+
+/** Plays one game with its own brain; pauses simulated time while a model call is open, and always closes the brain. */
+async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
+  const { id } = setup;
+  const brain = createBrain({
+    gameId: id,
+    env: setup.env,
+    gameBudgetUsd: setup.gameBudgetUsd,
+    ...(setup.logPath === null ? {} : { logPath: setup.logPath }),
+    ...(setup.writeModel === null ? {} : { writeModel: setup.writeModel }),
+  });
+  const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [] };
+  // The Smart seats' playbooks (spec A C4): asked for at the start and as each upkeep ends, in effect from the land
+  // grant. The strategist seats play their own drafts; in whatIf they play as the engine's Trader would.
+  // The game's live state (from onSeats), and the month whose auction was last asked.
+  const held: { playbooks: Playbooks | null; state: GameState | null; auctionAsked: number } = { playbooks: null, state: null, auctionAsked: -1 };
+  const calls = trackCalls();
+  const chat = new Map<string, (record: Spoken) => void>();
+  // The record being routed to a seat's chatter, read by its say.
+  let routing: Spoken | null = null;
+  /** Says a decision's or a plan's line through the seat's chat, so its say counts it under the record's month. */
+  const route = (seat: string, record: Spoken) => {
+    const say = chat.get(seat);
+    if (!say) return;
+    routing = record;
+    say(record);
+    routing = null;
+  };
+
+  const table = tableSeats(setup.game, setup.smart);
+  game.chairs = [];
+  if (setup.game.seating !== null) game.seating = setup.game.seating;
+  const deciderFor = (seatId: string, spec: SeatSpec, index: number): Decider | null => {
+    if (!table.claude.includes(index)) return null;
+    game.chairs!.push(seatId);
+    if (setup.control) return null;
+    const seat: BrainSeat = { id: seatId, persona: spec.persona, level: spec.level };
+    const decider = brain.deciderFor(seat);
+    if (!decider) return null;
+    game.smart.push(seatId);
+    const said: number[] = [];
+    const modelSaid: number[] = [];
+    game.lines[seatId] = said;
+    game.modelLines[seatId] = modelSaid;
+    chat.set(
+      seatId,
+      brain.chatter(seat, () => {
+        if (!routing) return;
+        bump(said, routing.month);
+        if (routing.by === 'llm') bump(modelSaid, routing.month);
+      }),
+    );
+    return calls.track(decider);
+  };
+
+  try {
+    const played = await playGameAsync(setup.game.seed, table.specs, {
+      deciderFor,
+      onSeats: (seats, state) => {
+        const smart = seats.filter((s) => game.smart.includes(s.id));
+        if (!setup.playbooks || smart.length === 0) return;
+        held.state = state;
+        held.playbooks = new Playbooks({
+          brain,
+          source: playbookSource(smart),
+          seats: smart,
+          record: (note) => game.playbooks.push({ seat: note.seat, month: note.month, by: note.playbook.by }),
+          // Ruling (a'): a plan's line is said as its phase starts, through the seat's chat, as MuleGame says it.
+          speak: (seat, said) => route(seat, { ...said, by: 'llm' }),
+        });
+        held.playbooks.ask(state, state.month);
+      },
+      onDecision: (r) => {
+        game.decisions.push({ seat: r.seat, kind: r.kind, by: r.by, options: r.shortlist.length, ...(r.note === undefined ? {} : { note: r.note }) });
+        route(r.seat, r);
+      },
+      onPhase: (state) => {
+        const cut = cutOffPhase(state);
+        if (cut) game.cutOff.push(cut);
+        // Planning ends and the land grant comes next: this month's playbook takes effect. An upkeep ends: next month's is asked.
+        if (state.phase === 'planning') held.playbooks?.takeEffect(state);
+        if (state.phase === 'upkeep') held.playbooks?.ask(state, state.month + 1);
+      },
+      // A phase's draft point, before its first tick: the development part the land write carried, and the auction's
+      // edits, are taken there, as MuleGame takes them at the phase's start. Nothing else is edited here.
+      ...(setup.playbooks
+        ? {
+            edits: (_seat: AiSeat, _draft: Playbook, state: GameState) => {
+              if (state.phase === 'development' || state.phase === 'auction') held.playbooks?.takePhase(state, state.phase);
+              return null;
+            },
+          }
+        : {}),
+      // Each call is bounded by its kind's wait, so this pauses simulated time for at most that long. See C6.
+      between: async () => {
+        if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
+        // Production has run: the auction's edits are asked, as the server asks them in the production show (AM-A16),
+        // and settled below before the auction opens. The development's facts stay inside the game loop, so the brief
+        // has no development outcome here.
+        const state = held.state;
+        if (held.playbooks && state?.phase === 'production' && held.auctionAsked !== state.month) {
+          held.auctionAsked = state.month;
+          held.playbooks.askPhase(state, 'auction', []);
+        }
+        await calls.drain();
+        await held.playbooks?.settle();
+        if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
+      },
+    });
+    game.months = played.state.month;
+    game.end = played.state.phase === 'gameOver' ? 'over' : 'unfinished';
+    game.scores = Object.fromEntries(played.state.players.map((p) => [p.id, score(played.state, p.id)]));
+  } catch (err) {
+    game.end = err instanceof AuthRefused ? 'auth' : 'crashed';
+    if (game.end === 'crashed') setup.out(`game ${id} threw: ${err instanceof Error ? err.message.slice(0, 120) : 'unknown error'}`);
+  } finally {
+    // A call still open would bill after the game closed.
+    await calls.drain();
+    await held.playbooks?.settle();
+    brain.finish();
+  }
+  game.settledCalls = calls.settled();
+  game.countedUsd = brain.countedUsd();
+  return game;
+}
+
+/** The ledger's call lines; a file not claimed yet has none. */
+function readCalls(file: string): CallLine[] {
+  return fs.existsSync(file) ? readLedgerLines(file).filter(isCallLine) : [];
+}
+
+/** The stop message when the ledger holds fewer of a game's call lines than calls settled, or null when none is missing. */
+function ledgerShortfall(logPath: string, calls: readonly CallLine[], game: TrialGame): string | null {
+  // Decision lines only: settledCalls counts the deciders' calls, and a write's lines must never cover for a lost one.
+  const written = calls.filter((c) => c.game === game.id && c.outcome !== 'budget' && (KINDS as readonly string[]).includes(c.kind)).length;
+  if (written >= game.settledCalls) return null;
+  return `Stopped: the ledger ${logPath} has ${written} of ${game.settledCalls} call lines for game ${game.id}; a write failed, so spend cannot be checked.`;
+}
+
+/**
+ * The stop message when the API refused every call of a game, or null: one answered call, or a game that called
+ * nothing, plays on. A 400 for every call is the account, not the game (uber17s, 5 Nov: from game 11 every call was
+ * refused, and the run played on for an hour on drafts).
+ */
+export function everyCallFailed(calls: readonly Pick<CallLine, 'game' | 'outcome' | 'status' | 'error_type'>[], gameId: string): string | null {
+  const own = calls.filter((c) => c.game === gameId && c.outcome !== 'tool' && c.outcome !== 'late' && c.outcome !== 'budget');
+  if (own.length === 0 || !own.every((c) => c.status !== undefined)) return null;
+  const first = own[0]!;
+  return `Stopped: the API refused every call in game ${gameId} (${first.status}${first.error_type === undefined ? '' : ` ${first.error_type}`}); check the account before more is played.`;
+}
+
+export interface TrialFlags {
+  games: number;
+  seed: number;
+  smart: number;
+  /** Null when not given: a paid run needs it. */
+  maxUsd: number | null;
+  /** The most each game's Smart seats together may spend. */
+  gameBudgetUsd: number;
+  /** Whether the Smart seats write their playbooks (--playbooks 1). */
+  playbooks: boolean;
+  /** --seeds: `games` from each, or null to play from --seed. */
+  seeds: number[] | null;
+  /** --table pair, or null. */
+  table: 'pair' | null;
+  /** --control 1: the pair table's positive control. */
+  control: boolean;
+}
+
+const USAGE =
+  `Usage: brain:trial [--games N] [--seed S | --seeds S1,S2,...] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku] ` +
+  `[--table pair [--control 1]], --table pair with --playbooks 1 unless --control 1, --smart 2 if given, and --games even under --table pair ` +
+  `(each seed in both seatings); ` +
+  `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
+
+/** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
+const LABEL = /^[a-z0-9-]{1,32}$/;
+
+/** A word flag taken out of the flags: its value, null when not given, or undefined for a missing or repeated one. */
+function wordFlag(argv: readonly string[], name: string): { value: string | null; rest: readonly string[] } | undefined {
+  const at = argv.indexOf(name);
+  if (at < 0) return { value: null, rest: argv };
+  const value = argv[at + 1];
+  if (value === undefined || argv.indexOf(name, at + 1) >= 0) return undefined;
+  return { value, rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+}
+
+/** `--write-model sonnet|haiku`: the model every write goes to in a paired run (PR-5 5.4), or undefined for another name. */
+export function writeModelFlag(name: string): ModelId | undefined {
+  return Object.hasOwn(BRAIN.strategySpike.models, name) ? BRAIN.strategySpike.models[name as keyof typeof BRAIN.strategySpike.models] : undefined;
+}
+
+/** The word flags (`--run`, `--write-model`, `--table`, `--seeds`) taken out, or undefined for a bad one. */
+function wordFlags(
+  argv: readonly string[],
+): { label: string | null; writeModel: ModelId | null; table: 'pair' | null; seeds: number[] | null; rest: readonly string[] } | undefined {
+  const run = wordFlag(argv, '--run');
+  if (!run || (run.value !== null && !LABEL.test(run.value))) return undefined;
+  const model = wordFlag(run.rest, '--write-model');
+  if (!model) return undefined;
+  const writeModel = model.value === null ? null : writeModelFlag(model.value);
+  if (writeModel === undefined) return undefined;
+  const table = wordFlag(model.rest, '--table');
+  if (!table || (table.value !== null && table.value !== 'pair')) return undefined;
+  const seedList = wordFlag(table.rest, '--seeds');
+  if (!seedList) return undefined;
+  const seeds = seedList.value === null ? null : seedsFlag(seedList.value);
+  if (seeds === undefined) return undefined;
+  return { label: run.value, writeModel, table: table.value as 'pair' | null, seeds, rest: seedList.rest };
+}
+
+/** A paid run's ledger: <kind>-<day>.jsonl, or <kind>-<day>-<label>.jsonl for a labelled run; 'tourney' for a pair run. */
+export function trialLedgerPath(dataDir: string, at: Date, label: string | null, kind: 'trial' | 'tourney' = 'trial'): string {
+  return label === null ? dayLedgerPath(dataDir, kind, at) : path.join(dataDir, `${kind}-${day(at)}-${label}.jsonl`);
+}
+
+/**
+ * A game's seats: at the pair table Claude sits on the chairs of its seating, even or odd, and every seat plays its
+ * playbook, its own development and auction parts included, as the sim's pair table seats them (RULE-15); otherwise the
+ * first `smart` chairs, every seat as the config says. Personas rotate by chair and seed either way.
+ */
+export function tableSeats(game: PlannedGame, smart: number): { specs: SeatSpec[]; claude: number[] } {
+  if (game.seating !== null) {
+    // literal-ok: RULE-15's pairing, even chairs and odd, not balance
+    const parity = game.seating === 'even' ? 0 : 1;
+    return { specs: simSeats(SEATS, 'trader', game.seed, null, 'playbook'), claude: Array.from({ length: SEATS }, (_, i) => i).filter((i) => i % 2 === parity) };
+  }
+  return { specs: simSeats(SEATS, 'trader', game.seed), claude: Array.from({ length: smart }, (_, i) => i) };
+}
+
+/** `--seeds 1,101,201`: distinct whole seeds, at least one, or undefined. */
+export function seedsFlag(text: string): number[] | undefined {
+  if (!/^\d+(,\d+)*$/.test(text)) return undefined;
+  const seeds = text.split(',').map(Number);
+  return new Set(seeds).size === seeds.length ? seeds : undefined;
+}
+
+/** The seeds a run plays: `games` from each of --seeds, as the sim plays from one --seed, or `games` from --seed. */
+export function trialSeeds(flags: { seeds: number[] | null; seed: number; games: number }): number[] {
+  return (flags.seeds ?? [flags.seed]).flatMap((first) => Array.from({ length: flags.games }, (_, i) => first + i));
+}
+
+const SEATINGS: readonly Seating[] = ['even', 'odd'];
+
+/** One game a run plays: its seed, and its seating at the pair table (null off it). */
+export interface PlannedGame {
+  seed: number;
+  seating: Seating | null;
+}
+
+/**
+ * The games a run plays, in order. At the pair table `games` counts both seatings: half as many seeds, each played even
+ * then odd at once, so a run stopped early is still balanced.
+ */
+export function trialGames(flags: { table: 'pair' | null; seeds: number[] | null; seed: number; games: number }): PlannedGame[] {
+  if (flags.table !== 'pair') return trialSeeds(flags).map((seed) => ({ seed, seating: null }));
+  return trialSeeds({ ...flags, games: flags.games / 2 }).flatMap((seed) => SEATINGS.map((seating) => ({ seed, seating })));
+}
+
+/** A trial ledger that could not be read, so the spend behind the cap is unknown. */
+class UnreadableLedger extends Error {
+  constructor(readonly file: string) {
+    super(`${file} is not a readable ledger`);
+  }
+}
+
+/** What every brain:trial PR-5 ledger (trial-*.jsonl) has spent, all days and labels. Throws UnreadableLedger. */
+export function trialSpent(dataDir: string): number {
+  return ledgersSpent(dataDir, 'trial');
+}
+
+/** What every tournament ledger (tourney-*.jsonl) has spent, all days and labels. Throws UnreadableLedger. */
+export function tourneySpent(dataDir: string): number {
+  return ledgersSpent(dataDir, 'tourney');
+}
+
+/** The call lines' dollars across every <kind>-*.jsonl ledger in the data folder. Throws UnreadableLedger. */
+function ledgersSpent(dataDir: string, kind: 'trial' | 'tourney'): number {
+  if (!fs.existsSync(dataDir)) return 0;
+  const ledgers = fs.readdirSync(dataDir).filter((f) => f.startsWith(`${kind}-`) && f.endsWith('.jsonl'));
+  return sum(
+    ledgers.flatMap((f) => {
+      const file = path.join(dataDir, f);
+      try {
+        return readLedgerLines(file).filter(isCallLine).map((l) => l.usd);
+      } catch {
+        throw new UnreadableLedger(file);
+      }
+    }),
+  );
+}
+
+/**
+ * Why a paid run with this cap may not start, or null: the trial ledgers' total plus the cap would pass
+ * BRAIN.proofCapUsd, or a ledger cannot be read, so the total is unknown (fail closed).
+ */
+export function proofCapRefusal(dataDir: string, maxUsd: number): string | null {
+  return ledgerCapRefusal(dataDir, maxUsd, { kind: 'trial', cap: BRAIN.proofCapUsd, name: 'the PR-5 cap', ledgers: 'the trial ledgers' });
+}
+
+/** Why a run may not start against one cap and its ledgers, or null; an unreadable ledger refuses it (fail closed). */
+function ledgerCapRefusal(dataDir: string, maxUsd: number, cap: { kind: 'trial' | 'tourney'; cap: number; name: string; ledgers: string }): string | null {
+  let spent: number;
+  try {
+    spent = ledgersSpent(dataDir, cap.kind);
+  } catch (err) {
+    if (err instanceof UnreadableLedger) return `brain:trial cannot check ${cap.name}: ${err.file} is not a readable ledger; nothing called.`;
+    throw err;
+  }
+  if (spent + maxUsd <= cap.cap) return null;
+  return `brain:trial would pass ${cap.name}: ${cap.ledgers} hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(cap.cap)}; nothing called.`;
+}
+
+/**
+ * Why a paid run may not start, or null: a pair run counts against the tournament cap and its ledgers, any other
+ * against the PR-5 cap and the trial ledgers. An unreadable ledger refuses it (fail closed).
+ */
+export function capRefusal(dataDir: string, table: 'pair' | null, maxUsd: number): string | null {
+  if (table !== 'pair') return proofCapRefusal(dataDir, maxUsd);
+  return ledgerCapRefusal(dataDir, maxUsd, { kind: 'tourney', cap: BRAIN.tournament.capUsd, name: 'the tournament cap', ledgers: 'the tournament ledgers' });
+}
+
+/** Both caps' totals for the report; null when a ledger cannot be read. */
+function spendTotals(dataDir: string): SpendTotals | null {
+  try {
+    return { proofUsd: trialSpent(dataDir), tourneyUsd: tourneySpent(dataDir) };
+  } catch (err) {
+    if (err instanceof UnreadableLedger) return null;
+    throw err;
+  }
+}
+
+/** The flags, or null for anything numberFlags refuses, a value out of range, or a tournament flag out of place. */
+function parseFlags(argv: readonly string[], words: { table: 'pair' | null; seeds: number[] | null }): TrialFlags | null {
+  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--playbooks', '--max-usd', '--game-budget-usd', '--control']);
+  if (!given) return null;
+  const control = given.get('--control') ?? 0;
+  const pair = words.table === 'pair';
+  const tourneyOk =
+    (control === 0 || control === 1) &&
+    (pair || control === 0) &&
+    (!pair || (given.get('--smart') ?? SEATS / 2) === SEATS / 2) &&
+    (!pair || control === 1 || given.get('--playbooks') === 1) &&
+    (words.seeds === null || !given.has('--seed'));
+  if (!tourneyOk) return null;
+  const flags = {
+    games: given.get('--games') ?? 20,
+    seed: given.get('--seed') ?? 101,
+    smart: given.get('--smart') ?? 2,
+    maxUsd: given.get('--max-usd') ?? null,
+    gameBudgetUsd: given.get('--game-budget-usd') ?? BRAIN.gameBudgetUsd,
+    playbooks: given.get('--playbooks') ?? 0,
+  };
+  const ok =
+    Number.isInteger(flags.games) && flags.games >= 1 && (!pair || flags.games % 2 === 0) && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
+  const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= BRAIN.gameBudgetUsd;
+  const playbooksOk = flags.playbooks === 0 || flags.playbooks === 1;
+  return ok && budgetOk && playbooksOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0)
+    ? { ...flags, playbooks: flags.playbooks === 1, seeds: words.seeds, table: words.table, control: control === 1 }
+    : null;
+}
+
+/** A keyed run's ledger and cap. */
+interface Paid {
+  logPath: string;
+  cap: number;
+}
+
+interface PlayedRun {
+  games: TrialGame[];
+  stopped: TrialStop;
+  /** The stop message when a ledger write was lost or the API refused a whole game. */
+  lostLines: string | null;
+}
+
+/** Plays the planned games in order, starting each only while the cap allows it; stops on a 401/403 or a lost ledger line. */
+async function playRun(
+  flags: TrialFlags,
+  env: Readonly<Record<string, string | undefined>>,
+  paid: Paid | null,
+  today: string,
+  out: (line: string) => void,
+  writeModel: ModelId | null = null,
+): Promise<PlayedRun> {
+  const games: TrialGame[] = [];
+  const planned = trialGames(flags);
+  for (let i = 0; i < planned.length; i++) {
+    const next = planned[i]!;
+    if (paid) {
+      // The brain's table check holds a game to the game budget, unknown bills included. !(<=) refuses a NaN. A seed's
+      // even game starts only with room for its odd one too, so a run stopped by the cap leaves no seed half played.
+      const room = next.seating === 'even' ? SEATINGS.length * flags.gameBudgetUsd : flags.gameBudgetUsd;
+      if (!(sum(games.map((g) => g.countedUsd)) + room <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
+      // The day's clearance is used once, by the run that starts the first game.
+      if (i === 0) claimLedger(paid.logPath);
+    }
+    const game = await playTrialGame({
+      writeModel,
+      game: next,
+      id: `trial-${today}-${planned[0]!.seed}-${i}`,
+      env,
+      logPath: paid?.logPath ?? null,
+      smart: flags.smart,
+      gameBudgetUsd: flags.gameBudgetUsd,
+      playbooks: flags.playbooks,
+      control: flags.control,
+      out,
+    });
+    games.push(game);
+    const chairs = next.seating === null ? '' : `, Claude chairs ${next.seating === 'even' ? '0 and 2' : '1 and 3'}`;
+    out(`game ${i + 1}/${planned.length} seed ${next.seed}${chairs}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
+    if (game.end === 'auth') return { games, stopped: 'auth', lostLines: null };
+    if (!paid) continue;
+    const calls = readCalls(paid.logPath);
+    const lostLines = ledgerShortfall(paid.logPath, calls, game);
+    if (lostLines) return { games, stopped: 'ledger', lostLines };
+    const refused = everyCallFailed(calls, game.id);
+    if (refused) return { games, stopped: 'refused', lostLines: refused };
+  }
+  return { games, stopped: 'done', lostLines: null };
+}
+
+/**
+ * 2 on a 401/403, 1 on a lost ledger line, a refused game, or a control that did not pass (WS1: the paid run waits on
+ * it); otherwise 0 with the key, and without it 0 only when the key-unset verdict passes.
+ */
+export function exitCode(keyed: boolean, stopped: TrialStop, report: Pick<TrialReport, 'ac2' | 'bar'>): number {
+  if (stopped === 'auth') return 2;
+  if (stopped === 'ledger' || stopped === 'refused') return 1;
+  if (report.bar?.kind === 'control' && report.bar.verdict !== 'pass') return 1;
+  return keyed || report.ac2 === 'pass' ? 0 : 1;
+}
+
+/**
+ * Runs the trial and prints its report. Exit code with the key: 0 done or capped, 1 bad flags, no --max-usd, today's
+ * run already made or a ledger write lost, 2 stopped on an auth failure. Without it: 0 when every game finished
+ * unstalled and all-Classic, otherwise 1.
+ */
+export async function trial(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+  deps: MainDeps = {},
+): Promise<{ code: number; report: TrialReport | null }> {
+  const { dataDir, out, now } = resolveDeps(deps);
+  const run = wordFlags(argv);
+  const flags = run ? parseFlags(run.rest, run) : null;
+  if (!run || !flags) {
+    out(USAGE);
+    return { code: 1, report: null };
+  }
+  // The control calls nothing: its games get no key, so no seat can reach the model.
+  const gameEnv = flags.control ? {} : env;
+  const keyed = apiKeyFrom(gameEnv) !== null;
+  const at = now();
+  const planned = trialGames(flags).length;
+  let paid: Paid | null = null;
+  if (flags.control) {
+    out(`brain:trial control: the Claude chairs play as engine seats on the pair table; ${planned} games, each seed with the Claude chairs on 0 and 2, then on 1 and 3; nothing is called.`);
+  } else if (!keyed && flags.table === 'pair') {
+    out(`${API_KEY_ENV} is not set, so no Claude would sit at the pair table; run --control 1 for the engine-only table; nothing played.`);
+    return { code: 1, report: null };
+  } else if (!keyed) {
+    out(`${API_KEY_ENV} is not set: every seat plays Classic and nothing is called.`);
+  } else {
+    if (flags.maxUsd === null) {
+      out(`brain:trial spends real money with ${API_KEY_ENV} set: give --max-usd, the cap that was cleared; nothing called.`);
+      return { code: 1, report: null };
+    }
+    const logPath = trialLedgerPath(dataDir, at, run.label, flags.table === 'pair' ? 'tourney' : 'trial');
+    const used =
+      run.label === null
+        ? alreadyRanToday(logPath, 'brain:trial')
+        : fs.existsSync(logPath)
+          ? `${logPath} exists: run "${run.label}" already ran, and each run needs its own clearance; nothing called.`
+          : null;
+    if (used) {
+      out(used);
+      return { code: 1, report: null };
+    }
+    // One run a day used to stop an accidental overspend; with labels, the cap across every ledger of the run's kind does.
+    const overCap = capRefusal(dataDir, flags.table, flags.maxUsd);
+    if (overCap) {
+      out(overCap);
+      return { code: 1, report: null };
+    }
+    paid = { logPath, cap: flags.maxUsd };
+    out(
+      `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${planned} games with ${flags.table === 'pair' ? 'Claude on chairs 0 and 2, then 1 and 3, of the pair table, each seed in both seatings' : `${flags.smart} Smart seats`} ` +
+        `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each)${run.writeModel === null ? '' : `, every write on ${run.writeModel}`}, ledger ${logPath}`,
+    );
+  }
+
+  const { games, stopped, lostLines } = await playRun(flags, gameEnv, paid, day(at), out, run.writeModel);
+  const totals = flags.table === 'pair' ? spendTotals(dataDir) : null;
+  const report = trialReport({
+    keyed,
+    planned,
+    table: flags.table,
+    control: flags.control,
+    ...(totals ? { totals } : {}),
+    stopped,
+    smartPerGame: keyed ? flags.smart : 0,
+    seatsPerGame: SEATS,
+    cap: paid?.cap ?? null,
+    gameBudgetUsd: flags.gameBudgetUsd,
+    games,
+    calls: paid ? readCalls(paid.logPath) : [],
+    playbooks: flags.playbooks,
+  });
+  for (const line of renderTrialReport(report)) out(line);
+  if (paid && stopped === 'cap' && games.length === 0) {
+    out(
+      flags.table === 'pair'
+        ? `No game started: cap ${capText(paid.cap)} is below a seed's two games' budget (${capText(SEATINGS.length * flags.gameBudgetUsd)}).`
+        : `No game started: cap ${capText(paid.cap)} is below one game's budget (${capText(flags.gameBudgetUsd)}).`,
+    );
+  }
+  if (stopped === 'auth') out(AUTH_STOPPED);
+  if (lostLines) out(lostLines);
+  return { code: exitCode(keyed, stopped, report), report };
+}
+
+export async function main(argv: readonly string[], env: Readonly<Record<string, string | undefined>>, deps: MainDeps = {}): Promise<number> {
+  return (await trial(argv, env, deps)).code;
+}
+
+runAsScript(import.meta.url, 'brain:trial', main);

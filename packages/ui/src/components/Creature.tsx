@@ -1,7 +1,10 @@
-import type { ReactNode } from 'react';
+import { memo, useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { GAIT, type Facing, type Motion } from './motion/gait';
 import type { Species } from './species';
+import { cx } from './tokens';
 
-const PUPIL = '#0f1d2b';
+/** The creatures' pupil and line ink, shared with the MULE. */
+export const PUPIL = '#0f1d2b';
 
 function Eye({ x, y, r }: { x: number; y: number; r: number }) {
   return (
@@ -117,12 +120,166 @@ function parts(species: Species, body: string, shade: string, light: string): Re
   }
 }
 
-export function Creature({ species, color, size = 32, className }: { species: Species; color: string; size?: number; className?: string }) {
+/** The species drawing itself: a still SVG, the same for every caller. */
+function Drawing({ species, color, size, className }: { species: Species; color: string; size: number; className?: string | undefined }) {
   const shade = `color-mix(in srgb, ${color} 62%, black)`;
   const light = `color-mix(in srgb, ${color} 45%, white)`;
   return (
     <svg viewBox="0 0 32 32" width={size} height={size} className={className} aria-hidden style={{ overflow: 'visible' }}>
       {parts(species, color, shade, light)}
     </svg>
+  );
+}
+
+export interface CreatureProps {
+  species: Species;
+  color: string;
+  size?: number;
+  className?: string;
+  /**
+   * What it does (gait.ts::motionOf). Any motion prop puts the drawing in its motion wrappers; none leaves it still, so
+   * toggling the motion props between a value and `undefined` remounts the drawing.
+   */
+  motion?: Motion;
+  facing?: Facing;
+  /** Seconds per stride, or per breath standing (gait.ts::cycleSeconds); a missing, NaN or non-positive one: default. */
+  cycle?: number;
+  /** Bites taken so far: each new one plays the flinch. */
+  flinch?: number;
+  /** Your own strikes so far: each new one jabs. */
+  strike?: number;
+  /** The ground shadow under a moving creature (default on). */
+  shadow?: boolean;
+}
+
+/**
+ * A colonist creature. With no motion props it is the still drawing, as it always was. With any of them it moves as
+ * variant A, "bob and waddle": the same drawing inside HTML wrappers that bob, squash, sway, lean and flip, so every
+ * animation is a transform the compositor can run without repainting the creature (keyframes cm-* in theme.css).
+ * Memoised: a board re-rendering at 20 Hz does not redraw an unchanged creature.
+ */
+export const Creature = memo(function Creature({ species, color, size = 32, className, motion, facing, cycle, flinch, strike, shadow }: CreatureProps) {
+  if (motion === undefined && facing === undefined && cycle === undefined && flinch === undefined && strike === undefined) {
+    return <Drawing species={species} color={color} size={size} className={className} />;
+  }
+  const m = motion ?? 'idle';
+  const usable = cycle !== undefined && Number.isFinite(cycle) && cycle > 0;
+  return (
+    <CreatureInMotion
+      species={species}
+      color={color}
+      size={size}
+      className={className}
+      motion={m}
+      facing={facing ?? 'right'}
+      cycle={usable ? cycle : m === 'idle' ? GAIT.idleCycle : m === 'fight' ? GAIT.fightCycle : GAIT.fullCycle}
+      flinch={flinch ?? 0}
+      strike={strike ?? 0}
+      shadow={shadow ?? true}
+    />
+  );
+});
+
+// The one-shot moments, played with the Web Animations API on their own wrappers (composited transforms).
+const FLINCH: Keyframe[] = [
+  { transform: 'none' },
+  { transform: 'translateX(-14%) rotate(-14deg) scale(0.88, 1.1)', offset: 0.18 },
+  { transform: 'translateX(6%) rotate(6deg) scale(1.04, 0.96)', offset: 0.45 },
+  { transform: 'translateX(-3%) rotate(-3deg)', offset: 0.7 },
+  { transform: 'none' },
+];
+const BITE: Keyframe[] = [
+  { opacity: 0, transform: 'scale(0.4)' },
+  { opacity: 1, transform: 'scale(1)', offset: 0.25 },
+  { opacity: 0, transform: 'scale(1.5)' },
+];
+const STRIKE: Keyframe[] = [
+  { transform: 'none' },
+  { transform: 'translateX(-6%) rotate(-6deg)', offset: 0.3 },
+  { transform: 'translateX(24%) rotate(12deg) scale(1.1, 0.92)', offset: 0.55 },
+  { transform: 'none' },
+];
+const SWIPE: Keyframe[] = [
+  { opacity: 0, transform: 'scale(0.6) rotate(-30deg)' },
+  { opacity: 0, transform: 'scale(0.6) rotate(-30deg)', offset: 0.45 },
+  { opacity: 1, transform: 'scale(1) rotate(0deg)', offset: 0.6 },
+  { opacity: 0, transform: 'scale(1.15) rotate(15deg)' },
+];
+const FLINCH_MS = 450;
+const STRIKE_MS = 380;
+
+/**
+ * Whether a one-shot plays: only when the counter rises past the last count seen (so not on mount, and not when a new
+ * round resets it), and never under reduced motion.
+ */
+export function replays(seen: number, count: number, reduced: boolean): boolean {
+  return count > seen && !reduced;
+}
+
+/** Plays the frames on each wrapper once whenever `count` rises (replays), then remembers the count. */
+function useOneShot(count: number, ms: number, plays: [RefObject<HTMLSpanElement | null>, Keyframe[]][]) {
+  const seen = useRef(count);
+  useEffect(() => {
+    const play = replays(seen.current, count, window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
+    seen.current = count;
+    if (!play) return;
+    for (const [ref, frames] of plays) ref.current?.animate(frames, { duration: ms, easing: 'ease-out' });
+    // `plays` holds refs and module constants, so only a new count replays.
+  }, [count, ms]);
+}
+
+/**
+ * The wrappers, outside in: cm-face (the facing flip) > cm-glance (looking back while running) > cm-lean (the static
+ * lean into travel, also the reduced-motion pose) > cm-hit (the bite's flinch) > cm-hit (the own strike) > cm-body
+ * (bob, breathe, limp, bounce) > cm-sway (side to side, the jab) > the drawing.
+ */
+function CreatureInMotion({
+  species,
+  color,
+  size,
+  className,
+  motion,
+  facing,
+  cycle,
+  flinch,
+  strike,
+  shadow,
+}: Required<Omit<CreatureProps, 'className'>> & { className: string | undefined }) {
+  const hit = useRef<HTMLSpanElement>(null);
+  const bite = useRef<HTMLSpanElement>(null);
+  const jab = useRef<HTMLSpanElement>(null);
+  const swipe = useRef<HTMLSpanElement>(null);
+  useOneShot(flinch, FLINCH_MS, [
+    [hit, FLINCH],
+    [bite, BITE],
+  ]);
+  useOneShot(strike, STRIKE_MS, [
+    [jab, STRIKE],
+    [swipe, SWIPE],
+  ]);
+  const style = { width: size, height: size, '--cycle': `${cycle.toFixed(3)}s` } as CSSProperties;
+  return (
+    <span aria-hidden className={cx('cm relative inline-block shrink-0', className)} style={style} data-motion={motion} data-facing={facing}>
+      {shadow && <span className="cm-shadow" />}
+      <span className="cm-face">
+        <span className="cm-glance">
+          <span className="cm-lean">
+            <span ref={hit} className="cm-hit">
+              <span ref={jab} className="cm-hit">
+                <span className="cm-body">
+                  <span className="cm-sway">
+                    <Drawing species={species} color={color} size={size} className="block" />
+                  </span>
+                </span>
+              </span>
+            </span>
+          </span>
+        </span>
+        {/* The fight's swipe, in the facing frame so it is always in front; and the own strike's, played once. */}
+        <span className="cm-swipe" />
+        <span ref={swipe} className="cm-swipe cm-swipe-once" />
+      </span>
+      <span ref={bite} className="cm-bite" />
+    </span>
   );
 }
