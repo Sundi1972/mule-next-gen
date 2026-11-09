@@ -345,6 +345,80 @@ describe('the promise sheet (E-4, RULE-10)', () => {
   });
 });
 
+/** S4-B-AC-11 (record leg): the outgoing Sheriff's term, as one plain line where people vote. */
+describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
+  /** Month 4's announce with Kai (s3) the outgoing Sheriff on `record`; a computer seat when `ai`. */
+  const day = (record: { caught: number; solved: number } | null | undefined, { sheriff = 's3', ai = false }: { sheriff?: string | null; ai?: boolean } = {}) =>
+    view(
+      politics({ next: 7, sheriff, sheriffRecord: record, candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, election: election({ waitingFor: SEATS }) }),
+      me({ running: 'governor', canRun: { governor: 'closed' } }),
+      { month: 4, players: PLAYERS.map((p) => (ai && p.id === 's3' ? { ...p, isAi: true } : p)) },
+    );
+  const SAID: [string, { caught: number; solved: number }, string][] = [
+    ['plural', { caught: 3, solved: 1 }, 'Kai was Sheriff: 3 catches, 1 case solved'],
+    ['singular', { caught: 1, solved: 1 }, 'Kai was Sheriff: 1 catch, 1 case solved'],
+    ['zero (still shown)', { caught: 0, solved: 0 }, 'Kai was Sheriff: 0 catches, 0 cases solved'],
+    ['two solved', { caught: 2, solved: 2 }, 'Kai was Sheriff: 2 catches, 2 cases solved'],
+  ];
+
+  it.each(SAID)('S4-B-AC-11: the phone says it in the ruled words (%s)', (_, record, words) => {
+    expect(textOf(inHub(day(record)), 'sheriff-record')).toBe(words);
+  });
+
+  it('S4-B-AC-11: on the phone the line sits under the elects sentence and before the candidates', () => {
+    const html = inHub(day({ caught: 3, solved: 1 }));
+    const [elects, line, field] = ['The colony elects its', 'data-testid="sheriff-record"', 'data-testid="announce-field"'].map((m) => html.indexOf(m));
+    expect(elects).toBeGreaterThan(-1);
+    expect(line).toBeGreaterThan(elects);
+    expect(field).toBeGreaterThan(line);
+  });
+
+  it.each([
+    ['no Sheriff', day({ caught: 3, solved: 1 }, { sheriff: null })],
+    ['no record sent', day(null)],
+    ['an older server with no record', day(undefined)],
+  ])('S4-B-AC-11: the phone has no line with %s', (_, game) => {
+    expect(tagOf(inHub(game), 'sheriff-record')).toBeUndefined();
+  });
+
+  it('S4-B-AC-11: the line is on the announce stage only, not the ballot', () => {
+    const ballot = day({ caught: 3, solved: 1 });
+    ballot.politics!.election = election({ stage: 'ballot', candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD } });
+    expect(tagOf(inHub(ballot), 'sheriff-record')).toBeUndefined();
+  });
+
+  it('S4-B-AC-11: the phone line is one unbroken text node, so it cannot wrap mid-phrase from markup', () => {
+    expect(htmlOf(inHub(day({ caught: 3, solved: 1 })), 'sheriff-record')).toBe('Kai was Sheriff: 3 catches, 1 case solved');
+  });
+
+  it.each(SAID)('S4-B-AC-11: the TV says it in the ruled words (%s)', (_, record, words) => {
+    expect(textOf(onTv(day(record)), 'tv-sheriff-record')).toBe(words);
+  });
+
+  it('S4-B-AC-11: on the TV the line sits after the title row and before the candidates', () => {
+    const html = onTv(day({ caught: 3, solved: 1 }));
+    const [title, line, field] = ['data-testid="tv-day-title"', 'data-testid="tv-sheriff-record"', 'data-testid="tv-field-governor"'].map((m) => html.indexOf(m));
+    expect(line).toBeGreaterThan(title);
+    expect(field).toBeGreaterThan(line);
+  });
+
+  it.each([
+    ['no Sheriff', day({ caught: 3, solved: 1 }, { sheriff: null })],
+    ['no record sent', day(null)],
+  ])('S4-B-AC-11: the TV has no line with %s', (_, game) => {
+    expect(tagOf(onTv(game), 'tv-sheriff-record')).toBeUndefined();
+  });
+
+  it('S4-B-AC-11: a computer Sheriff carries " · AI" after its name on the TV, through SeatWords', () => {
+    expect(textOf(onTv(day({ caught: 3, solved: 1 }, { ai: true })), 'tv-sheriff-record')).toBe('Kai · AI was Sheriff: 3 catches, 1 case solved');
+  });
+
+  it('S4-B-AC-11: the line never names a guard post or a tile', () => {
+    const words = textOf(onTv(day({ caught: 3, solved: 1 })), 'tv-sheriff-record');
+    expect(words).not.toMatch(/guard|tile|plot/i);
+  });
+});
+
 describe('election day on the phone (C66, E-2)', () => {
   /** Month `month`'s announce: Lena and Ossa run, Lena up to 8% and Ossa holding, on Politics' candidacy. */
   const announce = (month: number, canRun: CanRun, extra: Partial<ElectionView> = {}) =>
