@@ -576,9 +576,9 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     const small = opened.tabs.filter((t) => t.w < TAB_MIN - 0.01 || t.h < TAB_MIN - 0.01 || t.clipped);
     check(opened.tabs.length >= 6 && small.length === 0, `E-11 at ${at}: every tab and sub-tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${tabs}`);
     seen.push(`tabs ${tabs}`);
-    // Test fixture: a fourth sub-tab, as SB-3's Laws, Budget and Elections beside an office's will need. No game draws
-    // it today, so the Council's sub-tab, the longest word, is drawn twice for one read, then taken away.
-    await planning.getByTestId('sub-laws').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
+    // Test fixture: a fourth sub-tab beside Laws, Budget and Elections, as the Sheriff's will be for its holder. No game
+    // draws it here, so Elections, the longest label, is drawn twice for one read, then taken away.
+    await planning.getByTestId('sub-elections').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
     const more = (await read()).tabs.filter((t) => t.id.startsWith('sub-'));
     await lena.evaluate(() => document.getElementById('extra-sub')?.remove());
     const moreTabs = more.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
