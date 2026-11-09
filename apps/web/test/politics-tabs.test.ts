@@ -188,6 +188,11 @@ describe('SB-3: the politics sub-tabs', () => {
   });
   });
 
+  it('SB-3 (D8): the sitting Governor with nothing open is asked first by no sub-tab; Now is not a door into the tax desk', () => { // trace-allow: SB-3 has no spec AC ids; D8 of the approved hub-tabs mock: Now is a door only for a ballot or a deadline
+    const seat = seatOf(view(politics({ governor: 's1' })));
+    for (const t of POLITICS_TABS) expect(t.first?.(seat) ?? false, t.id).toBe(false);
+  });
+
   describe('an open law ballot', () => {
     const game = view(politics({ council: council() }));
 
