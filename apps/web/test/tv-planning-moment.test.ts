@@ -1,17 +1,19 @@
+import { document, FakeElement } from './fake-dom';
 import type { DealCard } from '@mule/engine';
 import type { MuleView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { TableApp } from '../src/table/TableApp';
+import { TV_MOMENT_MS } from '../src/table/moments';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /*
- * SB-5a (the tabbed hub's TV planning, mock hub-tabs src/tv/TvPlanning.tsx CHANGE 2; WS6 ruling 8 Nov, WS4 accepted):
- * a broken deal card is a moment on the TV. Its banner (WS7's TvDeals) overlays the top of the map box, out of flow,
- * so the body's scale never moves for it; the news column keeps the server's line for it.
+ * SB-5a and SB-5b (the tabbed hub's TV planning, mock hub-tabs src/tv/TvPlanning.tsx CHANGE 2; WS6 ruling 8 Nov, PM ruling
+ * 8 Nov): a card broken while the TV is up is a moment. Its banner (WS7's TvDeals) overlays the top of the map box, out of
+ * flow, so the body's scale never moves for it, and folds after TV_MOMENT_MS; the news column keeps the server's line.
  */
 
 const PLAYERS: PlayerView[] = [
@@ -21,6 +23,8 @@ const PLAYERS: PlayerView[] = [
 ];
 const BROKE: DealCard = { id: 'deal-k', from: 's1', to: 's2', terms: { kind: 'pact' }, offered: 1, until: 4, status: 'broken', brokenBy: 's2', settled: 3 };
 const NEWS = 'Kai broke a pact with Lena. Reputation −20.';
+const START = 100_000;
+const O: DealCard = { ...BROKE, id: 'deal-o', brokenBy: 's3', from: 's3' };
 
 function politics(brokenDeals: DealCard[]): PoliticsView {
   return {
@@ -31,17 +35,69 @@ function politics(brokenDeals: DealCard[]): PoliticsView {
   };
 }
 
-let state: unknown;
-// The TV reads the room through useClientState, whose store has no server snapshot to render from.
-vi.mock('../src/net/react', async (actual) => ({ ...(await actual<typeof import('../src/net/react')>()), useClientState: () => state }));
-
-function onTv(brokenDeals: DealCard[]): string {
+/** The room as the TV's store holds it, with these cards broken. */
+function room(brokenDeals: DealCard[]) {
   const game: MuleView = aMuleView({ phase: 'planning', month: 3, players: PLAYERS, me: null, politics: politics(brokenDeals), news: brokenDeals.length ? [NEWS] : [] });
   const seats = game.players.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot, ...(p.isAi ? { kind: 'builtin' as const } : {}) }));
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', seats, boards: 1, game };
-  state = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: table, notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
-  const client = { subscribe: () => () => {}, getState: () => state, serverNow: () => 0, watch: () => {} } as unknown as TableClient;
-  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TableApp, { room: 'MULE' }) })).replaceAll('<!-- -->', '');
+  return { status: 'open', role: 'board', code: 'MULE', seatId: null, view: table, notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+}
+
+/** The TV mounted in the fake DOM, on a server clock the test moves; `show` sends the room a new view. */
+function theTv(brokenDeals: DealCard[]) {
+  let state = room(brokenDeals);
+  let clock = START;
+  const listeners = new Set<() => void>();
+  const client = {
+    subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)),
+    getState: () => state,
+    serverNow: () => clock,
+    watch: () => {},
+  } as unknown as TableClient;
+  const host = document.createElement('div') as unknown as FakeElement;
+  document.body.appendChild(host as never);
+  root = createRoot(host as unknown as Element);
+  act(() => root!.render(createElement(ClientProvider, { client, children: createElement(TableApp, { room: 'MULE' }) })));
+  return {
+    html: () => outer(host),
+    show(next: DealCard[]) {
+      state = room(next);
+      act(() => listeners.forEach((l) => l()));
+    },
+    /** Moves the server clock and lets the screen's clock tick. */
+    at(ms: number) {
+      clock = START + ms;
+      act(() => vi.advanceTimersByTime(500));
+    },
+  };
+}
+
+let root: Root | null = null;
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  (document.documentElement as unknown as { dataset?: object }).dataset ??= {};
+  const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
+  doc.createElementNS ??= (_ns, t) => document.createElement(t) as unknown as FakeElement;
+});
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.stubGlobal('MutationObserver', class { observe() {} disconnect() {} });
+  vi.stubGlobal('requestAnimationFrame', () => 0);
+  vi.stubGlobal('cancelAnimationFrame', () => undefined);
+});
+afterEach(() => {
+  const r = root;
+  if (r) act(() => r.unmount());
+  root = null;
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+/** The fake DOM as markup, enough for the readers below. */
+function outer(node: FakeElement): string {
+  const attrs = [...node.attributes].map(([k, v]) => ` ${k}="${v}"`).join('');
+  const inner = node.childNodes.map((c) => (c instanceof FakeElement ? outer(c) : c.textContent)).join('');
+  return `<${node.tagName.toLowerCase()}${attrs}>${inner}</${node.tagName.toLowerCase()}>`;
 }
 
 /** The markup of the element carrying this data-testid, through its matching closing tag. */
@@ -59,9 +115,11 @@ function element(html: string, testid: string): string {
   throw new Error(`no closing tag for ${testid}`);
 }
 
-describe('SB-5a: a broken card is a moment over the TV planning map', () => {
+describe('SB-5a/5b: a card broken while the TV is up is a moment over the planning map', () => {
   it('the banner overlays the map box, out of flow, not under the header', () => {
-    const html = onTv([BROKE]);
+    const tv = theTv([]);
+    tv.show([BROKE]);
+    const html = tv.html();
     const box = element(html, 'tv-map-box');
     expect(box).toMatch(/^<div[^>]*class="[^"]*\brelative\b/);
     const moment = element(box, 'tv-moment');
@@ -76,12 +134,56 @@ describe('SB-5a: a broken card is a moment over the TV planning map', () => {
     expect(header).not.toContain('tv-break-banner');
   });
 
-  it('the news column keeps the server\'s line for the break', () => {
-    expect(onTv([BROKE])).toContain(NEWS);
+  it(`the banner shows for ${TV_MOMENT_MS / 1000} s of server time, then folds; the news line stays`, () => {
+    const tv = theTv([]);
+    tv.show([BROKE]);
+    expect(tv.html()).toContain('data-testid="tv-break-banner"');
+    tv.at(TV_MOMENT_MS - 600);
+    expect(tv.html(), 'just inside its time').toContain('data-testid="tv-break-banner"');
+    tv.at(TV_MOMENT_MS);
+    expect(tv.html(), 'its time up').not.toContain('data-testid="tv-moment"');
+    expect(tv.html()).toContain(NEWS);
   });
 
+  it('a break the screen opens on is old news: no banner, the news line only', () => {
+    const tv = theTv([BROKE]);
+    expect(tv.html()).not.toContain('data-testid="tv-break-banner"');
+    expect(tv.html()).toContain(NEWS);
+    // Nor a tick later, once the screen's clock has run.
+    tv.at(500);
+    expect(tv.html(), 'a tick after it opened').not.toContain('data-testid="tv-break-banner"');
+  });
+
+  it('a second card broken while the first shows is a moment of its own, the newest first, and folds on its own time', () => {
+    const tv = theTv([]);
+    tv.show([BROKE]);
+    tv.at(TV_MOMENT_MS - 1000);
+    tv.show([BROKE, O]);
+    tv.at(TV_MOMENT_MS + 1000);
+    const banner = element(tv.html(), 'tv-break-banner');
+    expect(banner.indexOf('data-testid="tv-break-deal-o-words"'), 'the newest break leads').toBeGreaterThanOrEqual(0);
+    expect(banner.indexOf('data-testid="tv-break-deal-o-words"')).toBeLessThan(banner.indexOf('data-testid="tv-break-deal-k-words"'));
+    tv.at(2 * TV_MOMENT_MS - 1000);
+    expect(tv.html(), "the second break's time up").not.toContain('data-testid="tv-moment"');
+  });
+
+  it("a third break in the month is in the banner, which names the newest two", () => {
+    const tv = theTv([]);
+    tv.show([BROKE]);
+    tv.show([BROKE, O]);
+    // Offered first, broken last: the view's order is not the order they broke in.
+    tv.show([{ ...BROKE, id: 'deal-a', brokenBy: 's1', from: 's1', to: 's3' }, BROKE, O]);
+    const banner = element(tv.html(), 'tv-break-banner');
+    expect(banner).toContain('data-testid="tv-break-deal-a-words"');
+    expect(banner).toContain('data-testid="tv-break-deal-o-words"');
+    expect(banner).not.toContain('data-testid="tv-break-deal-k-words"');
+  });
+
+
   it('with no break this month, the box draws no moment', () => {
-    expect(onTv([])).not.toContain('data-testid="tv-moment"');
-    expect(onTv([{ ...BROKE, settled: 2 }])).not.toContain('tv-break-banner');
+    const tv = theTv([]);
+    expect(tv.html()).not.toContain('data-testid="tv-moment"');
+    tv.show([{ ...BROKE, settled: 2 }]);
+    expect(tv.html()).not.toContain('tv-break-banner');
   });
 });
