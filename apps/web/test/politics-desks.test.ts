@@ -347,10 +347,17 @@ describe('the promise sheet (E-4, RULE-10)', () => {
 
 /** S4-B-AC-11 (record leg): the outgoing Sheriff's term, as one plain line where people vote. */
 describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
+  /** The sabotage block as the server sends it, carrying `record` (absent for an older server's view). */
+  const sabotageWith = (record: { caught: number; solved: number } | null | undefined): PoliticsView['sabotage'] => ({
+    terms: { powerCut: { cost: 0, success: 0, detect: 0 }, rumour: { cost: 0, success: 0, detect: 0 } },
+    incidents: [],
+    sheriff: { guards: 2, investigations: 2, investigationsLeft: 2 },
+    ...(record === undefined ? {} : { sheriffRecord: record }),
+  });
   /** Month 4's announce with Kai (s3) the outgoing Sheriff on `record`; a computer seat when `ai`. */
   const day = (record: { caught: number; solved: number } | null | undefined, { sheriff = 's3', ai = false }: { sheriff?: string | null; ai?: boolean } = {}) =>
     view(
-      politics({ next: 7, sheriff, sheriffRecord: record, candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, election: election({ waitingFor: SEATS }) }),
+      politics({ next: 7, sheriff, sabotage: sabotageWith(record), candidates: { governor: ['s1', 's2'] }, promises: { s1: CAP_8, s2: HOLD }, election: election({ waitingFor: SEATS }) }),
       me({ running: 'governor', canRun: { governor: 'closed' } }),
       { month: 4, players: PLAYERS.map((p) => (ai && p.id === 's3' ? { ...p, isAi: true } : p)) },
     );
@@ -367,7 +374,7 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
 
   it('S4-B-AC-11: on the phone the line sits under the elects sentence and before the candidates', () => {
     const html = inHub(day({ caught: 3, solved: 1 }));
-    const [elects, line, field] = ['The colony elects its', 'data-testid="sheriff-record"', 'data-testid="announce-field"'].map((m) => html.indexOf(m));
+    const [elects, line, field] = ['The colony elects its', 'data-testid="sheriff-record"', 'data-testid="announce-field"'].map((m) => html.indexOf(m)) as [number, number, number];
     expect(elects).toBeGreaterThan(-1);
     expect(line).toBeGreaterThan(elects);
     expect(field).toBeGreaterThan(line);
@@ -403,7 +410,7 @@ describe("S4-B-AC-11: the outgoing Sheriff's record on election day", () => {
 
   it('S4-B-AC-11: on the TV the line sits after the title row and before the candidates', () => {
     const html = onTv(day({ caught: 3, solved: 1 }));
-    const [title, line, field] = ['data-testid="tv-day-title"', 'data-testid="tv-sheriff-record"', 'data-testid="tv-field-governor"'].map((m) => html.indexOf(m));
+    const [title, line, field] = ['data-testid="tv-day-title"', 'data-testid="tv-sheriff-record"', 'data-testid="tv-field-governor"'].map((m) => html.indexOf(m)) as [number, number, number];
     expect(line).toBeGreaterThan(title);
     expect(field).toBeGreaterThan(line);
   });
