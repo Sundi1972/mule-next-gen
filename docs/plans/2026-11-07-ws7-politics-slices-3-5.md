@@ -861,6 +861,30 @@ WS7's path; `TvDeals.tsx` is WS7's own file (PM ruling 7 Nov), so it is built he
 - [ ] S3-B-AC-4's hand-off recorded in slice 4's section (S4-PR-8)
 - [ ] Rulebook "In the game" the same day; one code review once CI is green
 
+### S4-PR-11 · the outgoing Sheriff's record on election day, WS7 part (`ws7-s4-record`, draft #835)
+
+- [x] Built on 8d94ebc5 (the lane merged into f5226eef): 44daf07b S4-T-AC-20 (a guard-caught order cannot then be
+  investigated, so it counts once, in caught), 51067830 red, 100fe98f the line on the phone's announce and the TV's,
+  bbcf982f rulebook, f1a31b84 reads `politics.sabotage.sheriffRecord`, b5807cc5 the two halves, 67ff7938 " · AI" on
+  the phone, ed2e0202 / eab1bee8 / f0847267 the review's minors. **Review: APPROVE at a9310901.**
+- [x] PM rulings, 9 Nov: spot (a), under the sentence saying who the colony elects (the TV: after the title row); the
+  words "Kai was Sheriff: 3 catches, 1 case solved" with singulars, and 0/0 shown; name through SeatWords; the phone
+  breaks only after "Sheriff:", the TV stays one line. Spec slice 4 AM-13 at a9310901 (on the branch, not yet in the
+  lane), with S4-B-AC-11's Then clause "Kai was Sheriff: 1 catch, 0 cases solved".
+- [x] Fit measured in `e2e/small-phone.ts::sheriffRecordFit` (9656df33, WS4 named edit): 667 with an AI name gives
+  2 lines broken at the span, every other case 1 line, nothing clipped, no new scroll; TV-FIT 0.925 with the line
+  (0.956 without, floor 0.7).
+- [ ] Merges after SB-3 part 2: merge the lane in, check `e2e:small` passes in full (its main game's election step
+  waits on SB-3's 90ea7d24), WS4's OK on 9656df33 via the PM, then merge.
+
+### Lane → trunk (#834, draft)
+
+- [ ] Opened 9 Nov for the 12 Nov batch; ready by **11 Nov 18:00Z**. Needs SB-3 part 2 and #835 in the lane, then one
+  trunk sync (feat/strategist into the lane: the rulebook conflicts in `colony-and-politics.html` and
+  `search-index.js`), CI green, then ready for review.
+
+---
+
 ### Drift found (for WS7)
 
 Checked against `origin/feat/strategist` e1e4794a and #669 at dbe50e42. The spec is unedited.
@@ -1990,6 +2014,10 @@ and 4 stand; the parity row (play.ts plays the overrule as the server does, red 
 
 ### S5-PR-6 · the phone desks (`ws7-s5-desks`, WS7) [ruling: D-S5-2; re-scoped by spec AM-12, 8 Nov]
 
+**MERGED 9 Nov as #833 (e391e1de).** Head `ws7-s5-pr6` 35de6df7 = `ws7-s5-tv` 133feda9 plus a merge of the lane
+(fde0acfb). Phone part APPROVE a0669e2a, TV part APPROVE 49d9dc01. Spec slice 5 AM-12/AM-13 are in the lane with it.
+Still open below: WS4's placement (SB-5b) and the e2e step (Task S5-6.4).
+
 **Replanned 8 Nov (spec AM-12).** The phone screens graft into the politics sub-tabs of the hub-tabs scaffold
 (`origin/ws6-mock-hub-tabs` 24d31ebd), not into `Governor.tsx` / `Colony.tsx` / `LawBallot.tsx`. The TV
 components (S5-C11) are WS7's on `ws7-s5-tv` (AM-13); WS4's SB-5b places them and owns the `TableApp.tsx` route. The three `today.tsx` lines (the overrule Now line,
@@ -2009,7 +2037,7 @@ ready words and stage) are a **WS6 named edit inside SB-3 part 2** (63df1358 on 
 
 #### Task S5-6.3 — S5-C11, the TV components (WS7) placed by WS4's SB-5 (spec AM-13, 8 Nov)
 
-- [ ] **WS7 builds the components** on `ws7-s5-tv` (from a0669e2a), grafted from the scaffold's
+- [x] **WS7 builds the components** on `ws7-s5-tv` (APPROVE 49d9dc01, in the lane via #833) (from a0669e2a), grafted from the scaffold's
   `src/tv/copied/{TvBudgetLine,TvOverrule}.tsx`: `apps/web/src/table/TvBudgetLine.tsx` (`TvBudgetLine`,
   `TvOverruleCall`) and `apps/web/src/table/TvOverrule.tsx`, with render tests in `apps/web/test/politics-tv.test.ts`.
   They read the view and never re-derive a share or a needed count. Due 10 Nov 06:00Z, SHA to WS4 via the PM.
@@ -2047,10 +2075,24 @@ S5-B-AC-1's month-end leg). Lands for the 12 Nov 12:00Z batch.
 
 - [x] **Part 1** (`ws7-sb3-tabs`): approved at e9ff1bea.
 - [ ] **Part 2** (`ws7-sb3-part2`, on a0669e2a + WS6's SB-2 451a4549): built at da04731a (d2d14ba8 red, 63df1358
-  today.tsx WS6 named edit, 215ea232 impl). Review REQUEST CHANGES: 13 web tests outside the brief's filter red,
-  T-AC-67 agenda leak, missing VOTE badges, e2e selectors. Fix round 1 in flight; gate is the **full** web suite.
-- [ ] Owner OKs via the PM: WS6 for today.tsx and the hub-tabs.test.ts pins; WS8 for colony-actions.test.ts;
-  an owner for `e2e/hub-steps.ts:554, :578` before the batch.
+  today.tsx WS6 named edit, 215ea232 impl). Review REQUEST CHANGES; fix round 1 closed it.
+  - Round 2 (head f5226eef): 6d69452f DESK_DOORS drops the council and governor doors (WS6); de8ce572 red → 834f6008
+    HubSeat carries the room (WS6, S3-RULE-12); f563fe37 colony-actions reads the Commission in the real Budget (WS8);
+    f5226eef the D8 pin (no sub-tab asks first for the sitting Governor). Smoke failed in `doneThroughTheElection`
+    (the ballot card moved into the Elections sub-tab).
+  - Round 2b (head c3e8a5f0): 90ea7d24 the politics steps open Elections (WS7's helpers; "election over" is now the
+    result card); ef05f5e1 + c3e8a5f0 `table-steps.ts::doneThroughTheElection` opens Elections only for the ballot and
+    returns to Overview after (WS4 named edits); 94fda20e `hub-steps.ts` sub-tab steps (WS4). politics.ts and
+    politics-tie.ts pass. Smoke's plot-marks check still failed: the branch sat on SB-2's stale 451a4549, before SB-2
+    moved that check to the smallest phone (SB-2's afc5d688 passes the same seed).
+  - Round 2c (in progress, 9 Nov): e59bb1b5 merges the lane (e391e1de), 8d9c5cbb merges SB-2's afc5d688, be167fe2
+    re-points the promised-ballot tests. Pending: smoke on seeds 1298373396 and 598186290, the two politics scripts and
+    the seven callers of the shared election helper; the full web suite; trace-check; the report.
+  - Rides this PR: spec slice 1 B-AC-1 (`docs/specs/2026-10-22-ws7-politics.md`) changes "the winner's phone opens the
+    tax desk" to "through the Now line's door (D8)" (owed to SB-2's OKs). Not done yet.
+- [ ] Owner OKs via the PM, by SHA, before it merges into the lane: WS4 94fda20e, ef05f5e1, c3e8a5f0; WS8 f563fe37;
+  WS6 6d69452f, 834f6008, the hub-tabs.test.ts commits and any round 2c resolution touching WS6 files (today.tsx
+  63df1358 already OK'd).
 
 ---
 
