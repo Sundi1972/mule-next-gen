@@ -257,6 +257,8 @@ describe('the tabbed planning hub (SB-2)', () => {
     ["openDesk('laws') on the Governor's phone", (n) => n.openDesk('laws'), 's2', { tab: 'politics', sub: 'laws' }],
     ["openDesk('budget') on the Governor's phone", (n) => n.openDesk('budget'), 's2', { tab: 'politics', sub: 'budget' }],
     ["openDesk('market')", (n) => n.openDesk('market'), 's1', { tab: 'overview', tool: 'list' }],
+    // A sub the phone does not have (a Sheriff's term ended while it was on it): the tab lands on its first sub-tab, Laws.
+    ["openDesk('sheriff') on a phone that is not the Sheriff's", (n) => n.openDesk('sheriff'), 's1', { tab: 'politics', sub: 'laws' }],
     ["pickTool('drone')", (n) => n.pickTool('drone'), 's1', { tab: 'overview', tool: 'drone' }],
   ])("C17 (DESK_DOORS): today's %s lands on its tab, sub-tab or tool", (_door, move, self, to) => {
     mount(game({ self }));
