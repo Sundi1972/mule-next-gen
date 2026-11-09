@@ -290,6 +290,10 @@ examples Hospital damaged → one plume over the Hospital · all standing → no
      "headings": ["+x", "+y", "-x", "-y"], "sheets": { "<suit>-<trim>": { "day": "walker/…@800.webp", "dusk": "…" } },
      "outline": "walker/outline@800.webp" }` — a sheet's rows are the headings top to bottom, its columns the frames;
   `+x` is c rising (screen down-right), `+y` r falling (up-right). suit ∈ p1–p4; trim ∈ white, graphite, sand.
+  Top-level `"lamp"` · ADDED · non-breaking (absent → the inner crossings keep only the plate's pools) (AM-9):
+  `{ "cell": { "width": 320, "height": 288, "feet": [24, 216] }, "px_per_m": 76.19, "day": "lamp/day@800.webp",
+     "dusk": "lamp/dusk@800.webp", "glow": "lamp/glow@800.webp" }` — `kits.lamp`, the apron's own lamp, on a shadow
+  catcher; its glow is the globe alone (the plate has the pool), added at the plate's glow opacity (RULE-2).
 - **Open gap (small):** `ColonyProjectView.place` is on trunk and `plot` was removed (#605); the entry above still
   describes it as WS7's to produce. Reconcile when C6's PR is recorded here.
 
@@ -330,8 +334,9 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-13 (serves B-AC-3, G-2) | a colonist standing shallower than a building (col + row) is drawn before it, and where that building's picture covers its figure on screen (by the picture's silhouette, §3 `skyline`) its faint outline is drawn after every building; one in front draws over it with no outline; one behind a building but above its picture on screen has no outline; a site hides a colonist only where its picture's pixels cover the figure (Heiko, 8 Nov: a figure on the Hospital's upper floor) | C4 |
 | T-AC-14 (serves C4, AM-8) | a walker is drawn from the `walker` sheet: the row is its route leg's heading, the column advances with the cycle (frame 0 at reduced motion), the suit variant is its owner's colour; behind a building its ghost is the outline sheet faded on the image itself; with no `walker` entry, today's SVG figure | C4 |
 | T-AC-12 (serves C5, B-AC-6) | during the opener's lean-in, a building nearer the camera than a place the caption names and across it on screen fades to 1 − ⅔ × lean (a third at full lean); the named place, a level or off-to-the-side building, and a view that leans on nothing do not fade (PM, 8 Nov, from the visibility spike: a new site is up to ⅔ covered) | C5 |
-
 | T-AC-15 (serves C4, PM 8 Nov) | RULE-7's and RULE-8's examples at the rendered SVG: a clean colony (environment < 30) draws no haze; the haze's opacity rises with the gauge; smoke over a damaged place only, drawn just after its building and under nearer ones; at reduced motion the plume stands still | C4 |
+| T-AC-16 (serves G-2, AM-9) | with a plate and a `lamp` entry, a lamp stands at every inner crossing of the extent except one a building bigger than one place stands over, its foot pixel on the crossing at the buildings' scale; it is drawn after the place behind the crossing and before the one in front; at dusk its glow at the plate's glow opacity, none by day; no `lamp` entry → no lamp | C2 C4 |
+
 
 Invariant: the grounds never write state (HC-1).
 
@@ -463,6 +468,17 @@ did       Heiko: a colonist behind a building is hidden by it, with a faint outl
 because   G-1/G-2: the figures read as people at the table; Heiko, 8 Nov
 goal      G-1, G-2
 folded    C4; plan Task 2.2d; §3; T-AC-14
+
+AM-9 · 2026-11-08 · lead · plan follow-up "inner lamp heads" (PM scheduled it after Task 2.2b)
+target    §1 C2 (the inner crossings), §3 manifest, §6
+said      the plate keeps lamp heads and posts to its outer apron; each inner crossing gets only a head-less pool, because
+          a building layer drawn later would cover a head baked into the plate
+did       the page stands the apron's own lamp (kits.lamp, rendered once by lamp.py in day, dusk and glow) at every inner
+          crossing, in the live layer's depth order; a top-level manifest `lamp` entry (§3). 4.6 KB in all; the phone's
+          heaviest colony +1.1 KB by day
+because   G-2: look.html's paths are lined with lit lamps between the buildings; ours read empty there close up
+goal      G-2
+folded    C2, C4; plan Task 2.2e; §3; T-AC-16
 ```
 
 ## §9 · Ownership Boundaries  [handoff]

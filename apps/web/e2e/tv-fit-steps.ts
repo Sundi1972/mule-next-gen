@@ -104,19 +104,25 @@ export async function theTableHasSaid(tv: Page, server: MuleServer, code: string
   return said;
 }
 
+/** How long a fit box's scale must stand unchanged to count as held, in ms (PM ruling 8 Nov: a re-fit dips for ~0.1 s). */
+export const FIT_HELD_MS = 300;
+const FIT_READ_MS = 150;
+
 /**
- * Waits until the shown screen's fit boxes keep their scale across two reads: a line shown resizes the body a frame later.
+ * Waits until the shown screen's fit boxes keep their scale for FIT_HELD_MS, read every FIT_READ_MS: a line shown resizes
+ * the body a frame later, and a re-fit dips for about 0.1 s before it settles, so a scale read sooner may be a dip's.
  * A scale still moving after 20 reads fails by name: the step after it would otherwise grade a screen mid-refit.
  */
 export async function fitSettled(tv: Page, screen = 'shown'): Promise<void> {
   const read = () => tv.evaluate(() => [...document.querySelectorAll('[data-phase] [data-fit]')].map((b) => b.getAttribute('data-fit')).join(','));
+  const same = FIT_HELD_MS / FIT_READ_MS + 1;
   const reads = [await read()];
   for (let i = 0; i < 20; i++) {
-    await tv.waitForTimeout(150);
+    await tv.waitForTimeout(FIT_READ_MS);
     reads.push(await read());
-    if (reads.at(-1) === reads.at(-2)) return;
+    if (reads.length >= same && reads.slice(-same).every((r) => r === reads.at(-1))) return;
   }
-  check(false, `TV-FIT: the ${screen} TV's fit boxes never settled: their scales changed on each of ${reads.length - 1} reads 150 ms apart, the last reads ${reads.slice(-4).map((r) => `[${r}]`).join(' then ')}`);
+  check(false, `TV-FIT: the ${screen} TV's fit boxes never held a scale for ${FIT_HELD_MS} ms: the last reads, ${FIT_READ_MS} ms apart, ${reads.slice(-4).map((r) => `[${r}]`).join(' then ')}`);
 }
 
 /**
