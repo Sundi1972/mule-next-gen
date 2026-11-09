@@ -101,7 +101,11 @@ function Announce() {
       </p>
       {record && (
         <p className="text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="sheriff-record">
-          <SeatWords text={record.text} who={record.who} players={view.players} />
+          {/* Two unbreakable halves: a long name may push the counts to a second line, but never splits a phrase. */}
+          <span className="whitespace-nowrap">
+            <SeatWords text={record.lead} who={record.who} players={view.players} />
+          </span>{' '}
+          <span className="whitespace-nowrap">{record.counts}</span>
         </p>
       )}
       <div className="grid grid-cols-2 items-start gap-2 @min-[1100px]/shell:gap-4">
