@@ -8,6 +8,7 @@ import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
 import { OfficesCard, Person, Steps } from './parts';
 import { PhoneRevealSolo, PhoneRevealWithTv, showOf } from './Reveal';
+import { enterRoom, onRoomChange } from './room';
 import { RunBlock } from './Run';
 import { OFFICE_NAME, officeNames, promiseWords, termEnd } from './words';
 
@@ -278,16 +279,13 @@ function changed(): void {
   for (const l of listeners) l();
 }
 
-let heldRoom: string | null = null;
-/** Notes the room whose ballot is drawn and forgets another room's picks; true if it did. */
-export function enterRoom(code: string): boolean {
-  if (heldRoom === code) return false;
-  heldRoom = code;
-  const had = held !== null || shownBallots.election !== null || shownBallots.law !== null;
+onRoomChange(() => {
+  const had = held !== null || shownBallots.election !== null;
   held = null;
-  shownBallots = { election: null, law: null };
+  shownBallots = { ...shownBallots, election: null };
   return had;
-}
+});
+export { enterRoom };
 
 /**
  * The ballots this phone has had on screen, by kind (PM ruling A, 9 Nov): a promise counts as a pick for Cast my vote
@@ -307,9 +305,14 @@ export function showBallot(kind: 'election' | 'law', ballot: BallotOf): void {
 
 /** Forgets that a ballot was shown; the vote's close does this. */
 export function forgetShown(kind: 'election' | 'law'): void {
-  if (shownBallots[kind] === null) return;
+  if (clearShown(kind)) changed();
+}
+
+/** Forgets that a ballot was shown, without notifying; true if one was. */
+export function clearShown(kind: 'election' | 'law'): boolean {
+  if (shownBallots[kind] === null) return false;
   shownBallots = { ...shownBallots, [kind]: null };
-  changed();
+  return true;
 }
 
 /** Whether this seat's ballot of `kind` has been on screen for this vote. */

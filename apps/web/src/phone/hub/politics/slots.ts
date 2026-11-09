@@ -142,8 +142,10 @@ const LAW_BALLOT_WORDS: ReadyWords = {
 };
 
 /** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes) or a promised one. */
-export function councilReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
+export function councilReadyWords({ table, view, me }: HubSeat): ReadyBarWords | null {
   if (view.politics?.council?.stage !== 'ballot') return null;
+  // Another room's law pick is forgotten before it can make Done live; the ready bar draws before the ballot does.
+  if (table) enterRoom(table.code);
   return { ...LAW_BALLOT_WORDS, label: 'VOTED', canReady: lawBallotComplete({ view, me }), first: () => lawPromisedFirst({ view, me }) };
 }
 

@@ -6,9 +6,10 @@ import { SeatWords } from '../../../components/SeatWords';
 import { toSlot } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
-import { forgetShown, showBallot, wasShown, YouPromised } from './ElectionDay';
+import { clearShown, forgetShown, showBallot, wasShown, YouPromised } from './ElectionDay';
 import { chipWords, forYouWords, LAW_IDS, LAW_MEANING, proposalWords } from './LawPicker';
 import { Who } from './parts';
+import { enterRoom, onRoomChange } from './room';
 import { listNames, namer } from './words';
 
 /*
@@ -52,10 +53,15 @@ export function thenWords(c: CouncilView, passed: boolean, month: number): strin
 
 /** The ballot's stage body: the proposal and its cost to you, Yes and No, who has voted; then the reveal. */
 export function CouncilBallot() {
-  const { view, self, me } = usePhoneGame();
+  const { view, self, me, table } = usePhoneGame();
   const client = useClient();
   const c = view.politics!.council!;
   useLawPick();
+  // The picks belong to this room, as the election's do; the redraw comes from an effect, never from render.
+  const other = enterRoom(table.code);
+  useEffect(() => {
+    if (other) lawChanged();
+  });
   // The pick outlives this card leaving the screen (another sub-tab) while the vote is open; the vote's close forgets it.
   useEffect(() => {
     if (c.stage !== 'ballot') forgetLawPick();
@@ -181,6 +187,13 @@ export function forgetLawPick(): void {
   forgetShown('law');
   lawChanged();
 }
+
+// Another room's law pick and shown ballot are not this room's: seat ids and months repeat from room to room.
+onRoomChange(() => {
+  const had = lawPick !== null;
+  lawPick = null;
+  return clearShown('law') || had;
+});
 
 function useLawPick(): void {
   useSyncExternalStore(
