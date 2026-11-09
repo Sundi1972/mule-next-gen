@@ -70,6 +70,17 @@ export function namer(view: Pick<MuleView, 'players'>): (id: string) => string {
   return (id) => view.players.find((p) => p.id === id)?.name ?? id;
 }
 
+/**
+ * The outgoing Sheriff's term on election day: "Kai was Sheriff: 3 catches, 1 case solved", and the Sheriff's seat for
+ * SeatWords. A 0/0 record still shows; null with no Sheriff or no record, so nothing is drawn.
+ */
+export function sheriffRecordWords(politics: Pick<PoliticsView, 'sheriff' | 'sheriffRecord'>, players: Pick<MuleView, 'players'>): { text: string; who: string[] } | null {
+  const { sheriff, sheriffRecord: r } = politics;
+  if (sheriff === null || !r) return null;
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return { text: `${namer(players)(sheriff)} was Sheriff: ${count(r.caught, 'catch', 'catches')}, ${count(r.solved, 'case solved', 'cases solved')}`, who: [sheriff] };
+}
+
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "Kai", "Ossa and Kai", "you, Ossa and Kai": the viewer is "you" and comes first. */

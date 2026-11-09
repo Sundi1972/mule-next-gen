@@ -2,13 +2,14 @@ import { POLITICS, type Office, type TaxPromise } from '@mule/engine';
 import type { ElectionView, MuleView, MyView, PoliticsView } from '@mule/protocol';
 import { cx } from '@mule/ui';
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { SeatWords } from '../../../components/SeatWords';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
 import { OfficesCard, Person, Steps } from './parts';
 import { PhoneRevealSolo, PhoneRevealWithTv, showOf } from './Reveal';
 import { RunBlock } from './Run';
-import { OFFICE_NAME, officeNames, promiseWords, termEnd } from './words';
+import { OFFICE_NAME, officeNames, promiseWords, sheriffRecordWords, termEnd } from './words';
 
 /** Election day on the stage (E-2): the announcement, the secret ballot, then the reveal over the whole phone. */
 export function ElectionDay() {
@@ -92,11 +93,17 @@ function Field({ candidates, promises, testid }: { candidates: PoliticsView['can
 function Announce() {
   const { view } = usePhoneGame();
   const politics = view.politics!;
+  const record = sheriffRecordWords(politics, view);
   return (
     <DayCard at={1} testid="announce">
       <p className="text-xs text-ink-2 @min-[1100px]/shell:text-lg">
         The colony elects its {officeNames().join(' and ')} for months {view.month} to {termEnd(politics.next, view.maxMonths)}. The candidates:
       </p>
+      {record && (
+        <p className="text-xs text-ink-2 @min-[1100px]/shell:text-lg" data-testid="sheriff-record">
+          <SeatWords text={record.text} who={record.who} players={view.players} />
+        </p>
+      )}
       <div className="grid grid-cols-2 items-start gap-2 @min-[1100px]/shell:gap-4">
         {/* Until the ballot opens the candidacy is Politics'. */}
         <Field candidates={politics.candidates} promises={politics.promises} testid="announce-field" />

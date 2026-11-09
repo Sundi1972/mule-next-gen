@@ -1,12 +1,13 @@
 import { POLITICS } from '@mule/engine';
 import type { MuleView, PoliticsView, TableView } from '@mule/protocol';
 import { Creature, cx, PlayerMark } from '@mule/ui';
+import { SeatWords } from '../components/SeatWords';
 import { toSlot } from '../game/derive';
 import { connectedIn, stillPlanning } from '../phone/hub/ready';
 import { WaitingFor } from '../phone/hub/ReadyBar';
 import { colorOf, OfficesCard, Steps } from '../phone/hub/politics/parts';
 import { Ceremony, Progress, showOf } from '../phone/hub/politics/Reveal';
-import { JOB, listNames, namer, OFFICE_NAME, officeNames, promiseWords, termEnd } from '../phone/hub/politics/words';
+import { JOB, listNames, namer, OFFICE_NAME, officeNames, promiseWords, sheriffRecordWords, termEnd } from '../phone/hub/politics/words';
 import { TvHeader } from './TableApp';
 import { TvBody } from './TvFit';
 
@@ -82,6 +83,7 @@ function TvAnnounce({ table, game }: { table: TableView<MuleView>; game: MuleVie
   const politics = game.politics!;
   const left = waitedFor(table, game);
   const host = hostLine(table, game, left.map((s) => s.id));
+  const record = sheriffRecordWords(politics, game);
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table px-10 py-7 text-ink" data-phase="planning" data-testid="tv-announce">
       <TvHeader game={game} title="Election day" />
@@ -97,6 +99,11 @@ function TvAnnounce({ table, game }: { table: TableView<MuleView>; game: MuleVie
           <Steps at={1} tv />
         </span>
       </div>
+      {record && (
+        <span className="whitespace-nowrap text-2xl text-ink-2" data-testid="tv-sheriff-record">
+          <SeatWords text={record.text} who={record.who} players={game.players} />
+        </span>
+      )}
       <div className={cx('grid gap-6', POLITICS.offices.length > 1 ? 'grid-cols-2' : 'grid-cols-[1fr_440px]')}>
         {POLITICS.offices.map((o) => (
           <section key={o} className={cx('flex flex-col justify-center rounded-sheet border border-holo-line bg-panel px-8', fieldOf('big', politics.candidates[o]?.length ?? 0).section)} data-testid={`tv-field-${o}`}>
