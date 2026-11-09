@@ -1742,6 +1742,37 @@ code      M1 changes politics-value.ts's projects body (need = credits only toda
 goal      S5-1 — unchanged
 ```
 
+```
+AM-12 · 2026-11-08 · Heiko (approved the tabbed hub, 8 Nov ~06:10Z, via PM) and PM rulings (8 Nov 06:14Z) · the slice 5 phone screens graft into the politics sub-tabs
+target    §1 S5-C10's tomorrow, ux and graft targets; S5-C11's owner
+said      S5-C10 renders inside Heiko's P0 option A ("no new tab"), grafting into Governor.tsx, Colony.tsx's fund card and
+          LawBallot.tsx; the mock was "WS6, to come"; S5-C11 is WS7's, with one TableApp route as WS4's named edit
+did       the binding scaffold is design/mocks/hub-tabs (origin/ws6-mock-hub-tabs; its SB-0 commit, when WS6 opens it,
+          is the one the build is checked against): src/proposed/tabs/Politics.tsx's LawsSub and BudgetSub, and
+          src/copied/budget/ (GovernorBudget, variant A, the steppers, by the PM's ruling; CouncilBudget; OverruleCall;
+          OverruleBallot; words). GRAFT TARGET: apps/web/src/phone/hub/politics/tabs.tsx (SB-3's sub-tab bodies) and
+          new files under apps/web/src/phone/hub/politics/budget/. Laws: an open overrule ballot first; the Governor
+          sees FrozenTax above the desk while a call holds the tax; everyone else sees the tax line with the call
+          under it (D13: the call sits at the tax, not on the fund card). Budget: the Governor sets it (variant A)
+          above the Commission; everyone else sees CouncilBudget. The mock's variant switch, seed and fixture are
+          plumbing and are not built. The TV parts (the budget on the promise row, the call line, the overrule
+          panel) go with the tabbed hub's TV build, SB-5 (WS4); WS7 OKs them by SHA against S5-C11
+because   Heiko replaced the P0 desks with the tabbed hub (8 Nov); its README is the build plan every lane reads
+goal      S5-1, S5-2 — unchanged; S5-B-AC-1/3 and S5-UBER-AC-2 are proved on these screens
+
+AM-13 · 2026-11-08 · WS4's ask via the PM (8 Nov), WS7's ruling · who builds S5-C11's TV components
+target    §1 S5-C11's owner (AM-12's last sentence)
+said      the TV parts go with SB-5 (WS4); WS7 OKs them by SHA
+did       WS7 builds the components, grafted from the scaffold's src/tv/copied/TvBudgetLine.tsx (TvBudgetLine,
+          TvOverruleCall) and src/tv/copied/TvOverrule.tsx: new apps/web/src/table/TvBudgetLine.tsx and
+          apps/web/src/table/TvOverrule.tsx, with render tests. WS4's SB-5b places them: the budget line on the
+          promise row, the call as the map box's 8 s moment, and TableApp's route to TvOverrule while the overrule
+          is open (after the election and the law ballot). TV-FIT stays WS4's
+because   the components exist only in the mock's folder; they read slice 5's views, which WS7 owns, and the plan's
+          frame already gives WS7 the TV parts' content and WS4 their placement
+goal      S5-1, S5-2 — unchanged
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change:

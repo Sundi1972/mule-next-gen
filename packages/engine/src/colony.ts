@@ -291,9 +291,14 @@ export function lastGauges(state: GameState): ColonyGauges | null {
   return before.at(-1) ?? null;
 }
 
+/** What a fund of `fund` credits can spend: everything above the reserve it keeps for office pay. */
+export function spareOf(fund: number): number {
+  return Math.max(0, fund - COLONY.reserve);
+}
+
 /** What the fund can spend on a project: everything above the reserve it keeps for office pay. */
 export function spare(state: GameState): number {
-  return Math.max(0, state.treasury.money - COLONY.reserve);
+  return spareOf(state.treasury.money);
 }
 
 /** Funds one project from the fund as far as the reserve and `limit` (credits and goods together) allow. Returns what it spent. */

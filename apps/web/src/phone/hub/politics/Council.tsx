@@ -28,7 +28,7 @@ export function CouncilDesk() {
 }
 
 /** Next month's vote while a proposal is pending and no vote is open: the proposal, and what it costs this seat. */
-function PendingLaw() {
+export function PendingLaw() {
   const { view, self } = usePhoneGame();
   const politics = view.politics;
   const pending = politics?.proposal;
