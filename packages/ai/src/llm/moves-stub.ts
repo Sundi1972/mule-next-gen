@@ -438,6 +438,7 @@ export const MOVES: MoveTable = {
       refused('the votes are over', 'Propose once the votes are over'),
       refused('you are the Governor', 'Only the Governor proposes a law'),
       refused("the law is in the colony's book", "That law is not in the colony's book"),
+      refused('the game plays with sabotage if the law is the sabotage ban', 'This game plays without sabotage'),
       refused('it did not fail too recently', 'That proposal failed in month <month>; it can come back in month <month>'),
       refused('a repeal names a law in force', 'That law is not in force'),
       refused('the setting is one the law has', '<law> is set to <settings>'),
@@ -561,7 +562,7 @@ export const MOVES: MoveTable = {
     command: 'sabotage',
     phases: ['planning'],
     does: () =>
-      "Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it.",
+      `Orders a crew against another player's plot (a power cut: it makes nothing this month) or a good's price (a rumour: it opens higher or lower at the auction), or withdraws this month's order with null; one order a month, a later one replaces it. The crew is paid at upkeep, not when the order is given: ${POLITICS.sabotage.orders.powerCut.cost} cr for a power cut, ${POLITICS.sabotage.orders.rumour.cost} for a rumour.`,
     legalWhen: () => [
       refused('the game plays with sabotage', 'This game plays without sabotage'),
       refused('it is planning', 'Orders are given in planning'),

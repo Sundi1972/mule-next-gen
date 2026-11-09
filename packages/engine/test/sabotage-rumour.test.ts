@@ -6,6 +6,7 @@ import {
   createRng,
   endRumours,
   GOODS,
+  observe,
   orderSabotage,
   postPrices,
   POLITICS,
@@ -72,6 +73,31 @@ describe('market rumours', () => {
     endRumours(state);
     expect(state.store.posted).toEqual(posted);
     expect(state.politics!.rumoured).toEqual([]);
+  });
+
+  it('S4-T-AC-6: a computer seat is not told the price a worked rumour moved from (HC-4): observe() keeps the rumoured goods and drops `from`; the engine state keeps it for endRumours', () => {
+    const state = month(5, [{ by: 'lena', good: 'food', dir: 'up' }]);
+    worked(state);
+    postPrices(state);
+    const posted = state.store.posted.food;
+    applyRumours(state);
+    expect(state.politics!.rumoured).toEqual([{ good: 'food', from: posted }]);
+    for (const seat of SEATS) {
+      const rumoured = observe(state, seat).politics!.rumoured;
+      expect(rumoured.map((r) => r.good), seat).toEqual(['food']);
+      for (const entry of rumoured) expect(Object.keys(entry), seat).toEqual(['good']);
+    }
+    expect(state.politics!.rumoured, 'the state itself is untouched').toEqual([{ good: 'food', from: posted }]);
+  });
+
+  it('S4-T-AC-6: the auction ending on an observed copy (an AI seat looking ahead) leaves every posted price a number', () => {
+    const state = month(5, [{ by: 'lena', good: 'food', dir: 'up' }]);
+    worked(state);
+    postPrices(state);
+    applyRumours(state);
+    const seen = observe(state, 'brix');
+    endRumours(seen);
+    for (const good of GOODS) expect(Number.isFinite(seen.store.posted[good]), good).toBe(true);
   });
 
   it('S4-T-AC-6: two opposite rumours on one good cancel, and two on the same side add their shifts', () => {

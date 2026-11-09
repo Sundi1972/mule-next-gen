@@ -17,6 +17,7 @@ vi.mock('../src/diplomacy.js', async (original) => {
 });
 import {
   advancePhase,
+  applyEvents,
   captureOdds,
   createGame,
   createRng,
@@ -25,6 +26,7 @@ import {
   guardsMax,
   investigate,
   orderSabotage,
+  plotEvent,
   POLITICS,
   reputationReasons,
   resolveSabotage,
@@ -337,6 +339,42 @@ const rumourFood: SabotageTarget = { kind: 'rumour', good: 'food', dir: 'up' };
 
 describe('sabotage resolution', () => {
   sabotageOn();
+
+  it('S4-B-AC-4: S4-RULE-3: a power cut that works records the crop of the plot it hit, and a MULE theft on that plot in the same production leaves it', () => {
+    const { state, p } = monthOfSabotage(seedFor({ works: true, seen: false }, cutBrix), [{ by: 'lena', target: cutBrix }]);
+    resolveSabotage(state);
+    const order = state.politics!.sabotage[0]!;
+    expect(order.outcome).toBe('done');
+    expect(order.good).toBe('food');
+    applyEvents(state, [plotEvent(state, 'muleTheft', p.food)]);
+    expect(state.tiles[p.food]!.outfit, 'the theft took the MULE').toBeNull();
+    expect(state.politics!.sabotage[0]!.good).toBe('food');
+    // runProduction files the sabotage events after applyEvents: the theft has taken the MULE by then, and the line still names Food.
+    const filed = sabotageEvents(state);
+    expect(filed).toHaveLength(1);
+    expect(filed[0]!.line).toContain('Food plot');
+  });
+
+  it('S4-B-AC-4: S4-RULE-3: a worked cut whose order has no crop (a record older than the field) words its line without one and does not throw', () => {
+    const { state } = monthOfSabotage(seedFor({ works: true, seen: false }, cutBrix), [{ by: 'lena', target: cutBrix }]);
+    resolveSabotage(state);
+    delete state.politics!.sabotage[0]!.good;
+    const filed = sabotageEvents(state);
+    expect(filed[0]!.line).toMatch(/^Someone cut the power to a plot/);
+  });
+
+  it('S4-B-AC-4: S4-RULE-3: a cut that works on a Food plot its owner then re-outfits to Energy still names Food', () => {
+    const { state, p } = monthOfSabotage(seedFor({ works: true, seen: false }, cutBrix), [{ by: 'lena', target: cutBrix }]);
+    resolveSabotage(state);
+    state.tiles[p.food]!.outfit = 'energy';
+    expect(state.politics!.sabotage[0]!.good).toBe('food');
+  });
+
+  it('S4-B-AC-4: S4-RULE-3: a rumour records no crop of its own (its good is the target\'s)', () => {
+    const { state } = monthOfSabotage(seedFor({ works: true, seen: false }, () => rumourFood), [{ by: 'lena', target: () => rumourFood }]);
+    resolveSabotage(state);
+    expect(state.politics!.sabotage[0]!.good).toBeUndefined();
+  });
 
   it('S4-T-AC-2: S4-RULE-3 row 1: a cut whose plot lost its owner, changed hands to the orderer, or lost its MULE is void and removed, with no draw', () => {
     const lost: ((s: GameState, p: ReturnType<typeof plots>) => void)[] = [

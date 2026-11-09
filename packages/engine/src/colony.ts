@@ -100,6 +100,18 @@ export function stillNeeds(project: Project): { credits: number; goods: Partial<
   return { credits: row.credits - project.funded.credits, goods };
 }
 
+/**
+ * The credits the fund would spend to finish this project with no reserve and no limit (AM-15): the credits still needed, plus,
+ * while the fund buys goods, each missing good as far as the store sells it, at the store's sell price. fund() spends the same.
+ */
+export function stillToPay(state: GameState, project: Project): number {
+  const needs = stillNeeds(project);
+  const goods = COLONY.fundBuysGoods
+    ? (Object.entries(needs.goods) as [Good, number][]).reduce((sum, [good, missing]) => sum + Math.min(missing, storeForSale(state, good)) * (storeQuotes(state, good).sell ?? 0), 0)
+    : 0;
+  return Math.max(0, needs.credits) + goods;
+}
+
 const OPEN: readonly Project['stage'][] = ['commissioned', 'building'];
 
 /** The Governor's acts for the colony: planning only, once no vote is open. */
@@ -279,9 +291,14 @@ export function lastGauges(state: GameState): ColonyGauges | null {
   return before.at(-1) ?? null;
 }
 
+/** What a fund of `fund` credits can spend: everything above the reserve it keeps for office pay. */
+export function spareOf(fund: number): number {
+  return Math.max(0, fund - COLONY.reserve);
+}
+
 /** What the fund can spend on a project: everything above the reserve it keeps for office pay. */
 export function spare(state: GameState): number {
-  return Math.max(0, state.treasury.money - COLONY.reserve);
+  return spareOf(state.treasury.money);
 }
 
 /** Funds one project from the fund as far as the reserve and `limit` (credits and goods together) allow. Returns what it spent. */

@@ -4,7 +4,7 @@ import type { MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mul
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { aMuleView, aPlayer } from './fixtures/views';
 
@@ -175,6 +175,25 @@ describe("B-AC-46-1: the Governor's law picker", () => {
     mount(viewFor('s2', politics()));
     expect(findTestid('desk-governor')).toBeUndefined();
     expect(findTestid('picker-a')).toBeUndefined();
+  });
+});
+
+describe('S4-B-AC-10 (screen, contract): the sabotage ban in the law picker', () => {
+  let saved: boolean;
+  beforeEach(() => {
+    saved = POLITICS.sabotage.on;
+    POLITICS.sabotage.on = true;
+  });
+  afterEach(() => {
+    POLITICS.sabotage.on = saved;
+  });
+
+  it('S4-B-AC-10: the ban row shows ×2 and ×3 from config, with its meaning', () => {
+    mount(viewFor('s1', politics()));
+    const settings = POLITICS.laws.sabotageBan.settings;
+    expect(settings.map((s) => text(`law-sabotageBan-${s}`))).toEqual(settings.map((s) => `×${s}`));
+    expect(text('law-row-sabotageBan')).toContain('Sabotage ban');
+    expect(text('law-row-sabotageBan')).toContain(`A caught saboteur’s fine and reputation loss are multiplied: ${settings.map((s) => `×${s}`).join(' or ')}.`);
   });
 });
 

@@ -28,12 +28,26 @@ function edit(state: GameState): NonNullable<GameState['politics']> {
 /** Chance, 0..1, that this order is seen when it resolves (S4-RULE-3). */
 export function captureOdds(state: GameState, order: SabotageOrder): number {
   if (isGuarded(state, order)) return 1;
-  return orderTerms(state)[order.target.kind].detect;
+  const { detect } = orderTerms(state)[order.target.kind];
+  return ownsSheriffPlot(state, order) ? Math.min(1, detect + POLITICS.sheriff.ownPlotDetectBonus) : detect;
 }
 
-/** The tiles the Sheriff's guards stand on now: the first guardsMax of politics.guards, in the order they were listed (S4-RULE-6). */
+/** Whether a power cut's plot belongs to the Sheriff in office: those are watched harder (AM-11). A rumour has no plot. */
+function ownsSheriffPlot(state: GameState, order: SabotageOrder): boolean {
+  const sheriff = state.politics?.sheriff ?? null;
+  return sheriff !== null && order.target.kind === 'powerCut' && state.tiles[order.target.tile]?.owner === sheriff;
+}
+
+/**
+ * The tiles the Sheriff's guards stand on now: the first guardsMax of the listed tiles the Sheriff may still guard, in the
+ * order listed (S4-RULE-6). A plot the Sheriff came to own since planning stands down (AM-12).
+ */
 function standingGuards(state: GameState): number[] {
-  return state.politics?.guards.slice(0, guardsMax(state)) ?? [];
+  const sheriff = state.politics?.sheriff ?? null;
+  const listed = state.politics?.guards ?? [];
+  // No Sheriff is reached only in fixtures: guards need a sitting Sheriff and are cleared at every planning start.
+  const standing = sheriff === null ? listed : listed.filter((tile) => canGuard(state, sheriff, tile) === true);
+  return standing.slice(0, guardsMax(state));
 }
 
 /** Whether a power cut's plot is among the standing guards. A rumour has no plot to guard. */
@@ -65,12 +79,10 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   const can = canOrder(state, playerId);
   if (can === 'off') throw new RuleError('This game plays without sabotage');
   if (can === 'notPlanning') throw new RuleError('Orders are given in planning');
+  if (can === 'sheriff') throw new RuleError("The Sheriff can't order sabotage");
   const old = standing(state, playerId);
   if (target === null) {
-    if (old) {
-      const kept = state.politics!.sabotage.filter((o) => o !== old);
-      edit(state).sabotage = kept;
-    }
+    withdrawOrder(state, playerId);
     return;
   }
   if (target.kind === 'powerCut') {
@@ -90,6 +102,14 @@ export function orderSabotage(state: GameState, playerId: string, target: Sabota
   edit(state).sabotage = [...kept, order];
 }
 
+/** Withdraw the player's pending order for this month, free and unrecorded, as a null order does: the new Sheriff's, at takeOffice (AM-11). */
+export function withdrawOrder(state: GameState, playerId: string): void {
+  const old = standing(state, playerId);
+  if (!old) return;
+  const kept = state.politics!.sabotage.filter((o) => o !== old); // read before edit() swaps in the copy
+  edit(state).sabotage = kept;
+}
+
 /** The refusal for a Sheriff's act now, or null when the player may act; `words` fills the words of rows 2 and 3 (S4-RULE-6 rows 1-3). */
 function refusal(state: GameState, playerId: string, words: { votes: string; sheriff: string }): RuleError | null {
   const can = sheriffCanAct(state, playerId);
@@ -98,12 +118,24 @@ function refusal(state: GameState, playerId: string, words: { votes: string; she
   return new RuleError(can === 'notSheriff' ? words.sheriff : words.votes);
 }
 
+const OWN_PLOT = "You can't guard your own plots";
+
+/** Whether the Sheriff may guard this tile, or the refusal's words: a plot of another player's only (S4-RULE-6 rows 4-5, AM-11). */
+export function canGuard(state: GameState, playerId: string, tile: number): true | string {
+  const owner = state.tiles[tile]?.owner ?? null;
+  if (owner === playerId) return OWN_PLOT;
+  return owner === null ? "Guards watch players' plots" : true;
+}
+
 /** The Sheriff's guarded plots for this month: the whole list (S4-RULE-6). */
 export function setGuards(state: GameState, playerId: string, tiles: number[]): void {
   const refused = refusal(state, playerId, { votes: 'Guards are posted once the votes are over', sheriff: 'Only the Sheriff posts guards' });
   if (refused) throw refused;
   const plots = [...new Set(tiles)];
-  if (plots.some((tile) => (state.tiles[tile]?.owner ?? null) === null)) throw new RuleError("Guards watch players' plots");
+  // First match wins over the whole list (S4-RULE-6): every own plot is refused before any unowned one, whatever the order listed.
+  const refusals = plots.map((tile) => canGuard(state, playerId, tile)).filter((can) => can !== true);
+  const first = refusals.find((can) => can === OWN_PLOT) ?? refusals[0];
+  if (first !== undefined) throw new RuleError(first);
   const max = guardsMax(state);
   if (plots.length > max) throw new RuleError(`You have ${max} guards`);
   edit(state).guards = plots;
@@ -123,7 +155,10 @@ export function investigate(state: GameState, playerId: string, orderId: string)
   // The draw keys on the order's number, its place in the list plus one, which only the engine holds (AM-1), never on the id's text.
   const solved = createRng(seedOf(state.seed, at + 1, 'investigate', String(POLITICS.sabotage.streamSalt))).chance(POLITICS.sheriff.investigateOdds);
   edit(state).sabotage[at]!.investigated = state.month;
-  if (solved) reveal(state, orderId);
+  if (solved) {
+    reveal(state, orderId);
+    payBounty(state, orderId, 'solved');
+  }
   return state.politics!.sabotage[at]!;
 }
 
@@ -169,6 +204,7 @@ export function resolveSabotage(state: GameState): void {
   const rng = createRng(seedOf(state.seed, state.month, String(POLITICS.sabotage.streamSalt)));
   const terms = orderTerms(state);
   const voided = new Set<string>();
+  const guardedIds = new Set<string>();
   // Decide first, then write: a reveal edits the state, and the draws must not depend on what an earlier order caused.
   const verdicts = pending.flatMap((order) => {
     const tile = order.target.kind === 'powerCut' ? state.tiles[order.target.tile] : undefined;
@@ -181,17 +217,20 @@ export function resolveSabotage(state: GameState): void {
     const seen = rng.chance(captureOdds(state, order));
     const guarded = isGuarded(state, order);
     const victim = tile ? tile.owner : null;
+    if (guarded) guardedIds.add(order.id);
     const worked = !guarded && works;
     const outcome: SabotageOrder['outcome'] = guarded || seen ? 'caught' : works ? 'done' : 'failed';
-    return [{ id: order.id, outcome, worked, victim, revealed: guarded || seen }];
+    // The crop is read now, at resolution: the plot may lose its MULE or be re-outfitted before anyone looks again.
+    return [{ id: order.id, outcome, worked, victim, good: tile?.outfit as Good | undefined, revealed: guarded || seen }];
   });
   if (voided.size > 0) {
     const kept = state.politics.sabotage.filter((o) => !voided.has(o.id));
     edit(state).sabotage = kept;
   }
-  for (const { id, outcome, worked, victim, revealed } of verdicts) {
-    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim });
+  for (const { id, outcome, worked, victim, good, revealed } of verdicts) {
+    Object.assign(edit(state).sabotage.find((o) => o.id === id)!, { outcome, worked, victim, ...(good ? { good } : {}) });
     if (revealed) reveal(state, id);
+    if (guardedIds.has(id)) payBounty(state, id, 'caught');
   }
 }
 
@@ -213,6 +252,21 @@ function reveal(state: GameState, orderId: string): void {
   if (victim) pactBreach(state, by!, victim, month);
 }
 
+/**
+ * The Sheriff's bounty for the culprit a guard or a solved investigation just named (AM-11): paid from the fund on the
+ * office-pay line as far as it reaches, and the term's record counted. Nothing for a culprit who is the Sheriff, or with no Sheriff.
+ */
+function payBounty(state: GameState, orderId: string, record: keyof NonNullable<GameState['politics']>['sheriffRecord']): void {
+  const sheriff = state.politics!.sheriff;
+  const order = state.politics!.sabotage.find((o) => o.id === orderId)!;
+  if (sheriff === null || order.by === sheriff) return;
+  const paid = fundOut(state, 'officePay', POLITICS.sheriff.bounty);
+  player(state, sheriff).money += paid;
+  const politics = edit(state);
+  politics.sabotage.find((o) => o.id === orderId)!.bounty = { to: sheriff, paid };
+  politics.sheriffRecord[record] += 1;
+}
+
 const capital = (words: string): string => words[0]!.toUpperCase() + words.slice(1);
 
 /** The month's sabotage events for production to file, in seat order: one for each order that was done or caught (S4-RULE-4). */
@@ -229,7 +283,7 @@ export function sabotageEvents(state: GameState): MonthEvent[] {
     if (order.target.kind === 'powerCut') {
       const tile = order.target.tile;
       const event = plotEvent(state, 'powerCut', tile);
-      if (worked) return { ...event, line: `Someone cut the power to a ${capital(goodWords(state.tiles[tile]!.outfit as never))} plot: it makes nothing this month.`, sabotage };
+      if (worked) return { ...event, line: `Someone cut the power to a ${order.good ? `${capital(goodWords(order.good))} ` : ''}plot: it makes nothing this month.`, sabotage };
       return { ...event, plots: [], line: guarded ? 'Caught at a guarded plot: the power stays on.' : named, sabotage };
     }
     const { good, dir } = order.target;
@@ -262,7 +316,8 @@ export function applyRumours(state: GameState): void {
 /** Restore the posted prices exactly, when the auction ends: from the price recorded before the shift, never by undoing it. */
 export function endRumours(state: GameState): void {
   if (!state.politics || state.politics.rumoured.length === 0) return;
-  for (const { good, from } of state.politics.rumoured) state.store.posted[good] = from;
+  // A seat's observe() copy has no `from` (HC-4): the price it sees stays as posted, and the next month posts afresh.
+  for (const { good, from } of state.politics.rumoured) if (from !== undefined) state.store.posted[good] = from;
   edit(state).rumoured = [];
 }
 
@@ -302,9 +357,10 @@ export function orderTerms(state: GameState): OrderTerms {
 }
 
 /** Whether the player may order now, or why not. */
-export function canOrder(state: GameState, _playerId: string): true | 'off' | 'notPlanning' {
+export function canOrder(state: GameState, playerId: string): true | 'off' | 'notPlanning' | 'sheriff' {
   if (!state.politics || !POLITICS.sabotage.on) return 'off';
-  return state.phase === 'planning' ? true : 'notPlanning';
+  if (state.phase !== 'planning') return 'notPlanning';
+  return state.politics.sheriff === playerId ? 'sheriff' : true; // the sitting Sheriff does not sabotage (AM-11)
 }
 
 /** How many plots the Sheriff may guard this month. */

@@ -654,6 +654,29 @@ describe('RULE-60: who may run, and when', () => {
     }
   });
 
+  it('S5-T-AC-8: AM-10 - a new term (every election, a re-elected Governor included) starts the overrule count again at 0', () => {
+    const state = newGame();
+    toElection(state, 1, () => runFor(state, 'lena', 'governor', HOLD));
+    advancePhase(state);
+    state.politics!.overruled = 2;
+    toElection(state, 4, () => runFor(state, 'lena', 'governor', HOLD));
+    expect(politicsOf(state).overruled, 'the term has not turned yet').toBe(2);
+    advancePhase(state);
+    expect(politicsOf(state)).toMatchObject({ governor: 'lena', termStart: 4, overruled: 0 });
+  });
+
+  it('S4-T-AC-20: AM-11 - every election starts the Sheriff\'s record again at 0, a re-elected Sheriff\'s term included', () => {
+    const state = newGame();
+    toElection(state, 1, () => { runFor(state, 'lena', 'governor', HOLD); runFor(state, 'ossa', 'sheriff'); });
+    advancePhase(state);
+    expect(politicsOf(state).sheriff).toBe('ossa');
+    state.politics!.sheriffRecord = { caught: 3, solved: 1 };
+    toElection(state, 4, () => { runFor(state, 'lena', 'governor', HOLD); runFor(state, 'ossa', 'sheriff'); });
+    expect(politicsOf(state).sheriffRecord, 'the term has not turned yet').toEqual({ caught: 3, solved: 1 });
+    advancePhase(state);
+    expect(politicsOf(state)).toMatchObject({ sheriff: 'ossa', termStart: 4, sheriffRecord: { caught: 0, solved: 0 } });
+  });
+
   it('T-AC-60 row 3: two Governor terms in a row refuse a third Governor run at declaration, in any month the field is open, ahead of any promise check', () => {
     const state = newGame();
     for (const month of [1, 4]) {

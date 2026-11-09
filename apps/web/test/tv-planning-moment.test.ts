@@ -1,6 +1,6 @@
 import { document, FakeElement } from './fake-dom';
 import type { DealCard } from '@mule/engine';
-import type { MuleView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
+import type { MuleView, OverruleView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,19 +25,23 @@ const BROKE: DealCard = { id: 'deal-k', from: 's1', to: 's2', terms: { kind: 'pa
 const NEWS = 'Kai broke a pact with Lena. Reputation −20.';
 const START = 100_000;
 const O: DealCard = { ...BROKE, id: 'deal-o', brokenBy: 's3', from: 's3' };
+const CALL: OverruleView = {
+  target: 'tax', caller: 's1', stage: 'called', restores: { tax: 5 }, stands: { tax: 9 }, voted: [], done: [], waitingFor: [],
+  clockMs: 4000, revealMs: 4000, total: 3, needed: 2, result: null,
+};
 
-function politics(brokenDeals: DealCard[]): PoliticsView {
+function politics(brokenDeals: DealCard[], overrule: OverruleView | null = null): PoliticsView {
   return {
     governor: null, sheriff: null, term: null, next: 4, baron: null,
     tax: { percent: 5, start: 5, low: 0, high: 10 }, fund: 0, pay: { governor: 50 },
     weights: [], candidates: { governor: [] }, promises: {}, promise: null, promiseFrom: null, election: null,
-    brokenDeals, reputationReasons: {},
+    brokenDeals, reputationReasons: {}, ...(overrule ? { overrule } : {}),
   };
 }
 
 /** The room as the TV's store holds it, with these cards broken. */
-function room(brokenDeals: DealCard[]) {
-  const game: MuleView = aMuleView({ phase: 'planning', month: 3, players: PLAYERS, me: null, politics: politics(brokenDeals), news: brokenDeals.length ? [NEWS] : [] });
+function room(brokenDeals: DealCard[], overrule: OverruleView | null = null) {
+  const game: MuleView = aMuleView({ phase: 'planning', month: 3, players: PLAYERS, me: null, politics: politics(brokenDeals, overrule), news: brokenDeals.length ? [NEWS] : [] });
   const seats = game.players.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: true, color: p.slot, ...(p.isAi ? { kind: 'builtin' as const } : {}) }));
   const table: TableView<MuleView> = { code: 'MULE', status: 'playing', hostId: 's1', seats, boards: 1, game };
   return { status: 'open', role: 'board', code: 'MULE', seatId: null, view: table, notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
@@ -60,8 +64,8 @@ function theTv(brokenDeals: DealCard[]) {
   act(() => root!.render(createElement(ClientProvider, { client, children: createElement(TableApp, { room: 'MULE' }) })));
   return {
     html: () => outer(host),
-    show(next: DealCard[]) {
-      state = room(next);
+    show(next: DealCard[], overrule: OverruleView | null = null) {
+      state = room(next, overrule);
       act(() => listeners.forEach((l) => l()));
     },
     /** Moves the server clock and lets the screen's clock tick. */
@@ -167,7 +171,7 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
     expect(tv.html(), "the second break's time up").not.toContain('data-testid="tv-moment"');
   });
 
-  it("a third break in the month is in the banner, which names the newest two", () => {
+  it("a third break in the month is in the banner, which leads with the newest two breakers", () => {
     const tv = theTv([]);
     tv.show([BROKE]);
     tv.show([BROKE, O]);
@@ -179,6 +183,17 @@ describe('SB-5a/5b: a card broken while the TV is up is a moment over the planni
     expect(banner).not.toContain('data-testid="tv-break-deal-k-words"');
   });
 
+  it('a call withdrawn and called again by the same player that month is a moment once, on the whole TV (PM ruling 8 Nov)', () => {
+    const tv = theTv([]);
+    tv.show([], CALL);
+    expect(tv.html()).toContain('data-testid="tv-overrule-call"');
+    tv.at(2000);
+    tv.show([]);
+    tv.at(3000);
+    tv.show([], CALL);
+    expect(tv.html(), 'called again inside the first call\'s time').not.toContain('data-testid="tv-overrule-call"');
+    expect(element(tv.html(), 'tv-promise-row')).toContain('data-testid="tv-overrule-called-line"');
+  });
 
   it('with no break this month, the box draws no moment', () => {
     const tv = theTv([]);

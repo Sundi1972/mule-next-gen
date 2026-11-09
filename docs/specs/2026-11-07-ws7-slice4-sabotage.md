@@ -432,7 +432,7 @@ tomorrow     MUST filter, per the frozen HC-4 rule: keep the seat's own orders w
              order only when its effect or its culprit is public (outcome 'done' or 'caught', or
              culpritPublic), with `by` set to null unless culpritPublic, and `cost` 0; drop every other
              order (pending, or failed unseen). Keep politics.guards only for the sitting Sheriff (else []).
-             Keep politics.rumoured (public: the posted prices before the auction's shift).
+             Keep politics.rumoured (public: the goods rumoured), without the price before the shift (AM-9).
 logic        → §2 S4-RULE-12
 seam         observe.ts (WS1 named edit), beside the ballot hiding
 mechanism    in_place
@@ -931,7 +931,7 @@ SabotageHand.order (every seat)
       chance(POLITICS.ai.sabotage.orderChance[persona])                      order the best
   2   otherwise                                                              nothing
 SheriffHand (only the sitting Sheriff)
-  guard        the guardsMax plots with the highest guardValue(obs, me, plot) (a tie: a draw); Rookie: a
+  guard        the guardsMax plots with the highest guardValue(obs, me, plot) > 0 (AM-8) (a tie: a draw); Rookie: a
                seeded pick among players' working plots
   investigate  if one is left: the public order with culprit unknown and never investigated with the
                highest investigateValue(obs, me, suspect), if > 0; Rookie: the newest
@@ -940,7 +940,8 @@ SheriffHand (only the sitting Sheriff)
                Rookie: the standard fine
 VoteHand (in place)
   run          unchanged: runSheriff per persona once the office is elected (RULE-8 / RULE-63)
-  law vote     sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0, after the Governor and Rookie rows
+  law vote     sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0 on an enact, > 0 on a repeal (AM-6),
+               after the Governor and Rookie rows
                (lawWorth replaces lawCost for every law, WS7's ruling; the ban's duties are in §10)
   propose      unchanged rule; the ban enters the candidates through POLITICS.laws, valued by lawWorth
 examples  a Tycoon Saboteur, second on Worth, the leader's Crystite plot worth 400 a month: net 1.5 × 240 −
@@ -1009,6 +1010,9 @@ export interface SabotageOrder {
   victim?: string | null;
   /** Set when it resolves: whether the effect happened. 'caught' alone cannot say whether the plot went dark. */
   worked?: boolean | null;
+  /** Set when a power cut resolves: the crop of the plot it hit then. Absent for a rumour (its good is target.good),
+   *  while pending, and on a void order (AM-7). */
+  good?: Good;
   /** The month the Sheriff investigated it; null never. Once-only, and the month's count (S4-RULE-7). */
   investigated?: number | null;
   /** The fine levied on it, once (S4-RULE-8). */
@@ -1062,7 +1066,9 @@ Security after that. It returns 0 in RC.
 /** A public order as every screen sees it: an incident. */
 export interface IncidentView {
   id: string; month: number; kind: SabotageTarget['kind'];
-  victim: string | null; at: { x: number; y: number } | null; good: Good; dir?: 'up' | 'down';
+  victim: string | null; at: { x: number; y: number } | null;
+  good: Good | null;                      // null only for a pending or void cut on a plot with no MULE (AM-7, AM-9)
+  dir?: 'up' | 'down';
   worked: boolean;
   culprit: string | null;                 // only when culpritPublic (or on the orderer's own list)
   how: 'guard' | 'caught' | 'investigation' | null;
@@ -1081,7 +1087,7 @@ sabotage?: {
   order: SabotageTarget | null;            // this month's pending order
   canOrder: true | 'off' | 'notPlanning';
   owed: number;                            // crew cost due at this month's upkeep
-  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];  // culprit = them
+  mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] | 'void' })[];  // culprit = them; 'void' (AM-9)
 } | null;
 sheriff?: {                                 // only on the sitting Sheriff's view
   canAct: true | 'off' | 'notPlanning' | 'votesOpen';
@@ -1121,7 +1127,7 @@ sabotage: {
 },
 sheriff: {
   guards: 2, guardsPerHundred: 1, securityDetect: 0.1,   // per 100 cr of Security (slice 5)
-  investigations: 1, investigateOdds: 0.5,               // D-S4-1
+  investigations: 1, investigateOdds: 0.3,               // D-S4-1, AM-10 (was 0.5)
   fine: { steps: [50, 100, 150, 200, 250, 300], standard: 150 },
   victimShare: 0.5,
 },
@@ -1171,6 +1177,8 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-B-AC-8 | Given the ban at 2 in force · When a case is revealed and fined 150 · Then the culprit owes 300 and loses 20 reputation (a fine levied before the ban passed was ×1) | S4-C7 S4-C4 | engine state | — |
 | S4-B-AC-9 | Given only Classic AI seats and no API key · When a game is simulated · Then S4-UBER-AC-3 holds | S4-C10 S4-C11 S4-C12 | `pnpm sim` | Rookie and Trader personas never order |
 | S4-B-AC-10 | Given two phones and AI seats, Brix the Sheriff and Lena not · When the e2e step of S4-UBER-AC-2 runs · Then Lena's order shows on Brix's plot card (where she ordered it), Brix's Sheriff desk and map his guard, the TV the "Caught!" story with Lena's name, and after Brix's fine the month end shows it; the ban shows in the law picker and on the TV council panel | S4-C14 S4-C15 S4-C17 S4-C18 S4-C19 | the phone and TV DOM in apps/web/e2e/politics.ts | Brix's phone never shows Lena's order before production |
+| S4-B-AC-11 | Given Kai is Sheriff and guards Brix's Smithore plot (AM-11) · When Lena's power cut on it resolves · Then Lena is named, Kai's money rises by POLITICS.sheriff.bounty (50) from the fund on the office-pay line, and on the next election day every screen shows "Kai, Sheriff: caught 1, solved 0" | S4-C5 S4-C6 S4-C16 | Kai's money and the fund ledger in the server view; the election-day DOM | Kai trying to guard his own plot → "You can't guard your own plots"; a catch on the spot pays no bounty |
+| S4-B-AC-12 | Given Kai is Sheriff · When Lena's power cut on Kai's own Food plot resolves with no Security spent · Then it is seen with chance 0.5 (detect 0.3 + POLITICS.sheriff.ownPlotDetectBonus 0.2), against 0.3 on anyone else's plot (AM-11) | S4-C2 | engine test over seeded draws at the boundary | a rumour's odds are unchanged |
 | S4-T-AC-1 (serves S4-B-AC-6) | S4-RULE-2's eight rows, each verdict and message | S4-C1 | engine test | — |
 | S4-T-AC-2 (serves S4-B-AC-1, S4-B-AC-2) | S4-RULE-3's six rows; both draws are made for every non-void order whatever the guard | S4-C2 | engine test, seeded | — |
 | S4-T-AC-3 (serves S4-B-AC-2) | the cut's part is the plot line's last (why 'event', event 'powerCut'); the plot's runMonths still counts | S4-C2 | the production line | — |
@@ -1187,6 +1195,11 @@ a revert, or `POLITICS.sabotage.on = false` (and `POLITICS.offices = ['governor'
 | S4-T-AC-14 (serves S4-B-AC-1, S4-B-AC-2) | S4-RULE-14: a sabotage event's kind is 'sabotage' and its title starts "Sabotage"; no colony event has either; only sabotage incidents are in the incidents list | S4-C2 S4-C13 | engine + server test | a walkout is not investigable |
 | S4-T-AC-15 (serves S4-B-AC-7) | with both offices: RULE-3's appointment rows for the Sheriff (never the new Governor), pay 50 then 30 as far as the fund reaches, the office score counts Sheriff terms, nextTax's low-fund line counts 80 | S4-C6 | engine and ai tests | a Sheriff candidate's promise is refused "Sheriff candidates make no promise" |
 | S4-T-AC-16 (serves all) | the contract commit typechecks and every existing test passes with the stubs | S4-C20 | `pnpm typecheck && pnpm test` on PR-0 | — |
+| S4-T-AC-17 (serves S4-B-AC-11) | S4-RULE-6's own-plot row: setGuards refuses a tile the Sheriff owns, in words; canGuard agrees with setGuards on every tile | S4-C5 | engine test | another owner's plot is accepted |
+| S4-T-AC-18 (serves S4-B-AC-11) | the bounty: paid at a guard catch and at a solved investigation, never at a catch on the spot, never to a Sheriff who is the culprit; as far as the fund reaches; recorded on order.bounty | S4-C5 | engine test | fund 0 → paid 0, nothing owed |
+| S4-T-AC-19 (serves S4-B-AC-12) | captureOdds adds ownPlotDetectBonus only for a power cut on a plot the Sheriff owns at resolution, beside Security's bonus, capped at 1; a guarded plot is 1 | S4-C2 | engine test | no Sheriff in office → no bonus |
+| S4-T-AC-20 (serves S4-B-AC-11) | politics.sheriffRecord counts guard catches and solved investigations, resets in takeOffice every term; every view carries the outgoing Sheriff's record on election day and never a guarded tile | S4-C6 S4-C13 | engine and server tests | no Sheriff → null |
+| S4-T-AC-21 (serves S4-B-AC-11) | S4-RULE-2's Sheriff row: the sitting Sheriff's power cut and rumour are refused with "The Sheriff can't order sabotage"; canOrder says 'sheriff'; an order placed during the election by the player who then takes the Sheriff's office is withdrawn at takeOffice (no charge, no record) | S4-C1 S4-C6 | engine test | a Sheriff whose term ended may order again |
 
 Invariants, asserted by every relevant test: no player's money and never the fund below 0; nothing writes
 `treasury.money` but colony.ts; nothing writes `politics.sabotage` but sabotage.ts; one player never holds both
@@ -1294,6 +1307,144 @@ because   each was a choice the build had to make; recorded so the server, the h
 goal      S4-1, S4-2 — unchanged
 ```
 
+```
+AM-6 · 2026-11-08 · WS7 (build: S4-PR-4's logic review, finding I1) · a tie in the ban's vote goes to the ban
+
+target    S4-RULE-13, VoteHand's law-vote row
+said      "sabotageBan: yes iff lawWorth(obs, me, proposal) ≥ 0", for an enact and a repeal alike
+did       an enact passes on lawWorth ≥ 0, a repeal only on lawWorth > 0: a seat the ban costs nothing votes for
+          the ban and against its repeal. This is RULE-46's median rule's tie (enact ≥, repeal >).
+because   a repeal's worth is ≥ 0 for every seat the ban never fines, so "≥ 0" passed both the ban and its repeal:
+          measured at month 3 with one seat caught twice, the enact went 2 to 1 and the repeal 3 to 0, so a caught
+          Governor could repeal the ban the month after it passed
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-7 · 2026-11-08 · WS7 (build: S4-PR-5's logic review, finding C1) · the crop a power cut hit is recorded on the order
+
+target    §3 SabotageOrder; S4-RULE-12's news lines
+said      the news names the plot's good (the server read it off the plot's outfit when it built the line)
+did       the engine records the cut crop on the order at resolution (`good`, set by resolveSabotage where it sets
+          `victim`, for a power cut only; the sole writer is sabotage.ts); the server reads order.good, and reads the
+          plot's outfit only for a pending order, which only its orderer sees. With no crop to name, the words say
+          "Ossa's plot" and the incident's `good` is null (IncidentView.good: Good | null); nothing throws
+because   the review found a plot's outfit null by the time the line was built (the MULE taken off, sold or stolen),
+          which crashed the hook and with it every later intent, and a re-outfitted plot naming the wrong crop
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-8 · 2026-11-08 · WS7 (build: S4-PR-4's boundary review, finding I2) · a guard worth nothing is not posted
+
+target    S4-RULE-13, SheriffHand's guard row
+said      "the guardsMax plots with the highest guardValue" (no floor; only investigate had "> 0")
+did       a plot is guarded only if its guardValue is above 0, as an investigation is: a computer Sheriff posts fewer
+          guards, or none, when no plot is worth guarding. The Rookie's seeded pick is unchanged.
+because   a guard that protects nothing tells the table nothing and costs nothing to skip, and WS1 tunes against this
+          row, so the build's floor is written down. Until WS1's values (S4-PR-3) every guardValue is 0, so a
+          non-Rookie Sheriff posts no guards yet.
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-9 · 2026-11-08 · PM rulings (S4-PR-5's boundary review, findings I2 and m13) · the void entry; a rumour's real price
+
+target    S4-RULE-3 row 1 (a void order), §3 MyPoliticsView.sabotage.mine, S4-C9 (politics.rumoured in observe)
+said      row 1 promises the orderer "the crew found nothing to cut", but the engine drops a void order and no view
+          carried it; S4-C9 called politics.rumoured public, so observe() kept each entry's pre-shift price
+did       the void: the engine is unchanged (a void order leaves politics.sabotage, uncharged). The server keeps it
+          (noteSabotage's change list) and the orderer's own `mine` lists it as one entry: outcome 'void', public
+          false, how null, culprit the orderer, worked false, fine null, its crop frozen at the void. The protocol's
+          `mine` outcome widens to SabotageOrder['outcome'] | 'void'; never in incidents, a show event or another
+          view. WS8 draws "Month 5: power cut on Ossa's plot · Void. Your crew found nothing to cut; you pay nothing."
+          The price: observe() drops rumoured[].from; engine state keeps it for endRumours, which skips an entry
+          without it (an observed copy, as the AI's outlook runs).
+because   a promise no screen kept; and a computer seat must see what a human sees (HC-4): no phone gets the
+          pre-shift price, so no AI seat may either
+goal      S4-1, S4-2 — unchanged
+```
+
+```
+AM-10 · 2026-11-08 · Heiko (chat, 8 Nov, via PM) and WS7 (S4-PR-3's #770 review, via PM) · the investigation odds fall to 30%; sabotageGain carries the odds the order works
+target    D-S4-1 (B) and §3 Config's POLITICS.sheriff.investigateOdds; §10 sabotageGain's doc comment; S4-RULE-13's net
+said      (1) investigateOdds 0.5, "an investigation finds the culprit half the time" (AM-3's B). (2) sabotageGain is
+          the gain "before its cost, its odds and capture", yet S4-RULE-13's example nets 1.5 × 240 for a 400 plot
+did       (1) investigateOdds is 0.3: an investigation finds the culprit about one time in three. Heiko: "50% success
+          rate is too high, we should do only 30% or even 25%"; if his 13 Nov play-test still finds it too easy it
+          drops to 0.25, a config change only. (2) sabotageGain includes the order's odds of working (a power cut's
+          POLITICS.sabotage.orders.powerCut.success, 0.6; a rumour's 0.8): S4-RULE-13's net applies captureOdds only, and its
+          example's 240 is 400 × 0.6, as WS1 built it in #770 (d9c08a7b)
+because   (1) Heiko's ruling: with one investigation a month, half the time solved too much of what the guards missed.
+          (2) the doc comment contradicted the rule's own example; the code and the example agree
+goal      S4-1, S4-2 — unchanged
+folded    §3 Config and §10 read with AM-10; packages/engine/src/config.ts; docs/rulebook/colony-and-politics.html
+          (the Sheriff's line and the Why box) and numbers.html
+```
+
+```
+AM-11 · 2026-11-08 · Heiko (AskUserQuestion and chat, 8 Nov, via PM) · the Sheriff's incentives: no guard on its own plots, a bounty per catch, its own plots harder to cut, its record on election day
+target    §2 S4-RULE-3 (captureOdds), S4-RULE-5, S4-RULE-6, S4-RULE-7, S4-RULE-11; §1 S4-C5, S4-C6, S4-C10/C11 (WS1),
+          S4-C15 (WS8), S4-C16; §3 Config and the views; §6 new rows S4-B-AC-11, S4-B-AC-12, S4-T-AC-17..S4-T-AC-21; S4-RULE-2
+said      a Sheriff may guard any owner's plot, its own included (S4-RULE-6's example); the office pays a flat
+          POLITICS.pay.sheriff (30) a month, and a catch earns the Sheriff nothing; every plot is cut on the same odds
+why       as built a rational Sheriff guards only its own plots: the pay is flat and a catch earns nothing.
+          Heiko: "sabotaging the Sheriff should be a bit more difficult than other players, otherwise everybody
+          would only sabotage the Sheriff"
+did       1. S4-RULE-6 gains a row before row 4: a tile the Sheriff owns → refuse "You can't guard your own plots".
+             An exported predicate canGuard(state, playerId, tile) holds every per-tile row (owner nobody, owner the
+             Sheriff), so WS8's Guard pick offers exactly the plots setGuards accepts. The example "the Sheriff's own
+             plot → allowed" becomes "→ refused".
+          2. A bounty, POLITICS.sheriff.bounty (50 cr), paid to the Sheriff in office at the reveal for each culprit
+             its office names: a catch at a guarded plot (S4-RULE-3 row 2) or a solved investigation (S4-RULE-7 row
+             6). A catch on the spot (rows 3 and 5) earns none; neither does a culprit who is the Sheriff. It comes
+             out of the fund on the office-pay line (fundOut 'officePay'), as far as the fund reaches, as office
+             pay does (RULE-7): a short fund pays what it has and owes nothing after. The order records it,
+             order.bounty = { to, paid }, so the desk, the news and the month end can show it.
+          3. captureOdds: a power cut on a plot the Sheriff owns when the orders resolve adds
+             POLITICS.sheriff.ownPlotDetectBonus (0.2) to the order's detect, beside Security's bonus:
+             min(1, detect + ownPlotDetectBonus + floor(securitySpend / 100) × securityDetect); 30% → 50%. A
+             guarded plot stays 1, and the Sheriff's plots are never guarded (1). The cut's chance of working is
+             unchanged; a rumour has no plot and is unaffected. A catch this way is on the spot: no bounty (2).
+             The AI's sabotage values read captureOdds, so they price it (HC-4: the Sheriff and the owner are public).
+          4. The Sheriff's term record: politics.sheriffRecord = { caught, solved }, counting the bounties' two
+             cases (guard catches, solved investigations), reset when the Sheriff takes office (takeOffice, every
+             term, as AM-10 of slice 5 resets politics.overruled). Every screen's election view shows the outgoing
+             Sheriff's record on election day, e.g. "Kai, Sheriff: caught 3, solved 1". Where the guards stood
+             stays secret: only the two counts are public.
+          5. The Sheriff can't order sabotage (Heiko, 8 Nov: "the Sheriff himself shouldn't be allowed to sabotage").
+             S4-RULE-2 gains a row after "off" and "not planning": the orderer is the sitting Sheriff → refuse
+             "The Sheriff can't order sabotage", for a power cut and a rumour alike. canOrder returns 'sheriff' for
+             them, so every screen and hand reads one answer.
+             Edge cases (ruled by WS7): orders may be placed while the election's votes are open, so a player can
+             order and then take the Sheriff's office at the ceremony the same month. takeOffice withdraws the new
+             Sheriff's pending order, exactly as a free withdrawal (S4-RULE-2's null target): no charge, no record,
+             no news; the order card is gone from their phone. An order is never open across a term's end in any
+             other way: orders resolve at the same month's production, and terms end only at an election in
+             planning. A Sheriff whose term ended may order from that planning on.
+unknown   no Sheriff in office (nobody ran and none was appointed) → no bounty, no record line; a Sheriff who
+          loses office mid-term cannot (terms end only at an election)
+examples  Kai guards Brix's Smithore plot; Lena's cut there is caught → Lena named, Kai +50 cr from the fund, the
+          record caught 1 · Kai investigates and the trail goes cold → nothing · Lena cuts Kai's own Food plot:
+          detect 0.3 + 0.2 = 0.5; drawn 0.41 → caught on the spot, Lena named, no bounty · fund 20 cr at a guard
+          catch → Kai gets 20 · Kai tries to guard his own Crystite plot → "You can't guard your own plots"
+because   Heiko's rulings; the bounty makes the guards worth placing where sabotage is likely, and the own-plot rule
+          stops the office protecting only its holder
+goal      S4-1, S4-2 — unchanged; S4-UBER-AC-1 is now judged with a Sheriff who has a reason to guard others
+fines     Heiko considered a narrower range and kept it (8 Nov): S4-RULE-8 stands, 50 to 300 in steps of 50, × the ban
+folded    §3 Config gains POLITICS.sheriff.bounty and .ownPlotDetectBonus; the PR split is in the plan's S4-PR-9..11
+
+AM-12 · 2026-11-08 · WS7 (S4-PR-9's boundary review, #793) · a guard never stands on a plot the Sheriff came to own
+target    S4-RULE-6 (standing guards), AM-11 item 1
+said      the Sheriff can't guard its own plots (setGuards refuses them)
+did       the standing guards are the listed tiles the Sheriff may guard when the orders resolve: a tile the Sheriff
+          has come to own since planning (it bought the plot at the land auction) stands down, and guardsMax counts
+          only the tiles that stand. No refusal and no news: the guard simply isn't there
+because   guards are posted in planning but the land auction runs before production, so without this a Sheriff could
+          guard Brix's plot, buy it, and collect a bounty on its own plot, the case AM-11 item 1 rules out
+goal      S4-1 — unchanged; Heiko's own-plot rule now holds at production, not only at planning
+```
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 ### Ownership: sabotage state
@@ -1336,7 +1487,7 @@ including whether a `mind: Mind` parameter is passed** (slice 3's values take `m
 that needs persona weights reads them as WS1's existing values do.
 
 ```ts
-/** Proposed. Credits `me` expects to gain on the table if the order works, before its cost, its odds and capture: for a
+/** Proposed. Credits `me` expects to gain on the table, times the odds the order works (AM-10), before its cost and capture: for a
  *  power cut, the victim's lost output this month at the prices `me` expects, weighted by the victim's Worth
  *  lead over `me` (more against the leader, little against a trailing player); for a rumour, `me`'s own expected
  *  trades in that good at the shifted opening price minus the same for the leader. Never negative for a cut;
@@ -1434,7 +1585,7 @@ approved by 13 Nov.
 
 **D-S4-1 · Does an investigation always find the culprit?**
 
-**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** B, an investigation finds the culprit half the time (`POLITICS.sheriff.investigateOdds` 0.5).
+**Ruled 2026-11-07 12:54Z (Heiko, board: "Approve all six as recommended"):** B, an investigation finds the culprit half the time (`POLITICS.sheriff.investigateOdds` 0.5). **Amended 8 Nov (AM-10, Heiko): 0.3, about one time in three.**
 
 At the table: Brix, the Sheriff, taps Investigate on "Month 3: Kai's power line cut, culprit unknown".
 - **A · Always** (design 05: "The culprit is revealed to everyone"). *For:* the Sheriff's job is satisfying;

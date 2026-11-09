@@ -5,16 +5,17 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { fmt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
+import { FrozenTax, taxFrozen } from './budget/GovernorBudget';
 import { LawPicker } from './LawPicker';
 import { promiseBase, promiseKept, promisedWords } from './words';
 
-/** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7); then next month's law (C46). */
+/** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7); then next month's law (C46). While a call on the tax stands, FrozenTax takes the tax row's place. */
 export function GovernorDesk() {
   const { view } = usePhoneGame();
   if (!view.politics) return null;
   return (
     <>
-      <SalesTax politics={view.politics} />
+      {taxFrozen(view.politics) ? <FrozenTax /> : <SalesTax politics={view.politics} />}
       <LawPicker />
     </>
   );

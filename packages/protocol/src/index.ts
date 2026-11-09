@@ -342,11 +342,13 @@ export interface IncidentView {
   kind: SabotageTarget['kind'];
   victim: string | null;
   at: { x: number; y: number } | null;
-  good: Good;
+  /** null only when the crop is unknown: a pending power cut on a plot with no MULE. A settled cut always names the crop it hit (order.good). */
+  good: Good | null;
   dir?: 'up' | 'down';
   worked: boolean;
   /** Only when the culprit is public, or on the orderer's own list. */
   culprit: string | null;
+  /** How the culprit became known; null while it is not (an unseen worked cut), whoever is looking. */
   how: 'guard' | 'caught' | 'investigation' | null;
   investigated: boolean;
   fine: { due: number; paid: number; toVictim: number; by: 'sheriff' | 'standard' } | null;
@@ -410,8 +412,17 @@ export interface MyPoliticsView {
     canOrder: true | 'off' | 'notPlanning' | 'sheriff';
     /** The crew cost due at this month's upkeep. */
     owed: number;
-    /** Every order this player made: their culprit is themself, public or not. */
-    mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] })[];
+    /**
+     * Every order this player made. On this list `culprit` is always them. `public` means the order is on the public
+     * record: every screen lists it as an incident, because it worked, was caught, or its culprit was revealed. It does
+     * NOT mean anyone knows it was them: others know only when `how` is not null (a guard, caught on the spot, or an
+     * investigation). A worked cut nobody saw is `public: true` with `how: null`.
+     */
+    /**
+     * outcome 'void': the order found nothing to do (the plot was sold, had no MULE, or was the orderer's own); it was not
+     * charged, and only the orderer's own list shows it. Its `public` is false and its `how` null.
+     */
+    mine: (IncidentView & { public: boolean; outcome: SabotageOrder['outcome'] | 'void' })[];
   } | null;
   /** The Sheriff's desk (slice 4), only on the sitting Sheriff's view. Optional only for older fixtures. */
   sheriff?: {
