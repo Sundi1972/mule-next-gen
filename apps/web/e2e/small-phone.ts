@@ -4,7 +4,7 @@
  * read with and without a TV, and the month end in Collapse too (C20).
  * Local tier: `pnpm --filter @mule/web build`, then `pnpm --filter @mule/web e2e:small`.
  */
-import { EVENT_SHOW, POLLUTION, type GameState } from '@mule/engine';
+import { EVENT_SHOW, POLITICS, POLLUTION, type GameState } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, hallPlace, held, launch, PHONE, PHONE_SMALL, pressAct, SHOWN_MS, startServer, steerTo, throughDoor, TV } from './harness';
@@ -57,12 +57,56 @@ type Read = { screen: string; small: AuditRead; base: AuditRead; c20?: { small: 
 /** The screens whose rail is the game shell's, with your name in its header: every phase, not the lobby. */
 const GAME_RAIL = /^(planning|land grant|development|production|the goods auction|month end|game over)/;
 
+/** One read of the announce's record line and what stands around it. */
+type Box = { top: number; bottom: number; h: number };
+type RecordRead = {
+  record: { text: string; lines: number; lh: number; halves: Box[]; clipped: string[] } | null;
+  announceScroll: [number, number] | null;
+  stageScroll: [number, number] | null;
+  fieldInView: boolean;
+  readyInView: boolean;
+};
+
+/** Kept a string: tsx would wrap named functions in a helper the page lacks. */
+const RECORD_READ = String.raw`(() => {
+  const q = (id) => document.querySelector('[data-testid=' + id + ']');
+  const stage = q('stage');
+  const announce = q('announce');
+  const inView = (el) => {
+    if (!el) return false;
+    const b = el.getBoundingClientRect();
+    return b.top >= -1 && b.bottom <= innerHeight + 1 && b.left >= -1 && b.right <= innerWidth + 1;
+  };
+  const line = q('sheriff-record');
+  let record = null;
+  if (line) {
+    const cs = getComputedStyle(line);
+    const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2;
+    const box = line.getBoundingClientRect();
+    const clipped = [];
+    for (let el = line; el; el = el.parentElement) {
+      if (el.scrollWidth > el.clientWidth + 1) clipped.push((el.getAttribute('data-testid') || el.tagName.toLowerCase()) + ' ' + el.scrollWidth + '>' + el.clientWidth);
+      if (el === stage) break;
+    }
+    record = {
+      text: line.textContent,
+      lines: Math.round(box.height / lh),
+      lh,
+      halves: [...line.children].map((c) => { const r = c.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, h: r.height }; }),
+      clipped,
+    };
+  }
+  return { record, announceScroll: announce ? [announce.scrollHeight, announce.clientHeight] : null, stageScroll: stage ? [stage.scrollHeight, stage.clientHeight] : null, fieldInView: inView(q('announce-field')), readyInView: inView(q('ready')) };
+})()`;
+
 const started = Date.now();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => 1 });
 const browser = await launch();
 const errors: string[] = [];
 const reads: Read[] = [];
 try {
+  // Its own table and server, first: the main game below has to reach an election before anything else is read.
+  await sheriffRecordFit();
   const phone = await (await browser.newContext(PHONE_SMALL)).newPage();
   phone.on('pageerror', (e) => errors.push(e.message));
   let code = '';
@@ -298,6 +342,99 @@ async function steeredDevelopment(): Promise<void> {
     await steered.server.close();
   }
   check(errors.length === 0, `steered development: no page errors: ${errors.join('; ')}`);
+}
+
+/**
+ * S4-B-AC-11 (record leg) at both sizes: the outgoing Sheriff's record on the election-day announce, on a table of its
+ * own (six seats, politics and sabotage on, a TV in the room). The state is put there through the server: the sitting
+ * Sheriff is a computer seat named "The Good Neighbour" (the longest AI name, so its " · AI" is the widest), then a
+ * human seat with the longest typed name, each with a record of 3 catches and 1 case solved, read against the same
+ * announce with no record. The phone opens Politics > Elections, where the announce lives. Per size and Sheriff:
+ *   g1 the record takes at most 2 lines, and a second line falls exactly between its two halves, each one line tall;
+ *   g2 nothing is clipped: the line and every ancestor up to the stage show their whole width;
+ *   g3 no new scroll: the announce's and the stage's scroll heights are no worse than without the line, and the
+ *      candidates and the Ready button stand where they stood.
+ * POLITICS.sabotage.on is process-wide, so it is put back whatever happens, and the server is closed here.
+ */
+async function sheriffRecordFit(): Promise<void> {
+  const savedSabotage = POLITICS.sabotage.on;
+  POLITICS.sabotage.on = true;
+  const own = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => 1, politics: true });
+  const errors: string[] = [];
+  try {
+    const phone = await (await browser.newContext(PHONE_SMALL)).newPage();
+    const tv = await (await browser.newContext(TV)).newPage();
+    for (const [who, page] of [['phone', phone], ['tv', tv]] as const) page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
+    await phone.goto(own.base);
+    await phone.getByPlaceholder(NAME).fill(NAME);
+    await phone.getByRole('button', { name: 'Start a new game' }).click();
+    await phone.getByText("You're at the table").waitFor();
+    const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
+    for (let i = 1; i <= 5; i++) {
+      await phone.getByRole('button', { name: 'Add AI player' }).click();
+      await phone.locator('[data-testid=seats] li').nth(i).waitFor();
+    }
+    await tv.goto(`${own.base}/table?room=${code}`);
+    await tv.getByTestId('room-code').waitFor();
+    await phone.getByRole('button', { name: 'Start game' }).click();
+    await tv.locator('[data-testid=tv-announce]').waitFor({ timeout: ELECTION_WAIT_MS + SHOWN_MS });
+    const room = own.server.registry.get(code) as unknown as { game: { state: GameState; seats: { id: string; name: string; isAi: boolean }[] }; broadcast(): void };
+    check(room.game.state.players.length === 6, `six seats at the table, got ${room.game.state.players.length}`);
+    check(room.game.state.politics?.election?.stage === 'announce', `month 1's election is at its announce, got ${room.game.state.politics?.election?.stage}`);
+
+    /** Test fixture: seat `at` is the outgoing Sheriff under `name`, with `record` (or no record, no Sheriff). */
+    const put = async (at: number, name: string, isAi: boolean, record: { caught: number; solved: number } | null) => {
+      const { state, seats } = room.game;
+      const p = state.players[at]!;
+      Object.assign(p, { name, isAi });
+      const seat = seats.find((x) => x.id === p.id);
+      if (seat) Object.assign(seat, { name, isAi });
+      state.politics!.sheriff = record ? p.id : null;
+      state.politics!.sheriffRecord = record ?? { caught: 0, solved: 0 };
+      room.broadcast();
+      if (record) await phone.getByTestId('sheriff-record').waitFor({ timeout: PRESS_MS });
+      else await phone.getByTestId('sheriff-record').waitFor({ state: 'detached', timeout: PRESS_MS });
+    };
+    /** What the announce draws at this size: the record's boxes, and where the rest stands. */
+    const read = async (size: { width: number; height: number }) => {
+      await phone.setViewportSize(size);
+      await phone.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      await phone.evaluate(`document.getAnimations().forEach((a) => { if (Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish(); })`);
+      return phone.evaluate(RECORD_READ) as Promise<RecordRead>;
+    };
+    await phone.getByTestId('tab-politics').click();
+    await phone.getByTestId('sub-elections').click();
+
+    for (const [who, at, name, isAi] of [['computer Sheriff', 3, 'The Good Neighbour', true], ['human Sheriff', 0, 'Wolfgang Amadeus', false]] as const) {
+      for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
+        const at_ = `${who} at ${size.width}×${size.height}`;
+        await put(at, name, isAi, null);
+        const without = await read(size);
+        await put(at, name, isAi, { caught: 3, solved: 1 });
+        const withLine = await read(size);
+        const r = withLine.record!;
+        check(r.halves.length === 2, `S4-B-AC-11 g1: ${at_}: the line is two halves, got ${r.halves.length}`);
+        const [first, second] = r.halves as [Box, Box];
+        console.log(`  S4-B-AC-11 ${at_}: ${r.lines} line(s) of ${r.lh} px, halves at y ${first.top.toFixed(1)} and ${second.top.toFixed(1)}, clipped [${r.clipped.join('; ')}], announce scroll ${withLine.announceScroll} (was ${without.announceScroll}), stage scroll ${withLine.stageScroll} (was ${without.stageScroll}), candidates in view ${withLine.fieldInView} (was ${without.fieldInView}), Ready in view ${withLine.readyInView} (was ${without.readyInView})`);
+        check(r.lines <= 2, `S4-B-AC-11 g1: ${at_}: the record takes at most 2 lines, got ${r.lines}: "${r.text}"`);
+        check(first.h <= r.lh + 1 && second.h <= r.lh + 1, `S4-B-AC-11 g1: ${at_}: each half is one line tall, got ${first.h} and ${second.h} against ${r.lh}`);
+        check(r.lines === 1 || second.top >= first.bottom - 1, `S4-B-AC-11 g1: ${at_}: a second line starts below the first half`);
+        check(r.lines === 2 || Math.abs(second.top - first.top) <= 1, `S4-B-AC-11 g1: ${at_}: on one line both halves share a line`);
+        check(r.clipped.length === 0, `S4-B-AC-11 g2: ${at_}: nothing is clipped, got ${r.clipped.join('; ')}`);
+        const [was, now] = [without.announceScroll, withLine.announceScroll];
+        check(!was || !now || was[0] > was[1] + 1 || now[0] <= now[1] + 1, `S4-B-AC-11 g3: ${at_}: the announce gains a scroll with the line, ${now} against ${was}`);
+        const [stageWas, stageNow] = [without.stageScroll, withLine.stageScroll];
+        check(!stageWas || !stageNow || stageWas[0] > stageWas[1] + 1 || stageNow[0] <= stageNow[1] + 1, `S4-B-AC-11 g3: ${at_}: the stage gains a scroll with the line, ${stageNow} against ${stageWas}`);
+        check(!without.fieldInView || withLine.fieldInView, `S4-B-AC-11 g3: ${at_}: the candidates leave the screen with the line`);
+        check(!without.readyInView || withLine.readyInView, `S4-B-AC-11 g3: ${at_}: Ready leaves the screen with the line`);
+      }
+    }
+    await phone.setViewportSize(PHONE_SMALL.viewport);
+  } finally {
+    POLITICS.sabotage.on = savedSabotage;
+    await own.server.close();
+  }
+  check(errors.length === 0, `S4-B-AC-11 record fit: no page errors: ${errors.join('; ')}`);
 }
 
 /** Test fixture: the last AI seat takes `name`. */
