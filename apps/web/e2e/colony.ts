@@ -85,17 +85,19 @@ async function main(): Promise<void> {
       check(game.state.colony!.projects.length === 0, `no project before Lena commissions, got ${JSON.stringify(game.state.colony!.projects)}`);
       room().broadcast();
     });
-    // B-AC-35-1, front to back: the Governor's phone commissions through the Colony tab.
+    // B-AC-35-1, front to back: the Governor's phone commissions through Politics > Budget.
     const planning = phone.locator('[data-phase=planning]');
-    await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
+    await planning.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+    await planning.getByTestId('sub-budget').click({ timeout: PRESS_MS });
     await planning.getByTestId('commission-open').click({ timeout: PRESS_MS });
     await planning.getByTestId(`cat-${PROJECT}`).click({ timeout: PRESS_MS });
     await planning.getByTestId('commission-go').click({ timeout: PRESS_MS });
     await until(() => colony().projects.some((p) => p.id === PROJECT && p.stage === 'commissioned'), `B-AC-35-1: the server has the ${PRESTIGE[PROJECT].name} commissioned`);
     await planning.getByTestId('commission-news').filter({ hasText: `Lena commissions a ${PRESTIGE[PROJECT].name}` }).waitFor({ timeout: PRESS_MS });
-    console.log(`✓ B-AC-35-1: Lena's phone commissions the ${PRESTIGE[PROJECT].name} from the Colony desk; the server's ColonyView has it`);
+    console.log(`✓ B-AC-35-1: Lena's phone commissions the ${PRESTIGE[PROJECT].name} from Politics > Budget; the server's ColonyView has it`);
 
     // B-AC-35-2, front to back: she donates through the chips, and the plaque the preview promised is the server's.
+    await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
     await planning.getByTestId(`donate-${PROJECT}`).click({ timeout: PRESS_MS });
     await planning.getByTestId(`chip-cr-${DONATION}`).click({ timeout: PRESS_MS });
     const preview = (await planning.getByTestId('donate-preview').innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ');
