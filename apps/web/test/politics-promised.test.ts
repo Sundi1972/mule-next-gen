@@ -20,13 +20,14 @@ let PhoneGameProvider: typeof import('../src/phone/game').PhoneGameProvider;
 let Planning: typeof import('../src/phone/Planning').Planning;
 let forgetPicks: typeof import('../src/phone/hub/politics/ElectionDay').forgetPicks;
 let forgetLawPick: typeof import('../src/phone/hub/politics/LawBallot').forgetLawPick;
+let enterRoom: typeof import('../src/phone/hub/politics/ElectionDay').enterRoom;
 
 beforeAll(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   ({ ClientProvider } = await import('../src/net/react'));
   ({ PhoneGameProvider } = await import('../src/phone/game'));
   ({ Planning } = await import('../src/phone/Planning'));
-  ({ forgetPicks } = await import('../src/phone/hub/politics/ElectionDay'));
+  ({ forgetPicks, enterRoom } = await import('../src/phone/hub/politics/ElectionDay'));
   ({ forgetLawPick } = await import('../src/phone/hub/politics/LawBallot'));
   const doc = document as unknown as { createElementNS?: (ns: string, tag: string) => FakeElement };
   doc.createElementNS ??= (_ns, tag) => document.createElement(tag);
@@ -175,6 +176,12 @@ function mount(view: MuleView, openBallot = true): void {
   }
 }
 
+/** Back to Overview, the ballot's sub-tab left behind (it unmounts; the vote stays open). */
+const toOverview = () => act(() => (props(byTestid('tab-overview')).onClick as (e?: unknown) => void)({ currentTarget: byTestid('tab-overview') }));
+
+/** A reload: the page's memory of what was on screen is gone, the room's code is noted afresh. */
+const reload = () => enterRoom('RELOADED');
+
 /** A new view for the mounted phone, as a broadcast brings. */
 const rerender = (view: MuleView) => act(() => root!.render(onPhone(view)));
 
@@ -250,7 +257,7 @@ describe('S3-C21: the election ballot says "You promised"', () => {
   // S3-RULE-12's rows on the election ballot: [row, the seat, the taps before Cast, what the table receives in order,
   // whether the server answers the taps before Cast].
   const ROWS: [string, Seat, string[], unknown[], boolean?][] = [
-    ['row 4: no own pick, no ballot: the promised vote, then Cast', { promised: BRIX_VOTE }, [], [vote('s2'), READY]],
+    ['row 4: Cast after the ballot was shown, no own pick, no ballot: the promised vote, then Cast', { promised: BRIX_VOTE }, [], [vote('s2'), READY]],
     ['row 2: an own pick of another candidate stands; no promised vote', { promised: BRIX_VOTE }, ['s3'], [vote('s3'), READY]],
     ['row 2: an explicit Abstain stands; no promised vote', { promised: BRIX_VOTE }, ['abstain'], [vote(null), READY]],
     ['row 2: an own pick stands even before the server answers it', { promised: BRIX_VOTE }, ['s3'], [vote('s3'), READY], false],
@@ -274,12 +281,35 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     expect(sent).toEqual(expected);
   });
 
-  it('S3-T-AC-16: row 4 from Overview, the ballot never opened: the press sends the promised vote, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), here pressed from Overview; found in the SB-3 re-review
+  it('S3-T-AC-16: row 4 from Overview, the ballot never shown: a promise is not a pick, Cast my vote is dead and nothing is sent', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
     mount(electionFor({ promised: BRIX_VOTE }), false);
     expect(findTestid('ballot-card'), 'the ballot is not on screen').toBeUndefined();
-    expect(isDisabled('ready'), 'a promise makes Cast my vote live from any tab').toBe(false);
+    expect(isDisabled('ready'), 'nobody keeps a promise unseen').toBe(true);
+    tap('ready');
+    expect(sent).toEqual([]);
+  });
+
+  it('S3-T-AC-16: row 4 from Overview, the ballot shown and left: Cast my vote is live and sends the promised vote, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(electionFor({ promised: BRIX_VOTE }));
+    expect(findTestid('ballot-card'), 'the ballot is on screen').toBeDefined();
+    toOverview();
+    expect(findTestid('ballot-card'), 'and then it is not').toBeUndefined();
+    expect(isDisabled('ready'), 'seen once, live from any tab').toBe(false);
     tap('ready');
     expect(sent).toEqual([vote('s2'), READY]);
+  });
+
+  it('S3-T-AC-16: a reload forgets that the ballot was shown: Cast my vote is dead again until it is reopened', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(electionFor({ promised: BRIX_VOTE }));
+    toOverview();
+    expect(isDisabled('ready')).toBe(false);
+    act(() => root!.unmount());
+    root = null;
+    reload();
+    mount(electionFor({ promised: BRIX_VOTE }), false);
+    expect(isDisabled('ready'), 'shown is client memory only').toBe(true);
+    for (const id of ['tab-politics', 'sub-elections']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    expect(isDisabled('ready'), 'reopened').toBe(false);
   });
 
   it('S3-T-AC-16: row 3 shows the server\'s ballot, not the promise', () => {
@@ -315,7 +345,7 @@ describe('S3-C21: the law ballot says "You promised"', () => {
   const voteLaw = (yes: boolean) => ({ type: 'voteLaw', yes });
   // S3-RULE-12's rows on the law ballot: [row, the seat, the taps before Done, what the table receives in order].
   const LAW_ROWS: [string, Seat, string[], unknown[]][] = [
-    ['row 4: no own pick, no ballot: the promised yes, then Done', { promised: LAW_YES }, [], [voteLaw(true), READY]],
+    ['row 4: Done after the ballot was shown, no own pick, no ballot: the promised yes, then Done', { promised: LAW_YES }, [], [voteLaw(true), READY]],
     ['row 2: an own No stands, even before the server shows it', { promised: LAW_YES }, ['ballot-no'], [voteLaw(false), READY]],
     ['row 2: tapping the promised Yes sends it once', { promised: LAW_YES }, ['ballot-yes'], [voteLaw(true), READY]],
     ['row 3: no own pick, a No from another device: it stands', { promised: LAW_YES, lawBallot: false }, [], [READY]],
@@ -331,12 +361,35 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(sent).toEqual(expected);
   });
 
-  it('S3-T-AC-16: law row 4 from Overview, the ballot never opened: the press sends the promised yes, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), here pressed from Overview; found in the SB-3 re-review
+  it('S3-T-AC-16: law row 4 from Overview, the ballot never shown: a promise is not a vote, Done is dead and nothing is sent', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
     mount(lawFor({ promised: LAW_YES }), false);
     expect(findTestid('phone-ballot'), 'the ballot is not on screen').toBeUndefined();
-    expect(isDisabled('ready'), 'a promise makes Done live from any tab').toBe(false);
+    expect(isDisabled('ready'), 'nobody keeps a promise unseen').toBe(true);
+    tap('ready');
+    expect(sent).toEqual([]);
+  });
+
+  it('S3-T-AC-16: law row 4 from Overview, the ballot shown and left: Done is live and sends the promised yes, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(lawFor({ promised: LAW_YES }));
+    expect(findTestid('phone-ballot'), 'the ballot is on screen').toBeDefined();
+    toOverview();
+    expect(findTestid('phone-ballot'), 'and then it is not').toBeUndefined();
+    expect(isDisabled('ready'), 'seen once, live from any tab').toBe(false);
     tap('ready');
     expect(sent).toEqual([voteLaw(true), READY]);
+  });
+
+  it('S3-T-AC-16: a reload forgets that the law ballot was shown: Done is dead again until it is reopened', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), PM ruling A, 9 Nov
+    mount(lawFor({ promised: LAW_YES }));
+    toOverview();
+    expect(isDisabled('ready')).toBe(false);
+    act(() => root!.unmount());
+    root = null;
+    reload();
+    mount(lawFor({ promised: LAW_YES }), false);
+    expect(isDisabled('ready'), 'shown is client memory only').toBe(true);
+    for (const id of ['tab-politics', 'sub-laws']) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
+    expect(isDisabled('ready'), 'reopened').toBe(false);
   });
 
   it('S3-T-AC-16: row 2 · an own No outlives the ballot unmounting and mounting again (another sub-tab), before the server answers: Done sends no promised Yes', () => {
