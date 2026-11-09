@@ -52,13 +52,17 @@ export async function voteThroughTheElection(phone: Page, timeout: number): Prom
   await phone.getByTestId('tab-overview').click({ timeout: PRESS_MS });
 }
 
-/** The announce and the ballot are the Elections sub-tab's (SB-3): opens it, unless it is open or the stage holds the screen. */
-/** Whether the ready bar still asks for a vote: Ready to vote, Cast my vote, or what it says once pressed. */
+/**
+ * Whether the ready bar holds a button that still asks for a vote: Ready to vote, or Cast my vote. Once the player has
+ * pressed, the bar swaps the button for its done words (you-are-ready), so this is false and openElections leaves the
+ * phone where it is.
+ */
 async function asksForTheVote(phone: Page): Promise<boolean> {
   const words = await phone.getByTestId('ready').first().textContent({ timeout: 200 }).catch(() => '');
-  return /Ready to vote|Cast my vote|You'?re ready to vote|You voted/.test(words ?? '');
+  return /Ready to vote|Cast my vote/.test(words ?? '');
 }
 
+/** The announce and the ballot are the Elections sub-tab's (SB-3): opens it, unless it is open or the stage holds the screen. */
 async function openElections(phone: Page): Promise<void> {
   if ((await phone.locator('[data-phase=planning] [data-testid=tabs]').count()) === 0) return;
   // Only while the ready bar still asks for the vote: once the election is over the phone stays where it is.
@@ -71,8 +75,11 @@ async function openElections(phone: Page): Promise<void> {
     // held as planning ends): it is Laws', where answering No lets the bar's Cast go live.
     if ((await phone.getByTestId('ballot-card').count()) === 0 && /Cast my vote/.test((await phone.getByTestId('ready').first().textContent({ timeout: 200 }).catch(() => '')) ?? '')) {
       await phone.getByTestId('sub-laws').click({ timeout: PRESS_MS });
-      const no = phone.locator('[data-testid=overrule-no], [data-testid=ballot-no]').first();
-      if ((await no.count()) > 0) await no.click({ timeout: PRESS_MS });
+      const no = phone.getByTestId('overrule-no');
+      if ((await no.count()) > 0) {
+        await no.click({ timeout: PRESS_MS });
+        console.log('election steps: answered a held tax overrule with No so the ready bar goes live');
+      }
     }
   } catch (err) {
     if (!(err instanceof playwrightErrors.TimeoutError)) throw err;

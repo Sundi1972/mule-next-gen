@@ -163,14 +163,14 @@ const onPhone = (view: MuleView) => {
   return createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: { table, view, me: view.me!, self, slot: self.slot as Slot }, children: createElement(Planning) }) });
 };
 
-function mount(view: MuleView): void {
+function mount(view: MuleView, openBallot = true): void {
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host as unknown as HTMLElement);
   act(() => root!.render(onPhone(view)));
   // The ballots are the Governor / Council tab's sub-tabs' since SB-3: the election's in Elections, the law's in Laws.
   const sub = view.politics?.council?.stage === 'ballot' ? 'sub-laws' : view.politics?.election?.stage === 'ballot' ? 'sub-elections' : null;
-  if (sub) {
+  if (sub && openBallot) {
     for (const id of ['tab-politics', sub]) act(() => (props(byTestid(id)).onClick as (e?: unknown) => void)({ currentTarget: byTestid(id) }));
   }
 }
@@ -274,6 +274,14 @@ describe('S3-C21: the election ballot says "You promised"', () => {
     expect(sent).toEqual(expected);
   });
 
+  it('S3-T-AC-16: row 4 from Overview, the ballot never opened: the press sends the promised vote, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), here pressed from Overview; found in the SB-3 re-review
+    mount(electionFor({ promised: BRIX_VOTE }), false);
+    expect(findTestid('ballot-card'), 'the ballot is not on screen').toBeUndefined();
+    expect(isDisabled('ready'), 'a promise makes Cast my vote live from any tab').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([vote('s2'), READY]);
+  });
+
   it('S3-T-AC-16: row 3 shows the server\'s ballot, not the promise', () => {
     mount(electionFor({ promised: BRIX_VOTE, ballot: { governor: 's3' } }));
     expect(checked('s3')).toBe(true);
@@ -321,6 +329,14 @@ describe('S3-C21: the law ballot says "You promised"', () => {
     expect(isDisabled('ready'), 'Done is live').toBe(false);
     tap('ready');
     expect(sent).toEqual(expected);
+  });
+
+  it('S3-T-AC-16: law row 4 from Overview, the ballot never opened: the press sends the promised yes, then the press', () => { // trace-allow: S3-RULE-12 row 4 is a rule id (S3-T-AC-16's rows), here pressed from Overview; found in the SB-3 re-review
+    mount(lawFor({ promised: LAW_YES }), false);
+    expect(findTestid('phone-ballot'), 'the ballot is not on screen').toBeUndefined();
+    expect(isDisabled('ready'), 'a promise makes Done live from any tab').toBe(false);
+    tap('ready');
+    expect(sent).toEqual([voteLaw(true), READY]);
   });
 
   it('S3-T-AC-16: row 2 · an own No outlives the ballot unmounting and mounting again (another sub-tab), before the server answers: Done sends no promised Yes', () => {
