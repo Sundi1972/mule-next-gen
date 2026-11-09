@@ -293,6 +293,7 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
 
   it('B-AC-35-1: a phone that is not the Governor has no Commission button in its Budget', () => {
     mountBudget(game(colonyOf([]), { governor: 's2' }));
+    expect(has('council-budget')).toBe(true);
     expect(has('commission-open')).toBe(false);
   });
 

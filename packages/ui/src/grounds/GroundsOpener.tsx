@@ -8,6 +8,7 @@ import { useEventReducedMotion } from '../events/motion';
 import type { ColonyGroundsProps, GroundsColony } from './ColonyGrounds';
 import { leanAt, openerOf, type Opener } from './opener';
 import { useGroundsChange, type GroundsChange, type MonthEndView } from './useGroundsChange';
+import { useSeconds } from './clock';
 
 /** The opener while it is on screen: RULE-6's length, RULE-5's changes, and whether its clock runs yet. */
 export interface OpenerState extends Opener {
@@ -41,25 +42,6 @@ export function useGroundsOpener(view: MonthEndView & { politics: unknown }, eve
   return { ...opener, ...found, playing };
 }
 
-/** Seconds since `on` turned true, from the page's frames; 0 while off. */
-function useSeconds(on: boolean): number {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    // Where the frame clock is missing (or half-stubbed) the view holds still rather than throw on unmount.
-    if (!on || typeof requestAnimationFrame !== 'function' || typeof cancelAnimationFrame !== 'function') return;
-    let frame = 0;
-    let first: number | null = null;
-    const tick = (now: number) => {
-      first ??= now;
-      setSeconds((now - first) / 1000);
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [on]);
-  return on ? seconds : 0;
-}
-
 function said({ name, from, to }: GroundsChange): string {
   const the = `the ${name}`;
   if (to === 'standing') return from === 'closed' ? `${the} reopens` : from === 'damaged' ? `${the} is repaired` : `${the} stands`;
@@ -86,7 +68,7 @@ function Caption({ changes, baseline }: { changes: GroundsChange[]; baseline: bo
  * opener leans in on the places that changed and back out; the still holds the built area. `Scene` draws the grounds
  * with the app's art manifest.
  */
-export function GroundsOpener({ opener, colony, month, Scene }: { opener: OpenerState; colony: GroundsColony; month: number; Scene: ComponentType<Omit<ColonyGroundsProps, 'manifest'>> }) {
+export function GroundsOpener({ opener, colony, month, Scene, players }: { opener: OpenerState; colony: GroundsColony; month: number; Scene: ComponentType<Omit<ColonyGroundsProps, 'manifest'>>; players?: number }) {
   const leaning = opener.kind === 'full' ? opener.changes.filter((c) => c.place) : [];
   const lean = leanAt(useSeconds(opener.playing && leaning.length > 0));
   return (
@@ -105,6 +87,7 @@ export function GroundsOpener({ opener, colony, month, Scene }: { opener: Opener
           size="tv"
           light="dusk"
           chips={false}
+          players={players}
           framing={{ aspect: CANVAS.width / CANVAS.height, leanOn: leaning.map((c) => c.place!), lean: leaning.length > 0 ? lean : 0 }}
           className="absolute inset-0 h-full w-full"
         />

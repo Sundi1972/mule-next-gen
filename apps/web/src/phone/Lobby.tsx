@@ -435,13 +435,21 @@ function SeatRow({
   const claude = isClaude(seat);
   const word: ChipWord = seat.isAi ? (claude ? claudeChip(seat) : 'AI') : host ? 'HOST' : seat.connected ? 'PHONE' : 'AWAY';
   return (
-    <li className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2" data-testid={`seat-${seat.id}`}>
+    // The name keeps 6rem: where what follows it leaves less (in the small phone's rail, the host's ✕ and Change beside
+    // a seat's chip, or a Claude seat's status chip), that goes to a line of its own under it, so a name never breaks
+    // inside a word (AM-18's "The Big Spender", C19). A chip alone (PHONE, HOST, AWAY, AI) still fits beside it at 667.
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-x-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2" data-testid={`seat-${seat.id}`}>
       <span role="img" aria-label={SPECIES_NAME[seat.species]} className="shrink-0">
         <Creature species={seat.species} color={SLOT_COLOR[seat.slot]} size={22} />
       </span>
-      <span className="min-w-0 flex-1 text-sm font-semibold break-words @min-[1100px]/shell:text-base">
-        {seat.name}
-        {me && ' (you)'}
+      <span className="min-w-[6rem] flex-1 text-sm font-semibold @min-[1100px]/shell:text-base">
+        {/* One line: a name longer than its room ends in an ellipsis, never cut inside a word; "(you)" always shows. */}
+        <span className="flex min-w-0 whitespace-pre" data-testid={`seat-${seat.id}-name`}>
+          <span className="truncate" title={seat.name}>
+            {seat.name}
+          </span>
+          {me && <span className="shrink-0"> (you)</span>}
+        </span>
         {claude && <span className="block text-[10px] font-normal leading-tight text-ink-3 @min-[1100px]/shell:text-xs">Claude</span>}
         {/* Start stays enabled while the seat waits; the host is told what happens if they start now. */}
         {claude && youHost && seat.claude !== 'connected' && (
@@ -450,29 +458,31 @@ function SeatRow({
           </span>
         )}
       </span>
-      <Chip word={word} testid={`chip-${seat.id}`} />
-      {onOpen && (
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-haspopup="dialog"
-          className="grid h-8 shrink-0 place-items-center rounded-chip border border-holo-line px-2 text-xs font-semibold text-holo hover:border-holo"
-          data-testid={`seat-${seat.id}-open`}
-        >
-          {claude ? 'Code' : 'Change'}
-        </button>
-      )}
-      {onKick && (
-        <button
-          type="button"
-          className="grid size-8 shrink-0 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
-          aria-label={`Remove ${seat.name}`}
-          onClick={onKick}
-          data-testid={`kick-${seat.id}`}
-        >
-          ✕
-        </button>
-      )}
+      <span className="ml-auto flex shrink-0 items-center gap-2 @min-[1100px]/shell:gap-3">
+        <Chip word={word} testid={`chip-${seat.id}`} />
+        {onOpen && (
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-haspopup="dialog"
+            className="grid h-8 shrink-0 place-items-center rounded-chip border border-holo-line px-2 text-xs font-semibold text-holo hover:border-holo"
+            data-testid={`seat-${seat.id}-open`}
+          >
+            {claude ? 'Code' : 'Change'}
+          </button>
+        )}
+        {onKick && (
+          <button
+            type="button"
+            className="grid size-8 shrink-0 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
+            aria-label={`Remove ${seat.name}`}
+            onClick={onKick}
+            data-testid={`kick-${seat.id}`}
+          >
+            ✕
+          </button>
+        )}
+      </span>
     </li>
   );
 }

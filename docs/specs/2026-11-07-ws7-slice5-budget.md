@@ -1759,6 +1759,18 @@ did       the binding scaffold is design/mocks/hub-tabs (origin/ws6-mock-hub-tab
           panel) go with the tabbed hub's TV build, SB-5 (WS4); WS7 OKs them by SHA against S5-C11
 because   Heiko replaced the P0 desks with the tabbed hub (8 Nov); its README is the build plan every lane reads
 goal      S5-1, S5-2 — unchanged; S5-B-AC-1/3 and S5-UBER-AC-2 are proved on these screens
+
+AM-13 · 2026-11-08 · WS4's ask via the PM (8 Nov), WS7's ruling · who builds S5-C11's TV components
+target    §1 S5-C11's owner (AM-12's last sentence)
+said      the TV parts go with SB-5 (WS4); WS7 OKs them by SHA
+did       WS7 builds the components, grafted from the scaffold's src/tv/copied/TvBudgetLine.tsx (TvBudgetLine,
+          TvOverruleCall) and src/tv/copied/TvOverrule.tsx: new apps/web/src/table/TvBudgetLine.tsx and
+          apps/web/src/table/TvOverrule.tsx, with render tests. WS4's SB-5b places them: the budget line on the
+          promise row, the call as the map box's 8 s moment, and TableApp's route to TvOverrule while the overrule
+          is open (after the election and the law ballot). TV-FIT stays WS4's
+because   the components exist only in the mock's folder; they read slice 5's views, which WS7 owns, and the plan's
+          frame already gives WS7 the TV parts' content and WS4 their placement
+goal      S5-1, S5-2 — unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

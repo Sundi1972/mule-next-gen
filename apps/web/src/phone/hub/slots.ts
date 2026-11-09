@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import type { PhoneGame } from '../game';
 import type { Now } from '../Shell';
 import type { ReadyWords } from './ready';
@@ -12,7 +12,7 @@ import type { ReadyWords } from './ready';
  *
  * Today's entries are in ./today.tsx (TAB_SLOTS): the politics sub-tabs (politicsTabs) and the Sheriff's Guard, a plot
  * pick (picks), among them. An entry keeps its own state in its components and reads or changes where the hub is with useHub()
- * from ./Hub.tsx; `show` and the agenda's texts are plain functions of the seat, called on every render.
+ * from ./Hub.tsx; `show` and the agenda's texts are plain functions of the seat, called on every render; a ready-words function may also note the room (idempotent, but it writes module state).
  */
 
 /** Who is looking: what every `show` decides on. `table` is the room: the hub gives it; a bare seat built for a test may leave it out. */
@@ -50,7 +50,8 @@ export interface DeskDoor {
 export interface AgendaSlot extends Shown {
   key: string;
   title(seat: HubSeat): string;
-  sub(seat: HubSeat): string;
+  /** Words, or SeatWords where they name seats. */
+  sub(seat: HubSeat): ReactNode;
   /** Only you see what it leads to: the eye-slash and "Only you". */
   locked?: boolean;
   /** The one that matters most this month, drawn strong. */

@@ -5,7 +5,7 @@
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
 import { callStrike, COLONY, GOODS, HAPPINESS, moodBand, PRESTIGE, type FundLine, type GameState, type PrestigeId } from '@mule/engine';
-import type { ColonyProjectView, ColonyView, MuleView } from '@mule/protocol';
+import type { ColonyProjectView, ColonyView, IncidentView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
@@ -85,17 +85,19 @@ async function main(): Promise<void> {
       check(game.state.colony!.projects.length === 0, `no project before Lena commissions, got ${JSON.stringify(game.state.colony!.projects)}`);
       room().broadcast();
     });
-    // B-AC-35-1, front to back: the Governor's phone commissions through the Colony tab.
+    // B-AC-35-1, front to back: the Governor's phone commissions through Politics > Budget.
     const planning = phone.locator('[data-phase=planning]');
-    await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
+    await planning.getByTestId('tab-politics').click({ timeout: PRESS_MS });
+    await planning.getByTestId('sub-budget').click({ timeout: PRESS_MS });
     await planning.getByTestId('commission-open').click({ timeout: PRESS_MS });
     await planning.getByTestId(`cat-${PROJECT}`).click({ timeout: PRESS_MS });
     await planning.getByTestId('commission-go').click({ timeout: PRESS_MS });
     await until(() => colony().projects.some((p) => p.id === PROJECT && p.stage === 'commissioned'), `B-AC-35-1: the server has the ${PRESTIGE[PROJECT].name} commissioned`);
     await planning.getByTestId('commission-news').filter({ hasText: `Lena commissions a ${PRESTIGE[PROJECT].name}` }).waitFor({ timeout: PRESS_MS });
-    console.log(`✓ B-AC-35-1: Lena's phone commissions the ${PRESTIGE[PROJECT].name} from the Colony desk; the server's ColonyView has it`);
+    console.log(`✓ B-AC-35-1: Lena's phone commissions the ${PRESTIGE[PROJECT].name} from Politics > Budget; the server's ColonyView has it`);
 
     // B-AC-35-2, front to back: she donates through the chips, and the plaque the preview promised is the server's.
+    await planning.getByTestId('tab-colony').click({ timeout: PRESS_MS });
     await planning.getByTestId(`donate-${PROJECT}`).click({ timeout: PRESS_MS });
     await planning.getByTestId(`chip-cr-${DONATION}`).click({ timeout: PRESS_MS });
     const preview = (await planning.getByTestId('donate-preview').innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ');
@@ -107,10 +109,14 @@ async function main(): Promise<void> {
     await planning.getByTestId(`donate-hint-${PROJECT}`).filter({ hasText: `Your plaque ${fmt(DONATION)} cr` }).waitFor({ timeout: PRESS_MS });
     console.log(`✓ B-AC-35-2: Lena gives ${DONATION} cr through the chips; the server's plaque and her phone both read ${DONATION} cr`);
 
-    // 1. The TV's header carries the four gauges, its wealth the server's, happiness "not yet" while it has none.
+    // 1. The TV's header carries the four gauges (five with the colony's health, PR-11: Health after Happiness), its
+    // wealth the server's, happiness "not yet" while it has none.
     const gauges = tv.getByTestId('colony-gauges');
     await gauges.waitFor({ timeout: PRESS_MS });
-    check((await gauges.locator('[data-testid^=gauge-]').count()) === 4, 'B-AC-34-3: the TV header shows four gauges');
+    const health = board().colonyHealth ?? null;
+    const cells = health ? 5 : 4;
+    check((await gauges.locator('[data-testid^=gauge-]').count()) === cells, `B-AC-34-3: the TV header shows ${cells} gauges${health ? ', Health the fifth' : ''}`);
+    if (health) await gauges.getByTestId('health-value').filter({ hasText: `${health.health}%` }).waitFor({ timeout: PRESS_MS });
     const wealth = `${fmt(colony().gauges.wealth)} cr`;
     await gauges.getByTestId('gauge-wealth').locator('[data-num]').filter({ hasText: wealth }).waitFor({ timeout: PRESS_MS });
     // The mood (C23) has its first value once planning opens; the gauge shows the server's, or "not yet" while it is null.
@@ -118,7 +124,7 @@ async function main(): Promise<void> {
     const happiness = gauges.getByTestId('gauge-happiness');
     if (mood === null) await happiness.filter({ hasText: 'not yet' }).waitFor({ timeout: PRESS_MS });
     else await happiness.locator('[data-num]').filter({ hasText: String(mood) }).waitFor({ timeout: PRESS_MS });
-    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
+    console.log(`✓ B-AC-34-3: the TV header shows the ${cells} gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
 
     await theGovernorPaysTheStrike({ server, code, phone, tv, lenaId, room, colony });
 
@@ -491,8 +497,25 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       check(report?.ledger?.month === state.month, `month ${state.month}'s end has its own ledger, got month ${report?.ledger?.month}`);
       report.ledger.out = LONGEST_LEDGER;
       state.treasury.money = 88_888;
+      // WS4's named edit (S4-C17, PM ruling 8 Nov): two sabotage incidents this month, so the TV's colony panel carries
+      // its "Sabotage ×2" tag while TV-FIT is read. Staged in the view, as claude-seat-tv.ts stages waitingForClaude:
+      // the engine builds sabotage off.
+      const [lena, ossa, brix] = state.players.map((p) => p.id);
+      const incidents: IncidentView[] = [
+        { id: 'sab-e2e-1', month: state.month, kind: 'powerCut', victim: ossa!, at: { x: 0, y: 0 }, good: 'smithore', worked: false, culprit: lena!, how: 'guard', investigated: false, fine: null },
+        { id: 'sab-e2e-2', month: state.month, kind: 'rumour', victim: null, at: null, good: 'food', dir: 'up', worked: true, culprit: brix!, how: 'caught', investigated: false, fine: null },
+      ];
+      const game = (room as unknown as { game: { viewFor(seat: string | null): MuleView } }).game;
+      const viewFor = game.viewFor.bind(game);
+      game.viewFor = (seat) => {
+        const view = viewFor(seat);
+        if (!view.politics) return view;
+        const sabotage = view.politics.sabotage ?? { terms: { powerCut: { cost: 0, success: 0, detect: 0 }, rumour: { cost: 0, success: 0, detect: 0 } }, sheriff: { guards: 0, investigations: 0, investigationsLeft: 0 }, incidents: [] };
+        return { ...view, politics: { ...view.politics, sabotage: { ...sabotage, incidents: [...sabotage.incidents, ...incidents] } } };
+      };
       room.broadcast();
     });
+    check(board().politics?.sabotage?.incidents.length === 2, `two sabotage incidents staged in month ${board().month}'s view, got ${board().politics?.sabotage?.incidents.length}`);
     check(board().colony?.projects.length === 5, `five projects at the build site, got ${board().colony?.projects.length}`);
     // The full ticker: the TV that has watched the game. The empty one: a TV that joins now (the server replays no chat).
     const fresh = await (await browser.newContext(TV)).newPage();
@@ -503,6 +526,12 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       [fresh, 'ticker-empty'],
     ] as const) {
       const read = await readTheSixSeatMonthEnd(page, name);
+      // The TV counts the month's sabotage on the colony panel's header row; the lines are the phone's (PM ruling 8 Nov).
+      const tag = page.getByTestId('tv-monthend').getByTestId('colony-panel').getByTestId('sabotage-tag');
+      await tag.waitFor({ timeout: PRESS_MS });
+      check((await tag.innerText()).trim().toUpperCase() === 'SABOTAGE ×2', `the ${name} TV's colony panel reads SABOTAGE ×2, got "${await tag.innerText()}"`);
+      check((await page.getByTestId('tv-monthend').getByTestId('sabotage-news').count()) === 0, `the ${name} TV draws no sabotage line`);
+      console.log(`✓ S4-C17 (PM ruling 8 Nov): six seats, month 2's end, two sabotage incidents, the TV's tag SABOTAGE ×2 and TV-FIT held: ${read.match(/scale [\d.]+ with the band/)?.[0]}`);
       const site = page.getByTestId('tv-monthend').getByTestId('build-site');
       check((await site.locator('li').count()) === 5, `the ${name} TV's build site has five lines, the standing park folded into one`);
       await site.getByTestId('projects-standing').filter({ hasText: 'Standing: Park' }).waitFor({ timeout: PRESS_MS });

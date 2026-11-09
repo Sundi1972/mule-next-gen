@@ -12,7 +12,7 @@ import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, held as holding, PHONE, PHONE_SMALL, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
-import { LAPTOP } from './shell-steps';
+import { LAPTOP, railFits } from './shell-steps';
 import { fitSettled, theTvScaleHolds } from './tv-fit-steps';
 
 /** The human sits in seat 1. */
@@ -183,8 +183,7 @@ async function read(phone: Page): Promise<Shown> {
     const screen = document.querySelector('[data-phase]');
     const stage = screen?.querySelector('[data-testid=stage]');
     const guide = screen?.querySelector('[data-testid=guide]');
-    const body = guide?.querySelector('header')?.nextElementSibling;
-    const tabs = screen?.querySelector('[data-testid=tabs-a]');
+    const tabs = screen?.querySelector('[data-testid=tabs]');
     const content = stage?.firstElementChild;
     const toolRow = screen?.querySelector('[data-testid=map-tools]')?.getBoundingClientRect();
     const mapBox = screen?.querySelector('[data-testid=hub-map]')?.getBoundingClientRect();
@@ -201,8 +200,8 @@ async function read(phone: Page): Promise<Shown> {
       tabs: [...(tabs?.querySelectorAll('[role=tab]') ?? [])].map((d) => d.getAttribute('data-testid')!.slice('tab-'.length)),
       tools: [...(screen?.querySelectorAll('[data-testid=map-tools] [data-testid^="tool-"]') ?? [])].map((t) => t.getAttribute('data-testid')!.slice('tool-'.length)),
       toolsAt: !toolRow || !mapBox ? 'elsewhere' : toolRow.bottom <= mapBox.top + 0.5 ? 'above' : 'elsewhere',
-      // Now first: the rail's head (the phase line, then the Now line), first under the rail's header.
-      nowFirst: !!body?.firstElementChild && !!guide?.querySelector('[data-testid=now]') && body.firstElementChild.contains(guide.querySelector('[data-testid=now]')),
+      // Now first: in the rail's head, the header (the phase line, then the Now line), above the rail's body.
+      nowFirst: !!guide?.querySelector('header [data-testid=now]'),
       nowTitle: guide?.querySelector('[data-testid=now-title]')?.textContent ?? '',
       reviewLabels: (shell?.innerText ?? '').split('\n').filter((l) => /\bSOON\b|\bSLICE\b|\bWS7\b/.test(l)),
       fill: content && stageBox ? content.getBoundingClientRect().height / (stageBox.height - pad) : 0,
@@ -306,7 +305,7 @@ export async function hostContinuesWithout({ host, ready, left, tv, server, code
     await header.filter({ hasText: count }).waitFor({ timeout });
     const waiting = planning(p).getByTestId('waiting-for');
     await waiting.getByTestId(`waiting-${leftId}`).waitFor({ timeout });
-    const named = (await waiting.getByTestId(`waiting-${leftId}`).innerText()).trim();
+    const named = (await waiting.getByTestId(`waiting-${leftId}`).getByTestId('waiting-name').innerText()).trim();
     check(named === (p === left ? 'you' : left.name), `B-AC-19: ${p.name}'s phone names ${p === left ? 'her as "you"' : left.name} as still planning, got "${named}"`);
     const readyNamed = (await waiting.getByTestId(`waiting-${hostId}`).count()) + (await waiting.getByTestId(`waiting-${readyId}`).count());
     check(readyNamed === 0, `B-AC-19: ${p.name}'s phone waits for nobody who is Ready, got "${await waiting.innerText()}"`);
@@ -508,11 +507,14 @@ const READ_GOV = `(async () => {
   const box = (sel) => p?.querySelector(sel)?.getBoundingClientRect() ?? null;
   const row = box('[data-testid=governor-tax-row]');
   const verdict = box('[data-testid=governor-verdict]');
-  const tabs = [...(p?.querySelectorAll('[data-testid=tabs-a] [role=tab], [data-testid=sub-tabs] [role=tab]') ?? [])].map((t) => {
+  const tabs = [...(p?.querySelectorAll('[data-testid=tabs] [role=tab], [data-testid=sub-tabs] [role=tab]') ?? [])].map((t) => {
     const r = t.getBoundingClientRect();
-    // The label is the tab's own words: whole when nothing of them is cut short (a badge may overhang by design).
+    // The label is the tab's own words: whole when nothing of them is cut short, and when their box sits inside the
+    // tab's (a truncating span is only as wide as its text, so the box check is the one that fails; a badge may overhang).
     const label = [...t.querySelectorAll('span')].find((el) => el.textContent.trim() && !el.querySelector('span'));
-    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: !!label && label.scrollWidth > label.clientWidth + 0.5 };
+    const l = label ? label.getBoundingClientRect() : r;
+    const cut = !!label && label.scrollWidth > label.clientWidth + 0.5;
+    return { id: t.dataset.testid, w: r.width, h: r.height, clipped: cut || l.left < r.left - 0.5 || l.right > r.right + 0.5 };
   });
   return {
     bodyBottom: body?.getBoundingClientRect().bottom ?? NaN,
@@ -532,7 +534,7 @@ const READ_GOV = `(async () => {
 
 /**
  * E-11 (C66, SB-2: the Governor's desk on its sub-tab, the table chat in the rail): Lena, the sitting Governor, plans at
- * `size` with the chat's seat row and a two-line ticker, and Ossa still planning. Her politics tab opens on the
+ * `size` with the chat's seat row and a two-line ticker, and Ossa still planning. Her Now line is the door to the
  * Governor's sub-tab (E-9, D8); its tax row and verdict end inside the sub-tab's visible body, without it scrolling, as
  * the desk opens over her promise, after −, and after Set (at 844 × 390 by at least GOV_MARGIN_844). The rail keeps
  * the Now line, the footer names who is still planning, the ticker keeps both lines, and the seat row sits in the rail's
@@ -544,7 +546,8 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
   const at = `${size.width}×${size.height}`;
   await lena.setViewportSize(size);
   const planning = lena.locator('[data-phase=planning]');
-  await planning.getByTestId('tab-politics').evaluate((el: HTMLElement) => el.click());
+  // The Governor's sub-tab asks first: from Overview the Now line is the door to it (D8); nothing opens it by itself.
+  await planning.getByTestId('now-go').evaluate((el: HTMLElement) => el.click());
   await planning.getByTestId('governor-tax-row').waitFor({ timeout });
   const read = () => lena.evaluate(READ_GOV) as Promise<GovFit>;
   const click = (id: string) => planning.getByTestId(id).evaluate((el: HTMLElement) => el.click());
@@ -573,9 +576,9 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     const small = opened.tabs.filter((t) => t.w < TAB_MIN - 0.01 || t.h < TAB_MIN - 0.01 || t.clipped);
     check(opened.tabs.length >= 6 && small.length === 0, `E-11 at ${at}: every tab and sub-tab is at least ${TAB_MIN}×${TAB_MIN} with its label whole, got ${tabs}`);
     seen.push(`tabs ${tabs}`);
-    // Test fixture: a fourth sub-tab, as SB-3's Laws, Budget and Elections beside an office's will need. No game draws
-    // it today, so the Council's sub-tab, the longest word, is drawn twice for one read, then taken away.
-    await planning.getByTestId('sub-laws').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
+    // Test fixture: a fourth sub-tab beside Laws, Budget and Elections, as the Sheriff's will be for its holder. No game
+    // draws it here, so Elections, the longest label, is drawn twice for one read, then taken away.
+    await planning.getByTestId('sub-elections').evaluate((t) => t.after(Object.assign(t.cloneNode(true), { id: 'extra-sub' })));
     const more = (await read()).tabs.filter((t) => t.id.startsWith('sub-'));
     await lena.evaluate(() => document.getElementById('extra-sub')?.remove());
     const moreTabs = more.map((t) => `${t.w.toFixed(1)}×${t.h.toFixed(1)}${t.clipped ? ' clipped' : ''}`).join(', ');
@@ -583,6 +586,8 @@ async function governorDeskFits(lena: Page, size: { width: number; height: numbe
     seen.push(`one more sub-tab ${moreTabs}`);
   }
   fits(opened, 'as it opens', 'breaks it');
+  // C20 in the rail beside it: its key element (Now) above the footer, the seat row under it in order, each seat tall enough.
+  seen.push(`railFits ${await railFits(lena, { key: 'now', sizes: [size] })}`);
   await click('tax-down');
   await planning.getByTestId('gov-within').waitFor({ timeout });
   fits(await read(), 'after −', 'within');
@@ -716,17 +721,8 @@ export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, cod
     const readWith = async (stock: Stocks): Promise<Read> => {
       Object.assign(me.stock, stock);
       room.broadcast();
-      // Overview first: This month's Short row, or none, as the stock says, then the plot as it stands.
-      const short = (['food', 'water', 'energy'] as const).filter((g) => stock[g] < need[g]);
-      const row = planning.getByTestId('agenda-needs');
-      if (short.length > 0) await row.filter({ hasText: `Short ${need[short[0]!] - stock[short[0]!]}` }).waitFor({ timeout });
-      else await row.waitFor({ state: 'detached', timeout });
-      const plot = await phone.evaluate(async () => {
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        const p = document.querySelector('[data-phase=planning] [data-testid=hub-map] [data-testid^=map-plot-]')!.getBoundingClientRect();
-        return Math.min(p.width, p.height);
-      });
-      // Then the strip, in the "?" sheet.
+      // The strip in the "?" sheet first: it shows the new stock's figures, so once it does, the stock has drawn (20 of
+      // each and 120 of each leave This month alike).
       await planning.getByTestId('help-open').click({ timeout });
       for (const g of ['food', 'water', 'energy'] as const) {
         const shows = stock[g] >= need[g] ? '✓' : `short ${need[g] - stock[g]}`;
@@ -749,6 +745,16 @@ export async function theMapIgnoresTheNeeds(phone: Page, server: MuleServer, cod
       });
       await planning.getByTestId('help-close').click({ timeout });
       await planning.getByTestId('help-sheet').waitFor({ state: 'detached', timeout });
+      // Then Overview: This month's Short row, or none, as the stock says, and the plot as it stands.
+      const short = (['food', 'water', 'energy'] as const).filter((g) => stock[g] < need[g]);
+      const row = planning.getByTestId('agenda-needs');
+      if (short.length > 0) await row.filter({ hasText: `Short ${need[short[0]!] - stock[short[0]!]}` }).waitFor({ timeout });
+      else await row.waitFor({ state: 'detached', timeout });
+      const plot = await phone.evaluate(async () => {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const p = document.querySelector('[data-phase=planning] [data-testid=hub-map] [data-testid^=map-plot-]')!.getBoundingClientRect();
+        return Math.min(p.width, p.height);
+      });
       return { plot, ...strip };
     };
     const lines: string[] = [];

@@ -115,6 +115,28 @@ describe('the tabbed hub shell (SB-1b)', () => {
     expect(words(element(element(header, 'phase-line'), 'month'))).toBe('Month 3/12');
   });
 
+  it("with tabs the rail packs as the hub-tabs mock does: head 6/12/8, body 8/12, actions 6/12, and a short screen tighter still; without them as before", () => {
+    const classes = (html: string, testid: string) => html.match(new RegExp(`<[a-z]+[^>]*data-testid="${testid}"[^>]*class="([^"]*)"|<[a-z]+[^>]*class="([^"]*)"[^>]*data-testid="${testid}"`))!.slice(1).find(Boolean)!.split(' ');
+    const body = (html: string) => element(html, 'guide').match(/<\/header><div class="([^"]*)"/)![1]!.split(' ');
+    const hub = draw({ tabs: tabs(), head: createElement(Shell.PhaseLine), footer: createElement('button', null, 'Ready') });
+    expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pb-2', 'pt-[max(0.375rem,env(safe-area-inset-top))]']));
+    expect(body(hub)).toEqual(expect.arrayContaining(['gap-2', 'px-3', 'py-2']));
+    expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['gap-1.5', 'px-3', 'pt-1.5', 'pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
+    // And none of the other phases' base packing left beside them.
+    expect(classes(hub, 'rail-head')).not.toEqual(expect.arrayContaining(['gap-1']));
+    expect(classes(hub, 'rail-head')).not.toEqual(expect.arrayContaining(['pt-[max(0.5rem,env(safe-area-inset-top))]']));
+    for (const c of ['gap-2.5', 'py-2.5']) expect(body(hub)).not.toEqual(expect.arrayContaining([c]));
+    for (const c of ['gap-2', 'pt-2.5', 'pb-[max(0.625rem,env(safe-area-inset-bottom))]']) expect(classes(hub, 'actions')).not.toEqual(expect.arrayContaining([c]));
+    // At 667×375 the head and actions pack as every phase does there, so the hub's rail keeps the room it has at 844.
+    expect(classes(hub, 'rail-head')).toEqual(expect.arrayContaining(['short:gap-0.5', 'short:pb-1', 'short:pt-[max(0.25rem,env(safe-area-inset-top))]']));
+    expect(classes(hub, 'actions')).toEqual(expect.arrayContaining(['short:pt-1.5', 'short:pb-[max(0.375rem,env(safe-area-inset-bottom))]']));
+    // Every other phase keeps its packing, short screens included, so the arcade's and the auction's fits don't move.
+    const other = draw({ footer: createElement('button', null, 'Ready') });
+    expect(classes(other, 'rail-head')).toEqual(expect.arrayContaining(['gap-1', 'pt-[max(0.5rem,env(safe-area-inset-top))]', 'short:gap-0.5', 'short:pb-1']));
+    expect(body(other)).toEqual(expect.arrayContaining(['gap-2.5', 'py-2.5', 'short:gap-2']));
+    expect(classes(other, 'actions')).toEqual(expect.arrayContaining(['gap-2', 'pt-2.5', 'pb-[max(0.625rem,env(safe-area-inset-bottom))]', 'short:pt-1.5']));
+  });
+
   it('a head that is nothing (null or false) draws the shell as without one, the month included', () => {
     for (const head of [null, false]) expect(words(element(draw({ head }), 'month'))).toBe('Month 3 / 12');
   });

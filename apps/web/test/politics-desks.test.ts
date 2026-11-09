@@ -445,7 +445,8 @@ describe('election day on the phone (C66, E-2)', () => {
     const html = inHub(announce(4, 'closed'));
     // The rail's phase name is one word, so it fits whole at 667 px; the stage card carries the full words.
     expect(html).toMatch(/>Election</);
-    expect(html).not.toMatch(/>Election day</);
+    expect(textOf(html, 'phase-title-row'), 'the phase word is one word').toMatch(/^Election(?! day)/);
+    expect(textOf(html, 'now-title')).toBe('Election day');
     expect(textOf(html, 'day-title')).toBe('Election day: Governor');
     expect(tagOf(html, 'election-step-1')).toMatch(/aria-current="step"/);
     expect(textOf(html, 'announce')).toContain('The colony elects its Governor for months 4 to 6. The candidates:');
@@ -595,7 +596,16 @@ describe('election day on the phone (C66, E-2)', () => {
 
   it('C66, E-2: Now says each step of election day, and once you are done, whom it still waits for', () => {
     const now = (game: MuleView, ready = false) => electionNow({ view: game, me: game.me!, self: { ...game.players[0]!, ready } });
-    expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day: Governor', detail: 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.' });
+    // The Now line is one short line in the tabbed rail (667 px): the offices are in the detail; the card's own heading names them.
+    const asked = 'Read who runs and on what promise, then tap Ready to vote. No clock: the ballot opens once everyone is ready.';
+    expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day', detail: `Electing: Governor. ${asked}` });
+    const saved = POLITICS.offices;
+    POLITICS.offices = ['governor', 'sheriff'];
+    try {
+      expect(now(announce(4, 'closed'))).toEqual({ step: 1, of: 3, title: 'Election day', detail: `Electing: Governor and Sheriff. ${asked}` });
+    } finally {
+      POLITICS.offices = saved;
+    }
     expect(now(announce(4, 'closed', { waitingFor: ['s2'] }), true)?.title).toBe("You're ready. Still waiting for Ossa");
     expect(now(ballot())).toMatchObject({ step: 2, title: 'Vote in secret' });
     expect(now(ballot(), true)?.title).toBe('You voted. Still waiting for Ossa, Brix and Pip');
@@ -984,6 +994,8 @@ describe('the Colony desk (C11, H-5, A-3)', () => {
     expect(on).toContain('data-testid="colony-grounds"');
     expect(on, 'the standing Park in its phone-size picture').toContain('href="/art/colony/park/standing-day@400.webp"');
     expect(on.indexOf('data-testid="colony-grounds"'), 'above the colony card').toBeLessThan(on.indexOf('data-testid="colony-desk-card"'));
+    const seated = view(politics({ governor: 's2', fund: 840 }), me(), { colony }).players.length;
+    expect(on, "T-AC-14 (phone): the seated players, for the colonists' suits").toContain(`data-players="${seated}"`);
     const off = onPhone(view(null, { ...me(), politics: null }, { colony }), ColonyWithFacts);
     expect(off).not.toContain('data-testid="colony-grounds"');
   });
